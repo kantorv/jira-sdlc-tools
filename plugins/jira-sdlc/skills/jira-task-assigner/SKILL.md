@@ -213,9 +213,11 @@ syntax. Things to never forget:
 - For anything beyond a one-line description, write the body to a file
   and use `--template <file>` instead of inline `-b"..."` — inline has
   been observed to hang for ~2 minutes on longer text.
-- Comment syntax (`jira issue comment <KEY> ...`) isn't covered in the
-  original reference — check `jira issue comment --help` once and confirm
-  the exact flag (e.g. `-m` vs `--template`) before relying on it.
+- Comment syntax (`jira issue comment add <KEY> ...`) is fully covered
+  in `../_shared/jira-cli-reference.md` §6: use `jira issue comment add
+  <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue
+  comment add <KEY> --template -` for multi-line/markdown; there is no
+  `-m` flag.
 - Put investigation findings + acceptance criteria in the issue
   description.
 - Before branching, make sure the branch you're branching *from*
