@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "jira-sdlc",
-      "source": "./",
+      "source": "./plugins/jira-sdlc",
       "version": "1.0.0",
       "description": "Plan, implement, and review Jira work in parallel using git worktrees.",
       "category": "development-workflow",
