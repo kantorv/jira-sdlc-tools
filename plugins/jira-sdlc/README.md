@@ -56,7 +56,7 @@ Three skills, three jobs:
 
 ```
 /plugin marketplace add kantorv/claude-code-plugins
-/plugin install jira-sdlc@kantorv
+/plugin install jira-sdlc@jira-sdlc-toolkit
 ```
 
 Fill in `skills/_shared/project-config.md` for your repo (see
@@ -181,7 +181,7 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
    easiest).
 2. In Claude Code:
    ```
-   /plugin marketplace add YOUR_ORG/jira-sdlc-toolkit
+   /plugin marketplace add YOUR_ORG/claude-code-plugins
    /plugin install jira-sdlc@jira-sdlc-toolkit
    ```
 3. Fill in `skills/_shared/project-config.md` — see
@@ -220,25 +220,34 @@ references mentioned above back down to their bare form.
 ## Repository layout
 
 ```
-jira-sdlc-toolkit/
+claude-code-plugins/                # marketplace root (this repo)
 ├── .claude-plugin/
-│   ├── plugin.json          # plugin metadata
-│   └── marketplace.json     # self-hosted, single-plugin marketplace
-├── skills/
-│   ├── jira-task-assigner/
-│   │   └── SKILL.md
-│   ├── jira-task-executor/
-│   │   └── SKILL.md
-│   ├── jira-task-reviewer/
-│   │   └── SKILL.md
-│   └── _shared/
-│       ├── jira-cli-reference.md   # jira-cli syntax, auth, git conventions
-│       └── project-config.md       # ← fill this in for your project
-├── docs/
-│   └── SDLC.md               # the branching/release policy these skills assume
-├── LICENSE
-└── README.md
+│   └── marketplace.json           # single-plugin marketplace manifest
+└── plugins/
+    └── jira-sdlc/                 # ← plugin root (what install copies)
+        ├── .claude-plugin/
+        │   └── plugin.json        # plugin metadata (the only file in here)
+        ├── skills/
+        │   ├── jira-task-assigner/
+        │   │   └── SKILL.md
+        │   ├── jira-task-executor/
+        │   │   └── SKILL.md
+        │   ├── jira-task-reviewer/
+        │   │   └── SKILL.md
+        │   └── _shared/
+        │       ├── jira-cli-reference.md   # jira-cli syntax, auth, git conventions
+        │       └── project-config.md       # ← fill this in for your project
+        ├── docs/
+        │   ├── JIRA-GITHUB-API.md
+        │   ├── JIRA-KANBAN-BOARD.md
+        │   └── SDLC.md            # the branching/release policy these skills assume
+        ├── LICENSE
+        └── README.md
 ```
+
+The marketplace root (`claude-code-plugins/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
+is the plugin root Claude Code copies on install. `_shared/` lives inside it
+deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
