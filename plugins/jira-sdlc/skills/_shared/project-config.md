@@ -1,13 +1,13 @@
 # Project configuration reference
 
-This file describes every variable used in the `.env` file
-(`jira-tools-plugin.env` in the project root). All project-specific values
-live in that `.env` file — nothing else under `skills/` should need editing
+This file describes every variable used in `jira-tools-plugin.env`
+(the `.env` file in the project root). All project-specific values
+live in `jira-tools-plugin.env` — nothing else under `skills/` should need editing
 after that.
 
 Each skill's "Conventions used below" section names the tokens it needs
 (e.g. `<PROJECT-KEY>`). Before following a skill's instructions, resolve
-every token it references against the `.env` file; the tables below describe
+every token it references against `jira-tools-plugin.env`; the tables below describe
 what each variable means.
 
 ## Required

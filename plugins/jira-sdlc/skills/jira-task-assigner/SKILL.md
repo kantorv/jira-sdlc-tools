@@ -10,7 +10,7 @@ project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>` — resolve
-  these from the `.env` file in the project root before following the rest of
+  these from `jira-tools-plugin.env` in the project root before following the rest of
   this skill.
 - `<WORKTREES_DIR>` — relative to project root — already exists, don't
   create it. Just confirm with `ls <WORKTREES_DIR>` before using it; if
@@ -87,7 +87,7 @@ investigation, this is a question for step 3.
 
 This skill assumes a two-level hierarchy — top-level types (`Task`,
 `Story`, `Bug`) plus `Sub-task`, no `Epic`. Confirm against
-`<HAS_EPIC_TYPE>` in the `.env` file; if your project does
+`<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`; if your project does
 use Epics, this step and the hierarchy checks in
 `../_shared/jira-cli-reference.md` §1/§3 need extending before you rely on
 this skill:
@@ -205,7 +205,7 @@ syntax. Things to never forget:
 - **Auth**: check whether `JIRA_API_TOKEN` is already set (`echo
   $JIRA_API_TOKEN`). If empty, prefix every `jira` command with
   `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)"` (see
-  the `.env` file for `<JIRA_TOKEN_PATH>` — default
+  `jira-tools-plugin.env` for `<JIRA_TOKEN_PATH>` — default
   `.jira/token.txt` — and jira-cli-reference.md §0).
 - Use `--no-input` on every write command except `delete` (§8 — it doesn't
   support it), and quote `"Sub-task"` exactly (with the hyphen) when

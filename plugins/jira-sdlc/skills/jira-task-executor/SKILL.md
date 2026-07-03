@@ -91,7 +91,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 3. **Transition the issue** to in-progress:
    `jira issue move <KEY> "<STATUS_IN_PROGRESS>"` (see
-   the `.env` file in the project root for the confirmed status name for this
+   `jira-tools-plugin.env` in the project root for the confirmed status name for this
    project — default example `In Progress`).
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
@@ -109,7 +109,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      test(s) to the relevant suite file first.
    - Run each new/affected test individually, one at a time — don't move
      to the next one until the current one passes. Use
-     `<TEST_SINGLE_CMD>` from the `.env` file in the project root (the default
+     `<TEST_SINGLE_CMD>` from `jira-tools-plugin.env` in the project root (the default
      example there runs a Playwright test by line number:
      `yarn playwright test tests/mysuite.ts:555`).
    - Once every individual test passes, run the whole affected suite to
@@ -136,7 +136,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      `git commit -m "<KEY> #done <short message>"`. See
      `../_shared/jira-cli-reference.md` §7a for the full syntax and
      caveats (e.g. `#done` requires `<STATUS_DONE>` to be the actual
-     workflow status name — check the `.env` file).
+     workflow status name — check `jira-tools-plugin.env`).
    - **Dedicated branch**: `git commit -m "<KEY> <short message>"`.
      Split into multiple commits if the change has logically separate
      pieces; one is fine for a small change.
@@ -166,7 +166,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       one this skill, or `jira-task-assigner`, posts when first creating
       the branch). Use that as `PR_BASE` if found.
     - Only fall back to `<DEFAULT_BASE_BRANCH>` (see
-      the `.env` file in the project root) if *both* the local config and the
+      `jira-tools-plugin.env` in the project root) if *both* the local config and the
       Jira comment come up empty, and say so explicitly in the final
       report if you had to.
     - Try to get the issue's canonical URL via `jira open <KEY> --no-browser`
@@ -177,7 +177,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       The `--label` flag is **required** — the repo's semver-based release
       workflow reads it to decide the next version bump. Pick the label by
       what the PR actually changes in the app's semantics (these three
-      names assume the `<SEMVER_LABELS>` default from the `.env` file
+      names assume the `<SEMVER_LABELS>` default from `jira-tools-plugin.env`
       — adjust if yours differ):
       - `patch` — bug fixes, small internal improvements, no new
         functionality or breaking changes

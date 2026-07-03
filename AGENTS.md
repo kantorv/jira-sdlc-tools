@@ -12,12 +12,12 @@ is deliberately shorter and only covers what's easy to get wrong.
 
 Every project-specific value (Jira project key, worktrees path, test
 commands, workflow status names, review conventions) is a `<TOKEN>`
-resolved from the `.env` file in the project root (`jira-tools-plugin.env` —
-see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
+resolved from `jira-tools-plugin.env` in the project root
+(see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
 each variable) — never a literal.
 **Never hardcode a real project's value into a skill file.** If you're
 about to type an actual Jira key, a real path, or a specific framework
-name into a `SKILL.md` body, it belongs in the `.env` file's example
+name into a `SKILL.md` body, it belongs in `jira-tools-plugin.env`'s example
 table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
