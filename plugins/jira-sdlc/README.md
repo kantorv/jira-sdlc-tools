@@ -458,6 +458,7 @@ concrete before/after scenario in the PR description goes a long way.
 
 - [`ankitpokhrel/jira-cli`](https://github.com/ankitpokhrel/jira-cli) —
   the CLI these skills are written against.
+- [`Introducing JIRA cli`](https://medium.com/@ankitpokhrel/introducing-jira-cli-the-missing-command-line-tool-for-atlassian-jira-fe44982cc1de) — Medium article
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — smart
   commits and automatic branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
