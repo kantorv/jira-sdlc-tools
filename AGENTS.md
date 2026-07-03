@@ -12,11 +12,12 @@ is deliberately shorter and only covers what's easy to get wrong.
 
 Every project-specific value (Jira project key, worktrees path, test
 commands, workflow status names, review conventions) is a `<TOKEN>`
-resolved from `plugins/jira-sdlc/skills/_shared/project-config.md` —
-never a literal.
+resolved from `jira-tools-plugin.env` in the project root
+(see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
+each variable) — never a literal.
 **Never hardcode a real project's value into a skill file.** If you're
 about to type an actual Jira key, a real path, or a specific framework
-name into a `SKILL.md` body, it belongs in `project-config.md`'s example
+name into a `SKILL.md` body, it belongs in `jira-tools-plugin.env`'s example
 table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
@@ -96,4 +97,4 @@ Don't try to exercise a skill by running `/jira-task-assigner` *against
 this repo*. There's no Jira project or worktrees directory configured
 for `claude-code-plugins` itself, and there shouldn't be — these skills are
 meant to be installed into, and pointed at, a separate application repo
-that has its own `project-config.md` filled in.
+that has its own `.env` file filled in.

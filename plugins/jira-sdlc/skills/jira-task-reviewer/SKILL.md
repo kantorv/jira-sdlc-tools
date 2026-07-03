@@ -15,14 +15,14 @@ e.g. `PROJ-286`):
   `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
 - `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into
   (typically `<DEFAULT_BASE_BRANCH>` — see
-  `../_shared/project-config.md`) — recovered from
+  `jira-tools-plugin.env` in the project root) — recovered from
   `git config branch.<PARENT-BRANCH>.parentbranch` (set by
   `jira-task-assigner` when it created the branch), falling back to that
   issue's `"PR target branch: ..."` Jira comment if the config is missing.
 - Sub-task PRs all target `<PARENT-BRANCH>`.
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check
   `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
-  `../_shared/project-config.md`).
+  `jira-tools-plugin.env` in the project root).
 
 ## 1. Resolve the parent, sub-tasks, and current phase
 
@@ -100,7 +100,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
 2. **Pattern consistency** — Does the change match existing codebase
    patterns and conventions (naming, file structure, state-management/
    UI-framework idioms, i18n approach, etc.)? Refer to
-   `<CONVENTIONS_PATH>` (see `../_shared/project-config.md` — that file
+   `<CONVENTIONS_PATH>` (see `jira-tools-plugin.env` in the project root — `project-config.md`
    also lists `<CONVENTION_HIGHLIGHTS>`, specific patterns worth extra
    attention in this codebase, if any were configured).
 3. **No scope creep** — The change should only address what the
@@ -371,5 +371,5 @@ the skill will still verify it but can note it was previously approved.
 
 Reference: `../_shared/jira-cli-reference.md` has the full jira-cli
 syntax, confirmed issue types, and git/branch conventions.
-`../_shared/project-config.md` has this repo's specific values for
+The `.env` file in the project root has this repo's specific values for
 every `<TOKEN>` used above.
