@@ -7,7 +7,7 @@ Code copies a plugin snapshot into its cache at install time, so edits to
 this clone won't show up there until you reinstall. While actively
 changing a skill, load straight from your working copy instead:
 ```bash
-claude --plugin-dir /path/to/jira-sdlc-toolkit
+claude --plugin-dir /path/to/claude-code-plugins/plugins/jira-sdlc
 ```
 After further edits, run `/reload-plugins` inside that session rather
 than restarting. If this plugin is already installed from a marketplace
