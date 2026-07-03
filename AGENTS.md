@@ -94,6 +94,6 @@ to run against them.
 
 Don't try to exercise a skill by running `/jira-task-assigner` *against
 this repo*. There's no Jira project or worktrees directory configured
-for `jira-sdlc-toolkit` itself, and there shouldn't be — these skills are
+for `claude-code-plugins` itself, and there shouldn't be — these skills are
 meant to be installed into, and pointed at, a separate application repo
 that has its own `project-config.md` filled in.

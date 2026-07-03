@@ -177,17 +177,19 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
 
 ### Option A — Plugin + marketplace (recommended)
 
-1. Push this repo somewhere Claude Code can reach it (a GitHub repo is
-   easiest).
-2. In Claude Code:
+1. Add the marketplace at `kantorv/claude-code-plugins` and install the
+   plugin:
    ```
-   /plugin marketplace add YOUR_ORG/claude-code-plugins
+   /plugin marketplace add kantorv/claude-code-plugins
    /plugin install jira-sdlc@jira-sdlc-toolkit
    ```
-3. Fill in `skills/_shared/project-config.md` — see
+2. Fill in `skills/_shared/project-config.md` — see
    [Configuration](#configuration).
-4. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
+3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
+
+   Self-hosting or forking? Push the repo to your own GitHub and
+   `marketplace add` *that* `owner/repo` instead.
 
 **Why the layout matters:** a marketplace install only copies the
 plugin's own root directory into Claude Code's plugin cache. `_shared/`
@@ -207,10 +209,11 @@ skill bodies themselves.
 ### Option B — Drop-in (no marketplace)
 
 ```bash
-cp -r skills/* ~/.claude/skills/   # personal, all projects
+cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
-cp -r skills/* .claude/skills/     # project-level, commit it to your repo
+cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
+Run from the root of your `kantorv/claude-code-plugins` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
 `/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
