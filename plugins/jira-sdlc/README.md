@@ -55,8 +55,8 @@ Three skills, three jobs:
 ## Quick start
 
 ```
-/plugin marketplace add YOUR_ORG/jira-sdlc-toolkit
-/plugin install jira-sdlc@jira-sdlc-toolkit
+/plugin marketplace add kantorv/claude-code-plugins
+/plugin install jira-sdlc@kantorv
 ```
 
 Fill in `skills/_shared/project-config.md` for your repo (see
