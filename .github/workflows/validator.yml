@@ -32,17 +32,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: '25'
-          cache: 'npm'
-
-      # Pinned to the version these manifests were last confirmed green against.
-      # Bump deliberately — a float would let an upstream schema change turn
-      # the gate red mid-week. See claude plugin validate --help for --strict.
-      - name: Install claude CLI
-        run: npm install -g @anthropic-ai/claude-code@2.1.199
+      # Native install of the claude CLI — no npm, no Node toolchain. The
+      # installer (https://claude.ai/install.sh) downloads a prebuilt binary
+      # from downloads.claude.ai, SHA256-verifies it against Anthropic's
+      # manifest, then runs the binary's own `claude install` to set up the
+      # launcher at ~/.local/bin/claude. Pinned to the version these
+      # manifests were last confirmed green against — bump deliberately; a
+      # float would let an upstream schema change turn the gate red mid-week.
+      # `bash -s -- 2.1.199` puts 2.1.199 in $1 (install.sh reads TARGET="$1"),
+      # never $0. See claude plugin validate --help for --strict.
+      - name: Install claude CLI (native, no npm)
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.199
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Validate with claude plugin validate
         # Canonical structural check. --strict makes warnings (missing
