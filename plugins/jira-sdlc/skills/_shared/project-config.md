@@ -1,13 +1,14 @@
-# Project configuration
+# Project configuration reference
 
-`jira-task-assigner`, `jira-task-executor`, `jira-task-reviewer`, and
-`jira-cli-reference.md` all read their project-specific values from this
-one file. Fill it in once per repo you use this plugin in — nothing else
-under `skills/` should need editing after that.
+This file describes every variable used in the `.env` file
+(`jira-tools-plugin.env` in the project root). All project-specific values
+live in that `.env` file — nothing else under `skills/` should need editing
+after that.
 
 Each skill's "Conventions used below" section names the tokens it needs
 (e.g. `<PROJECT-KEY>`). Before following a skill's instructions, resolve
-every token it references against the tables below.
+every token it references against the `.env` file; the tables below describe
+what each variable means.
 
 ## Required
 
@@ -35,12 +36,14 @@ commands aren't.
 ## Jira workflow status names
 
 These are already flagged as "confirm once" inside the skills, because
-Jira status *names* vary by project even when the underlying states are
-the same. Check yours with `jira issue view <any-existing-key>`.
+Jira status *names* vary by project even when the underlying states are the
+same. Check yours with `jira issue view <any-existing-key>`.
 
 | Token | What it is | Example |
 |---|---|---|
+| `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
+| `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Status name the Smart Commit `#done` command relies on. Must match your workflow's real status name exactly, or the transition silently won't fire. | `Done` |
 
 ## Optional — sensible defaults, override if yours differ
@@ -53,20 +56,21 @@ the same. Check yours with `jira issue view <any-existing-key>`.
 
 ## Worked example
 
-The README's usage walkthrough assumes this filled-in config — copy the
-shape, not the values:
+The README's usage walkthrough assumes this filled-in `.env`:
 
 ```
-<PROJECT-KEY>           = PROJ
-<WORKTREES_DIR>         = ../myapp-worktrees
-<DEFAULT_BASE_BRANCH>   = development
-<CONVENTIONS_PATH>      = .claude/rules/
-<CONVENTION_HIGHLIGHTS> = (blank — no framework-specific call-outs yet)
-<TEST_SINGLE_CMD>       = yarn playwright test {file}:{line}
-<TEST_SUITE_CMD>        = yarn playwright test {file}
-<STATUS_IN_PROGRESS>    = In Progress
-<STATUS_DONE>           = Done
-<SEMVER_LABELS>         = patch / minor / major
-<JIRA_TOKEN_PATH>       = .jira/token.txt
-<HAS_EPIC_TYPE>         = no
+PROJECT-KEY           = PROJ
+WORKTREES_DIR         = ../myapp-worktrees
+DEFAULT_BASE_BRANCH   = development
+CONVENTIONS_PATH      = .claude/rules/
+CONVENTION_HIGHLIGHTS =
+TEST_SINGLE_CMD       = yarn playwright test {file}:{line}
+TEST_SUITE_CMD        = yarn playwright test {file}
+STATUS_TODO           = To Do
+STATUS_IN_PROGRESS    = In Progress
+STATUS_IN_REVIEW      = In Review
+STATUS_DONE           = Done
+SEMVER_LABELS         = patch / minor / major
+JIRA_TOKEN_PATH       = .jira/token.txt
+HAS_EPIC_TYPE         = no
 ```

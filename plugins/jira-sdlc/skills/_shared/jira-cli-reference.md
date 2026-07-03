@@ -4,8 +4,8 @@ Reference for Claude Code when creating/managing Jira issues via `jira-cli`.
 Auth is already set up (`jira init`, Cloud, classic unscoped token, default project selected).
 
 Project-specific values below (`<PROJECT-KEY>`, `<JIRA_TOKEN_PATH>`,
-`<STATUS_IN_PROGRESS>`, `<STATUS_DONE>`) come from `project-config.md` in
-this same directory — resolve them there, not here.
+`<STATUS_IN_PROGRESS>`, `<STATUS_DONE>`) come from the `.env` file in the
+project root — resolve them there, not here.
 
 **Sections:** [0. Auth](#0-auth--non-interactive-flags) ·
 [1. Issue types](#1-issue-type-hierarchy) ·
@@ -30,7 +30,7 @@ echo $JIRA_API_TOKEN
 - **Set** → run plain `jira ...` commands, no prefix needed.
 - **Empty** → fall back to the token file at `<JIRA_TOKEN_PATH>` (default
   `.jira/token.txt`, relative to the worktree root — see
-  `project-config.md`). Prefix every command:
+  the `.env` file in the project root). Prefix every command:
   ```
   JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)" jira ...
   ```
@@ -56,7 +56,7 @@ required flag explicit, never `--plain`, never rely on the prompt.
 ## 1. Issue type hierarchy
 
 Confirmed for this project (no Epic type here — if yours has one, see
-`<HAS_EPIC_TYPE>` in `project-config.md` before relying on the rest of
+`<HAS_EPIC_TYPE>` in the `.env` file before relying on the rest of
 this section):
 
 ```
@@ -71,7 +71,7 @@ Task / Story / Bug        (top-level, no parent)
 | Bug | `Bug` |
 | Subtask | `Sub-task` |
 
-Default project key: `<PROJECT-KEY>` (see `project-config.md`).
+Default project key: `<PROJECT-KEY>` (see the `.env` file in the project root).
 
 Note the hyphen in `Sub-task` — pass it quoted in commands: `-t"Sub-task"`.
 
@@ -171,7 +171,7 @@ jira issue assign <KEY> $(jira me)
 jira issue assign <KEY> x                         # unassign
 
 jira issue move <KEY> "<Status name>"             # use <STATUS_IN_PROGRESS> / <STATUS_DONE>
-                                                    # from project-config.md — CHECK against
+                                                    # from the `.env` file — CHECK against
                                                     # real workflow status names once
 jira issue move <KEY> "<Status>" --comment "<note>"   # only works if the workflow
                                                         # screen allows a comment on transition
@@ -181,7 +181,7 @@ jira issue move <KEY> "<Status>" --comment "<note>"   # only works if the workfl
 # CHECK — see workflow status names for this project, e.g.:
 jira issue view <any-existing-KEY>
 # (status names appear in the output — fill the confirmed names into
-# <STATUS_IN_PROGRESS> / <STATUS_DONE> in project-config.md)
+# <STATUS_IN_PROGRESS> / <STATUS_DONE> in the `.env` file)
 ```
 
 ---
@@ -271,7 +271,7 @@ Available commands:
 - `#time <amount> <text>` — logs work, e.g. `#time 1h 30m fixed pagination bug`
 - `#<transition-name>` — moves the issue to that workflow state
 
-⚠️ `#done` only works if `<STATUS_DONE>` (see `project-config.md`; default
+⚠️ `#done` only works if `<STATUS_DONE>` (see the `.env` file; default
 example: `Done`) is the **actual transition/status name** in this project's
 workflow. If the real name differs or is multi-word, hyphenate it
 (`#in-review`, `#code-review`). Confirm the exact name once, the same way
@@ -369,7 +369,7 @@ gh pr create --base development --title "PROJ-123: fix off-by-one" --body "..." 
 ```
 Label picks the version bump: `patch` (fixes/internal), `minor` (features), `major` (breaking).
 Labels must exist in the repo — check with `gh api repos/<org>/<repo>/labels --jq '.[].name'`.
-(Label names shown are the `<SEMVER_LABELS>` default from `project-config.md` — adjust if yours differ.)
+(Label names shown are the `<SEMVER_LABELS>` default from the `.env` file — adjust if yours differ.)
 
 **Other gh commands:**
 ```

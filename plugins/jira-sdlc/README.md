@@ -59,7 +59,7 @@ Three skills, three jobs:
 /plugin install jira-sdlc@jira-sdlc-toolkit
 ```
 
-Fill in `skills/_shared/project-config.md` for your repo (see
+Create `jira-tools-plugin.env` in the project root for your repo (see
 [Configuration](#configuration)), then:
 
 ```
@@ -150,7 +150,7 @@ parallelizable pieces or not.
 
 **Jira shape assumed.** Two-level hierarchy: `Task`/`Story`/`Bug` at the
 top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
-`<HAS_EPIC_TYPE>` in `project-config.md`.
+`<HAS_EPIC_TYPE>` in the `.env` file.
 
 ## Prerequisites
 
@@ -164,7 +164,7 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
   connected between your Jira project and GitHub repo — the smart-commit
   transitions and automatic branch-to-issue linking both depend on it.
 - **Git with worktree support** (any reasonably current git).
-- **A test runner and commands to plug into `project-config.md`** — the
+- **A test runner and commands to plug into the `.env` file** — the
   executor's test step ships with a Playwright example but the underlying
   policy is framework-agnostic.
 - **Semver PR labels** (`patch`/`minor`/`major`, or your equivalents)
@@ -183,7 +183,7 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
    /plugin marketplace add kantorv/claude-code-plugins
    /plugin install jira-sdlc@jira-sdlc-toolkit
    ```
-2. Fill in `skills/_shared/project-config.md` — see
+2. Fill in the `.env` file (`jira-tools-plugin.env`) in the project root — see
    [Configuration](#configuration).
 3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
@@ -239,7 +239,7 @@ claude-code-plugins/                # marketplace root (this repo)
         │   │   └── SKILL.md
         │   └── _shared/
         │       ├── jira-cli-reference.md   # jira-cli syntax, auth, git conventions
-        │       └── project-config.md       # ← fill this in for your project
+        │       └── project-config.md       # ← reference: describes each .env variable
         ├── docs/
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
@@ -254,8 +254,9 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in **`skills/_shared/project-config.md`**
-— nothing else under `skills/` should need editing. It covers:
+All project-specific values live in the `.env` file (`jira-tools-plugin.env`)
+— see `skills/_shared/project-config.md` for a description of each variable.
+Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
 - Your default base branch and where your coding conventions live
@@ -368,7 +369,7 @@ Deliberately never automated, regardless of how routine a run looks:
   GitLab/Bitbucket means replacing those mechanisms, not just swapping
   CLI commands.
 - Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
-  `project-config.md` if yours has one.
+  the `.env` file if yours has one.
 - The reviewer works through sub-task PRs **sequentially, by design** —
   not in parallel — so the early-exit behavior stays simple to reason
   about. For a large sub-task count this means later PRs wait on earlier
@@ -392,7 +393,7 @@ real task, not discovering mid-failure:
       objects with a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the
       confirmed values into `<STATUS_IN_PROGRESS>` / `<STATUS_DONE>` in
-      `project-config.md`.
+      the `.env` file.
 - [ ] `jira issue comment --help` — confirm the flag for piping a
       multi-line comment from stdin (the skills assume `--template -`).
 - [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
@@ -401,7 +402,7 @@ real task, not discovering mid-failure:
       — required for Smart Commit's `#done` to fire.
 - [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
       semver labels exist (or update `<SEMVER_LABELS>` in
-      `project-config.md` to match what does).
+      the `.env` file to match what does).
 
 ## Troubleshooting / FAQ
 
@@ -448,7 +449,7 @@ directives aimed specifically at AI coding assistants (branch naming,
 target-branch defaults, feature-flag wrapping, commit message format).
 
 If your branching model differs, adapt that document to match yours, then
-update `<DEFAULT_BASE_BRANCH>` in `project-config.md` and the
+update `<DEFAULT_BASE_BRANCH>` in the `.env` file and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
 `jira-cli-reference.md` §7b accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
