@@ -166,7 +166,9 @@ For each sub-task PR (same key order as step 3):
    `state == "MERGED"`. If not merged, stop and report — don't assume.
 
 4. **Jira update**: Post a comment on the sub-task recording the
-   merge:
+   merge (see `../_shared/jira-cli-reference.md` §6 for comment
+   variants — single-line via positional arg, multi-line via heredoc
+   to `--template -`, or `echo ... | --template -`):
    ```
    echo "PR #<prNumber> approved and merged into <PARENT-BRANCH>." | \
      jira issue comment add <SUBTASK-KEY> --template -
@@ -223,7 +225,10 @@ Runs only once step 4b's state check finds `state == MERGED` — in
 practice this means the user merged the parent PR manually since the
 previous run, and this invocation is picking that up.
 
-1. **Jira update** — comment on `<PARENT-KEY>`:
+1. **Jira update** — comment on `<PARENT-KEY>`. For this multi-line
+   report use the heredoc pattern (see `../_shared/jira-cli-reference.md`
+   §6; never wrap markdown in a quoted inline string — backticks are
+   interpreted as command substitution):
    ```
    cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
    All sub-tasks approved and merged. Parent branch
@@ -306,9 +311,11 @@ you installed these skills as loose files rather than as a plugin.)
 
 ### Jira comment mechanics
 
-Since the report is multi-line, pipe it in via `--template -` (same
-pattern as the other skills — see `../_shared/jira-cli-reference.md`
-§6):
+Since the report is multi-line, **always pipe via heredoc to
+`--template -`** (see `../_shared/jira-cli-reference.md` §6).
+Single-line comments can use the positional `jira issue comment add
+<KEY> "<text>"` form. Never wrap markdown in a quoted inline
+string — backticks are interpreted as command substitution:
 ```
 cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
 <the report content>

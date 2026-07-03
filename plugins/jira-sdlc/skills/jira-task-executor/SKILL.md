@@ -87,7 +87,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      - Also post the same durable fallback `jira-task-assigner` posts for
        issues it creates, so the PR target survives even if this local
        config is ever unreadable later (fresh clone, different machine):
-       `jira issue comment add <KEY> "PR target branch: $STARTING_BRANCH."`
+       `jira issue comment add <KEY> "PR target branch: $STARTING_BRANCH."` — single-line form; for multi-line/markdown comments use `cat <<'EOF' | jira issue comment add <KEY> --template -` (see `../_shared/jira-cli-reference.md` §6 for full comment syntax).
 
 3. **Transition the issue** to in-progress:
    `jira issue move <KEY> "<STATUS_IN_PROGRESS>"` (see
@@ -201,10 +201,11 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
     commit(s), the PR link, and the issue's new status. Post this same
     report to the user in chat **and** as a single Jira comment — don't
     post a separate short "PR opened" comment earlier, this is the one
-    comment for the whole run. Since it's multi-line, pipe it in rather
-    than using an inline quoted `-b`/comment string (same `--template -`
-    stdin pattern as issue creation, see `../_shared/jira-cli-reference.md`
-    §6):
+    comment for the whole run. Since it's multi-line, **always pipe via
+    heredoc to `--template -`** (see `../_shared/jira-cli-reference.md`
+    §6 for all comment variants: single-line positional, multi-line
+    heredoc, and stdin pipe). Never wrap markdown in an quoted inline
+    string — backticks are interpreted as command substitution:
     ```
     cat <<'EOF' | jira issue comment add <KEY> --template -
     <the same report content shown to the user>
