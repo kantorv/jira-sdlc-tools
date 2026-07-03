@@ -1,0 +1,122 @@
+# Cuts a release branch for the next sprint — SDLC §3 Phase 2 (Feature
+# Freeze & Release Cut). Manual dispatch: derives the next sprint number,
+# branches `release/sprint-<N>` off `development`, and opens a DRAFT PR into
+# `main` carrying the `minor` label (the sprint-default bump per SDLC §5).
+# Relabel the PR to `patch`/`major` before merging to override the bump
+# that `release.yml` will compute.
+#
+# Humans QA on the branch (Phase 3) by opening fix PRs back into
+# `release/sprint-<N>`, then mark this draft PR ready and merge it (Phase 4,
+# step 1). `release.yml` takes over on that merge.
+#
+# Prereq: the repo setting "Allow GitHub Actions to create and approve pull
+# requests" must be ON for `gh pr create --draft` to succeed.
+name: Cut release
+
+on:
+  workflow_dispatch:
+    inputs:
+      sprint-number:
+        description: Sprint number for the release branch (e.g. 24). Leave blank to auto-increment from the highest existing release/sprint-* branch on origin.
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cut:
+    name: Cut release/sprint-<N> from development
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Resolve sprint number
+        id: resolve
+        env:
+          INPUT_SPRINT: ${{ inputs.sprint-number }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_SPRINT}" ]; then
+            if ! printf '%s' "${INPUT_SPRINT}" | grep -qE '^[0-9]+$'; then
+              echo "::error::sprint-number must be a positive integer (got '${INPUT_SPRINT}'). Leave blank for auto-increment."
+              exit 1
+            fi
+            N="${INPUT_SPRINT}"
+          else
+            # Query origin directly (checkout may not have fetched every
+            # release/* head). Highest existing sprint integer → +1, else 1.
+            max=$(git ls-remote --heads origin 'release/sprint-*' \
+                  | sed -E 's#.*refs/heads/release/sprint-([0-9]+).*#\1#' \
+                  | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
+            if [ -z "${max}" ]; then N=1; else N=$((max + 1)); fi
+          fi
+          echo "number=${N}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release/sprint-${{ steps.resolve.outputs.number }}
+        id: create
+        env:
+          N: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+          branch="release/sprint-${N}"
+          if git ls-remote --heads origin "${branch}" | grep -q .; then
+            echo "::error::Branch ${branch} already exists on origin. Pass a higher sprint-number, or delete it first."
+            exit 1
+          fi
+          git checkout -b "${branch}" origin/development
+          git push -u origin "${branch}"
+          echo "::notice::Created ${branch} from development"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Open draft PR into main
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          N: ${{ steps.resolve.outputs.number }}
+          BRANCH: ${{ steps.create.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # Unquoted heredoc so ${N} expands; deliberately backtick-free so
+          # nothing in the body gets shell-interpreted.
+          body=$(cat <<EOF
+          Release cut from development — SDLC Phase 2.
+
+          1. QA runs against this branch (Phase 3). Fix bugs as PRs into
+             release/sprint-${N}; never merge new features here.
+          2. When green, mark this draft PR ready and merge it into main.
+          3. release.yml then tags vX.Y.Z, publishes the GitHub Release,
+             back-merges main into development, and deletes this branch.
+
+          The minor label is the sprint-default bump (SDLC section 5).
+          Relabel to patch or major before merging to override.
+
+          Diff: development...release/sprint-${N}
+          EOF
+          )
+          url=$(gh pr create \
+            --base main --head "${BRANCH}" --draft \
+            --title "Release sprint ${N}" \
+            --label minor \
+            --body "${body}")
+          echo "draft_pr=${url}" >> "$GITHUB_OUTPUT"
+          echo "${url}"
+
+      - name: Job summary
+        env:
+          N: ${{ steps.resolve.outputs.number }}
+          BRANCH: ${{ steps.create.outputs.branch }}
+          DRAFT_PR: ${{ steps.pr.outputs.draft_pr }}
+        run: |
+          {
+            echo "## Cut release sprint ${N}"
+            echo ""
+            echo "- branch: \`${BRANCH}\` (cut from \`development\`)"
+            echo "- draft PR (labeled \`minor\`): ${DRAFT_PR}"
+            echo ""
+            echo "Next: QA on this branch, then merge the draft PR into \`main\` — \`release.yml\` does the rest."
+          } >> "$GITHUB_STEP_SUMMARY"
