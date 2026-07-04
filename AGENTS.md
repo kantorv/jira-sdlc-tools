@@ -91,6 +91,47 @@ logic end to end for the scenario you changed. These files *are* the
 behavior, not a description of it — there's no separate implementation
 to run against them.
 
+## Releasing (tagging + GitHub Releases)
+
+There's no deploy pipeline — for a plugin marketplace, a *release* is just a
+SemVer git tag plus the GitHub Release that the marketplace install command
+consumes. The version lives only in git tags (no `package.json`/`VERSION` file
+to bump), which is what makes the workflow generic enough to lift into any
+repo, not just the JS app these skills came from. The branching and release
+policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
+automate it:
+
+- **`cut-release.yml`** — manual `workflow_dispatch`. Derives the next sprint
+  number (or takes one), cuts `release/sprint-<N>` from `development`, opens a
+  **draft** PR into `main` carrying the `minor` label (the sprint-default bump,
+  SDLC §5). SDLC Phase 2.
+- **`release.yml`** — on a PR merge into `main` whose head is `release/*` or
+  `hotfix/*`. In order: resolves the bump → tags `vX.Y.Z` on the merge commit
+  → publishes the GitHub Release → back-merges `main` into `development`
+  (opens a sync PR instead if it conflicts, never force-pushing) → deletes the
+  `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
+
+Order of operations, the short version:
+1. Run `cut-release` → `release/sprint-<N>` and a draft PR appear.
+2. QA on that branch; fix PRs land back into `release/sprint-<N>` (SDLC Phase 3).
+3. Mark the draft PR ready and merge it into `main`.
+4. `release.yml` tags, releases, syncs back to `development`, and deletes the
+   branch automatically.
+
+Bump resolution (SDLC §5): branch-type default — `release/*` → **minor**,
+`hotfix/*` → **patch** — overridden by a `patch`/`minor`/`major` label on the
+merged PR (the same labels `jira-task-executor` already stamps, and that
+already exist on this repo). Tags are pure SemVer, no sprint suffix. The
+first release (no `v*` tag exists) is `v0.1.0`. A `hotfix/*` merge defaults to
+a `patch` bump and runs the same sync-back + cleanup steps.
+
+Auth: the default `GITHUB_TOKEN` suffices while `main`/`development` are
+unprotected (the workflows push tags, delete branches, create releases, and
+push the back-merge with it). If you enable branch protection on `main`, or
+want the back-merge commit to re-trigger the `validator` workflow, define a
+`RELEASE_PAT` secret and swap the `GH_TOKEN`/remote in `release.yml`'s
+back-merge step.
+
 ## This repo is the toolkit, not a target
 
 Don't try to exercise a skill by running `/jira-task-assigner` *against
