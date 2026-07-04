@@ -4,8 +4,8 @@ Reference for Claude Code when creating/managing Jira issues via `jira-cli`.
 Auth is already set up (`jira init`, Cloud, classic unscoped token, default project selected).
 
 Project-specific values below (`<PROJECT-KEY>`, `<JIRA_TOKEN_PATH>`,
-`<STATUS_IN_PROGRESS>`, `<STATUS_DONE>`) come from `project-config.md` in
-this same directory — resolve them there, not here.
+`<STATUS_IN_PROGRESS>`, `<STATUS_DONE>`) come from `jira-tools-plugin.env` in the
+project root — resolve them there, not here.
 
 **Sections:** [0. Auth](#0-auth--non-interactive-flags) ·
 [1. Issue types](#1-issue-type-hierarchy) ·
@@ -30,7 +30,7 @@ echo $JIRA_API_TOKEN
 - **Set** → run plain `jira ...` commands, no prefix needed.
 - **Empty** → fall back to the token file at `<JIRA_TOKEN_PATH>` (default
   `.jira/token.txt`, relative to the worktree root — see
-  `project-config.md`). Prefix every command:
+  `jira-tools-plugin.env` in the project root). Prefix every command:
   ```
   JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)" jira ...
   ```
@@ -56,7 +56,7 @@ required flag explicit, never `--plain`, never rely on the prompt.
 ## 1. Issue type hierarchy
 
 Confirmed for this project (no Epic type here — if yours has one, see
-`<HAS_EPIC_TYPE>` in `project-config.md` before relying on the rest of
+`<HAS_EPIC_TYPE>` in `jira-tools-plugin.env` before relying on the rest of
 this section):
 
 ```
@@ -71,7 +71,7 @@ Task / Story / Bug        (top-level, no parent)
 | Bug | `Bug` |
 | Subtask | `Sub-task` |
 
-Default project key: `<PROJECT-KEY>` (see `project-config.md`).
+Default project key: `<PROJECT-KEY>` (see `jira-tools-plugin.env` in the project root).
 
 Note the hyphen in `Sub-task` — pass it quoted in commands: `-t"Sub-task"`.
 
@@ -171,7 +171,7 @@ jira issue assign <KEY> $(jira me)
 jira issue assign <KEY> x                         # unassign
 
 jira issue move <KEY> "<Status name>"             # use <STATUS_IN_PROGRESS> / <STATUS_DONE>
-                                                    # from project-config.md — CHECK against
+                                                    # from `jira-tools-plugin.env` — CHECK against
                                                     # real workflow status names once
 jira issue move <KEY> "<Status>" --comment "<note>"   # only works if the workflow
                                                         # screen allows a comment on transition
@@ -181,7 +181,7 @@ jira issue move <KEY> "<Status>" --comment "<note>"   # only works if the workfl
 # CHECK — see workflow status names for this project, e.g.:
 jira issue view <any-existing-KEY>
 # (status names appear in the output — fill the confirmed names into
-# <STATUS_IN_PROGRESS> / <STATUS_DONE> in project-config.md)
+# <STATUS_IN_PROGRESS> / <STATUS_DONE> in `jira-tools-plugin.env`)
 ```
 
 ---
@@ -197,10 +197,46 @@ jira issue unlink <KEY-1> <KEY-2>
 
 ## 6. Comments & worklogs
 
-```
-jira issue comment add <KEY> "<comment text>"
-echo "<comment from agent>" | jira issue comment add <KEY> --template -
+### Add a comment
 
+**Single-line (simple text):**
+```bash
+jira issue comment add <KEY> "Single-line comment text"
+```
+
+**Multi-line / markdown / backticks (safest — heredoc to `--template -`):**
+```bash
+cat <<'EOF' | jira issue comment add <KEY> --template -
+Multi-line comment with **markdown** and `inline code`.
+Line 2 of the comment.
+Line 3 of the comment.
+EOF
+```
+
+**Dynamic / single-line via `echo` pipe (good for templated strings):**
+```bash
+echo "Comment from stdin" | jira issue comment add <KEY> --template -
+```
+
+**Bash dollar-quoted string (inline newlines without heredoc):**
+```bash
+jira issue comment add <KEY> $'Line 1\nLine 2\nLine 3'
+```
+
+**From a file (reusable template / long report):**
+```bash
+jira issue comment add <KEY> --template /path/to/comment.md
+```
+
+#### ⚠️ Important notes for comments
+- **There is no `-m` flag** — `jira issue comment add KEY -m "text"` does not exist. The positional argument works exactly as in `jira issue create`.
+- **Backticks inside double-quoted strings are dangerous in a raw shell** because bash treats `` ` `` as command substitution. The heredoc or file methods are safest for any comment containing backticks, markdown, or newlines.
+- **The `--template -` form reads stdin** — explicit `echo "..." | jira issue comment add <KEY> --template -` is the canonical multi-line pattern used across all skills.
+- **Pipe without `--template` also works** — `echo "..." | jira issue comment add <KEY>` is accepted as a shorthand when stdin is a pipe.
+
+### Worklog
+
+```bash
 jira issue worklog add <KEY> "1h 30m" --comment "<note>" --no-input
 ```
 
@@ -235,7 +271,7 @@ Available commands:
 - `#time <amount> <text>` — logs work, e.g. `#time 1h 30m fixed pagination bug`
 - `#<transition-name>` — moves the issue to that workflow state
 
-⚠️ `#done` only works if `<STATUS_DONE>` (see `project-config.md`; default
+⚠️ `#done` only works if `<STATUS_DONE>` (see `jira-tools-plugin.env`; default
 example: `Done`) is the **actual transition/status name** in this project's
 workflow. If the real name differs or is multi-word, hyphenate it
 (`#in-review`, `#code-review`). Confirm the exact name once, the same way
@@ -333,7 +369,7 @@ gh pr create --base development --title "PROJ-123: fix off-by-one" --body "..." 
 ```
 Label picks the version bump: `patch` (fixes/internal), `minor` (features), `major` (breaking).
 Labels must exist in the repo — check with `gh api repos/<org>/<repo>/labels --jq '.[].name'`.
-(Label names shown are the `<SEMVER_LABELS>` default from `project-config.md` — adjust if yours differ.)
+(Label names shown are the `<SEMVER_LABELS>` default from `jira-tools-plugin.env` — adjust if yours differ.)
 
 **Other gh commands:**
 ```

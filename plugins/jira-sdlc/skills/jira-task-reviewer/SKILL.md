@@ -15,14 +15,14 @@ e.g. `PROJ-286`):
   `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
 - `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into
   (typically `<DEFAULT_BASE_BRANCH>` — see
-  `../_shared/project-config.md`) — recovered from
+  `jira-tools-plugin.env` in the project root) — recovered from
   `git config branch.<PARENT-BRANCH>.parentbranch` (set by
   `jira-task-assigner` when it created the branch), falling back to that
   issue's `"PR target branch: ..."` Jira comment if the config is missing.
 - Sub-task PRs all target `<PARENT-BRANCH>`.
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check
   `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
-  `../_shared/project-config.md`).
+  `jira-tools-plugin.env` in the project root).
 
 ## 1. Resolve the parent, sub-tasks, and current phase
 
@@ -100,7 +100,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
 2. **Pattern consistency** — Does the change match existing codebase
    patterns and conventions (naming, file structure, state-management/
    UI-framework idioms, i18n approach, etc.)? Refer to
-   `<CONVENTIONS_PATH>` (see `../_shared/project-config.md` — that file
+   `<CONVENTIONS_PATH>` (see `jira-tools-plugin.env` in the project root — `project-config.md`
    also lists `<CONVENTION_HIGHLIGHTS>`, specific patterns worth extra
    attention in this codebase, if any were configured).
 3. **No scope creep** — The change should only address what the
@@ -166,7 +166,9 @@ For each sub-task PR (same key order as step 3):
    `state == "MERGED"`. If not merged, stop and report — don't assume.
 
 4. **Jira update**: Post a comment on the sub-task recording the
-   merge:
+   merge (see `../_shared/jira-cli-reference.md` §6 for comment
+   variants — single-line via positional arg, multi-line via heredoc
+   to `--template -`, or `echo ... | --template -`):
    ```
    echo "PR #<prNumber> approved and merged into <PARENT-BRANCH>." | \
      jira issue comment add <SUBTASK-KEY> --template -
@@ -223,7 +225,10 @@ Runs only once step 4b's state check finds `state == MERGED` — in
 practice this means the user merged the parent PR manually since the
 previous run, and this invocation is picking that up.
 
-1. **Jira update** — comment on `<PARENT-KEY>`:
+1. **Jira update** — comment on `<PARENT-KEY>`. For this multi-line
+   report use the heredoc pattern (see `../_shared/jira-cli-reference.md`
+   §6; never wrap markdown in a quoted inline string — backticks are
+   interpreted as command substitution):
    ```
    cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
    All sub-tasks approved and merged. Parent branch
@@ -306,9 +311,11 @@ you installed these skills as loose files rather than as a plugin.)
 
 ### Jira comment mechanics
 
-Since the report is multi-line, pipe it in via `--template -` (same
-pattern as the other skills — see `../_shared/jira-cli-reference.md`
-§6):
+Since the report is multi-line, **always pipe via heredoc to
+`--template -`** (see `../_shared/jira-cli-reference.md` §6).
+Single-line comments can use the positional `jira issue comment add
+<KEY> "<text>"` form. Never wrap markdown in a quoted inline
+string — backticks are interpreted as command substitution:
 ```
 cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
 <the report content>
@@ -364,5 +371,5 @@ the skill will still verify it but can note it was previously approved.
 
 Reference: `../_shared/jira-cli-reference.md` has the full jira-cli
 syntax, confirmed issue types, and git/branch conventions.
-`../_shared/project-config.md` has this repo's specific values for
+The `.env` file in the project root has this repo's specific values for
 every `<TOKEN>` used above.
