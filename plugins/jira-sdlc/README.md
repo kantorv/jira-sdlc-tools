@@ -55,7 +55,7 @@ Three skills, three jobs:
 ## Quick start
 
 ```
-/plugin marketplace add kantorv/claude-code-plugins
+/plugin marketplace add kantorv/jira-sdlc-toolkit
 /plugin install jira-sdlc@jira-sdlc-toolkit
 ```
 
@@ -177,10 +177,10 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
 
 ### Option A — Plugin + marketplace (recommended)
 
-1. Add the marketplace at `kantorv/claude-code-plugins` and install the
+1. Add the marketplace at `kantorv/jira-sdlc-toolkit` and install the
    plugin:
    ```
-   /plugin marketplace add kantorv/claude-code-plugins
+   /plugin marketplace add kantorv/jira-sdlc-toolkit
    /plugin install jira-sdlc@jira-sdlc-toolkit
    ```
 2. Fill in `jira-tools-plugin.env` in the project root — see
@@ -213,7 +213,7 @@ cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
 cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
-Run from the root of your `kantorv/claude-code-plugins` clone.
+Run from the root of your `kantorv/jira-sdlc-toolkit` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
 `/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
@@ -223,7 +223,7 @@ references mentioned above back down to their bare form.
 ## Repository layout
 
 ```
-claude-code-plugins/                # marketplace root (this repo)
+jira-sdlc-toolkit/                # marketplace root (this repo)
 ├── .claude-plugin/
 │   └── marketplace.json           # single-plugin marketplace manifest
 └── plugins/
@@ -248,7 +248,7 @@ claude-code-plugins/                # marketplace root (this repo)
         └── README.md
 ```
 
-The marketplace root (`claude-code-plugins/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
+The marketplace root (`jira-sdlc-toolkit/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
 is the plugin root Claude Code copies on install. `_shared/` lives inside it
 deliberately — see [Installation](#installation) for why that matters.
 
