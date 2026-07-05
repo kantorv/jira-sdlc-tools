@@ -190,12 +190,21 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
       (get `<org>/<repo>` from `git remote get-url origin`).
 
-11. **Update Jira — status only, no comment yet:**
-    - **Don't transition the status here.** Leave it as
-      `<STATUS_IN_PROGRESS>` — moving to "In Review"/"Done" happens
-      automatically (via GitHub-for-Jira's merge automation) once the PR
-      is merged. Transitioning it manually here would fight that
-      automation, not help it.
+11. **Update Jira — status transition, no comment yet:**
+    This depends on the git strategy from step 1:
+    - **Dedicated-branch strategy**: you just opened a PR (step 10), so
+      the work is now under review — transition it to in-review:
+      `jira issue move <KEY> "<STATUS_IN_REVIEW>"` (see
+      `jira-tools-plugin.env` in the project root for the confirmed status
+      name for this project — default example `In Review`).
+      `jira-task-reviewer` will move it to `<STATUS_DONE>` once it
+      squash-merges this PR into the parent branch (reviewer step 4a).
+    - **Smart-commit strategy**: don't transition here. The Smart Commit
+      message in step 8 already carries `#done`, which GitHub-for-Jira
+      applies to transition the issue straight to `<STATUS_DONE>` once the
+      commit lands on the remote parent branch — there's no In Review step
+      for a smart-commit sub-task, since it has no PR of its own. Leave
+      the status as `<STATUS_IN_PROGRESS>` until then.
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Post this same
