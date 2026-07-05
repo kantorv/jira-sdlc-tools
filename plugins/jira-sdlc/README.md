@@ -99,6 +99,12 @@ flowchart TB
     BASE -->|human merges manually| DONE([Released])
 ```
 
+The diagram shows the multistep path — one worktree and dedicated branch
+per sub-task, all merging into the parent branch. A single-step task is
+just the top-level issue and its worktree (PR targets the base branch
+directly); smart-commit sub-tasks share the parent's worktree and skip
+the per-sub-task PR (see Core concepts below).
+
 Nothing here gets passed by hand. Two mechanisms carry state between the
 three skills:
 
@@ -121,32 +127,40 @@ self-contained single task, or one sub-task of a split) gets its own
 subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
 
-**Dedicated branch vs. smart commit.** The assigner decides, per leaf
-issue, how its work should land:
-- **Dedicated branch** — its own branch and PR, merging into the branch
-  its worktree was created from. The default when issues have separate
-  worktrees.
-- **Smart commit** — committed directly with a `<KEY> #done <message>`
-  commit message (no new branch, no PR); GitHub-for-Jira reads the
-  special syntax and transitions the issue automatically. The default
-  when several small, non-parallelizable sub-tasks share one worktree.
+**What the assigner creates.** The assigner runs only from your base
+branch — invoke it from an existing feature/hotfix branch and it stops,
+telling you to checkout the base branch first (it doesn't append
+sub-tasks to an existing parent). From the base branch it always
+provisions one top-level issue (`Task`/`Story`/`Bug`) with a matching
+branch and a `git worktree`, then:
+
+- **Single-step** — the top-level issue is the only issue. The executor
+  runs in that worktree on a dedicated branch whose PR targets the base
+  branch directly.
+- **Multistep** — the top-level issue becomes the parent, and each
+  sub-task gets its own git strategy (see below). The parent branch (and
+  its worktree) is the merge target for the sub-tasks' PRs and the home
+  for any smart-commit sub-tasks.
+
+**Dedicated branch vs. smart commit** (per sub-task, multistep only):
+- **Dedicated branch** (default) — its own branch and PR, merging into
+  the parent branch. Used for anything that touches multiple files, adds
+  tests, or involves non-trivial logic. Gets its own worktree.
+- **Smart commit** (exceptional) — committed directly on the parent
+  branch with a `<KEY> #done <message>` message (no new branch, no PR);
+  GitHub-for-Jira reads the `#done` and transitions the issue straight
+  to Done. Reserved for small focused fixes (a couple of lines, a typo).
+  Runs in the shared parent worktree.
 
 The executor reads this decision from a Jira comment rather than
 re-deciding it — see `jira-task-assigner`'s "Git strategy" section for
 the full reasoning.
 
-**The five assignment cases.** What the assigner creates depends on two
-independent questions: does a parent issue already exist (inferred from
-the current branch), and does the request split into genuinely
-parallelizable pieces or not.
-
-| Case | Parent exists? | Single- or multistep? | What gets created |
-|---|---|---|---|
-| A | No | Multistep | New parent issue + parent branch (no worktree of its own); one worktree + dedicated branch per sub-task, targeting the parent branch |
-| B | No | Single-step | One issue; one worktree + dedicated branch targeting the base branch directly — no parent branch layer |
-| C | Yes | Multistep | Sub-tasks under the existing parent; one worktree + dedicated branch per sub-task, targeting the parent branch |
-| D | Yes | Single-step | Same as C, with exactly one sub-task |
-| E | — | Single-step, but splits into non-parallelizable sub-tasks (e.g. all touch the same files) | New parent issue + parent branch; **one shared worktree**; each sub-task lands via **smart commit** instead of its own branch/PR |
+**Picking `Task` vs. `Story` for the top-level issue.** When the user
+hasn't told you which to use, the assigner decides by complexity: a
+`Story` for larger, multi-faceted requests that deliver end-to-end user
+value; a `Task` for smaller, localized, or strictly technical chores. A
+`Bug` is always used for a defect or regression.
 
 **Jira shape assumed.** Two-level hierarchy: `Task`/`Story`/`Bug` at the
 top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
@@ -219,7 +233,7 @@ won't survive the copy.
 
 **If you rename the plugin** (the `name` field in
 `.claude-plugin/plugin.json`), also update the three self-referential
-`/jira-sdlc:...` mentions inside `jira-task-assigner` (step 8) and
+`/jira-sdlc:...` mentions inside `jira-task-assigner` (step 7) and
 `jira-task-reviewer` (step 5, both report templates) to match your new
 name — those are the only places the plugin name is hardcoded into the
 skill bodies themselves.
@@ -299,9 +313,10 @@ page: backend endpoint, frontend button, tests."*
 /jira-sdlc:jira-task-assigner "Add CSV export to the reports page: backend endpoint, frontend button, tests"
 ```
 The assigner investigates the codebase, asks anything genuinely
-ambiguous, decides this splits into independent pieces (multistep, case A
-— no parent branch exists yet), and creates:
-- `PROJ-401` (parent Task) on `feature/PROJ-401-csv-export`
+ambiguous, decides this splits into independent pieces (multistep), and
+creates:
+- `PROJ-401` (parent Story) on `feature/PROJ-401-csv-export`, with its
+  own worktree `worktree-PROJ-401` (home for any smart-commit sub-tasks)
 - `PROJ-402` (backend endpoint) → worktree, dedicated branch
 - `PROJ-403` (frontend button) → worktree, dedicated branch
 - `PROJ-404` (tests) → worktree, dedicated branch
@@ -354,9 +369,10 @@ local branches for you to clean up.
 All three skills check "what phase am I in" before acting, so re-invoking
 mid-flight is safe by design:
 
-- **Assigner**, run again against a branch that already has a parent →
-  treats new sub-tasks as siblings under the existing parent (cases C/D)
-  instead of creating a duplicate parent.
+- **Assigner**, run again from the base branch → a fresh planning pass
+  that provisions a brand-new top-level issue. It aborts if invoked from
+  an existing feature/hotfix branch — it doesn't append sub-tasks to an
+  existing parent, so checkout the base branch first.
 - **Executor**, run again on an issue with an existing branch → resumes
   it rather than creating a second branch for the same issue.
 - **Reviewer** — no parent PR yet → full review pass. Parent PR open →
@@ -388,6 +404,10 @@ Deliberately never automated, regardless of how routine a run looks:
   CLI commands.
 - Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
   `jira-tools-plugin.env` if yours has one.
+- The assigner runs **only from your base branch**. Invoked from an
+  existing feature/hotfix branch, it stops and tells you to checkout the
+  base branch first — it doesn't append sub-tasks to an existing parent
+  (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
   not in parallel — so the early-exit behavior stays simple to reason
   about. For a large sub-task count this means later PRs wait on earlier
@@ -475,8 +495,9 @@ policy `docs/SDLC.md` describes, not the other way around.
 ## Contributing
 
 Issues and PRs welcome. If you're proposing a change to one of the three
-`SKILL.md` files, please describe which of the five assignment cases (or
-which review/execution step) it affects — the control flow between the
+`SKILL.md` files, please describe which step of the assigner's planning
+flow (single-step vs. multistep, dedicated-branch vs. smart-commit), or
+which review/execution step, it affects — the control flow between the
 three skills is easy to get subtly wrong at the seams (git-config vs.
 Jira-comment fallback, phase detection, early-exit behavior), so a
 concrete before/after scenario in the PR description goes a long way.
