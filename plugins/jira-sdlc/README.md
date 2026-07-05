@@ -152,6 +152,24 @@ parallelizable pieces or not.
 top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
 `<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`.
 
+**Jira status flow across the three skills.** Each skill drives the issue's
+Kanban status explicitly with the four status names from
+`jira-tools-plugin.env`, so board progress reflects the work without
+relying on opaque GitHub-for-Jira transition rules:
+- New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
+  (Jira's default initial status for new issues — no explicit move needed).
+- `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
+  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
+  the sub-task's PR (step 11, dedicated-branch path only).
+- `jira-task-reviewer` transitions a sub-task to `<STATUS_DONE>` when it
+  squash-merges its PR (4a); transitions the parent to `<STATUS_IN_REVIEW>`
+  when it opens the aggregate PR (4b); and to `<STATUS_DONE>` once the
+  human merges that PR (4c).
+The smart-commit path skips In Review — the `#done` Smart Commit
+transitions the issue straight from In Progress to Done via GitHub-for-Jira,
+since a smart-commit sub-task shares the parent branch and has no PR of its
+own.
+
 ## Prerequisites
 
 - **Claude Code**, a version with plugin support.
@@ -391,9 +409,9 @@ real task, not discovering mid-failure:
 - [ ] `jira issue view <any-existing-key> --raw` — confirm
       `fields.subtasks` is shaped the way the skills expect (an array of
       objects with a `.key`, not bare strings).
-  - Prints your project's real workflow status names — fill the
-      confirmed values into `<STATUS_IN_PROGRESS>` / `<STATUS_DONE>` in
-      `jira-tools-plugin.env`.
+  - Prints your project's real workflow status names — fill the confirmed
+      values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
+      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-tools-plugin.env`.
 - [ ] `jira issue comment --help` — confirm the flag for piping a
       multi-line comment from stdin (the skills assume `--template -`).
 - [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
@@ -475,3 +493,5 @@ concrete before/after scenario in the PR description goes a long way.
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — smart
   commits and automatic branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
+- [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
+
