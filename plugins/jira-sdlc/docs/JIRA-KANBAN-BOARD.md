@@ -1,7 +1,7 @@
 **Jira Kanban Board Explained with a Real-World Web SaaS Example**
 
 ### What is a Jira Kanban Board?
-A **Kanban board** in Jira is a visual workflow management tool. It uses columns to represent stages of work (e.g., Backlog → To Do → In Progress → In Review → Done) and cards that move from left to right as work progresses.
+A **Kanban board** in Jira is a visual workflow management tool. It uses columns to represent stages of work (e.g., To Do → In Progress → In Review → Done) and cards that move from left to right as work progresses.
 
 Unlike Scrum (which is time-boxed with sprints), Kanban is **continuous flow** — great for SaaS teams that release features frequently and want to limit work-in-progress (WIP).
 
@@ -55,7 +55,7 @@ Under the Google Signup Story:
 ### How It Looks on a Typical Kanban Board
 
 **Columns** (common setup for SaaS teams):
-- **Backlog** → **To Do** → **In Progress** → **In Review** → **Done**
+- **To Do** → **In Progress** → **In Review** → **Done**
 
 **Card Visualization**:
 - **Epic cards** are usually bigger or have a distinct color (e.g., purple).
@@ -68,9 +68,9 @@ You can also create a board that shows **only Stories + Tasks** (Epics are manag
 ### Typical Workflow in SaaS Development
 
 1. Product team creates **Epics** during quarterly planning.
-2. They break Epics into **Stories** and prioritize them in the backlog.
+2. They break Epics into **Stories** and prioritize them in the To Do state.
 3. Development team breaks Stories into **Tasks** and **Subtasks**.
-4. Team pulls work from Backlog → To Do (respecting WIP limits — e.g., max 5 cards in "In Progress").
+4. Team pulls work from To Do (respecting WIP limits — e.g., max 5 cards in "In Progress").
 5. Cards move across the board daily.
 6. When a Story is complete (all subtasks + acceptance criteria met), it’s marked Done and the Epic progress updates automatically.
 

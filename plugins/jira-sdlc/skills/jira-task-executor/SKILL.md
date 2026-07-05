@@ -12,11 +12,16 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
    `../_shared/jira-cli-reference.md` §0). Pull out: summary, description,
    issue type, current status, and parent (if any).
    - Also check `fields.subtasks` (CHECK this field path against real
-     output once). If it's non-empty, `<KEY>` is a coordinating parent
-     issue, not a leaf — `jira-task-assigner` creates these specifically
-     as merge targets for its sub-tasks' PRs, not as something meant to
-     be implemented on directly. Confirm with the user that they really
-     want to implement on the parent itself before continuing.
+     output once):
+     - **Non-empty** → `<KEY>` is a multistep parent — a merge target
+       for its sub-tasks' PRs and the home worktree for any smart-commit
+       sub-tasks, not something to implement on directly. Confirm with
+       the user that they really want to implement on the parent itself
+       before continuing.
+     - **Empty** → `<KEY>` is a leaf: either a sub-task, or a
+       single-step top-level issue the assigner provisioned for direct
+       implementation (its own worktree + dedicated branch, PR targeting
+       the base branch). Proceed normally.
    - **Read the git strategy** from the issue's comments (posted by
      `jira-task-assigner`). Look for a line matching `Git strategy: ...`
      in any comment. Two possibilities:
@@ -25,7 +30,9 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
        Smart Commit message (§7a of `jira-cli-reference.md`). No
        individual PR — the parent branch gets one PR for all subtasks.
      - *"Dedicated branch `<branch-name>`"* → create (or resume) the
-       named branch and open an individual PR against the parent branch.
+       named branch and open an individual PR against its recorded base
+       (the parent branch for a multistep sub-task, the base branch for
+       a single-step issue — resolved in step 10).
      If no `Git strategy:` comment exists, fall back to the generic rule
      in `jira-cli-reference.md` §7 (few-line fix → smart commit,
      anything bigger → new branch).
@@ -63,15 +70,20 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      `PR_BASE=$(git config branch."$STARTING_BRANCH".parentbranch)`.
      Skip the rest of this step and go to step 3.
    - `git fetch origin` then `git branch -a | grep <KEY>` to check whether
-     a branch for this issue already exists, local or remote.
-   - **If it exists** → check it out (resumed work — don't create a second
-     branch for the same issue). Recover its parent via
+     a branch for this issue already exists, local or remote. The
+     assigner pre-creates the branch and worktree for every leaf issue,
+     so the "exists" path below is the normal one; "not" is a fallback
+     for issues created without the assigner.
+   - **If it exists** → check it out (the assigner pre-created it, or
+     this is resumed work — either way, don't create a second branch for
+     the same issue). Recover its parent via
      `git config branch."<branch-name>".parentbranch` — if that's unset
-     (branch predates this convention, or wasn't created by this skill),
-     ask the user which branch the PR should target rather than guessing.
-   - **If not** → this is a fresh branch, so first work out the prefix
-     (only needed on this path — an existing branch already has its
-     prefix baked into its name):
+     (branch predates the parentbranch convention, or wasn't created by
+     this skill), ask the user which branch the PR should target rather
+     than guessing.
+   - **If not** → this only happens for issues created without the
+     assigner, so first work out the prefix (only needed on this path —
+     an existing branch already has its prefix baked into its name):
      - `<KEY>` is `Task`/`Story` → `feature/`.
      - `<KEY>` is `Bug` → `hotfix/`.
      - `<KEY>` is `Sub-task` → look at its parent's type instead (one
@@ -142,19 +154,22 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      pieces; one is fine for a small change.
 
 9. **Push** — depends on the git strategy from step 1:
-   - **Smart commit** (shared worktree): skip push. Other subtasks may
-     still be pending on this branch; pushing after every commit would
-     create noise and half-done states on the remote. The user (or a
-     later run after all subtasks land) will push the parent branch once.
+   - **Smart commit** (shared parent worktree): skip push. You committed
+     directly to the parent branch, which may carry other smart-commit
+     work too; pushing after every commit would create noise and
+     half-done states on the remote. The user (or a later run once the
+     parent branch's work is complete) pushes the parent branch once.
    - **Dedicated branch**: `git push -u origin <branch-name>`.
 
 10. **Open a PR — only for dedicated-branch strategy:**
-    - **Smart-commit strategy**: skip this step entirely. This subtask
-      is one of several sharing a parent branch; the parent branch gets
-      a single PR once all subtasks are done. Don't push or open a PR
-      here — just ensure the commit is on the parent branch. The user
-      (or a later run) will push the parent branch and open one PR for
-      the whole group.
+    - **Smart-commit strategy**: skip this step entirely. This issue has
+      no PR of its own — it lands as a Smart Commit on the parent branch,
+      which gets a single aggregate PR (opened by `jira-task-reviewer`
+      once the parent's work is complete, or by you/the user manually if
+      there are no dedicated-branch sub-tasks for the reviewer to cascade
+      through). Don't push or open a PR here — just ensure the commit is
+      on the parent branch. The user (or a later run) pushes the parent
+      branch when its work is ready.
     - **Dedicated-branch strategy**: proceed as follows:
       - Determine the base:
         `PR_BASE=$(git config branch."$(git branch --show-current)".parentbranch)`
@@ -197,8 +212,17 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       `jira issue move <KEY> "<STATUS_IN_REVIEW>"` (see
       `jira-tools-plugin.env` in the project root for the confirmed status
       name for this project — default example `In Review`).
-      `jira-task-reviewer` will move it to `<STATUS_DONE>` once it
-      squash-merges this PR into the parent branch (reviewer step 4a).
+      How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
+      a parent (check `fields.parent` from step 1):
+      - **Has a parent (multistep sub-task)** → `jira-task-reviewer`
+        moves it to `<STATUS_DONE>` when it squash-merges this PR into
+        the parent branch (reviewer step 4a).
+      - **No parent (single-step top-level issue)** → no reviewer runs
+        for this issue (the reviewer only operates on parents with
+        sub-tasks). `<STATUS_DONE>` is handled when the human merges the
+        PR into the base branch — via GitHub-for-Jira's merge automation
+        if connected, or a manual `jira issue move <KEY> "<STATUS_DONE>"`
+        otherwise. Don't transition to Done here.
     - **Smart-commit strategy**: don't transition here. The Smart Commit
       message in step 8 already carries `#done`, which GitHub-for-Jira
       applies to transition the issue straight to `<STATUS_DONE>` once the

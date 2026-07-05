@@ -1,6 +1,6 @@
 ---
 name: jira-task-reviewer
-description: Given a parent Jira issue key (e.g. PROJ-286), reviews all sub-task PRs targeting the parent branch, approves or requests changes per-PR, merges approved PRs into the parent branch, then prepares the parent branch's own PR into its base (typically the project's default base branch) for the user to merge manually. Stops on first rejection and reports which PRs blocked.
+description: Given a parent Jira issue key (e.g. PROJ-286), reviews all dedicated-branch sub-task PRs targeting the parent branch, approves or requests changes per-PR, merges approved PRs into the parent branch, then prepares the parent branch's own PR into its base (typically the project's default base branch) for the user to merge manually. Smart-commit sub-tasks (no PR of their own) are folded into the aggregate parent review. Stops on first rejection and reports which PRs blocked.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -20,6 +20,17 @@ e.g. `PROJ-286`):
   `jira-task-assigner` when it created the branch), falling back to that
   issue's `"PR target branch: ..."` Jira comment if the config is missing.
 - Sub-task PRs all target `<PARENT-BRANCH>`.
+- **Sub-tasks come in two git strategies** (decided by
+  `jira-task-assigner`, posted as a `Git strategy: ...` comment on each
+  sub-task — read it the same way `jira-task-executor` does):
+  - **Dedicated branch** — own branch + PR into `<PARENT-BRANCH>`.
+    These go through the per-PR review cascade (steps 2–4a).
+  - **Smart commit** — commits directly on `<PARENT-BRANCH>` with a
+    `<KEY> #done <message>` message; no branch or PR of its own. Its
+    work lands on the parent branch and is reviewed as part of the
+    aggregate parent diff in step 4b; its transition to
+    `<STATUS_DONE>` is driven by the `#done` Smart Commit via
+    GitHub-for-Jira, not by this skill.
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check
   `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
   `jira-tools-plugin.env` in the project root).
@@ -37,8 +48,11 @@ e.g. `PROJ-286`):
   sub-task key.
 - Extract sub-task keys from `fields.subtasks` (CHECK the exact shape
   once against real output — likely an array of objects, i.e.
-  `fields.subtasks[].key`, not bare strings). If empty, there's
-  nothing to review — report and exit.
+  `fields.subtasks[].key`, not bare strings). If empty, this is a
+  single-step top-level issue — it has no sub-tasks to cascade
+  through, its PR targets `<BASE_BRANCH>` directly, and the human
+  merges it. There's nothing for this skill to do — report that and
+  exit.
 - Resolve `<PARENT-BRANCH>`:
   `git branch -a | grep <PARENT-KEY>`. Exactly one match → that's the
   parent branch. Zero or multiple → ask the user rather than guessing.
@@ -46,17 +60,35 @@ e.g. `PROJ-286`):
   both the config and the Jira-comment fallback come up empty.
 - **Check the current phase** —
   `gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url`:
-  - **No PR found** → sub-tasks haven't all been merged yet (or haven't
-    been reviewed at all). Continue to step 2 for a normal review pass.
-  - **A PR exists** (open, merged, or closed) → every sub-task PR was
-    already reviewed and merged in an earlier run — step 4a only ever
-    runs once every sub-task PR is approved, so a parent PR existing at
-    all means that already happened. Skip straight to step 4b; don't
-    re-discover or re-review sub-tasks, there's nothing left to review.
+  - **No PR found** → the dedicated-branch sub-tasks haven't all been
+    merged yet (or haven't been reviewed at all). Continue to step 2
+    for a normal review pass.
+  - **A PR exists** (open, merged, or closed) → every dedicated-branch
+    sub-task PR was already reviewed and merged in an earlier run —
+    step 4a only ever runs once every dedicated-branch sub-task PR is
+    approved, so a parent PR existing at all means that already
+    happened. (Smart-commit sub-task commits may also already be on the
+    parent branch — they don't gate this.) Skip straight to step 4b;
+    don't re-discover or re-review sub-tasks, there's nothing left to
+    review.
 
-## 2. Discover open PRs for each sub-task
+## 2. Discover open PRs for each dedicated-branch sub-task
 
-For each `<SUBTASK-KEY>` from step 1:
+For each `<SUBTASK-KEY>` from step 1, first classify its git strategy by
+reading its comments for a `Git strategy: ...` line (posted by
+`jira-task-assigner`, same convention `jira-task-executor` reads):
+
+- **Smart commit** (e.g. *"smart commit on parent branch"*) → no branch
+  or PR of its own; its work commits directly to `<PARENT-BRANCH>` and
+  is reviewed as part of the aggregate parent diff in step 4b. **Skip
+  the per-PR discovery below** — record it as
+  `{ key, strategy: "smart-commit" }` and move on. Don't flag the
+  missing branch as a problem; it's by design.
+- **Dedicated branch** (e.g. *"dedicated branch `feature/<KEY>-...`"*)
+  → it has its own branch and a PR into `<PARENT-BRANCH>`. Run the
+  per-PR discovery below.
+
+Per-PR discovery (dedicated-branch sub-tasks only):
 
 - Find its branch: `git branch -a | grep <SUBTASK-KEY>`. If no branch
   exists yet, that sub-task hasn't been implemented — flag it in the
@@ -65,11 +97,22 @@ For each `<SUBTASK-KEY>` from step 1:
   <PARENT-BRANCH> --json number,title,state,url`. If no PR exists,
   flag and skip. If more than one open PR for the same head branch,
   ask the user which one to review.
-- Record: `{ key, branch, prNumber, prUrl }`.
+- Record: `{ key, branch, prNumber, prUrl, strategy: "dedicated-branch" }`.
 
-If **zero** sub-tasks have open PRs, report and exit.
+If **zero** dedicated-branch sub-tasks have open PRs *and* there are no
+smart-commit sub-tasks either, report and exit. If there are
+smart-commit sub-tasks but no dedicated-branch PRs, skip steps 3–4a and
+go straight to step 4b (the aggregate parent review covers the
+smart-commit work).
 
 ## 3. Sequential per-PR review
+
+This cascade covers **dedicated-branch sub-tasks only** — each has its
+own PR into `<PARENT-BRANCH>`. Smart-commit sub-tasks have no PR (their
+work commits directly to `<PARENT-BRANCH>`), so they're not in this
+loop; they're reviewed as part of the aggregate parent diff in step 4b
+and transitioned to `<STATUS_DONE>` by the `#done` Smart Commit, not by
+this skill.
 
 Process sub-task PRs **one at a time, in sub-task key order** (ascending
 — this just gives a deterministic, reproducible review order. The
@@ -138,12 +181,14 @@ before the rest can be batch-approved. Record which PRs were reviewed
 Skip to step 5 (report back). Step 4 (merge cascade) only happens when
 all reviewed PRs get **APPROVE**.
 
-## 4. Merge cascade (all PRs approved)
+## 4. Merge cascade (all reviewed PRs approved)
 
 This step only executes if every PR reviewed in step 3 received
-**APPROVE**.
+**APPROVE**. It covers **dedicated-branch sub-tasks** — smart-commit
+sub-tasks have no PR to merge; their work is already on
+`<PARENT-BRANCH>` and is reviewed in the aggregate parent diff (4b).
 
-### 4a. Approve and merge each sub-task PR
+### 4a. Approve and merge each dedicated-branch sub-task PR
 
 For each sub-task PR (same key order as step 3):
 
@@ -182,9 +227,13 @@ For each sub-task PR (same key order as step 3):
 
 ### 4b. Prepare the parent PR — review only, merging is manual
 
-This step runs once all sub-task PRs are merged into `<PARENT-BRANCH>` —
-either just now (4a, this run) or in an earlier run, detected via the
-phase check in step 1.
+This step runs once all **dedicated-branch** sub-task PRs are merged
+into `<PARENT-BRANCH>` *and* all smart-commit sub-task commits are on
+`<PARENT-BRANCH>` — the dedicated-branch merges just now (4a, this run)
+or in an earlier run (detected via the phase check in step 1);
+smart-commit commits are made directly by executors. The aggregate diff
+reviewed here includes both: the squash-merged dedicated-branch work
+(from 4a) and the smart-commit commits already on the parent branch.
 
 1. Find or create the PR from `<PARENT-BRANCH>` to `<BASE_BRANCH>`:
    ```
@@ -346,13 +395,16 @@ Each invocation checks the current phase first (step 1) rather than
 blindly repeating the whole flow:
 
 - **No parent PR exists yet** → full review from step 2: re-discovers
-  all open sub-task PRs and reviews everything again. This is
-  intentional — previously-approved PRs may have new commits since the
-  last run, and an early exit means some PRs were never reviewed at all.
-  Re-reviewing is cheap (the diff is usually small).
-- **A parent PR exists and is still open** → sub-tasks are already done;
-  this run only checks/refreshes the aggregate review (4b) and reports
-  the current status. It will not re-discover or re-review sub-tasks.
+  all open dedicated-branch sub-task PRs and reviews everything again
+  (smart-commit sub-tasks are picked up as part of the 4b aggregate).
+  This is intentional — previously-approved PRs may have new commits
+  since the last run, and an early exit means some PRs were never
+  reviewed at all. Re-reviewing is cheap (the diff is usually small).
+- **A parent PR exists and is still open** → the dedicated-branch
+  sub-tasks are already merged into `<PARENT-BRANCH>` (smart-commit
+  commits land there directly); this run only checks/refreshes the
+  aggregate review (4b) and reports the current status. It will not
+  re-discover or re-review sub-tasks.
 - **A parent PR exists and is now merged** → this run does the
   post-merge wrap-up (4c) and nothing else.
 
@@ -362,12 +414,17 @@ the skill will still verify it but can note it was previously approved.
 
 ## 7. Edge cases
 
-- **Sub-task with no branch / no PR**: Flag in the report. The skill
-  can only review what has been pushed and has a PR open. Don't attempt
-  to create branches or PRs — that's the executor's job. (In practice
-  this shouldn't come up for a parent that's already past the sub-task
-  phase, per the phase check in step 1 — but can still happen mid-flight
-  if a sub-task simply hasn't been picked up yet.)
+- **Sub-task with no branch / no PR**: First check its `Git strategy:`
+  comment.
+  - **Smart commit** → no branch or PR is *expected* — this sub-task
+    commits directly to `<PARENT-BRANCH>` and is reviewed in the 4b
+    aggregate. Don't flag it as a problem.
+  - **Dedicated branch** → flag in the report. The skill can only
+    review what has been pushed and has a PR open. Don't attempt to
+    create branches or PRs — that's the executor's job. (In practice
+    this shouldn't come up for a parent that's already past the
+    sub-task phase, per the phase check in step 1 — but can still happen
+    mid-flight if a sub-task simply hasn't been picked up yet.)
 - **Conflicts on merge**: If `gh pr merge` reports merge conflicts
   during 4a, stop — report the conflict and let the user resolve it.
   Don't attempt automatic conflict resolution.
