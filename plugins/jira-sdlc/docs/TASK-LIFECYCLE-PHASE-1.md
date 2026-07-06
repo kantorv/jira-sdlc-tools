@@ -1,14 +1,15 @@
 # Task Lifecycle — Phase 1: Plan
 
 The planning phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run by the
-**`jira-task-assigner`** skill. Triggered once per task, **must be
-invoked from the default base branch** (the assigner refuses to run on
-an existing feature/hotfix branch).
+**`jira-task-assigner`** skill. Triggered once per task, **invoked from
+the default base branch** — the assigner refuses to run on an existing
+`feature/`/`hotfix/` issue branch, and asks the user how to proceed on
+any other non-base branch.
 
 This phase ends when the assigner reports back: issues exist, branches
-and worktrees are ready, and `"PR target branch: ..."` plus
-`"Git strategy: ..."` comments are posted on every leaf issue for the
-next phase to read.
+and worktrees are ready, and a single
+`"PR target branch: ... Git strategy: ..."` comment is posted on every
+leaf issue for the next phase to read.
 
 ## Sequence diagram
 
@@ -17,11 +18,11 @@ sequenceDiagram
     actor User
     participant Assigner
 
-    Note over User,Assigner: Phase 1 — Plan<br/>(runs once, must be invoked from base branch)
+    Note over User,Assigner: Phase 1 — Plan<br/>(runs once, from the base branch)
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
-    Assigner->>Assigner: check branch context (must be base branch)
+    Assigner->>Assigner: check branch context (base ok, feature/hotfix stop, ask otherwise)
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled
@@ -29,22 +30,23 @@ sequenceDiagram
         User-->>Assigner: answers
     end
 
-    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)<br/>+ per-sub-task strategy (dedicated branch / smart commit)
+    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)
 
     alt Multistep (split into parallel sub-tasks)
         Assigner->>Assigner: create <PARENT-KEY> (Task / Story / Bug)
-        Assigner->>Assigner: create branch feature/<PARENT-KEY>-<slug><br/>+ create parent worktree (home for smart-commit work)
+        Assigner->>Assigner: create branch feature/<PARENT-KEY>-<slug><br/>+ set parentbranch config + push + parent worktree
         loop per sub-task
+            Assigner->>Assigner: decide sub-task strategy<br/>(dedicated branch vs smart commit)
             alt Dedicated branch (default)
-                Assigner->>Assigner: create sub-task issue<br/>+ sub-task branch & worktree
+                Assigner->>Assigner: create sub-task issue + branch & worktree<br/>+ set parentbranch config + push
             else Smart commit (small focused fix)
                 Assigner->>Assigner: create sub-task issue<br/>(no branch — uses parent worktree)
             end
-            Assigner->>Assigner: post "PR target branch" + "Git strategy" comments
+            Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
         end
     else Single-step (one cohesive task)
-        Assigner->>Assigner: create single top-level issue<br/>+ branch + worktree
-        Assigner->>Assigner: post "PR target branch" + "Git strategy" comments
+        Assigner->>Assigner: create single top-level issue + branch<br/>+ set parentbranch config + push + worktree
+        Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
     end
     deactivate Assigner
 
@@ -56,16 +58,19 @@ sequenceDiagram
 - **Investigate + clarify loop** — the only place the user is asked
   anything by `jira-task-assigner`; questions persist until scope,
   acceptance criteria, and priority are settled.
-- **One decision point** that admits three dimensions at once
-  (`alt Multistep / else Single-step`, with another nested
-  `alt Dedicated branch / else Smart commit` per leaf): whether the
-  request is single-step, how to type the top-level issue, and how each
-  sub-task should land in git.
+- **Two-stage decision** — first the assigner settles scope and the
+  top-level type (`alt Multistep / else Single-step`); only then,
+  inside the multistep loop, does it pick each sub-task's per-leaf
+  strategy (nested `alt Dedicated branch / else Smart commit`). The
+  per-sub-task strategy is *not* fixed up front — it's chosen as each
+  sub-task is created.
 - **Provisioning is uniform** — *every* scenario (single-step,
   multistep parent, dedicated-branch sub-task, smart-commit sub-task)
-  ends with the assigner posting the `PR target branch` and
-  `Git strategy` comments that the executor and reviewer will read
-  later as their durable source of truth.
+  records `branch.<branch>.parentbranch` in git config, pushes the
+  branch to the remote, and ends with the assigner posting a single
+  `PR target branch: ... Git strategy: ...` comment (one comment with
+  both lines) that the executor and reviewer will read later as the
+  durable source of truth.
 
 The assigner deliberately stops short of writing any code, commits, or
 PRs — those are phase 2's job.

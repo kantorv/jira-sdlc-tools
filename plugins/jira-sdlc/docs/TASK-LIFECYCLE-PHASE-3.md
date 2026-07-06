@@ -17,57 +17,79 @@ sequenceDiagram
     actor User
     participant Reviewer
 
-    Note over User,Reviewer: Phase 3 — Review & merge cascade (jira-task-reviewer)
+    Note over User,Reviewer: Phase 3 — Review & merge cascade<br/>(parent key only)
     User->>Reviewer: invoke /jira-task-reviewer <PARENT-KEY>
 
     activate Reviewer
-    Reviewer->>Reviewer: fetch parent + sub-tasks<br/>phase check (existing parent PR?)
+    Reviewer->>Reviewer: git fetch origin --prune
+    Reviewer->>Reviewer: fetch parent + sub-tasks, classify each<br/>(dedicated branch vs smart commit) from Git strategy comments
 
-    loop per dedicated-branch sub-task PR (sequential)
-        Reviewer->>Reviewer: fetch diff + review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
-        alt REQUEST_CHANGES
-            Reviewer-->>User: stop + report findings<br/>(nothing merged)
-            Note over Reviewer: early exit — wait for fix, then re-run
-        else APPROVE
+    alt No parent PR yet (first pass)
+        loop per dedicated-branch sub-task PR (sequential, review only)
+            Reviewer->>Reviewer: fetch diff + review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
+            alt REQUEST_CHANGES
+                Reviewer-->>User: stop + report findings<br/>(nothing merged)
+                Note over Reviewer: early exit — wait for fix, then re-run<br/>(next run re-reviews everything)
+            else APPROVE
+                Reviewer->>Reviewer: record APPROVE (no merge yet)
+            end
+        end
+
+        Note over Reviewer: all reviewed PRs approved — merge cascade
+        loop per dedicated-branch sub-task PR (same key order)
             Reviewer->>Reviewer: gh pr review --approve
             Reviewer->>Reviewer: gh pr merge --squash --delete-branch
+            Reviewer->>Reviewer: verify state == MERGED
             Reviewer->>Reviewer: transition sub-task → Done
         end
+
+        Reviewer->>Reviewer: if any smart-commit sub-tasks,<br/>push <PARENT-BRANCH> so their commits reach the remote
+        Reviewer->>Reviewer: find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>)
+        Reviewer->>Reviewer: transition <PARENT-KEY> → In Review
+        Reviewer->>Reviewer: review aggregate diff (lighter pass)
+        Reviewer->>Reviewer: gh pr review --approve (no auto-merge — manual)
+        Reviewer-->>User: "parent PR ready for manual merge"
+    else Parent PR open (re-run while open)
+        Note over Reviewer: dedicated-branch sub-tasks already merged<br/>(just refresh the aggregate review and report status)
+        Reviewer-->>User: "parent PR still open — status refreshed"
+    else Parent PR merged (post-merge → phase 4)
+        Note over Reviewer: short-circuit to the wrap-up (step 4c)
     end
-
-    Reviewer->>Reviewer: find or create parent PR<br/>(PARENT_BRANCH → BASE_BRANCH)
-    Reviewer->>Reviewer: review aggregate diff (lighter pass)
-    Reviewer->>Reviewer: gh pr review --approve (no auto-merge — manual)
-    Reviewer->>Reviewer: transition <PARENT-KEY> → In Review
     deactivate Reviewer
-
-    Reviewer-->>User: "parent PR ready for manual merge"
 ```
 
 ## What the diagram shows
 
+- **Parent-only, refuses sub-task keys** — the reviewer is triggered on
+  the parent key; a sub-task key is rejected, and a top-level issue with
+  no sub-tasks has nothing to cascade through, so the reviewer exits
+  early.
 - **Phase check first** — the reviewer inspects for an existing parent
-  PR first, so re-invocations stay correct: a *no* parent PR means a
-  full review pass (re-runs revisit everything), an *open* parent PR
-  skips straight to the aggregate review, a *merged* parent PR falls
-  into phase 4's post-merge wrap-up.
-- **Sequential per-PR loop** — sub-task PRs are reviewed **in order,
-  one at a time**, not in parallel. Smart-commit sub-tasks have no PR
-  of their own — they're picked up as part of the aggregate diff
-  later in this phase.
-- **Early exit semantics** — the `alt REQUEST_CHANGES / else APPROVE`
-  is the safety model in diagram form: the moment one PR fails, the
-  loop halts and *nothing* is merged. Subsequent PRs stay un-reviewed
-  rather than being auto-approved, even though they'd been queued.
-- **Cascade only on all-approve** — merge (`--squash` and
-  `--delete-branch`) and the *Done* transition only run inside the
-  `else APPROVE` branch, only after the loop completes without a
-  rejection.
-- **Parent PR review, never merge** — the aggregate parent PR is
-  approved (`gh pr review --approve`) but the reviewer explicitly does
-  *not* call `gh pr merge` on it. The parent issue moves to
-  *In Review*, and the user merges the parent branch into `<BASE_BRANCH>`
-  manually. That's the seam between this phase and phase 4.
+  PR before anything else, so re-invocations stay correct: *no* parent
+  PR means a full review pass (re-runs revisit everything), an *open*
+  parent PR skips straight to the aggregate review, a *merged* parent
+  PR short-circuits to phase 4's post-merge wrap-up.
+- **Two passes, not one** — sub-task PRs are reviewed **in order, one
+  at a time**, but the review pass only *records* verdicts (no merging).
+  Only if every reviewed PR is `APPROVE` does a **second pass** — the
+  merge cascade — run, in the same key order. This is the safety model
+  in diagram form: the moment one PR fails, the review loop halts and
+  *nothing* is merged, so the "(nothing merged)" guarantee holds even
+  though some PRs were already approved in the review pass. (Re-runs
+  re-review everything, since an early exit left some PRs un-reviewed
+  against their latest state.)
+- **Smart commits have no PR** — smart-commit sub-tasks aren't in
+  either loop; their work is already on `<PARENT-BRANCH>` and is
+  reviewed as part of the aggregate parent diff. Before that aggregate
+  PR is created, the reviewer pushes `<PARENT-BRANCH>` to the remote so
+  the smart commits (and their `#done` transitions) actually land —
+  the executor's smart-commit path deliberately skips pushing.
+- **Parent PR: review and approve, never merge** — the reviewer
+  transitions `<PARENT-KEY>` to *In Review* **before** the aggregate
+  review, then reviews the lighter aggregate diff and approves it. It
+  explicitly does *not* call `gh pr merge` on the parent PR — merging
+  the parent branch into `<BASE_BRANCH>` is the human release decision.
+  That's the seam between this phase and phase 4.
 
 ## Related
 
