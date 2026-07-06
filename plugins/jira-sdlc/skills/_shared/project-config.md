@@ -17,8 +17,6 @@ what each variable means.
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
-| `<CONVENTIONS_PATH>` | Where this repo's coding conventions live, for `jira-task-reviewer` to check changes against. | `.claude/rules/` |
-| `<CONVENTION_HIGHLIGHTS>` | Freeform, optional: specific patterns worth flagging during review — your state-management library, component library, i18n approach, whatever's easy to get subtly wrong here. Leave blank to review generically. | `XState conventions, MUI usage, translation keys` |
 
 ## Testing — used by `jira-task-executor` step 7
 
@@ -61,8 +59,6 @@ The README's usage walkthrough assumes this filled-in `jira-tools-plugin.env`:
 PROJECT-KEY           = PROJ
 WORKTREES_DIR         = ../myapp-worktrees
 DEFAULT_BASE_BRANCH   = development
-CONVENTIONS_PATH      = .claude/rules/
-CONVENTION_HIGHLIGHTS =
 TEST_SINGLE_CMD       = yarn playwright test {file}:{line}
 TEST_SUITE_CMD        = yarn playwright test {file}
 STATUS_TODO           = To Do

@@ -282,8 +282,7 @@ All project-specific values live in `jira-tools-plugin.env`
 Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
-- Your default base branch and where your coding conventions live
-  (required)
+- Your default base branch (required)
 - Test commands for `jira-task-executor`'s test step
 - Your Jira workflow's real status names — these are flagged as
   "confirm once" inside the skills themselves, since status *names*
