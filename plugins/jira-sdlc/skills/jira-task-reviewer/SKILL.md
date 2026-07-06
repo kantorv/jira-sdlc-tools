@@ -235,6 +235,20 @@ smart-commit commits are made directly by executors. The aggregate diff
 reviewed here includes both: the squash-merged dedicated-branch work
 (from 4a) and the smart-commit commits already on the parent branch.
 
+0. **Ensure `<PARENT-BRANCH>` is on the remote.** The dedicated-branch
+   squash merges in 4a land on the remote parent branch automatically,
+   but a smart-commit sub-task commits **locally** only — the executor's
+   smart-commit path deliberately skips pushing (`jira-task-executor`
+   §9). If any smart-commit sub-task exists, push the parent branch so
+   those commits (and their `#done` Smart Commit transitions) reach the
+   remote:
+   ```
+   git push origin <PARENT-BRANCH>
+   ```
+   If `git rev-parse origin/<PARENT-BRANCH>` already matches the local
+   tip, this is a no-op. The aggregate PR created next is built from
+   the remote branch, so it must include these commits.
+
 1. Find or create the PR from `<PARENT-BRANCH>` to `<BASE_BRANCH>`:
    ```
    gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state,url
