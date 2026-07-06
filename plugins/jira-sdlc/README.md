@@ -1,4 +1,4 @@
-# jira-sdlc-toolkit
+# jira-sdlc-tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -55,8 +55,8 @@ Three skills, three jobs:
 ## Quick start
 
 ```
-/plugin marketplace add kantorv/jira-sdlc-toolkit
-/plugin install jira-sdlc@jira-sdlc-toolkit
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
 ```
 
 Create `jira-tools-plugin.env` in the project root for your repo (see
@@ -200,11 +200,11 @@ relying on opaque GitHub-for-Jira transition rules:
 
 ### Option A — Plugin + marketplace (recommended)
 
-1. Add the marketplace at `kantorv/jira-sdlc-toolkit` and install the
+1. Add the marketplace at `kantorv/jira-sdlc-tools` and install the
    plugin:
    ```
-   /plugin marketplace add kantorv/jira-sdlc-toolkit
-   /plugin install jira-sdlc@jira-sdlc-toolkit
+   /plugin marketplace add kantorv/jira-sdlc-tools
+   /plugin install jira-sdlc@jira-sdlc-tools
    ```
 2. Fill in `jira-tools-plugin.env` in the project root — see
    [Configuration](#configuration).
@@ -236,7 +236,7 @@ cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
 cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
-Run from the root of your `kantorv/jira-sdlc-toolkit` clone.
+Run from the root of your `kantorv/jira-sdlc-tools` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
 `/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
@@ -246,7 +246,7 @@ references mentioned above back down to their bare form.
 ## Repository layout
 
 ```
-jira-sdlc-toolkit/                # marketplace root (this repo)
+jira-sdlc-tools/                # marketplace root (this repo)
 ├── .claude-plugin/
 │   └── marketplace.json           # single-plugin marketplace manifest
 └── plugins/
@@ -271,7 +271,7 @@ jira-sdlc-toolkit/                # marketplace root (this repo)
         └── README.md
 ```
 
-The marketplace root (`jira-sdlc-toolkit/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
+The marketplace root (`jira-sdlc-tools/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
 is the plugin root Claude Code copies on install. `_shared/` lives inside it
 deliberately — see [Installation](#installation) for why that matters.
 
