@@ -52,11 +52,10 @@ same. Check yours with `jira issue view <any-existing-key>`.
 |---|---|---|
 | `<SEMVER_LABELS>` | The three GitHub label names `jira-task-executor` applies to PRs for release automation. Must already exist on the repo. | `patch` / `minor` / `major` |
 | `<JIRA_TOKEN_PATH>` | Fallback token file, used when `JIRA_API_TOKEN` isn't already exported. | `.jira/token.txt` |
-| `<HAS_EPIC_TYPE>` | Whether your Jira project has an `Epic` type above Task/Story/Bug. These skills assume a two-level hierarchy and don't handle Epics — if yours has one, extend `jira-task-assigner` step 5 and the hierarchy checks in `jira-cli-reference.md` §1/§3 yourself before relying on this. | `no` |
 
 ## Worked example
 
-The README's usage walkthrough assumes this filled-in `.env`:
+The README's usage walkthrough assumes this filled-in `jira-tools-plugin.env`:
 
 ```
 PROJECT-KEY           = PROJ
@@ -72,5 +71,4 @@ STATUS_IN_REVIEW      = In Review
 STATUS_DONE           = Done
 SEMVER_LABELS         = patch / minor / major
 JIRA_TOKEN_PATH       = .jira/token.txt
-HAS_EPIC_TYPE         = no
 ```

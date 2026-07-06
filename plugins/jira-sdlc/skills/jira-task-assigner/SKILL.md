@@ -66,7 +66,7 @@ If you are in **Case 1** (base branch), make the following two decisions before 
 - **Single-step** — one cohesive piece of work, even if it touches several files. If piece B can only start once piece A finishes, that's one piece, not two — don't split purely sequential work.
 
 **B. Pick the top-level issue type**
-Confirm against `<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`. Your top-level options are `Task`, `Story`, or `Bug`.
+There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types (peers), with `Sub-task` underneath. Your top-level options are `Task`, `Story`, or `Bug`.
 - Defect / regression / something broken → `Bug`.
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
 
@@ -130,5 +130,5 @@ rather than as a plugin). Merging the parent branch back into its own
 base once all sub-tasks land is likewise out of scope for this skill.
 
 Reference: `../_shared/jira-cli-reference.md` has the full command syntax,
-confirmed issue type names, and git/branch conventions. The `.env` file in the
+confirmed issue type names, and git/branch conventions. The `jira-tools-plugin.env` file in the
 project root has this repo's specific values for every `<TOKEN>` used above.

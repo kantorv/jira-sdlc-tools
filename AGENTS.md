@@ -138,4 +138,4 @@ Don't try to exercise a skill by running `/jira-task-assigner` *against
 this repo*. There's no Jira project or worktrees directory configured
 for `jira-sdlc-toolkit` itself, and there shouldn't be — these skills are
 meant to be installed into, and pointed at, a separate application repo
-that has its own `.env` file filled in.
+that has its own `jira-tools-plugin.env` file filled in.

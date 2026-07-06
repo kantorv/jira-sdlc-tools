@@ -401,5 +401,5 @@ the skill will still verify it but can note it was previously approved.
 
 Reference: `../_shared/jira-cli-reference.md` has the full jira-cli
 syntax, confirmed issue types, and git/branch conventions.
-The `.env` file in the project root has this repo's specific values for
+The `jira-tools-plugin.env` file in the project root has this repo's specific values for
 every `<TOKEN>` used above.

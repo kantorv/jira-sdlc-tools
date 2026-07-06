@@ -157,9 +157,9 @@ hasn't told you which to use, the assigner decides by complexity: a
 value; a `Task` for smaller, localized, or strictly technical chores. A
 `Bug` is always used for a defect or regression.
 
-**Jira shape assumed.** Two-level hierarchy: `Task`/`Story`/`Bug` at the
-top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
-`<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`.
+**Jira shape assumed.** Two-level hierarchy with no `Epic` level:
+`Story`, `Task`, and `Bug` are the top-level types (peers), with
+`Sub-task` underneath.
 
 **Jira status flow across the three skills.** Each skill drives the issue's
 Kanban status explicitly with the four status names from
@@ -288,8 +288,8 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira workflow's real status names — these are flagged as
   "confirm once" inside the skills themselves, since status *names*
   aren't standardized across Jira projects
-- Semver label names, the Jira auth token fallback path, and whether your
-  project has an `Epic` type (optional — sensible defaults given)
+- Semver label names and the Jira auth token fallback path
+  (optional — sensible defaults given)
 
 Open that file and read it top to bottom before your first run; it's
 short, and every skill points back to it.
@@ -392,8 +392,8 @@ Deliberately never automated, regardless of how routine a run looks:
 - Built around **GitHub + GitHub-for-Jira** specifically — branch-to-issue
   linking relies on that integration. Adapting to GitLab/Bitbucket means
   replacing that mechanism, not just swapping CLI commands.
-- Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
-  `jira-tools-plugin.env` if yours has one.
+- Assumes **no `Epic` type** and doesn't create or group under Epics —
+  `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
 - The assigner runs **only from your base branch**. Invoked from an
   existing feature/hotfix branch, it stops and tells you to checkout the
   base branch first — it doesn't append sub-tasks to an existing parent
