@@ -109,10 +109,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
    description says? No logic bugs, off-by-ones, wrong conditions.
 2. **Pattern consistency** — Does the change match existing codebase
    patterns and conventions (naming, file structure, state-management/
-   UI-framework idioms, i18n approach, etc.)? Refer to
-   `<CONVENTIONS_PATH>` (see `jira-tools-plugin.env` in the project root — `project-config.md`
-   also lists `<CONVENTION_HIGHLIGHTS>`, specific patterns worth extra
-   attention in this codebase, if any were configured).
+   UI-framework idioms, i18n approach, etc.)?
 3. **No scope creep** — The change should only address what the
    sub-task describes. Unrelated refactors, formatting changes, or
    "while I'm here" additions belong in a separate issue. Flag these

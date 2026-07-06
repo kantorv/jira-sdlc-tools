@@ -11,7 +11,7 @@ is deliberately shorter and only covers what's easy to get wrong.
 ## The one rule that matters most
 
 Every project-specific value (Jira project key, worktrees path, test
-commands, workflow status names, review conventions) is a `<TOKEN>`
+commands, workflow status names) is a `<TOKEN>`
 resolved from `jira-tools-plugin.env` in the project root
 (see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
 each variable) — never a literal.
