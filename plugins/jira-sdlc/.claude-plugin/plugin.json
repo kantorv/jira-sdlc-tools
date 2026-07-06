@@ -1,11 +1,11 @@
 {
   "name": "jira-sdlc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Parallel, Jira-tracked feature delivery for Claude Code: plan work into Jira issues and git worktrees, implement each piece in parallel, then review and merge the whole set as a unit.",
   "author": {
     "name": "Valentin Kantor"
   },
-  "repository": "https://github.com/kantorv/jira-sdlc-toolkit",
+  "repository": "https://github.com/kantorv/jira-sdlc-tools",
   "license": "MIT",
   "keywords": [
     "jira",

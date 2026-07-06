@@ -1,5 +1,5 @@
 {
-  "name": "jira-sdlc-toolkit",
+  "name": "jira-sdlc-tools",
   "owner": {
     "name": "Valentin Kantor"
   },
@@ -9,7 +9,7 @@
     {
       "name": "jira-sdlc",
       "source": "./plugins/jira-sdlc",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Plan, implement, and review Jira work in parallel using git worktrees.",
       "category": "development-workflow",
       "keywords": ["jira", "git-worktree", "sdlc", "code-review"]
