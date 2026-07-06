@@ -54,7 +54,7 @@ when the re-invocation lands.
 
 **Single-step top-level issues skip phases 3 and 4's reviewer wrap-up
 entirely.** There's no parent-PR cascade and no reviewer re-run: the
-user merges the one PR directly into `<BASE_BRANCH>`, and `#done` /
+user merges the one PR directly into `<BASE_BRANCH>`, and
 GitHub-for-Jira's merge automation (or a manual `jira issue move`)
 takes the issue to *Done*.
 

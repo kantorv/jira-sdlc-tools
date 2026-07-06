@@ -15,7 +15,7 @@ resolve them there, not here.
 [4. Editing/transitioning](#4-editing--transitioning) ·
 [5. Linking](#5-linking-issues) ·
 [6. Comments/worklogs](#6-comments--worklogs) ·
-[7. Branch vs. commit](#7-git-workflow--branch-vs-direct-commit) ·
+[7. Branch convention](#7-git-workflow--branch-convention) ·
 [8. Destructive commands](#8-destructive--risky-commands--use-with-care) ·
 [9. Other commands](#9-other-useful-commands) ·
 [10. gh usage](#10-gh-tool-usage-examples)
@@ -244,54 +244,17 @@ jira issue worklog add <KEY> "1h 30m" --comment "<note>" --no-input
 
 ---
 
-## 7. Git workflow — branch vs. direct commit
+## 7. Git workflow — branch convention
 
-**Decision rule:**
-- **Few-line fix** → commit directly, no new branch — use a Smart Commit message (see below).
-- **Anything bigger** → new branch using the feature/hotfix convention (see §7b).
+**Decision rule:** every change goes on its own branch using the
+feature/hotfix convention below — no matter how small. There's no
+"small enough to commit straight to the working branch" shortcut in
+this toolkit.
 
-**When running as `jira-task-executor`**: the decision may already be made.
-If `jira-task-assigner` created the issue, it posts a `Git strategy: ...`
-comment on the Jira issue. Follow that pre-decided strategy rather than
-re-deriving it from the generic rule above. If no strategy comment exists,
-fall back to the generic rule.
-
-### 7a. Small fix → direct commit with a Smart Commit message
-
-GitHub-for-Jira (already connected here) reads special commands out of commit
-messages — no jira-cli call needed:
-
-```
-git commit -m "<KEY> #done fixed off-by-one in pagination"
-```
-
-Syntax: `<ISSUE-KEY> <ignored text> #<command> <optional args>` — everything
-between the issue key and the `#` is ignored, so a short human description is fine.
-
-Available commands:
-- `#comment <text>` — adds a comment to the issue
-- `#time <amount> <text>` — logs work, e.g. `#time 1h 30m fixed pagination bug`
-- `#<transition-name>` — moves the issue to that workflow state
-
-⚠️ `#done` only works if `<STATUS_DONE>` (see `jira-tools-plugin.env`; default
-example: `Done`) is the **actual transition name** in this project's workflow.
-These skills use `#done` only on the **smart-commit** path, to transition an
-issue straight to `<STATUS_DONE>` once the commit lands. The
-`<STATUS_IN_REVIEW>` and `<STATUS_DONE>` transitions on the dedicated-branch
-path are done explicitly via `jira issue move` (§4), not via smart-commit
-commands. If your workflow's transition name is multi-word, hyphenate it in a
-smart commit (`#in-review`, `#code-review`). Confirm the exact name once, the
-same way as the `jira issue move` status check in §4.
-
-⚠️ Also requires the git commit author's email to match the Jira account's
-email exactly — worth a one-time check (`git config user.email` vs. the Jira
-account email) before relying on this.
-
-Agent rule: a direct commit to the working branch still counts as a real
-change — don't push it without it being part of work the user asked for in
-that session.
-
-### 7b. Bigger change → new branch
+**When running as `jira-task-executor`**: the assigner pre-creates the
+branch and worktree for every leaf issue, so you're resuming or
+creating that branch per the skill's step 2 — never committing straight
+to the base or parent branch.
 
 GitHub-for-Jira links a branch to an issue purely by finding the **issue key inside
 the branch name** — no API call required either.
@@ -321,11 +284,6 @@ its parent's type, not its own — a Sub-task under a Bug is still `hotfix/...`.
 
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 `"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
-
-After creating a Task/Sub-task, the agent's natural next step (if asked to start work)
-is: decide branch vs. direct commit per §7 above → if branching, get the issue key →
-`git checkout -b <feature|hotfix>/<key>-<slug>` → optionally
-`jira issue move <key> "<STATUS_IN_PROGRESS>"`.
 
 ---
 

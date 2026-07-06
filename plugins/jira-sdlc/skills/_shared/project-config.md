@@ -44,7 +44,7 @@ same. Check yours with `jira issue view <any-existing-key>`.
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
-| `<STATUS_DONE>` | Status name the Smart Commit `#done` command relies on. Must match your workflow's real status name exactly, or the transition silently won't fire. | `Done` |
+| `<STATUS_DONE>` | Final status the reviewer (and the single-step flow) transitions issues to once their work has landed. Must match your workflow's real status name exactly. | `Done` |
 
 ## Optional — sensible defaults, override if yours differ
 

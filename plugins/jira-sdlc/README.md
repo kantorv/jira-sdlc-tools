@@ -102,8 +102,7 @@ flowchart TB
 The diagram shows the multistep path — one worktree and dedicated branch
 per sub-task, all merging into the parent branch. A single-step task is
 just the top-level issue and its worktree (PR targets the base branch
-directly); smart-commit sub-tasks share the parent's worktree and skip
-the per-sub-task PR (see Core concepts below).
+directly).
 
 Nothing here gets passed by hand. Two mechanisms carry state between the
 three skills:
@@ -111,10 +110,9 @@ three skills:
 - **`git config branch.<branch>.parentbranch`** — set by the assigner on
   every branch it creates, read by the executor (to find its PR base) and
   the reviewer (to find the parent branch's own base). Local to a clone.
-- **Jira comments** — `"PR target branch: ..."` and `"Git strategy: ..."`,
-  posted by the assigner as a durable fallback for the same information.
-  These survive a fresh clone or a different machine, which the git config
-  alone doesn't.
+- **Jira comments** — `"PR target branch: ..."` posted by the assigner as
+  a durable fallback for the same information. These survive a fresh clone
+  or a different machine, which the git config alone doesn't.
 
 The executor and reviewer both check the git config first and fall back to
 the Jira comment if it's missing.
@@ -137,24 +135,21 @@ branch and a `git worktree`, then:
 - **Single-step** — the top-level issue is the only issue. The executor
   runs in that worktree on a dedicated branch whose PR targets the base
   branch directly.
-- **Multistep** — the top-level issue becomes the parent, and each
-  sub-task gets its own git strategy (see below). The parent branch (and
-  its worktree) is the merge target for the sub-tasks' PRs and the home
-  for any smart-commit sub-tasks.
+- **Multistep** — the top-level issue becomes the parent. Each sub-task
+  gets its own dedicated branch, worktree, and PR into the parent branch.
+  The parent branch (and its worktree) is the merge target for the
+  sub-tasks' PRs.
 
-**Dedicated branch vs. smart commit** (per sub-task, multistep only):
-- **Dedicated branch** (default) — its own branch and PR, merging into
-  the parent branch. Used for anything that touches multiple files, adds
-  tests, or involves non-trivial logic. Gets its own worktree.
-- **Smart commit** (exceptional) — committed directly on the parent
-  branch with a `<KEY> #done <message>` message (no new branch, no PR);
-  GitHub-for-Jira reads the `#done` and transitions the issue straight
-  to Done. Reserved for small focused fixes (a couple of lines, a typo).
-  Runs in the shared parent worktree.
+**Every sub-task gets a dedicated branch.** Each sub-task has its own
+branch, worktree, and PR into the parent branch — regardless of size. A
+one-line fix and a multi-file feature both go through the same
+branch → worktree → PR → review → squash-merge path. There's no "small
+enough to commit straight to the parent" shortcut.
 
-The executor reads this decision from a Jira comment rather than
-re-deciding it — see `jira-task-assigner`'s "Git strategy" section for
-the full reasoning.
+This keeps the flow uniform (every leaf follows the same steps), makes
+every sub-task individually reviewable, and means every change lands
+through an explicit PR rather than an implicit commit on the parent
+branch.
 
 **Picking `Task` vs. `Story` for the top-level issue.** When the user
 hasn't told you which to use, the assigner decides by complexity: a
@@ -179,10 +174,6 @@ relying on opaque GitHub-for-Jira transition rules:
   squash-merges its PR (4a); transitions the parent to `<STATUS_IN_REVIEW>`
   when it opens the aggregate PR (4b); and to `<STATUS_DONE>` once the
   human merges that PR (4c).
-The smart-commit path skips In Review — the `#done` Smart Commit
-transitions the issue straight from In Progress to Done via GitHub-for-Jira,
-since a smart-commit sub-task shares the parent branch and has no PR of its
-own.
 
 ## Prerequisites
 
@@ -193,8 +184,8 @@ own.
   Jira CLIs. Authenticated (`jira init`) against your Jira Cloud instance.
 - **GitHub CLI (`gh`)**, authenticated.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
-  connected between your Jira project and GitHub repo — the smart-commit
-  transitions and automatic branch-to-issue linking both depend on it.
+  connected between your Jira project and GitHub repo — automatic
+  branch-to-issue linking depends on it.
 - **Git with worktree support** (any reasonably current git).
 - **A test runner and commands to plug into `jira-tools-plugin.env`** — the
   executor's test step ships with a Playwright example but the underlying
@@ -316,10 +307,10 @@ The assigner investigates the codebase, asks anything genuinely
 ambiguous, decides this splits into independent pieces (multistep), and
 creates:
 - `PROJ-401` (parent Story) on `feature/PROJ-401-csv-export`, with its
-  own worktree `worktree-PROJ-401` (home for any smart-commit sub-tasks)
-- `PROJ-402` (backend endpoint) → worktree, dedicated branch
-- `PROJ-403` (frontend button) → worktree, dedicated branch
-- `PROJ-404` (tests) → worktree, dedicated branch
+  own worktree `worktree-PROJ-401`
+- `PROJ-402` (backend endpoint) → worktree + branch
+- `PROJ-403` (frontend button) → worktree + branch
+- `PROJ-404` (tests) → worktree + branch
 
 It reports the keys, branches, and worktree paths in chat, and posts the
 same as a Jira comment on `PROJ-401`.
@@ -331,9 +322,9 @@ In three terminals (or three subagents, one per worktree):
 cd ../myapp-worktrees/worktree-PROJ-402 && claude
 > /jira-sdlc:jira-task-executor PROJ-402
 ```
-...and the same for `PROJ-403` and `PROJ-404`. Each executor reads its own
-`Git strategy:` comment, implements, tests, commits, pushes, and opens a
-PR into `feature/PROJ-401-csv-export`, then reports the PR link.
+...and the same for `PROJ-403` and `PROJ-404`. Each executor implements,
+tests, commits, pushes, and opens a PR into
+`feature/PROJ-401-csv-export`, then reports the PR link.
 
 **3. Review and merge the set:**
 ```
@@ -398,10 +389,9 @@ Deliberately never automated, regardless of how routine a run looks:
 
 ## Known limitations
 
-- Built around **GitHub + GitHub-for-Jira** specifically — smart commits
-  and branch-to-issue linking both rely on that integration. Adapting to
-  GitLab/Bitbucket means replacing those mechanisms, not just swapping
-  CLI commands.
+- Built around **GitHub + GitHub-for-Jira** specifically — branch-to-issue
+  linking relies on that integration. Adapting to GitLab/Bitbucket means
+  replacing that mechanism, not just swapping CLI commands.
 - Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
   `jira-tools-plugin.env` if yours has one.
 - The assigner runs **only from your base branch**. Invoked from an
@@ -436,8 +426,6 @@ real task, not discovering mid-failure:
       multi-line comment from stdin (the skills assume `--template -`).
 - [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
       rather than trying to open a browser.
-- [ ] `git config user.email` matches your Jira account's email exactly
-      — required for Smart Commit's `#done` to fire.
 - [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
       semver labels exist (or update `<SEMVER_LABELS>` in
       `jira-tools-plugin.env` to match what does).
@@ -489,14 +477,14 @@ target-branch defaults, feature-flag wrapping, commit message format).
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-tools-plugin.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
-`jira-cli-reference.md` §7b accordingly — the skills follow whatever
+`jira-cli-reference.md` §7 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
 
 ## Contributing
 
 Issues and PRs welcome. If you're proposing a change to one of the three
 `SKILL.md` files, please describe which step of the assigner's planning
-flow (single-step vs. multistep, dedicated-branch vs. smart-commit), or
+flow (single-step vs. multistep), or
 which review/execution step, it affects — the control flow between the
 three skills is easy to get subtly wrong at the seams (git-config vs.
 Jira-comment fallback, phase detection, early-exit behavior), so a
@@ -511,8 +499,8 @@ concrete before/after scenario in the PR description goes a long way.
 - [`ankitpokhrel/jira-cli`](https://github.com/ankitpokhrel/jira-cli) —
   the CLI these skills are written against.
 - [`Introducing JIRA cli`](https://medium.com/@ankitpokhrel/introducing-jira-cli-the-missing-command-line-tool-for-atlassian-jira-fe44982cc1de) — Medium article
-- [GitHub-for-Jira](https://github.com/github/github-for-jira) — smart
-  commits and automatic branch-to-issue linking.
+- [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
+  branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
 - [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
 
