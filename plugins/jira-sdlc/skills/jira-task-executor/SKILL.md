@@ -201,5 +201,5 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 Reference: `../_shared/jira-cli-reference.md` has the full jira-cli syntax,
 confirmed issue types, and git/branch conventions this skill depends on.
-The `.env` file in the project root has this repo's specific values for every
+The `jira-tools-plugin.env` file in the project root has this repo's specific values for every
 `<TOKEN>` used above.
