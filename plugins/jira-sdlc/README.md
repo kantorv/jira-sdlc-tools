@@ -55,7 +55,7 @@ Three skills, three jobs:
 ## Quick start
 
 ```
-/plugin marketplace add kantorv/claude-code-plugins
+/plugin marketplace add kantorv/jira-sdlc-toolkit
 /plugin install jira-sdlc@jira-sdlc-toolkit
 ```
 
@@ -99,6 +99,12 @@ flowchart TB
     BASE -->|human merges manually| DONE([Released])
 ```
 
+The diagram shows the multistep path — one worktree and dedicated branch
+per sub-task, all merging into the parent branch. A single-step task is
+just the top-level issue and its worktree (PR targets the base branch
+directly); smart-commit sub-tasks share the parent's worktree and skip
+the per-sub-task PR (see Core concepts below).
+
 Nothing here gets passed by hand. Two mechanisms carry state between the
 three skills:
 
@@ -121,36 +127,62 @@ self-contained single task, or one sub-task of a split) gets its own
 subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
 
-**Dedicated branch vs. smart commit.** The assigner decides, per leaf
-issue, how its work should land:
-- **Dedicated branch** — its own branch and PR, merging into the branch
-  its worktree was created from. The default when issues have separate
-  worktrees.
-- **Smart commit** — committed directly with a `<KEY> #done <message>`
-  commit message (no new branch, no PR); GitHub-for-Jira reads the
-  special syntax and transitions the issue automatically. The default
-  when several small, non-parallelizable sub-tasks share one worktree.
+**What the assigner creates.** The assigner runs only from your base
+branch — invoke it from an existing feature/hotfix branch and it stops,
+telling you to checkout the base branch first (it doesn't append
+sub-tasks to an existing parent). From the base branch it always
+provisions one top-level issue (`Task`/`Story`/`Bug`) with a matching
+branch and a `git worktree`, then:
+
+- **Single-step** — the top-level issue is the only issue. The executor
+  runs in that worktree on a dedicated branch whose PR targets the base
+  branch directly.
+- **Multistep** — the top-level issue becomes the parent, and each
+  sub-task gets its own git strategy (see below). The parent branch (and
+  its worktree) is the merge target for the sub-tasks' PRs and the home
+  for any smart-commit sub-tasks.
+
+**Dedicated branch vs. smart commit** (per sub-task, multistep only):
+- **Dedicated branch** (default) — its own branch and PR, merging into
+  the parent branch. Used for anything that touches multiple files, adds
+  tests, or involves non-trivial logic. Gets its own worktree.
+- **Smart commit** (exceptional) — committed directly on the parent
+  branch with a `<KEY> #done <message>` message (no new branch, no PR);
+  GitHub-for-Jira reads the `#done` and transitions the issue straight
+  to Done. Reserved for small focused fixes (a couple of lines, a typo).
+  Runs in the shared parent worktree.
 
 The executor reads this decision from a Jira comment rather than
 re-deciding it — see `jira-task-assigner`'s "Git strategy" section for
 the full reasoning.
 
-**The five assignment cases.** What the assigner creates depends on two
-independent questions: does a parent issue already exist (inferred from
-the current branch), and does the request split into genuinely
-parallelizable pieces or not.
-
-| Case | Parent exists? | Single- or multistep? | What gets created |
-|---|---|---|---|
-| A | No | Multistep | New parent issue + parent branch (no worktree of its own); one worktree + dedicated branch per sub-task, targeting the parent branch |
-| B | No | Single-step | One issue; one worktree + dedicated branch targeting the base branch directly — no parent branch layer |
-| C | Yes | Multistep | Sub-tasks under the existing parent; one worktree + dedicated branch per sub-task, targeting the parent branch |
-| D | Yes | Single-step | Same as C, with exactly one sub-task |
-| E | — | Single-step, but splits into non-parallelizable sub-tasks (e.g. all touch the same files) | New parent issue + parent branch; **one shared worktree**; each sub-task lands via **smart commit** instead of its own branch/PR |
+**Picking `Task` vs. `Story` for the top-level issue.** When the user
+hasn't told you which to use, the assigner decides by complexity: a
+`Story` for larger, multi-faceted requests that deliver end-to-end user
+value; a `Task` for smaller, localized, or strictly technical chores. A
+`Bug` is always used for a defect or regression.
 
 **Jira shape assumed.** Two-level hierarchy: `Task`/`Story`/`Bug` at the
 top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
 `<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`.
+
+**Jira status flow across the three skills.** Each skill drives the issue's
+Kanban status explicitly with the four status names from
+`jira-tools-plugin.env`, so board progress reflects the work without
+relying on opaque GitHub-for-Jira transition rules:
+- New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
+  (Jira's default initial status for new issues — no explicit move needed).
+- `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
+  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
+  the sub-task's PR (step 11, dedicated-branch path only).
+- `jira-task-reviewer` transitions a sub-task to `<STATUS_DONE>` when it
+  squash-merges its PR (4a); transitions the parent to `<STATUS_IN_REVIEW>`
+  when it opens the aggregate PR (4b); and to `<STATUS_DONE>` once the
+  human merges that PR (4c).
+The smart-commit path skips In Review — the `#done` Smart Commit
+transitions the issue straight from In Progress to Done via GitHub-for-Jira,
+since a smart-commit sub-task shares the parent branch and has no PR of its
+own.
 
 ## Prerequisites
 
@@ -177,10 +209,10 @@ top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
 
 ### Option A — Plugin + marketplace (recommended)
 
-1. Add the marketplace at `kantorv/claude-code-plugins` and install the
+1. Add the marketplace at `kantorv/jira-sdlc-toolkit` and install the
    plugin:
    ```
-   /plugin marketplace add kantorv/claude-code-plugins
+   /plugin marketplace add kantorv/jira-sdlc-toolkit
    /plugin install jira-sdlc@jira-sdlc-toolkit
    ```
 2. Fill in `jira-tools-plugin.env` in the project root — see
@@ -201,7 +233,7 @@ won't survive the copy.
 
 **If you rename the plugin** (the `name` field in
 `.claude-plugin/plugin.json`), also update the three self-referential
-`/jira-sdlc:...` mentions inside `jira-task-assigner` (step 8) and
+`/jira-sdlc:...` mentions inside `jira-task-assigner` (step 7) and
 `jira-task-reviewer` (step 5, both report templates) to match your new
 name — those are the only places the plugin name is hardcoded into the
 skill bodies themselves.
@@ -213,7 +245,7 @@ cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
 cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
-Run from the root of your `kantorv/claude-code-plugins` clone.
+Run from the root of your `kantorv/jira-sdlc-toolkit` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
 `/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
@@ -223,7 +255,7 @@ references mentioned above back down to their bare form.
 ## Repository layout
 
 ```
-claude-code-plugins/                # marketplace root (this repo)
+jira-sdlc-toolkit/                # marketplace root (this repo)
 ├── .claude-plugin/
 │   └── marketplace.json           # single-plugin marketplace manifest
 └── plugins/
@@ -248,7 +280,7 @@ claude-code-plugins/                # marketplace root (this repo)
         └── README.md
 ```
 
-The marketplace root (`claude-code-plugins/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
+The marketplace root (`jira-sdlc-toolkit/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
 is the plugin root Claude Code copies on install. `_shared/` lives inside it
 deliberately — see [Installation](#installation) for why that matters.
 
@@ -281,9 +313,10 @@ page: backend endpoint, frontend button, tests."*
 /jira-sdlc:jira-task-assigner "Add CSV export to the reports page: backend endpoint, frontend button, tests"
 ```
 The assigner investigates the codebase, asks anything genuinely
-ambiguous, decides this splits into independent pieces (multistep, case A
-— no parent branch exists yet), and creates:
-- `PROJ-401` (parent Task) on `feature/PROJ-401-csv-export`
+ambiguous, decides this splits into independent pieces (multistep), and
+creates:
+- `PROJ-401` (parent Story) on `feature/PROJ-401-csv-export`, with its
+  own worktree `worktree-PROJ-401` (home for any smart-commit sub-tasks)
 - `PROJ-402` (backend endpoint) → worktree, dedicated branch
 - `PROJ-403` (frontend button) → worktree, dedicated branch
 - `PROJ-404` (tests) → worktree, dedicated branch
@@ -336,9 +369,10 @@ local branches for you to clean up.
 All three skills check "what phase am I in" before acting, so re-invoking
 mid-flight is safe by design:
 
-- **Assigner**, run again against a branch that already has a parent →
-  treats new sub-tasks as siblings under the existing parent (cases C/D)
-  instead of creating a duplicate parent.
+- **Assigner**, run again from the base branch → a fresh planning pass
+  that provisions a brand-new top-level issue. It aborts if invoked from
+  an existing feature/hotfix branch — it doesn't append sub-tasks to an
+  existing parent, so checkout the base branch first.
 - **Executor**, run again on an issue with an existing branch → resumes
   it rather than creating a second branch for the same issue.
 - **Reviewer** — no parent PR yet → full review pass. Parent PR open →
@@ -370,6 +404,10 @@ Deliberately never automated, regardless of how routine a run looks:
   CLI commands.
 - Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
   `jira-tools-plugin.env` if yours has one.
+- The assigner runs **only from your base branch**. Invoked from an
+  existing feature/hotfix branch, it stops and tells you to checkout the
+  base branch first — it doesn't append sub-tasks to an existing parent
+  (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
   not in parallel — so the early-exit behavior stays simple to reason
   about. For a large sub-task count this means later PRs wait on earlier
@@ -391,9 +429,9 @@ real task, not discovering mid-failure:
 - [ ] `jira issue view <any-existing-key> --raw` — confirm
       `fields.subtasks` is shaped the way the skills expect (an array of
       objects with a `.key`, not bare strings).
-  - Prints your project's real workflow status names — fill the
-      confirmed values into `<STATUS_IN_PROGRESS>` / `<STATUS_DONE>` in
-      `jira-tools-plugin.env`.
+  - Prints your project's real workflow status names — fill the confirmed
+      values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
+      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-tools-plugin.env`.
 - [ ] `jira issue comment --help` — confirm the flag for piping a
       multi-line comment from stdin (the skills assume `--template -`).
 - [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
@@ -457,8 +495,9 @@ policy `docs/SDLC.md` describes, not the other way around.
 ## Contributing
 
 Issues and PRs welcome. If you're proposing a change to one of the three
-`SKILL.md` files, please describe which of the five assignment cases (or
-which review/execution step) it affects — the control flow between the
+`SKILL.md` files, please describe which step of the assigner's planning
+flow (single-step vs. multistep, dedicated-branch vs. smart-commit), or
+which review/execution step, it affects — the control flow between the
 three skills is easy to get subtly wrong at the seams (git-config vs.
 Jira-comment fallback, phase detection, early-exit behavior), so a
 concrete before/after scenario in the PR description goes a long way.
@@ -475,3 +514,5 @@ concrete before/after scenario in the PR description goes a long way.
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — smart
   commits and automatic branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
+- [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
+

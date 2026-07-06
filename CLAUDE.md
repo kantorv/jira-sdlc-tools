@@ -5,9 +5,12 @@
 **Local dev loop.** Don't iterate against a marketplace install — Claude
 Code copies a plugin snapshot into its cache at install time, so edits to
 this clone won't show up there until you reinstall. While actively
-changing a skill, load straight from your working copy instead:
+changing a skill, load straight from your working copy instead — point
+`--plugin-dir` at the *plugin's* root, not the toolkit repo's root
+(the toolkit root only has `marketplace.json`; `plugin.json` is one
+level down):
 ```bash
-claude --plugin-dir /path/to/claude-code-plugins/plugins/jira-sdlc
+claude --plugin-dir /path/to/jira-sdlc-toolkit/plugins/jira-sdlc
 ```
 After further edits, run `/reload-plugins` inside that session rather
 than restarting. If this plugin is already installed from a marketplace
