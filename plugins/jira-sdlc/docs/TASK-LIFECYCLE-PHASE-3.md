@@ -6,7 +6,7 @@ The review phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run by the
 issue), after every leaf executor has reported back.
 
 This phase ends when the reviewer has approved and squash-merged every
-dedicated-branch sub-task PR into the parent branch, then approved
+sub-task PR into the parent branch, then approved
 the aggregate parent PR (without merging it). The parent PR is
 handed off to the user as the deliberate manual step (phase 4).
 
@@ -22,10 +22,10 @@ sequenceDiagram
 
     activate Reviewer
     Reviewer->>Reviewer: git fetch origin --prune
-    Reviewer->>Reviewer: fetch parent + sub-tasks, classify each<br/>(dedicated branch vs smart commit) from Git strategy comments
+    Reviewer->>Reviewer: fetch parent + sub-tasks from Jira
 
     alt No parent PR yet (first pass)
-        loop per dedicated-branch sub-task PR (sequential, review only)
+        loop per sub-task PR (sequential, review only)
             Reviewer->>Reviewer: fetch diff + review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
             alt REQUEST_CHANGES
                 Reviewer-->>User: stop + report findings<br/>(nothing merged)
@@ -36,14 +36,13 @@ sequenceDiagram
         end
 
         Note over Reviewer: all reviewed PRs approved — merge cascade
-        loop per dedicated-branch sub-task PR (same key order)
+        loop per sub-task PR (same key order)
             Reviewer->>Reviewer: gh pr review --approve
             Reviewer->>Reviewer: gh pr merge --squash --delete-branch
             Reviewer->>Reviewer: verify state == MERGED
             Reviewer->>Reviewer: transition sub-task → Done
         end
 
-        Reviewer->>Reviewer: if any smart-commit sub-tasks,<br/>push <PARENT-BRANCH> so their commits reach the remote
         Reviewer->>Reviewer: find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>)
         Reviewer->>Reviewer: transition <PARENT-KEY> → In Review
         Reviewer->>Reviewer: review aggregate diff (lighter pass)
@@ -78,12 +77,6 @@ sequenceDiagram
   though some PRs were already approved in the review pass. (Re-runs
   re-review everything, since an early exit left some PRs un-reviewed
   against their latest state.)
-- **Smart commits have no PR** — smart-commit sub-tasks aren't in
-  either loop; their work is already on `<PARENT-BRANCH>` and is
-  reviewed as part of the aggregate parent diff. Before that aggregate
-  PR is created, the reviewer pushes `<PARENT-BRANCH>` to the remote so
-  the smart commits (and their `#done` transitions) actually land —
-  the executor's smart-commit path deliberately skips pushing.
 - **Parent PR: review and approve, never merge** — the reviewer
   transitions `<PARENT-KEY>` to *In Review* **before** the aggregate
   review, then reviews the lighter aggregate diff and approves it. It

@@ -84,12 +84,12 @@ grep -rn --exclude=project-config.md "SUB-\|cropapp\|XState\|MUI\b" \
   plugins/jira-sdlc/skills/ plugins/jira-sdlc/docs/ plugins/jira-sdlc/README.md
 ```
 
-Beyond that, "testing" a skill means tracing through which of the five
-assignment cases, which review dimension, or which re-run phase your
-change touches (see README → Core concepts), and re-reading that skill's
-logic end to end for the scenario you changed. These files *are* the
-behavior, not a description of it — there's no separate implementation
-to run against them.
+Beyond that, "testing" a skill means tracing through which assignment
+scenario (single-step vs. multistep, parent vs. sub-task), which review
+dimension, or which re-run phase your change touches (see README → Core
+concepts), and re-reading that skill's logic end to end for the scenario
+you changed. These files *are* the behavior, not a description of it —
+there's no separate implementation to run against them.
 
 ## Releasing (tagging + GitHub Releases)
 
