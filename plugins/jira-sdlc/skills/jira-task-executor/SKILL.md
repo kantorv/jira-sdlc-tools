@@ -100,30 +100,58 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 6. **Implement** the change.
 
 7. **Test before committing:**
-   - If the change needs test coverage that doesn't already exist, add the
-     test(s) to the relevant suite file first.
-   - Run each new/affected test individually, one at a time — don't move
-     to the next one until the current one passes. Use
-     `<TEST_SINGLE_CMD>` from `jira-tools-plugin.env` in the project root (the default
-     example there runs a Playwright test by line number:
-     `yarn playwright test tests/mysuite.ts:555`).
-   - Once every individual test passes, run the whole affected suite to
-     catch regressions: `<TEST_SUITE_CMD>` from the same config (default
-     example: `yarn playwright test tests/mysuite.ts`).
-   - **If the full suite run reports failures, don't treat that as final**
-     — timing/flakiness can fail a test that's actually fine on its own.
-     Re-run just the failed tests individually (not the
+   - **Testing is project-local — find the project's instructions
+     first.** Which runner a project uses, how it selects a single
+     test, and how it runs the whole suite all vary too much to ship a
+     plugin default that isn't wrong for most setups. Look for a
+     `CLAUDE.md`, `AGENTS.md`, "Tests" section in `README.md`, or
+     similar in the repo root.
+     - **If the project docs cover both forms (run a single test, run
+       the full suite)** → use those commands throughout the rest of
+       this step.
+     - **If no such docs exist** in this project, ask the user
+       explicitly whether to install a test runner and the testing
+       dependencies now. This is its own task; don't decide on their
+       behalf.
+       - If they say yes → once everything's in, fold the discovered
+         "run one test" / "run full suite" commands into `CLAUDE.md` /
+         `AGENTS.md` so the next session doesn't have to re-derive
+         them.
+       - If they say no, or this stack genuinely has no test layer →
+         skip the rest of this step. Note in the final report that
+         testing was skipped and why, then continue to step 8
+         (commit).
+     - **Tests exist in the project but the one-vs-suite commands
+       aren't documented** (e.g. CI runs them, `package.json` has
+       scripts, but no `CLAUDE.md`/`AGENTS.md` line tells you how):
+       discover them — inspect `package.json` scripts, `Makefile`
+       targets, README sections, and CI config — and sanity-check each
+       candidate (`--listTests`, a dry run, or one trivial pass)
+       before relying on it. **Suggest** (don't silently edit) that
+       the user add the resulting "run one test" and "run full suite"
+       commands to `CLAUDE.md` / `AGENTS.md`, so the next session
+       skips the discovery dance.
+   - **For the change at hand:** if test coverage exists already,
+     identify the affected tests; if it doesn't, add the new test(s)
+     to the relevant suite file first.
+   - **Run each new/affected test individually, one at a time** —
+     don't move on until the current one passes. Use the project's
+     documented single-test command. If that command selects by line
+     number but your runner doesn't actually support it, filter by
+     name or pattern instead — the policy below matters more than
+     the exact invocation.
+   - **Once every individual test passes, run the whole affected
+     suite** to catch regressions, using the project's documented
+     full-suite command.
+   - **If the full suite run reports failures, don't treat that as
+     final** — timing/flakiness can fail a test that's actually fine
+     on its own. Re-run just the failed tests individually (not the
      whole suite again):
-     - If they pass individually → treat the suite as passing overall.
-       Don't re-run the whole suite a second time.
+     - If they pass individually → treat the suite as passing
+       overall. Don't re-run the whole suite a second time.
      - If an individually re-run test fails again → stop. Report the
-       failure and wait for instructions — don't commit, push, or open a
-       PR, and don't keep retrying on your own.
-   - If `<TEST_SINGLE_CMD>` isn't set to something your runner actually
-     supports (e.g. it can't select by line number), select by test
-     name/pattern instead — the policy above (individually, then suite,
-     then re-run only failures before trusting a red suite) matters more
-     than the exact invocation.
+       failure and wait for instructions — don't commit, push, or open
+       a PR, and don't keep retrying on your own.
 
 8. **Commit** — `git commit -m "<KEY> <short message>"`. Split into
    multiple commits if the change has logically separate pieces; one is

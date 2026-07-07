@@ -18,18 +18,13 @@ what each variable means.
 | `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 
-## Testing — used by `jira-task-executor` step 7
+## Testing
 
-| Token | What it is | Example |
-|---|---|---|
-| `<TEST_SINGLE_CMD>` | Command to run one test in isolation. | `yarn playwright test {file}:{line}` |
-| `<TEST_SUITE_CMD>` | Command to run a whole affected suite. | `yarn playwright test {file}` |
-
-If your runner can't select a single test by line number, adapt step 7 of
-`jira-task-executor` to select by name or pattern instead — the *policy*
-(individually first, full suite second, re-run only the failures before
-trusting a red suite) is framework-agnostic even though these two example
-commands aren't.
+`jira-task-executor` step 7 reads the project's own `CLAUDE.md`,
+`AGENTS.md`, or README for "run one test" / "run full suite"
+commands — it does **not** take test commands from
+`jira-tools-plugin.env`. See that step for the policy and the
+discovery flow when the project hasn't documented them.
 
 ## Jira workflow status names
 
@@ -59,8 +54,6 @@ The README's usage walkthrough assumes this filled-in `jira-tools-plugin.env`:
 PROJECT-KEY           = PROJ
 WORKTREES_DIR         = ../myapp-worktrees
 DEFAULT_BASE_BRANCH   = development
-TEST_SINGLE_CMD       = yarn playwright test {file}:{line}
-TEST_SUITE_CMD        = yarn playwright test {file}
 STATUS_TODO           = To Do
 STATUS_IN_PROGRESS    = In Progress
 STATUS_IN_REVIEW      = In Review
