@@ -24,6 +24,18 @@ e.g. `PROJ-286`):
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check
   `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
   `jira-tools-plugin.env` in the project root).
+- Auth follows `../_shared/jira-cli-reference.md` §0 — check
+  `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
+  `jira-tools-plugin.env` in the project root).
+- **Jira Comment Mechanics**: Since reports and updates are multi-line, 
+  **always pipe via heredoc to `--template -`** (see `../_shared/jira-cli-reference.md` §6). 
+  Single-line comments can use the positional `jira issue comment add <KEY> "<text>"` form. 
+  *Never wrap markdown in a quoted inline string*—backticks are interpreted as 
+  shell command substitutions.
+  ```bash
+  cat <<'EOF' | jira issue comment add <KEY> --template -
+  <markdown content>
+  EOF
 
 ## 1. Resolve the parent, sub-tasks, and current phase
 
@@ -48,16 +60,17 @@ e.g. `PROJ-286`):
   parent branch. Zero or multiple → ask the user rather than guessing.
 - Resolve `<BASE_BRANCH>` per the convention above. Only ask the user if
   both the config and the Jira-comment fallback come up empty.
-- **Check the current phase** —
+- **Check the current phase (Execution & Re-run routing)** —
   `gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url`:
-  - **No PR found** → the dedicated-branch sub-tasks haven't all been
-    merged yet (or haven't been reviewed at all). Continue to step 2
-    for a normal review pass.
-  - **A PR exists** (open, merged, or closed) → every sub-task PR was
-    already reviewed and merged in an earlier run — step 4a only ever
-    runs once every sub-task PR is approved, so a parent PR existing at
-    all means that already happened. Skip straight to step 4b; don't
-    re-discover or re-review sub-tasks, there's nothing left to review.
+  - **No parent PR exists yet** → Sub-tasks aren't fully merged. Continue to 
+    step 2 for a full review pass. *(Note: Previously-approved PRs are re-reviewed 
+    to catch new commits. If the user explicitly asks to skip re-reviewing a 
+    specific PR number, note its previous approval and skip it).*
+  - **A parent PR exists and is OPEN (or closed)** → Sub-tasks are already merged. 
+    Skip straight to step 4b to check/refresh the aggregate review. Do not 
+    re-discover or re-review sub-tasks.
+  - **A parent PR exists and is MERGED** → The user merged the aggregate PR 
+    manually. Skip straight to step 4c for post-merge wrap-up.
 
 ## 2. Discover open PRs for each sub-task
 
@@ -173,19 +186,15 @@ For each sub-task PR (same key order as step 3):
    `state == "MERGED"`. If not merged, stop and report — don't assume.
 
 4. **Jira update** — transition and comment:
-   - Transition to `<STATUS_DONE>` (this sub-task's PR merged into the
-     parent branch, so its work is landed):
-     `jira issue move <SUBTASK-KEY> "<STATUS_DONE>"` (see
-     `jira-tools-plugin.env` in the project root for the confirmed status
-     name for this project — default example `Done`).
-   - Post a comment recording the merge (see
-     `../_shared/jira-cli-reference.md` §6 for comment variants —
-     single-line via positional arg, multi-line via heredoc to
-     `--template -`, or `echo ... | --template -`):
-     ```
-     echo "PR #<prNumber> approved and merged into <PARENT-BRANCH>." | \
-       jira issue comment add <SUBTASK-KEY> --template -
-     ```
+    - Transition to `<STATUS_DONE>` (this sub-task's PR merged into the
+      parent branch, so its work is landed):
+      `jira issue move <SUBTASK-KEY> "<STATUS_DONE>"` (see
+      `jira-tools-plugin.env` in the project root for the confirmed status
+      name for this project — default example `Done`).
+    - Post a positional single-line comment recording the merge:
+      ```bash
+      jira issue comment add <SUBTASK-KEY> "PR #<prNumber> approved and merged into <PARENT-BRANCH>."
+      ```
 
 ### 4b. Prepare the parent PR — review only, merging is manual
 
@@ -251,11 +260,8 @@ previous run, and this invocation is picking that up.
      `jira issue move <PARENT-KEY> "<STATUS_DONE>"` (see
      `jira-tools-plugin.env` in the project root for the confirmed status
      name — default example `Done`).
-   - Comment via the heredoc pattern (see
-     `../_shared/jira-cli-reference.md` §6; never wrap markdown in a
-     quoted inline string — backticks are interpreted as command
-     substitution):
-     ```
+   - Comment via heredoc (per global Jira Comment Mechanics convention):
+     ```bash
      cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
      All sub-tasks approved and merged. Parent branch
      <PARENT-BRANCH> merged into <BASE_BRANCH>.
@@ -272,104 +278,44 @@ previous run, and this invocation is picking that up.
    (`git branch --merged origin/<BASE_BRANCH>`) and report them. Don't
    auto-delete local branches — that's the user's call.
 
+
 ## 5. Report back
 
-Post the review summary to the user in chat **and** as a single Jira
-comment on `<PARENT-KEY>`. Three possible outcomes:
+Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` using the global heredoc convention. Construct the layout using the conditional structures below depending on the outcome:
 
-### A. Parent PR ready, waiting for manual merge
-```
-## Sub-tasks merged — parent PR ready for manual merge
+```markdown
+## Review Status: <OUTCOME_TITLE>
+<!-- 
+  Outcomes:
+  - "Sub-tasks merged — parent PR ready for manual merge"
+  - "Review complete — all PRs merged"
+  - "Review blocked — changes requested"
+-->
 
-Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
-Sub-tasks:
-- <KEY> PR #<n>: ✅ APPROVED + merged
-- <KEY> PR #<n>: ✅ APPROVED + merged
+Parent: <PARENT-KEY> (<PARENT-BRANCH> [→ <BASE_BRANCH> if applicable])
+
+### Pull Request Summary
+- <KEY> PR #<n>: [✅ APPROVED + merged | ❌ REQUEST_CHANGES | ⏳ SKIPPED]
 - ...
 
-Parent PR #<n>: ✅ reviewed and approved. Merging is manual for this
-step — merge it yourself on GitHub when ready: <PR URL>
-Once merged, re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY> to post
-the final Jira update and check for orphaned branches.
-```
+### [Details / Next Steps]
+<!-- IF PARENT PR READY FOR MANUAL MERGE: -->
+Parent PR #<n>: ✅ reviewed and approved. Merging is manual for this step — merge it yourself on GitHub when ready: <PR URL>
+Once merged, re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY> to post the final Jira update and check for orphaned branches.
 
-### B. Fully complete (parent PR already merged manually)
-```
-## Review complete — all PRs merged
-
-Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
-Sub-tasks:
-- <KEY> PR #<n>: ✅ APPROVED + merged
-- <KEY> PR #<n>: ✅ APPROVED + merged
-- ...
-
+<!-- IF FULLY COMPLETE: -->
 Parent PR #<n>: ✅ merged into <BASE_BRANCH> (merged manually by the user)
-```
 
-### C. Review blocked — changes requested
-```
-## Review blocked — changes requested
-
-Parent: <PARENT-KEY> (<PARENT-BRANCH>)
-
-Reviewed:
-- <KEY> PR #<n>: ✅ APPROVED
-- <KEY> PR #<n>: ❌ REQUEST_CHANGES
-
-Not yet reviewed:
-- <KEY> PR #<n> (skipped)
-- ...
-
-### Findings for <BLOCKED-KEY> PR #<n>:
+<!-- IF REVIEW BLOCKED: -->
+#### Findings for <BLOCKED-KEY> PR #<n>:
 1. <file>:<line> — <what's wrong>
 2. ...
 
-### Next step:
-Fix the findings above in <blocked-branch>, push, then re-run
-/jira-sdlc:jira-task-reviewer <PARENT-KEY>.
-```
-This template applies whether the blocked PR was a sub-task's or the
-parent's own aggregate PR (step 4b.3) — same structure either way.
-
-(The `/jira-sdlc:` prefix above assumes this skill is installed as the
-`jira-sdlc` plugin — adjust if you renamed it, or drop the prefix if
-you installed these skills as loose files rather than as a plugin.)
-
-### Jira comment mechanics
-
-Since the report is multi-line, **always pipe via heredoc to
-`--template -`** (see `../_shared/jira-cli-reference.md` §6).
-Single-line comments can use the positional `jira issue comment add
-<KEY> "<text>"` form. Never wrap markdown in a quoted inline
-string — backticks are interpreted as command substitution:
-```
-cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
-<the report content>
-EOF
+#### Next step:
+Fix the findings above in <blocked-branch>, push, then re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY>.
 ```
 
-## 6. Re-run semantics
-
-Each invocation checks the current phase first (step 1) rather than
-blindly repeating the whole flow:
-
-- **No parent PR exists yet** → full review from step 2: re-discovers
-  all open sub-task PRs and reviews everything again. This is
-  intentional — previously-approved PRs may have new commits since the
-  last run, and an early exit means some PRs were never reviewed at
-  all. Re-reviewing is cheap (the diff is usually small).
-- **A parent PR exists and is still open** → the sub-tasks are already
-  merged into `<PARENT-BRANCH>`; this run only checks/refreshes the
-  aggregate review (4b) and reports the current status. It will not
-  re-discover or re-review sub-tasks.
-- **A parent PR exists and is now merged** → this run does the
-  post-merge wrap-up (4c) and nothing else.
-
-If the user wants to skip re-reviewing a previously-approved sub-task PR
-during a full review pass, they should mention the PR number explicitly —
-the skill will still verify it but can note it was previously approved.
-
-## 7. Edge cases
+## 6. Edge cases
 
 - **Sub-task with no branch / no PR**: flag in the report. The skill
   can only review what has been pushed and has a PR open. Don't attempt
