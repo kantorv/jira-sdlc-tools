@@ -202,9 +202,12 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
     name for this project — default example `In Review`).
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
     a parent (check `fields.parent` from step 1):
-    - **Has a parent (multistep sub-task)** → `jira-task-reviewer`
-      moves it to `<STATUS_DONE>` when it squash-merges this PR into
-      the parent branch (reviewer step 4a).
+    - **Has a parent (multistep sub-task)** → Once the reviewer
+      approves the PR, the human merges it into the parent branch.
+      GitHub-for-Jira automation (if connected) transitions the
+      sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
+      it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
+      executor must re-run `jira-task-executor <KEY>` to fix it.
     - **No parent (single-step top-level issue)** → no reviewer runs
       for this issue (the reviewer only operates on parents with
       sub-tasks). `<STATUS_DONE>` is handled when the human merges the

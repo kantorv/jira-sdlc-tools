@@ -1,6 +1,6 @@
 ---
 name: jira-task-reviewer
-description: Given a parent Jira issue key (e.g. PROJ-286), finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and stops on first rejection. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Never merges anything.
+description: Given a parent Jira issue key (e.g. PROJ-286), finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Never merges anything.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
