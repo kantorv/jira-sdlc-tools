@@ -187,9 +187,12 @@ relying on opaque GitHub-for-Jira transition rules:
   connected between your Jira project and GitHub repo — automatic
   branch-to-issue linking depends on it.
 - **Git with worktree support** (any reasonably current git).
-- **A test runner and commands to plug into `jira-tools-plugin.env`** — the
-  executor's test step ships with a Playwright example but the underlying
-  policy is framework-agnostic.
+- **A documented way to run tests** — the executor's test step reads
+  the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
+  test" and "full suite" commands; they no longer live in
+  `jira-tools-plugin.env`. If the project doesn't document them,
+  the executor will ask whether to install a runner — and skip the
+  test step if you decline.
 - **Semver PR labels** (`patch`/`minor`/`major`, or your equivalents)
   already created on the GitHub repo — the executor requires one on every
   PR it opens.
@@ -283,12 +286,14 @@ Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
-- Test commands for `jira-task-executor`'s test step
 - Your Jira workflow's real status names — these are flagged as
   "confirm once" inside the skills themselves, since status *names*
   aren't standardized across Jira projects
 - Semver label names and the Jira auth token fallback path
   (optional — sensible defaults given)
+
+Test commands are **not** here anymore — `jira-task-executor` step 7
+reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
 Open that file and read it top to bottom before your first run; it's
 short, and every skill points back to it.
