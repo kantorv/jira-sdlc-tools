@@ -80,44 +80,49 @@ sequenceDiagram
         deactivate Executor
     end
 
-    Note over User,JIRA: Phase 3 — Review & merge cascade (parent key only)
+    Note over User,JIRA: Phase 3 — Review & aggregate approval (parent key only)
 
-    alt Multistep (reviewer cascade)
+    alt Multistep (reviewer)
         User->>Reviewer: invoke /jira-task-reviewer <PARENT-KEY>
         activate Reviewer
         Reviewer->>GIT: git fetch origin --prune
-        Reviewer->>JIRA: fetch parent + sub-tasks
+        Reviewer->>JIRA: fetch parent + sub-tasks<br/>(filter to <STATUS_IN_REVIEW>)
         Reviewer->>GIT: resolve <PARENT-BRANCH> + <BASE_BRANCH><br/>(grep + parentbranch config)
         Reviewer->>GIT: phase check — list parent PR (state all)
         GIT-->>Reviewer: parent PR state (none | open | merged)
 
         alt No parent PR yet (first pass)
-            loop per sub-task PR (sequential, review only)
+            loop per sub-task PR (sequential, In Review only)
                 Reviewer->>GIT: fetch diff
                 Reviewer->>Reviewer: review 6 dimensions
-                alt REQUEST_CHANGES
-                    Reviewer->>JIRA: post blocked-report comment on <PARENT-KEY>
-                    Reviewer-->>User: stop + report findings (nothing merged)
-                    Note over Reviewer: early exit — wait for fix, then re-run
-                else APPROVE
-                    Reviewer->>Reviewer: record APPROVE (no merge yet)
+                alt APPROVE
+                    Reviewer->>GIT: gh pr review --approve<br/>(no merge — human merges manually)
+                    Reviewer->>JIRA: comment on <SUBTASK-KEY><br/>"PR #<n> reviewed and approved."
+                    Reviewer->>JIRA: update summary on <PARENT-KEY><br/>"Sub-task <KEY>: ✅ approved"
+                else REQUEST_CHANGES
+                    Reviewer->>GIT: gh pr review --request-changes<br/>"<findings>"
+                    Reviewer->>JIRA: transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
+                    Reviewer->>JIRA: comment on <SUBTASK-KEY><br/>"Findings: ...<br/>Moving back to In Progress."
+                    Reviewer->>JIRA: update summary on <PARENT-KEY><br/>"Sub-task <KEY>: ❌ changes requested"
+                    Note over Reviewer: continue to next sub-task PR
                 end
             end
-            Note over Reviewer: all reviewed PRs approved — merge cascade
-            loop per sub-task PR (same key order)
-                Reviewer->>GIT: gh pr review --approve
-                Reviewer->>GIT: gh pr merge --squash --delete-branch
-                Reviewer->>GIT: verify state == MERGED
-                Reviewer->>JIRA: transition sub-task → Done
+            Note over Reviewer: loop complete — check outcomes
+            alt All approved and all already merged
+                Reviewer->>GIT: find or create parent PR (<PARENT-BRANCH> → <BASE_BRANCH>)
+                Reviewer->>GIT: fetch + review aggregate diff (lighter pass)
+                Reviewer->>GIT: gh pr review --approve (no auto-merge — manual)
+                Reviewer-->>User: "parent PR ready for manual merge"
+            else All approved, some not yet merged
+                Reviewer->>JIRA: post report on <PARENT-KEY><br/>(all approved, waiting for merge)
+                Reviewer-->>User: "all approved — merge manually, then re-run"
+            else Some rejected
+                Reviewer->>JIRA: post full report on <PARENT-KEY><br/>(approved + rejected list)
+                Reviewer-->>User: "some PRs blocked — fix & re-run"
             end
-            Reviewer->>GIT: find or create parent PR (<PARENT-BRANCH> → <BASE_BRANCH>)
-            Reviewer->>JIRA: transition <PARENT-KEY> → In Review
-            Reviewer->>GIT: fetch + review aggregate diff (lighter pass)
-            Reviewer->>GIT: gh pr review --approve (no auto-merge — manual)
-            Reviewer-->>User: "parent PR ready for manual merge"
         else Parent PR open (re-run)
-            Note over Reviewer: sub-tasks already merged<br/>(refresh aggregate review and report status)
-            Reviewer-->>User: "parent PR still open — status refreshed"
+            Note over Reviewer: aggregate PR already open<br/>(refresh review, skip sub-tasks)
+            Reviewer-->>User: "parent PR reviewed and ready for manual merge"
         else Parent PR merged (→ phase 4)
             Note over Reviewer: short-circuit to the post-merge wrap-up
         end
@@ -129,12 +134,13 @@ sequenceDiagram
 
     Note over User,JIRA: Phase 4 — Human merges the release (always manual)
     alt Multistep
+        User->>GIT: merge sub-task PR(s) on GitHub (manual)
         User->>GIT: merge parent PR on GitHub (manual — bypasses the reviewer)
         User->>Reviewer: re-invoke /jira-task-reviewer <PARENT-KEY>
         activate Reviewer
         Reviewer->>GIT: phase check finds parent PR state == MERGED
-        Reviewer->>JIRA: transition <PARENT-KEY> → Done
-        Reviewer->>JIRA: post final Jira comment (what landed, sub-tasks)
+        Reviewer->>JIRA: post final wrap-up comment (what landed, sub-tasks)
+        Note over Reviewer: GitHub-for-Jira automation handled<br/>all status transitions → Done
         Reviewer->>GIT: list orphaned local branches
         Reviewer-->>User: final report (everything landed, cleanup hints)
         deactivate Reviewer
