@@ -106,6 +106,7 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 
 **CLI mechanics — things to never forget:**
 - **Auth**: check whether `JIRA_API_TOKEN` is already set (`echo $JIRA_API_TOKEN`). If empty, prefix every `jira` command with `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)"`.
+- **Project health check**: before the first `jira issue create`, run `jira project list | grep <PROJECT-KEY>` to confirm the configured project key exists and is accessible. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
 - Use `--no-input` on every write command except `delete`. Quote `"Sub-task"` exactly (with the hyphen).
 - For anything beyond a one-line description, write the body to a file and use `--template <file>` instead of inline `-b"..."`.
 - Comment syntax: use `jira issue comment add <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template -` for multi-line.
