@@ -4,7 +4,7 @@ This repo is a private Claude Code plugin **marketplace** that ships one
 plugin, `jira-sdlc` — three coupled skills (`jira-task-assigner`,
 `jira-task-executor`, `jira-task-reviewer`) that plan a feature into Jira
 issues + git worktrees, implement each piece in parallel, and then
-review/merge the set. Full explanation, architecture diagram, and usage
+review the set. Full explanation, architecture diagram, and usage
 walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
 is deliberately shorter and only covers what's easy to get wrong.
 
