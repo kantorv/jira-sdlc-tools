@@ -131,11 +131,3 @@ push the back-merge with it). If you enable branch protection on `main`, or
 want the back-merge commit to re-trigger the `validator` workflow, define a
 `RELEASE_PAT` secret and swap the `GH_TOKEN`/remote in `release.yml`'s
 back-merge step.
-
-## This repo is the toolkit, not a target
-
-Don't try to exercise a skill by running `/jira-task-assigner` *against
-this repo*. There's no Jira project or worktrees directory configured
-for `jira-sdlc-tools` itself, and there shouldn't be — these skills are
-meant to be installed into, and pointed at, a separate application repo
-that has its own `jira-tools-plugin.env` file filled in.
