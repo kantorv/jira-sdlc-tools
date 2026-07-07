@@ -2,11 +2,19 @@
 
 The end-to-end flow a task goes through from a user's first request to
 the parent PR being merged into the base branch — across the three
-coupled skills of this plugin: **`jira-task-assigner`**, **`jira-task-executor`**,
-and **`jira-task-reviewer`**.
+coupled skills of this plugin: **`jira-task-assigner`**,
+**`jira-task-executor`**, and **`jira-task-reviewer`**.
 
-The **sequence diagram** below is the canonical view; the prose that
-follows narrates it.
+The diagram below surfaces the two systems each skill drives as their
+own swimlanes — **GIT** (anything that mutates or reads repo/PR state)
+and **JIRA** (anything that mutates or reads issue state) — so the
+whole interaction reads `User ↔ skill ↔ GIT ↔ JIRA` left to right
+across all four phases. It is stitched from the four per-phase
+diagrams ([P1](TASK-LIFECYCLE-PHASE-1.md),
+[P2](TASK-LIFECYCLE-PHASE-2.md),
+[P3](TASK-LIFECYCLE-PHASE-3.md),
+[P4](TASK-LIFECYCLE-PHASE-4.md)); those have the full arrow-level
+routing detail, this one is the one-look canonical view.
 
 ## Sequence diagram
 
@@ -16,12 +24,15 @@ sequenceDiagram
     participant Assigner
     participant Executor
     participant Reviewer
+    participant GIT
+    participant JIRA
 
-    Note over User,Assigner: Phase 1 — Plan<br/>(runs once, from the base branch)
+    Note over User,JIRA: Phase 1 — Plan<br/>(runs once, from the base branch)
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
-    Assigner->>Assigner: check branch context
+    Assigner->>GIT: read current branch (base? feature/hotfix? other?)
+    GIT-->>Assigner: current branch
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled
@@ -32,87 +43,86 @@ sequenceDiagram
     Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)
 
     alt Multistep (split into parallel sub-tasks)
-        Assigner->>Assigner: create <PARENT-KEY> (Task / Story / Bug)
-        Assigner->>Assigner: create branch feature/<PARENT-KEY>-<slug><br/>+ set parentbranch config + push + parent worktree
+        Assigner->>JIRA: create <PARENT-KEY> (Task / Story / Bug)
+        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug>,<br/>set parentbranch config, push, add parent worktree
         loop per sub-task
-            Assigner->>Assigner: decide sub-task strategy (dedicated / smart commit)
-            alt Dedicated branch (default)
-                Assigner->>Assigner: create sub-task issue + branch & worktree<br/>+ set parentbranch config + push
-            else Smart commit (small focused fix)
-                Assigner->>Assigner: create sub-task issue (uses parent worktree)
-            end
-            Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
+            Assigner->>JIRA: create sub-task issue (link parent)
+            Assigner->>GIT: create sub-task branch + worktree,<br/>set parentbranch config, push
+            Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
         end
     else Single-step (one cohesive task)
-        Assigner->>Assigner: create single top-level issue + branch<br/>+ set parentbranch config + push + worktree
-        Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
+        Assigner->>JIRA: create single top-level issue
+        Assigner->>GIT: create branch + worktree,<br/>set parentbranch config, push
+        Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
     end
     deactivate Assigner
 
     Assigner-->>User: report (keys, branches, worktrees, strategy)
 
-    Note over User,Reviewer: Phase 2 — Implement<br/>(one Executor per leaf)
+    Note over User,JIRA: Phase 2 — Implement<br/>(one Executor per leaf)
 
-    par dedicated-branch leaves — own worktree each (parallel)
+    par every leaf — own worktree (parallel)
         User->>Executor: invoke /jira-task-executor <KEY-A>
         activate Executor
-        Executor->>Executor: fetch issue + read Git strategy, validate worktree
-        Executor->>Executor: branch / worktree setup
-        Executor->>Executor: transition → In Progress
+        Executor->>JIRA: fetch issue + (parent family for ownership check)
+        Executor->>GIT: validate worktree belongs to <KEY-A> (else stop & ask)
+        Executor->>GIT: branch / worktree setup (resume or create)
+        Executor->>JIRA: transition → In Progress
         Executor->>Executor: investigate • clarify • implement • test
-        alt Dedicated branch
-            Executor->>Executor: commit + push + open PR (semver label)
-            Executor->>Executor: transition → In Review
-            Executor-->>User: report (PR URL, branch, status)
-        else Smart commit
-            Executor->>Executor: commit "<KEY-A> #done <msg>" on parent branch (local)
-            Executor-->>User: report (commit on parent branch)
-        end
+        Executor->>GIT: commit + push + open PR (semver label)
+        Executor->>JIRA: transition → In Review + post closing comment
+        Executor-->>User: report (PR URL, branch, status)
         deactivate Executor
-    and dedicated-branch leaf (parallel)
+    and additional leaf (parallel)
         User->>Executor: invoke /jira-task-executor <KEY-B>
         activate Executor
-        Executor->>Executor: same flow as KEY-A
-        deactivate Executor
-    and smart-commit leaves — share parent worktree (serial)
-        User->>Executor: invoke /jira-task-executor <KEY-C>
-        activate Executor
-        Executor->>Executor: smart commit on parent branch — no new branch
-        Executor->>Executor: commit "<KEY-C> #done <msg>" (local, no push)
-        Executor-->>User: report (commit on parent branch)
+        Executor->>Executor: same flow as KEY-A (in parallel)
         deactivate Executor
     end
 
-    Note over User,Reviewer: Phase 3 — Review & merge cascade (parent key only)
+    Note over User,JIRA: Phase 3 — Review & aggregate approval (parent key only)
 
-    alt Multistep (reviewer cascade)
+    alt Multistep (reviewer)
         User->>Reviewer: invoke /jira-task-reviewer <PARENT-KEY>
         activate Reviewer
-        Reviewer->>Reviewer: git fetch origin --prune, fetch parent + sub-tasks<br/>classify each from Git strategy comments
+        Reviewer->>GIT: git fetch origin --prune
+        Reviewer->>JIRA: fetch parent + sub-tasks<br/>(filter to <STATUS_IN_REVIEW>)
+        Reviewer->>GIT: resolve <PARENT-BRANCH> + <BASE_BRANCH><br/>(grep + parentbranch config)
+        Reviewer->>GIT: phase check — list parent PR (state all)
+        GIT-->>Reviewer: parent PR state (none | open | merged)
 
         alt No parent PR yet (first pass)
-            loop per dedicated-branch sub-task PR (sequential, review only)
-                Reviewer->>Reviewer: fetch diff + review 6 dimensions
-                alt REQUEST_CHANGES
-                    Reviewer-->>User: stop + report findings (nothing merged)
-                    Note over Reviewer: early exit — wait for fix, then re-run
-                else APPROVE
-                    Reviewer->>Reviewer: record APPROVE (no merge yet)
+            loop per sub-task PR (sequential, In Review only)
+                Reviewer->>GIT: fetch diff
+                Reviewer->>Reviewer: review 6 dimensions
+                alt APPROVE
+                    Reviewer->>GIT: gh pr review --approve<br/>(no merge — human merges manually)
+                    Reviewer->>JIRA: comment on <SUBTASK-KEY><br/>"PR #<n> reviewed and approved."
+                    Reviewer->>JIRA: update summary on <PARENT-KEY><br/>"Sub-task <KEY>: ✅ approved"
+                else REQUEST_CHANGES
+                    Reviewer->>GIT: gh pr review --request-changes<br/>"<findings>"
+                    Reviewer->>JIRA: transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
+                    Reviewer->>JIRA: comment on <SUBTASK-KEY><br/>"Findings: ...<br/>Moving back to In Progress."
+                    Reviewer->>JIRA: update summary on <PARENT-KEY><br/>"Sub-task <KEY>: ❌ changes requested"
+                    Note over Reviewer: continue to next sub-task PR
                 end
             end
-            Note over Reviewer: all reviewed PRs approved — merge cascade
-            loop per dedicated-branch sub-task PR (same key order)
-                Reviewer->>Reviewer: gh pr review --approve
-                Reviewer->>Reviewer: gh pr merge --squash --delete-branch
-                Reviewer->>Reviewer: verify MERGED + transition sub-task → Done
+            Note over Reviewer: loop complete — check outcomes
+            alt All approved and all already merged
+                Reviewer->>GIT: find or create parent PR (<PARENT-BRANCH> → <BASE_BRANCH>)
+                Reviewer->>GIT: fetch + review aggregate diff (lighter pass)
+                Reviewer->>GIT: gh pr review --approve (no auto-merge — manual)
+                Reviewer-->>User: "parent PR ready for manual merge"
+            else All approved, some not yet merged
+                Reviewer->>JIRA: post report on <PARENT-KEY><br/>(all approved, waiting for merge)
+                Reviewer-->>User: "all approved — merge manually, then re-run"
+            else Some rejected
+                Reviewer->>JIRA: post full report on <PARENT-KEY><br/>(approved + rejected list)
+                Reviewer-->>User: "some PRs blocked — fix & re-run"
             end
-            Reviewer->>Reviewer: if smart-commit sub-tasks exist,<br/>push <PARENT-BRANCH> to remote
-            Reviewer->>Reviewer: find or create parent PR (<PARENT-BRANCH> → <BASE_BRANCH>)
-            Reviewer->>Reviewer: transition <PARENT-KEY> → In Review
-            Reviewer->>Reviewer: review aggregate diff (lighter pass) + approve (no merge)
-            Reviewer-->>User: "parent PR ready for manual merge"
         else Parent PR open (re-run)
-            Note over Reviewer: dedicated-branch sub-tasks already merged<br/>(just refresh the aggregate review and report status)
+            Note over Reviewer: aggregate PR already open<br/>(refresh review, skip sub-tasks)
+            Reviewer-->>User: "parent PR reviewed and ready for manual merge"
         else Parent PR merged (→ phase 4)
             Note over Reviewer: short-circuit to the post-merge wrap-up
         end
@@ -122,175 +132,149 @@ sequenceDiagram
         Note over User: Done via GitHub-for-Jira merge automation (or manual jira issue move)
     end
 
-    Note over User,Reviewer: Phase 4 — Human merges the release (always manual)
+    Note over User,JIRA: Phase 4 — Human merges the release (always manual)
     alt Multistep
-        User->>User: merge parent PR on GitHub (manual)
+        User->>GIT: merge sub-task PR(s) on GitHub (manual)
+        User->>GIT: merge parent PR on GitHub (manual — bypasses the reviewer)
         User->>Reviewer: re-invoke /jira-task-reviewer <PARENT-KEY>
         activate Reviewer
-        Reviewer->>Reviewer: phase check finds parent PR state == MERGED
-        Reviewer->>Reviewer: transition <PARENT-KEY> → Done
-        Reviewer->>Reviewer: post final Jira comment + list orphaned local branches
-        deactivate Reviewer
+        Reviewer->>GIT: phase check finds parent PR state == MERGED
+        Reviewer->>JIRA: post final wrap-up comment (what landed, sub-tasks)
+        Note over Reviewer: GitHub-for-Jira automation handled<br/>all status transitions → Done
+        Reviewer->>GIT: list orphaned local branches
         Reviewer-->>User: final report (everything landed, cleanup hints)
+        deactivate Reviewer
     else Single-step (already Done)
         Note over User: already Done — parent PR merged in the single-step branch above
     end
 ```
 
+## Participant routing
+
+Two lanes, one rule each — applied uniformly across all four phases:
+
+- **GIT** — anything that mutates or reads **repo/PR state**: branch
+  context reads, branch creation, the `branch.<branch>.parentbranch` git
+  config entry (set in phase 1, read back in phases 2 and 3), the push,
+  `git worktree add`, `git fetch --prune`, fetching PR diffs,
+  `gh pr review --approve` / `--request-changes`, state-verification reads,
+  find-or-create parent PR, and the cleanup orphan-branch listing. The
+  reviewer **never calls `gh pr merge`** — it only approves PRs, and the
+  human merges them on GitHub. *The one GIT write the skills never make*
+  is `gh pr merge` on the **parent** PR — that's the human release
+  decision (phase 4).
+- **JIRA** — anything that mutates or reads **issue state**: fetching
+  the parent / sub-tasks / leaf issue (the parent family returned here
+  feeds the executor's worktree-ownership check too), every status
+  transition (*In Progress*, *In Review*, *Done*), every comment
+  (assigner leaf "PR target branch" comments, executor closing comments,
+  reviewer review-approval / blocked-report / wrap-up comments).
+- **Stays inside the skill** — the reasoning that turns those reads into
+  decisions: the assigner's scoping, the executor's
+  investigate/clarify/implement/test, the reviewer's six-dimension
+  review and recorded verdicts.
+
+Two routing quirks the diagram makes visible:
+
+1. In **phase 4**, the user's manual merge is the only arrow in the
+   whole four-phase sequence that jumps a swimlane to GIT without going
+   through a skill (`User → GIT`, past the reviewer). The reviewer is
+   explicitly forbidden from that merge, so the user drives GIT
+   directly.
+2. In the **single-step** branches (phases 3 and 4), no skill is active
+   at all — the user merges on GitHub and GitHub-for-Jira's automation
+   (or a manual `jira issue move`) takes the issue to *Done*. The skill
+   lanes go quiet; GIT and JIRA still move, just via automation.
+
 ## Phase 1 — Plan (`jira-task-assigner`)
 
 Triggered once by the user, **from the base branch** (the assigner
 refuses to run on an existing feature/hotfix issue branch and asks how
-to proceed on any other non-base branch — see
-[jira-task-assigner §1](skills/jira-task-assigner/SKILL.md)).
-
-The assigner:
-1. Reads the branch context. The configured default base branch is
-   fine; an existing `feature/`/`hotfix/` issue branch is refused; any
-   other branch prompts the user rather than guessing.
-2. Investigates the codebase to ground its scoping decisions.
-3. **Clarification loop** — asks the user only about things that would
-   change what gets built; doesn't ping what it can find itself.
-4. Decides **scope** (single-step vs multistep — split into parallel
-   sub-tasks only when the pieces are genuinely independent) **and the
-   top-level type** (`Task` / `Story` / `Bug` per `jira-task-assigner`
-   §4B). The **per-sub-task strategy** — *dedicated branch* (default;
-   own worktree + PR) or *smart commit* (small focused fixes; shares
-   the parent's worktree, no PR of its own, `<KEY> #done` commit that
-   GitHub-for-Jira picks up) — is **not** fixed here: it's chosen per
-   leaf as each sub-task is created in step 5.
-5. Provisions issues, branches, and worktrees: records
-   `branch.<branch>.parentbranch` in git config, pushes every branch
-   it creates, and adds a worktree per leaf (dedicated) plus one shared
-   parent worktree (home for smart-commit work).
-6. Posts a single `"PR target branch: ... Git strategy: ..."` comment
-   on each leaf issue (one comment carrying both lines) — picked up
-   later by the executor and reviewer as the durable fallback for the
-   same info.
-
-After phase 1, every leaf issue has either its own dedicated worktree
-or is marked as smart-commit on the shared parent worktree. Nothing
-is implemented yet — `jira-task-assigner` deliberately stops short of
-writing code.
+to proceed on any other non-base branch). The assigner clarifies scope
+and provisions issues + branches + worktrees, then posts a single
+`"PR target branch: ... Worktree: ..."` comment on each leaf — the
+durable fallback the executor and reviewer read later. **Routing:** JIRA
+owns issue creation and the leaf comments; GIT owns the branch-context
+read, branch creation, the `parentbranch` config entry, the push, and
+worktree creation. See
+[Phase 1 — Plan](TASK-LIFECYCLE-PHASE-1.md).
 
 ## Phase 2 — Implement (`jira-task-executor`)
 
-Runs **once per leaf issue**. **Dedicated-branch leaves each run in
-their own worktree and can go in parallel; smart-commit leaves share
-the parent worktree and must run serially** (two smart commits in the
-same working tree would collide). The user (or a sub-agent) invokes
-`/jira-sdlc:jira-task-executor <KEY>` from inside each worktree.
+Runs **once per leaf issue**, in its own worktree — multiple executors
+run in parallel against the worktrees the assigner set up. The executor
+validates its worktree, transitions to *In Progress*, implements/tests,
+commits + pushes + opens a PR with a required `patch`/`minor`/`major`
+semver label, transitions to *In Review*, and posts a single closing
+Jira comment. **Routing:** JIRA owns the issue fetch (which returns the
+parent family used in the ownership check), the *In Progress* / *In
+Review* transitions, and the closing comment; GIT owns the
+worktree-ownership read, the resume-or-create branch setup, the
+commit/push, and the PR open. See
+[Phase 2 — Implement](TASK-LIFECYCLE-PHASE-2.md).
 
-What the executor does (see [jira-task-executor SKILL](skills/jira-task-executor/SKILL.md)):
+## Phase 3 — Review & aggregate approval (`jira-task-reviewer`)
 
-1. Fetches the issue, checks for sub-tasks. If `<KEY>` is a multistep
-   parent, it **asks the user to confirm** before implementing on the
-   parent itself — a parent is normally a merge target, not an
-   implementation target.
-2. Reads the `Git strategy:` Jira comment to decide its branch and PR
-   shape, and validates that its worktree actually belongs to `<KEY>`
-   (or its parent family) rather than assuming.
-3. Transitions the issue to *In Progress*.
-4. Investigates, may clarify, implements, tests (executor-level test
-   policy: run each affected test individually first, then the full
-   suite, and treat a red-but-individually-green suite as likely flake).
-5. Branches the commit:
-   - **Dedicated branch** → regular commit, `git push -u origin …`,
-     open a PR with a required `patch`/`minor`/`major` semver label,
-     transition the issue to *In Review*.
-   - **Smart commit** → `<KEY> #done <msg>` on the parent branch,
-     local only (no push, no PR). The `#done` is consumed by
-     GitHub-for-Jira once the parent branch reaches the remote — the
-     parent branch is pushed later (by the reviewer before it creates
-     the aggregate PR, or by the user).
-6. Posts a single Jira comment with the PR URL (or the smart-commit
-   summary), not as a separate short "PR opened" earlier.
-
-The diagram uses `par/and/and` to make the cross-worktree parallelism
-explicit for the dedicated-branch lanes — three executors (or more)
-can be in flight at once.
-
-## Phase 3 — Review & merge cascade (`jira-task-reviewer`)
-
-Triggered once by the user on the **parent** key, not a sub-task. See
-[jira-task-reviewer SKILL](skills/jira-task-reviewer/SKILL.md).
-
-What the reviewer does:
-
-1. **Phase check** — looks for an existing parent PR on `<PARENT-BRANCH>`
-   → `<BASE_BRANCH>` to decide whether this is the first review pass, a
-   re-run while the parent PR is open, or a post-merge wrap-up. Also
-   rejects a sub-task key (parent only) and exits early on a top-level
-   issue with no sub-tasks.
-2. Discovers every sub-task; classifies each as *dedicated-branch* vs
-   *smart-commit* from its `Git strategy:` comment. Smart-commit
-   sub-tasks have no PR — they're reviewed as part of the aggregate
-   parent diff in step 6.
-3. **Sequential per-PR review pass** of every dedicated-branch sub-task
-   PR, against six dimensions (correctness, pattern consistency, scope,
-   regressions, test coverage, build hygiene) — this pass only
-   *records* verdicts, it does not merge.
-4. **Early exit on the first `REQUEST_CHANGES`** — *no* merges happen
-   if any PR fails. The reviewer reports which PRs are blocked and
-   which were already reviewed; the user fixes the blocker and
-   re-invokes. The next run re-reviews everything, deliberately — the
-   diff is usually small and an early exit means nothing was actually
-   confirmed against its latest state.
-5. **Merge cascade** (a *second* pass, only when every reviewed PR is
-   approved) — for each: `gh pr review --approve`,
-   `gh pr merge --squash --delete-branch`, verify `MERGED`, transition
-   the sub-task to *Done*. Squash keeps the parent-branch history
-   one-commit-per-sub-task.
-6. **Prepare the aggregate parent PR** (parent branch → base branch):
-   if any smart-commit sub-tasks exist, **push `<PARENT-BRANCH>`** so
-   their local commits (and their `#done` transitions) reach the
-   remote — the executor's smart-commit path defers this push. Then
-   transition `<PARENT-KEY>` to *In Review*, find or create the parent
-   PR, review the lighter aggregate diff, and approve it. The reviewer
-   **never** merges this one — that's a deliberate human release
-   decision.
-7. Leaves a Jira comment and reports "ready for manual merge".
+Triggered once by the user on the **parent** key, not a sub-task. The
+reviewer phase-checks for an existing parent PR, then filters to only
+the sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Each matching
+sub-task PR is reviewed sequentially in one pass: `APPROVE` means
+`gh pr review --approve` plus a Jira comment, and the loop continues.
+`REQUEST_CHANGES` means `gh pr review --request-changes`, a move back to
+`<STATUS_IN_PROGRESS>`, a findings comment on the sub-task — and the
+loop also continues to the next PR (the user fixes and re-runs later).
+After the loop, if all are approved and already merged, the reviewer
+finds or creates the aggregate parent PR and reviews that too. The
+reviewer **never merges** sub-task PRs or the parent PR — the human
+merges everything manually on GitHub. **Routing:** GIT owns the fetch,
+branch resolution (the `parentbranch` config the assigner set in phase 1),
+diff fetches, `gh pr review --approve` / `--request-changes`, and
+parent-PR find-or-create; JIRA owns the parent+sub-task fetch (In Review
+filter), each rejected sub-task's *In Progress* transition and findings
+comment, the per-review summary comment on the parent, and every report
+comment posted on the parent. See
+[Phase 3 — Review & aggregate approval](TASK-LIFECYCLE-PHASE-3.md).
 
 ## Phase 4 — Human merge + re-run wrap-up
 
-The merge of the parent branch into its base (`main` / `development` /
-whatever `<BASE_BRANCH>` is) is **always manual**. This is by design —
-the heaviest judgment call in the cascade is the one that stays human
-(see the **Safety model** section of [README.md](../README.md)).
-
+The merge of the parent branch into `<BASE_BRANCH>` is **always manual**
+— the heaviest judgment call in the cascade is the one that stays
+human (see the **Safety model** section of [README.md](../README.md)).
 After the user merges the parent PR on GitHub, they re-invoke
-`jira-task-reviewer <PARENT-KEY>` once more. It detects
-`state == MERGED`, transitions the parent to *Done*, posts a final
-Jira comment summarising what landed, and lists any orphaned local
-branches for cleanup.
-
-**Single-step top-level issues skip phases 3 and 4's reviewer re-run
-entirely**: there's no parent-PR cascade, so the user just merges the
-one PR directly into `<BASE_BRANCH>`, and `#done` / GitHub-for-Jira's
-merge automation (or a manual `jira issue move`) takes the issue to
-*Done*.
+`jira-task-reviewer <PARENT-KEY>` once more; it detects
+`state == MERGED` and posts a final wrap-up Jira comment summarising what
+landed (GitHub-for-Jira automation has already transitioned all related
+issues to *Done*). It also lists any orphaned local branches.
+**Routing:** the manual merge is the one `User → GIT` arrow that
+bypasses the reviewer; the reviewer's re-run is book-keeping — GIT
+reads (phase check, orphan list) and one JIRA write (final wrap-up
+comment), no GIT or JIRA status writes. See
+[Phase 4 — Human merge + re-run wrap-up](TASK-LIFECYCLE-PHASE-4.md).
 
 ## State passed between the three skills
 
-Nothing is passed by hand. Two mechanisms carry state from one skill
-to the next:
+Nothing is passed by hand. Two mechanisms carry state from one skill to
+the next, and both are visible as GIT/JIRA arrows in the diagram above:
 
 | Mechanism | Set in | Read in | Scope |
 |---|---|---|---|
 | `git config branch.<branch>.parentbranch` | `jira-task-assigner` (on every branch it creates) + fallback by `jira-task-executor` when it makes an issue's branch on the fly | `jira-task-executor` (to find its PR base), `jira-task-reviewer` (to find the parent branch's own base) | Local to a clone |
-| Jira comment `"PR target branch: ... Git strategy: ..."` (one comment, both lines) | `jira-task-assigner` (every leaf) and `jira-task-executor` (fallback when it branches mid-flight) | `jira-task-executor` (when config is missing), `jira-task-reviewer` (when config is missing) | Durable across clones and machines |
+| Jira comment `"PR target branch: ... Worktree: ..."` | `jira-task-assigner` (every leaf) and `jira-task-executor` (fallback when it branches mid-flight) | `jira-task-executor` (when config is missing), `jira-task-reviewer` (when config is missing) | Durable across clones and machines |
 
-Both skills that consume this state check the git-config first and
-fall back to the Jira comment on miss — never the other way around.
+The diagram makes **which** system each arrow hits explicit: the
+skills talk to GIT and JIRA in the order shown, and the two
+state-passing mechanisms are why it matters — the `parentbranch` config
+is the GIT trace the assigner leaves for phases 2 and 3, and the Jira
+comment is the JIRA trace each leaf carries for the same consumers.
 
 ## Per-phase views
 
-The same flow split into one focused diagram per phase:
+The same flow split into focused diagrams, one per phase:
 
-- [Phase 1 — Plan](TASK-LIFECYCLE-PHASE-1.md) — `jira-task-assigner`
-- [Phase 2 — Implement](TASK-LIFECYCLE-PHASE-2.md) — `jira-task-executor`
-- [Phase 3 — Review & merge cascade](TASK-LIFECYCLE-PHASE-3.md) — `jira-task-reviewer`
-- [Phase 4 — Human merge + re-run wrap-up](TASK-LIFECYCLE-PHASE-4.md) — manual merge + re-invoke
+- [Phase 1 — Plan](TASK-LIFECYCLE-PHASE-1.md)
+- [Phase 2 — Implement](TASK-LIFECYCLE-PHASE-2.md)
+- [Phase 3 — Review & aggregate approval](TASK-LIFECYCLE-PHASE-3.md)
+- [Phase 4 — Human merge + re-run wrap-up](TASK-LIFECYCLE-PHASE-4.md)
 
 ## Related documents
 

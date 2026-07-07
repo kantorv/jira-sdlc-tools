@@ -4,14 +4,14 @@ This repo is a private Claude Code plugin **marketplace** that ships one
 plugin, `jira-sdlc` — three coupled skills (`jira-task-assigner`,
 `jira-task-executor`, `jira-task-reviewer`) that plan a feature into Jira
 issues + git worktrees, implement each piece in parallel, and then
-review/merge the set. Full explanation, architecture diagram, and usage
+review the set. Full explanation, architecture diagram, and usage
 walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
 is deliberately shorter and only covers what's easy to get wrong.
 
 ## The one rule that matters most
 
 Every project-specific value (Jira project key, worktrees path, test
-commands, workflow status names, review conventions) is a `<TOKEN>`
+commands, workflow status names) is a `<TOKEN>`
 resolved from `jira-tools-plugin.env` in the project root
 (see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
 each variable) — never a literal.
@@ -84,12 +84,12 @@ grep -rn --exclude=project-config.md "SUB-\|cropapp\|XState\|MUI\b" \
   plugins/jira-sdlc/skills/ plugins/jira-sdlc/docs/ plugins/jira-sdlc/README.md
 ```
 
-Beyond that, "testing" a skill means tracing through which of the five
-assignment cases, which review dimension, or which re-run phase your
-change touches (see README → Core concepts), and re-reading that skill's
-logic end to end for the scenario you changed. These files *are* the
-behavior, not a description of it — there's no separate implementation
-to run against them.
+Beyond that, "testing" a skill means tracing through which assignment
+scenario (single-step vs. multistep, parent vs. sub-task), which review
+dimension, or which re-run phase your change touches (see README → Core
+concepts), and re-reading that skill's logic end to end for the scenario
+you changed. These files *are* the behavior, not a description of it —
+there's no separate implementation to run against them.
 
 ## Releasing (tagging + GitHub Releases)
 
@@ -131,11 +131,3 @@ push the back-merge with it). If you enable branch protection on `main`, or
 want the back-merge commit to re-trigger the `validator` workflow, define a
 `RELEASE_PAT` secret and swap the `GH_TOKEN`/remote in `release.yml`'s
 back-merge step.
-
-## This repo is the toolkit, not a target
-
-Don't try to exercise a skill by running `/jira-task-assigner` *against
-this repo*. There's no Jira project or worktrees directory configured
-for `jira-sdlc-toolkit` itself, and there shouldn't be — these skills are
-meant to be installed into, and pointed at, a separate application repo
-that has its own `.env` file filled in.

@@ -10,7 +10,7 @@ changing a skill, load straight from your working copy instead — point
 (the toolkit root only has `marketplace.json`; `plugin.json` is one
 level down):
 ```bash
-claude --plugin-dir /path/to/jira-sdlc-toolkit/plugins/jira-sdlc
+claude --plugin-dir /path/to/jira-sdlc-tools/plugins/jira-sdlc
 ```
 After further edits, run `/reload-plugins` inside that session rather
 than restarting. If this plugin is already installed from a marketplace

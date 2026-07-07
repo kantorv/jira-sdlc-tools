@@ -1,4 +1,4 @@
-# jira-sdlc-toolkit
+# jira-sdlc-tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -9,9 +9,9 @@ worktrees, and then review and merge the result as a single unit.
 
 You describe the work once. The assigner plans it into Jira issues,
 branches, and worktrees. An executor runs in each worktree and does the
-implementation. The reviewer works through the resulting PRs, merges what
-passes, and stops on anything that doesn't — leaving only the final
-release merge for a human.
+implementation. The reviewer works through the resulting PRs, approves what
+passes and flags what doesn't for the human to fix, and never merges anything
+— leaving merges and the final release to a human.
 
 ## Contents
 
@@ -50,13 +50,13 @@ Three skills, three jobs:
 |---|---|---|
 | `jira-task-assigner` | Once, on a task description | Plans: creates the Jira issue(s), decides single-step vs. multistep, creates branches and `git worktree`s, decides how each piece should land in git. Never writes code. |
 | `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, Jira status transition, investigation, implementation, tests, commit, push, PR. |
-| `jira-task-reviewer` | Once, on the parent issue | Integrates: reviews each sub-task PR in order, approves and squash-merges what passes, stops on the first rejection, then preps (but never merges) the parent's own PR into its base. |
+| `jira-task-reviewer` | Once, on the parent issue | Reviews: iterates over each In Review sub-task PR, approves or requests changes per-PR (continuing past rejections), posts findings to Jira, and reviews the aggregate parent PR. Never merges anything — all merges are manual. |
 
 ## Quick start
 
 ```
-/plugin marketplace add kantorv/jira-sdlc-toolkit
-/plugin install jira-sdlc@jira-sdlc-toolkit
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
 ```
 
 Create `jira-tools-plugin.env` in the project root for your repo (see
@@ -94,7 +94,7 @@ flowchart TB
     E3 --> PB
 
     PB --> R["/jira-sdlc:jira-task-reviewer"]
-    R -->|approve + squash-merge each PR| PB
+    R -->|approve each PR (human merges manually)| PB
     R -->|review + open aggregate PR| BASE[(Base branch)]
     BASE -->|human merges manually| DONE([Released])
 ```
@@ -102,8 +102,7 @@ flowchart TB
 The diagram shows the multistep path — one worktree and dedicated branch
 per sub-task, all merging into the parent branch. A single-step task is
 just the top-level issue and its worktree (PR targets the base branch
-directly); smart-commit sub-tasks share the parent's worktree and skip
-the per-sub-task PR (see Core concepts below).
+directly).
 
 Nothing here gets passed by hand. Two mechanisms carry state between the
 three skills:
@@ -111,10 +110,9 @@ three skills:
 - **`git config branch.<branch>.parentbranch`** — set by the assigner on
   every branch it creates, read by the executor (to find its PR base) and
   the reviewer (to find the parent branch's own base). Local to a clone.
-- **Jira comments** — `"PR target branch: ..."` and `"Git strategy: ..."`,
-  posted by the assigner as a durable fallback for the same information.
-  These survive a fresh clone or a different machine, which the git config
-  alone doesn't.
+- **Jira comments** — `"PR target branch: ..."` posted by the assigner as
+  a durable fallback for the same information. These survive a fresh clone
+  or a different machine, which the git config alone doesn't.
 
 The executor and reviewer both check the git config first and fall back to
 the Jira comment if it's missing.
@@ -137,24 +135,21 @@ branch and a `git worktree`, then:
 - **Single-step** — the top-level issue is the only issue. The executor
   runs in that worktree on a dedicated branch whose PR targets the base
   branch directly.
-- **Multistep** — the top-level issue becomes the parent, and each
-  sub-task gets its own git strategy (see below). The parent branch (and
-  its worktree) is the merge target for the sub-tasks' PRs and the home
-  for any smart-commit sub-tasks.
+- **Multistep** — the top-level issue becomes the parent. Each sub-task
+  gets its own dedicated branch, worktree, and PR into the parent branch.
+  The parent branch (and its worktree) is the merge target for the
+  sub-tasks' PRs.
 
-**Dedicated branch vs. smart commit** (per sub-task, multistep only):
-- **Dedicated branch** (default) — its own branch and PR, merging into
-  the parent branch. Used for anything that touches multiple files, adds
-  tests, or involves non-trivial logic. Gets its own worktree.
-- **Smart commit** (exceptional) — committed directly on the parent
-  branch with a `<KEY> #done <message>` message (no new branch, no PR);
-  GitHub-for-Jira reads the `#done` and transitions the issue straight
-  to Done. Reserved for small focused fixes (a couple of lines, a typo).
-  Runs in the shared parent worktree.
+**Every sub-task gets a dedicated branch.** Each sub-task has its own
+branch, worktree, and PR into the parent branch — regardless of size. A
+one-line fix and a multi-file feature both go through the same
+branch → worktree → PR → review → manual merge path. There's no "small
+enough to commit straight to the parent" shortcut.
 
-The executor reads this decision from a Jira comment rather than
-re-deciding it — see `jira-task-assigner`'s "Git strategy" section for
-the full reasoning.
+This keeps the flow uniform (every leaf follows the same steps), makes
+every sub-task individually reviewable, and means every change lands
+through an explicit PR rather than an implicit commit on the parent
+branch.
 
 **Picking `Task` vs. `Story` for the top-level issue.** When the user
 hasn't told you which to use, the assigner decides by complexity: a
@@ -162,9 +157,9 @@ hasn't told you which to use, the assigner decides by complexity: a
 value; a `Task` for smaller, localized, or strictly technical chores. A
 `Bug` is always used for a defect or regression.
 
-**Jira shape assumed.** Two-level hierarchy: `Task`/`Story`/`Bug` at the
-top, `Sub-task` underneath, no `Epic`. If your project has Epics, see
-`<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`.
+**Jira shape assumed.** Two-level hierarchy with no `Epic` level:
+`Story`, `Task`, and `Bug` are the top-level types (peers), with
+`Sub-task` underneath.
 
 **Jira status flow across the three skills.** Each skill drives the issue's
 Kanban status explicitly with the four status names from
@@ -175,14 +170,10 @@ relying on opaque GitHub-for-Jira transition rules:
 - `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
   when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
   the sub-task's PR (step 11, dedicated-branch path only).
-- `jira-task-reviewer` transitions a sub-task to `<STATUS_DONE>` when it
-  squash-merges its PR (4a); transitions the parent to `<STATUS_IN_REVIEW>`
-  when it opens the aggregate PR (4b); and to `<STATUS_DONE>` once the
-  human merges that PR (4c).
-The smart-commit path skips In Review — the `#done` Smart Commit
-transitions the issue straight from In Progress to Done via GitHub-for-Jira,
-since a smart-commit sub-task shares the parent branch and has no PR of its
-own.
+- `jira-task-reviewer` transitions a rejected sub-task back to
+  `<STATUS_IN_PROGRESS>` (step 3d, `REQUEST_CHANGES` path) so the executor
+  can pick it up again. It never transitions anything to `<STATUS_DONE>` —
+  GitHub-for-Jira automation handles that when the human merges the PRs.
 
 ## Prerequisites
 
@@ -193,12 +184,15 @@ own.
   Jira CLIs. Authenticated (`jira init`) against your Jira Cloud instance.
 - **GitHub CLI (`gh`)**, authenticated.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
-  connected between your Jira project and GitHub repo — the smart-commit
-  transitions and automatic branch-to-issue linking both depend on it.
+  connected between your Jira project and GitHub repo — automatic
+  branch-to-issue linking depends on it.
 - **Git with worktree support** (any reasonably current git).
-- **A test runner and commands to plug into `jira-tools-plugin.env`** — the
-  executor's test step ships with a Playwright example but the underlying
-  policy is framework-agnostic.
+- **A documented way to run tests** — the executor's test step reads
+  the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
+  test" and "full suite" commands; they no longer live in
+  `jira-tools-plugin.env`. If the project doesn't document them,
+  the executor will ask whether to install a runner — and skip the
+  test step if you decline.
 - **Semver PR labels** (`patch`/`minor`/`major`, or your equivalents)
   already created on the GitHub repo — the executor requires one on every
   PR it opens.
@@ -209,11 +203,11 @@ own.
 
 ### Option A — Plugin + marketplace (recommended)
 
-1. Add the marketplace at `kantorv/jira-sdlc-toolkit` and install the
+1. Add the marketplace at `kantorv/jira-sdlc-tools` and install the
    plugin:
    ```
-   /plugin marketplace add kantorv/jira-sdlc-toolkit
-   /plugin install jira-sdlc@jira-sdlc-toolkit
+   /plugin marketplace add kantorv/jira-sdlc-tools
+   /plugin install jira-sdlc@jira-sdlc-tools
    ```
 2. Fill in `jira-tools-plugin.env` in the project root — see
    [Configuration](#configuration).
@@ -245,7 +239,7 @@ cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
 cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
-Run from the root of your `kantorv/jira-sdlc-toolkit` clone.
+Run from the root of your `kantorv/jira-sdlc-tools` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
 `/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
@@ -255,7 +249,7 @@ references mentioned above back down to their bare form.
 ## Repository layout
 
 ```
-jira-sdlc-toolkit/                # marketplace root (this repo)
+jira-sdlc-tools/                # marketplace root (this repo)
 ├── .claude-plugin/
 │   └── marketplace.json           # single-plugin marketplace manifest
 └── plugins/
@@ -280,7 +274,7 @@ jira-sdlc-toolkit/                # marketplace root (this repo)
         └── README.md
 ```
 
-The marketplace root (`jira-sdlc-toolkit/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
+The marketplace root (`jira-sdlc-tools/`) hosts `marketplace.json`; `plugins/jira-sdlc/`
 is the plugin root Claude Code copies on install. `_shared/` lives inside it
 deliberately — see [Installation](#installation) for why that matters.
 
@@ -291,14 +285,15 @@ All project-specific values live in `jira-tools-plugin.env`
 Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
-- Your default base branch and where your coding conventions live
-  (required)
-- Test commands for `jira-task-executor`'s test step
+- Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as
   "confirm once" inside the skills themselves, since status *names*
   aren't standardized across Jira projects
-- Semver label names, the Jira auth token fallback path, and whether your
-  project has an `Epic` type (optional — sensible defaults given)
+- Semver label names and the Jira auth token fallback path
+  (optional — sensible defaults given)
+
+Test commands are **not** here anymore — `jira-task-executor` step 7
+reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
 Open that file and read it top to bottom before your first run; it's
 short, and every skill points back to it.
@@ -316,10 +311,10 @@ The assigner investigates the codebase, asks anything genuinely
 ambiguous, decides this splits into independent pieces (multistep), and
 creates:
 - `PROJ-401` (parent Story) on `feature/PROJ-401-csv-export`, with its
-  own worktree `worktree-PROJ-401` (home for any smart-commit sub-tasks)
-- `PROJ-402` (backend endpoint) → worktree, dedicated branch
-- `PROJ-403` (frontend button) → worktree, dedicated branch
-- `PROJ-404` (tests) → worktree, dedicated branch
+  own worktree `worktree-PROJ-401`
+- `PROJ-402` (backend endpoint) → worktree + branch
+- `PROJ-403` (frontend button) → worktree + branch
+- `PROJ-404` (tests) → worktree + branch
 
 It reports the keys, branches, and worktree paths in chat, and posts the
 same as a Jira comment on `PROJ-401`.
@@ -331,27 +326,31 @@ In three terminals (or three subagents, one per worktree):
 cd ../myapp-worktrees/worktree-PROJ-402 && claude
 > /jira-sdlc:jira-task-executor PROJ-402
 ```
-...and the same for `PROJ-403` and `PROJ-404`. Each executor reads its own
-`Git strategy:` comment, implements, tests, commits, pushes, and opens a
-PR into `feature/PROJ-401-csv-export`, then reports the PR link.
+...and the same for `PROJ-403` and `PROJ-404`. Each executor implements,
+tests, commits, pushes, and opens a PR into
+`feature/PROJ-401-csv-export`, then reports the PR link.
 
 **3. Review and merge the set:**
 ```
 /jira-sdlc:jira-task-reviewer PROJ-401
 ```
-The reviewer works through `PROJ-402` → `PROJ-403` → `PROJ-404` in order.
-Only if **all three** pass does it approve-and-squash-merge each into
-`feature/PROJ-401-csv-export`, then open (or find) the aggregate PR from
-that branch into `development`, review that too, and report it's ready
-for you to merge — it stops short of merging that one itself.
+The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
+(e.g. "In Review") — if a sub-task is still in progress, it is skipped for
+now. For each In Review sub-task, it checks if it has already reviewed that
+PR (skipping if yes), reads the full diff, and evaluates it against six
+criteria. An `APPROVE` means a `gh pr review --approve` and a Jira comment
+on both the sub-task and the parent — the PR is left for you to merge
+manually on GitHub. A `REQUEST_CHANGES` means a
+`gh pr review --request-changes`, a move back to `<STATUS_IN_PROGRESS>`, a
+findings comment, and then the loop simply continues to the next sub-task
+so the full state is known.
 
-If `PROJ-403` had failed review, the reviewer stops immediately: it
-doesn't even review `PROJ-404`, and *nothing* gets merged, not even
-`PROJ-402`. It reports which PRs were reviewed and the specific findings
-blocking `PROJ-403`, and tells you to fix it and re-run. The next run
-starts the whole review pass over — re-reviewing `PROJ-402` and
-`PROJ-404` too, deliberately, since diffs are usually small and an early
-exit means they were never actually confirmed against their latest state.
+Once the loop finishes, the report tells you which sub-tasks are approved
+(waiting for your manual merge) and which are rejected (need fixes). You
+merge the approved ones on GitHub, fix and re-run the reviewer for the
+rejected ones, and repeat until all sub-task PRs are merged into the parent
+branch. Only then does the reviewer find (or create) the aggregate parent
+PR, review that too, and approve it — still leaving the merge to you.
 
 **4. Merge the release:**
 
@@ -393,28 +392,25 @@ Deliberately never automated, regardless of how routine a run looks:
   you meant.
 - **Conflict resolution.** A merge conflict — sub-task into parent, or
   parent into base — stops the relevant skill for you to resolve by hand.
-- **Continuing past a rejected PR.** One `REQUEST_CHANGES` halts the
-  whole review/merge cascade, not just that one PR.
+- **Continuing past a rejected PR.** One `REQUEST_CHANGES` moves that
+  sub-task back to `<STATUS_IN_PROGRESS>` and continues reviewing the
+  rest. The full state is reported at the end.
 
 ## Known limitations
 
-- Built around **GitHub + GitHub-for-Jira** specifically — smart commits
-  and branch-to-issue linking both rely on that integration. Adapting to
-  GitLab/Bitbucket means replacing those mechanisms, not just swapping
-  CLI commands.
-- Assumes **no Epic type**. See `<HAS_EPIC_TYPE>` in
-  `jira-tools-plugin.env` if yours has one.
+- Built around **GitHub + GitHub-for-Jira** specifically — branch-to-issue
+  linking relies on that integration. Adapting to GitLab/Bitbucket means
+  replacing that mechanism, not just swapping CLI commands.
+- Assumes **no `Epic` type** and doesn't create or group under Epics —
+  `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
 - The assigner runs **only from your base branch**. Invoked from an
   existing feature/hotfix branch, it stops and tells you to checkout the
   base branch first — it doesn't append sub-tasks to an existing parent
   (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
-  not in parallel — so the early-exit behavior stays simple to reason
-  about. For a large sub-task count this means later PRs wait on earlier
-  ones being reviewed first.
-- Sub-task PRs are always **squash-merged**. If you need merge commits or
-  rebase-merges preserved, that's a change to `jira-task-reviewer` step
-  4a.
+  one review at a time, with per-PR GH approval (or rejection) and a
+  summary on the parent. For a large sub-task count this means later
+  PRs wait on earlier ones being reviewed first.
 - An AI code review is not a substitute for the human judgment still
   required at the one step that's never automated (the final merge) —
   treat the automated review as a strong first pass, not a replacement
@@ -436,18 +432,26 @@ real task, not discovering mid-failure:
       multi-line comment from stdin (the skills assume `--template -`).
 - [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
       rather than trying to open a browser.
-- [ ] `git config user.email` matches your Jira account's email exactly
-      — required for Smart Commit's `#done` to fire.
 - [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
       semver labels exist (or update `<SEMVER_LABELS>` in
       `jira-tools-plugin.env` to match what does).
 
 ## Troubleshooting / FAQ
 
-**`gh pr merge` reports a conflict during the merge cascade.**
-Expected behavior — the reviewer stops and reports it rather than
-attempting automatic resolution. Resolve the conflict yourself and
-re-run.
+**A sub-task with an open PR is not being reviewed by `jira-task-reviewer`.**
+The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
+(e.g., "In Review"). A sub-task still in `<STATUS_IN_PROGRESS>` (or any other
+status) is silently skipped. Ask the executor to transition it (or move it
+manually) and re-run the reviewer.
+
+**I fixed a sub-task that the reviewer rejected, but re-running still shows
+changes requested.**
+The reviewer tracks which PRs it has already reviewed (via the `reviews` field
+of `gh pr view`). If the original review was `REQUEST_CHANGES`, re-running
+causes a *re-review* of the fresh code, and a fresh `gh pr review` with new
+findings. If the PR still fails criteria, the rejection remains. If all
+findings are addressed, the new review will be `APPROVE` and the PR is
+ready for you to merge manually.
 
 **The parent PR was closed instead of merged.**
 The reviewer stops and asks what you want to do rather than reopening it
@@ -489,17 +493,17 @@ target-branch defaults, feature-flag wrapping, commit message format).
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-tools-plugin.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
-`jira-cli-reference.md` §7b accordingly — the skills follow whatever
+`jira-cli-reference.md` §7 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
 
 ## Contributing
 
 Issues and PRs welcome. If you're proposing a change to one of the three
 `SKILL.md` files, please describe which step of the assigner's planning
-flow (single-step vs. multistep, dedicated-branch vs. smart-commit), or
+flow (single-step vs. multistep), or
 which review/execution step, it affects — the control flow between the
 three skills is easy to get subtly wrong at the seams (git-config vs.
-Jira-comment fallback, phase detection, early-exit behavior), so a
+Jira-comment fallback, phase detection, In Review filter, idempotency), so a
 concrete before/after scenario in the PR description goes a long way.
 
 ## License
@@ -511,8 +515,8 @@ concrete before/after scenario in the PR description goes a long way.
 - [`ankitpokhrel/jira-cli`](https://github.com/ankitpokhrel/jira-cli) —
   the CLI these skills are written against.
 - [`Introducing JIRA cli`](https://medium.com/@ankitpokhrel/introducing-jira-cli-the-missing-command-line-tool-for-atlassian-jira-fe44982cc1de) — Medium article
-- [GitHub-for-Jira](https://github.com/github/github-for-jira) — smart
-  commits and automatic branch-to-issue linking.
+- [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
+  branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
 - [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
 

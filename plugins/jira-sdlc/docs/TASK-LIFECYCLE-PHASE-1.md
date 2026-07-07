@@ -8,8 +8,16 @@ any other non-base branch.
 
 This phase ends when the assigner reports back: issues exist, branches
 and worktrees are ready, and a single
-`"PR target branch: ... Git strategy: ..."` comment is posted on every
+`"PR target branch: ... Worktree: ..."` comment is posted on every
 leaf issue for the next phase to read.
+
+The diagram surfaces the two systems the assigner actually drives as
+their own swimlanes — **GIT** (anything that mutates repo state:
+reading the current branch, creating branches, setting
+`parentbranch` config, pushing, adding worktrees) and **JIRA**
+(anything that mutates issue state: creating the top-level or sub-task
+issue, posting comments) — so the full interaction reads
+`User ↔ Assigner ↔ GIT ↔ JIRA` left to right.
 
 ## Sequence diagram
 
@@ -17,12 +25,16 @@ leaf issue for the next phase to read.
 sequenceDiagram
     actor User
     participant Assigner
+    participant GIT
+    participant JIRA
 
-    Note over User,Assigner: Phase 1 — Plan<br/>(runs once, from the base branch)
+    Note over User,JIRA: Phase 1 — Plan<br/>(runs once, from the base branch)
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
-    Assigner->>Assigner: check branch context (base ok, feature/hotfix stop, ask otherwise)
+    Assigner->>GIT: read current branch (base? feature/hotfix? other?)
+    GIT-->>Assigner: current branch
+    Note right of Assigner: base → continue · feature/hotfix → stop · other → ask user
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled
@@ -33,20 +45,23 @@ sequenceDiagram
     Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)
 
     alt Multistep (split into parallel sub-tasks)
-        Assigner->>Assigner: create <PARENT-KEY> (Task / Story / Bug)
-        Assigner->>Assigner: create branch feature/<PARENT-KEY>-<slug><br/>+ set parentbranch config + push + parent worktree
+        Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)
+        JIRA-->>Assigner: <PARENT-KEY>
+        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug>,<br/>set parentbranch config, push, add parent worktree
+        GIT-->>Assigner: branch + worktree ready
         loop per sub-task
-            Assigner->>Assigner: decide sub-task strategy<br/>(dedicated branch vs smart commit)
-            alt Dedicated branch (default)
-                Assigner->>Assigner: create sub-task issue + branch & worktree<br/>+ set parentbranch config + push
-            else Smart commit (small focused fix)
-                Assigner->>Assigner: create sub-task issue<br/>(no branch — uses parent worktree)
-            end
-            Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
+            Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)
+            JIRA-->>Assigner: sub-task key
+            Assigner->>GIT: create sub-task branch + worktree,<br/>set parentbranch config, push
+            GIT-->>Assigner: branch + worktree ready
+            Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
         end
     else Single-step (one cohesive task)
-        Assigner->>Assigner: create single top-level issue + branch<br/>+ set parentbranch config + push + worktree
-        Assigner->>Assigner: post "PR target branch: ... Git strategy: ..." comment
+        Assigner->>JIRA: create single top-level issue
+        JIRA-->>Assigner: issue key
+        Assigner->>GIT: create branch + worktree,<br/>set parentbranch config, push
+        GIT-->>Assigner: branch + worktree ready
+        Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
     end
     deactivate Assigner
 
@@ -55,22 +70,28 @@ sequenceDiagram
 
 ## What the diagram shows
 
+- **Participant routing** — the assigner is the orchestrator between
+  three parties. **GIT** owns repo state (the initial branch-context
+  read, branch creation, the `branch.<branch>.parentbranch` git config
+  entry, the push, and `git worktree add`). **JIRA** owns issue state
+  (creating the top-level or sub-task issue — the sub-task carries its
+  parent link — and posting the durable `PR target branch` comment).
+  Everything else (investigating the codebase, deciding scope) stays
+  inside the assigner.
 - **Investigate + clarify loop** — the only place the user is asked
   anything by `jira-task-assigner`; questions persist until scope,
-  acceptance criteria, and priority are settled.
-- **Two-stage decision** — first the assigner settles scope and the
-  top-level type (`alt Multistep / else Single-step`); only then,
-  inside the multistep loop, does it pick each sub-task's per-leaf
-  strategy (nested `alt Dedicated branch / else Smart commit`). The
-  per-sub-task strategy is *not* fixed up front — it's chosen as each
-  sub-task is created.
+  acceptance criteria, and priority are settled. (The branch-context
+  "ask otherwise" path, if triggered, is also a user question.)
+- **Scope decision first** — the assigner settles scope and the
+  top-level type (`alt Multistep / else Single-step`); inside the
+  multistep loop it provisions each sub-task's issue (JIRA) then branch
+  + worktree (GIT) uniformly.
 - **Provisioning is uniform** — *every* scenario (single-step,
-  multistep parent, dedicated-branch sub-task, smart-commit sub-task)
-  records `branch.<branch>.parentbranch` in git config, pushes the
-  branch to the remote, and ends with the assigner posting a single
-  `PR target branch: ... Git strategy: ...` comment (one comment with
-  both lines) that the executor and reviewer will read later as the
-  durable source of truth.
+  multistep parent, sub-task) records `branch.<branch>.parentbranch`
+  in git config via GIT, pushes the branch to the remote via GIT, and
+  ends with the assigner posting a single `PR target branch: ...
+  Worktree: ...` comment to JIRA that the executor and reviewer will
+  read later as the durable source of truth.
 
 The assigner deliberately stops short of writing any code, commits, or
 PRs — those are phase 2's job.

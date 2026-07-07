@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues, with matching git branches and worktrees set up so the pieces can be worked on in parallel. Detects an implied parent from the current git branch, investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task that should be split into parallel sub-tasks, creates the Jira issue(s) via jira-cli, creates a branch per top-level/parent issue, and creates a `git worktree` per leaf issue (the single task, or each sub-task) so parallel work can start immediately. Also decides and records per-issue git strategy (dedicated branch vs smart commit) so the executor knows how to land each change.
+description: Turn a feature/task/bug description into Jira issues, with matching git branches and worktrees set up so the pieces can be worked on in parallel. Detects an implied parent from the current git branch, investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task that should be split into parallel sub-tasks, creates the Jira issue(s) via jira-cli, creates a branch per top-level/parent issue, and creates a `git worktree` per leaf issue (the single task, or each sub-task) so parallel work can start immediately. Every leaf issue gets its own dedicated branch and worktree, so the executor always opens an individual PR per leaf.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -66,7 +66,7 @@ If you are in **Case 1** (base branch), make the following two decisions before 
 - **Single-step** — one cohesive piece of work, even if it touches several files. If piece B can only start once piece A finishes, that's one piece, not two — don't split purely sequential work.
 
 **B. Pick the top-level issue type**
-Confirm against `<HAS_EPIC_TYPE>` in `jira-tools-plugin.env`. Your top-level options are `Task`, `Story`, or `Bug`.
+There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types (peers), with `Sub-task` underneath. Your top-level options are `Task`, `Story`, or `Bug`.
 - Defect / regression / something broken → `Bug`.
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
 
@@ -80,39 +80,33 @@ Because you aborted in Step 1 if an existing parent was found, you are always cr
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:** 
    `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> feature/<PARENT-KEY>-<slug>`
-   *(This parent worktree acts as the home for any smart-commit sub-tasks, and as a base for future additions).*
+   *(A worktree to check out when inspecting the assembled parent branch, and a base for future additions.)*
 
 **B. If Single-step (Cohesive work):**
 The top-level issue is your only issue. You are done creating issues. 
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comment" section below).
 
-**C. If Multistep (Parallelizable): Create Sub-tasks and assign Git Strategy**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task must be annotated with how its implementation should land in git. Decide this strategy per sub-task:
+**C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `<PARENT-BRANCH>` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
 
-- **Strategy 1: Dedicated branch** (Default for most work: touches multiple files, adds tests, etc.)
-  1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-  2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
-  3. Leave a PR-target comment on the sub-task.
+For each sub-task `→ <SUBTASK-KEY>`:
+1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
+   (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-cli-reference.md` §7)
+2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
+3. Leave a PR-target comment on the sub-task.
 
-- **Strategy 2: Smart commit** (Exceptional case for small, focused fixes like 1-2 lines or a simple typo)
-  1. **Do not** create a child worktree or branch.
-  2. The executor will perform this work inside the shared parent worktree (`worktree-<PARENT-KEY>`) directly on the `PARENT_BRANCH`. Messages use `<ISSUE-KEY> #done <description>`.
-  3. Leave a PR-target comment on the sub-task.
-
-**PR-target comment:** 
-After creating leaf issues (the single top-level task, OR each sub-task), add a Jira comment recording where its PR should go and its git strategy. This allows the executor agent to know exactly how to land the change.
+**PR-target comment:**
+After creating each leaf issue (the single top-level task, OR each sub-task), add a Jira comment recording the branch its PR should target and the worktree to run the executor in. Every leaf — single-step or sub-task — gets its own dedicated branch and PR; this comment is what tells the executor where that PR's base is.
 
 *Example format for Single-step (Top-level issue):*
-*"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>. Git strategy: dedicated branch `feature/<PARENT-KEY>-<slug>`."*
+*"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>."*
 
-*Example format for Multistep Sub-task (Dedicated branch):*
-*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>. Git strategy: dedicated branch `feature/<SUBTASK-KEY>-<slug>`."*
-
-*Example format for Multistep Sub-task (Smart commit):*
-*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>. Git strategy: smart commit on parent branch."*
+*Example format for Multistep Sub-task:*
+*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
 
 **CLI mechanics — things to never forget:**
 - **Auth**: check whether `JIRA_API_TOKEN` is already set (`echo $JIRA_API_TOKEN`). If empty, prefix every `jira` command with `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)"`.
+- **Project health check**: before the first `jira issue create`, run `jira project list | grep <PROJECT-KEY>` to confirm the configured project key exists and is accessible. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
 - Use `--no-input` on every write command except `delete`. Quote `"Sub-task"` exactly (with the hyphen).
 - For anything beyond a one-line description, write the body to a file and use `--template <file>` instead of inline `-b"..."`.
 - Comment syntax: use `jira issue comment add <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template -` for multi-line.
@@ -137,5 +131,5 @@ rather than as a plugin). Merging the parent branch back into its own
 base once all sub-tasks land is likewise out of scope for this skill.
 
 Reference: `../_shared/jira-cli-reference.md` has the full command syntax,
-confirmed issue type names, and git/branch conventions. The `.env` file in the
+confirmed issue type names, and git/branch conventions. The `jira-tools-plugin.env` file in the
 project root has this repo's specific values for every `<TOKEN>` used above.

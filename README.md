@@ -1,4 +1,4 @@
-# jira-sdlc-toolkit
+# jira-sdlc-tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,15 +24,15 @@ walkthrough, safety model, and troubleshooting — lives in
 ### Remote — from the marketplace (recommended)
 
 ```
-/plugin marketplace add YOUR_ORG/jira-sdlc-toolkit
-/plugin install jira-sdlc@jira-sdlc-toolkit
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
 ```
 
 ### Local — clone, then load with `--plugin-dir`
 
 ```bash
-git clone https://github.com/YOUR_ORG/jira-sdlc-toolkit.git
-claude --plugin-dir ./jira-sdlc-toolkit/plugins/jira-sdlc
+git clone https://github.com/kantorv/jira-sdlc-tools.git
+claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
 ```
 
 No marketplace step and nothing gets installed — this loads the plugin
@@ -56,7 +56,7 @@ each value means). Then you're ready to run
 ## Repository layout
 
 ```
-jira-sdlc-toolkit/
+jira-sdlc-tools/
 ├── .claude-plugin/
 │   └── marketplace.json        # lists every plugin this repo offers
 ├── plugins/
@@ -88,8 +88,8 @@ you reinstall.
 
 1. **Clone the repo:**
    ```bash
-   git clone https://github.com/YOUR_ORG/jira-sdlc-toolkit.git
-   cd jira-sdlc-toolkit
+   git clone https://github.com/kantorv/jira-sdlc-tools.git
+   cd jira-sdlc-tools
    ```
 
 2. **Load it manually**, pointing at the plugin's own root — not the

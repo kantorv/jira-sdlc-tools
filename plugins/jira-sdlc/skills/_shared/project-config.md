@@ -17,21 +17,14 @@ what each variable means.
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
-| `<CONVENTIONS_PATH>` | Where this repo's coding conventions live, for `jira-task-reviewer` to check changes against. | `.claude/rules/` |
-| `<CONVENTION_HIGHLIGHTS>` | Freeform, optional: specific patterns worth flagging during review — your state-management library, component library, i18n approach, whatever's easy to get subtly wrong here. Leave blank to review generically. | `XState conventions, MUI usage, translation keys` |
 
-## Testing — used by `jira-task-executor` step 7
+## Testing
 
-| Token | What it is | Example |
-|---|---|---|
-| `<TEST_SINGLE_CMD>` | Command to run one test in isolation. | `yarn playwright test {file}:{line}` |
-| `<TEST_SUITE_CMD>` | Command to run a whole affected suite. | `yarn playwright test {file}` |
-
-If your runner can't select a single test by line number, adapt step 7 of
-`jira-task-executor` to select by name or pattern instead — the *policy*
-(individually first, full suite second, re-run only the failures before
-trusting a red suite) is framework-agnostic even though these two example
-commands aren't.
+`jira-task-executor` step 7 reads the project's own `CLAUDE.md`,
+`AGENTS.md`, or README for "run one test" / "run full suite"
+commands — it does **not** take test commands from
+`jira-tools-plugin.env`. See that step for the policy and the
+discovery flow when the project hasn't documented them.
 
 ## Jira workflow status names
 
@@ -44,7 +37,7 @@ same. Check yours with `jira issue view <any-existing-key>`.
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
-| `<STATUS_DONE>` | Status name the Smart Commit `#done` command relies on. Must match your workflow's real status name exactly, or the transition silently won't fire. | `Done` |
+| `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state directly; it is handled by automation or a manual `jira issue move`. Must match your workflow's real status name exactly. | `Done` |
 
 ## Optional — sensible defaults, override if yours differ
 
@@ -52,25 +45,19 @@ same. Check yours with `jira issue view <any-existing-key>`.
 |---|---|---|
 | `<SEMVER_LABELS>` | The three GitHub label names `jira-task-executor` applies to PRs for release automation. Must already exist on the repo. | `patch` / `minor` / `major` |
 | `<JIRA_TOKEN_PATH>` | Fallback token file, used when `JIRA_API_TOKEN` isn't already exported. | `.jira/token.txt` |
-| `<HAS_EPIC_TYPE>` | Whether your Jira project has an `Epic` type above Task/Story/Bug. These skills assume a two-level hierarchy and don't handle Epics — if yours has one, extend `jira-task-assigner` step 5 and the hierarchy checks in `jira-cli-reference.md` §1/§3 yourself before relying on this. | `no` |
 
 ## Worked example
 
-The README's usage walkthrough assumes this filled-in `.env`:
+The README's usage walkthrough assumes this filled-in `jira-tools-plugin.env`:
 
 ```
 PROJECT-KEY           = PROJ
 WORKTREES_DIR         = ../myapp-worktrees
 DEFAULT_BASE_BRANCH   = development
-CONVENTIONS_PATH      = .claude/rules/
-CONVENTION_HIGHLIGHTS =
-TEST_SINGLE_CMD       = yarn playwright test {file}:{line}
-TEST_SUITE_CMD        = yarn playwright test {file}
 STATUS_TODO           = To Do
 STATUS_IN_PROGRESS    = In Progress
 STATUS_IN_REVIEW      = In Review
 STATUS_DONE           = Done
 SEMVER_LABELS         = patch / minor / major
 JIRA_TOKEN_PATH       = .jira/token.txt
-HAS_EPIC_TYPE         = no
 ```
