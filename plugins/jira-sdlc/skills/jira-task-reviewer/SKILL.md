@@ -24,9 +24,6 @@ e.g. `PROJ-286`):
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check
   `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
   `jira-tools-plugin.env` in the project root).
-- Auth follows `../_shared/jira-cli-reference.md` §0 — check
-  `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see
-  `jira-tools-plugin.env` in the project root).
 - **Jira Comment Mechanics**: Since reports and updates are multi-line, 
   **always pipe via heredoc to `--template -`** (see `../_shared/jira-cli-reference.md` §6). 
   Single-line comments can use the positional `jira issue comment add <KEY> "<text>"` form. 
