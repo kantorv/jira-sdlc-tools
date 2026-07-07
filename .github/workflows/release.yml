@@ -157,6 +157,23 @@ jobs:
               --generate-notes
           fi
 
+      - name: Bump plugin manifests to ${NEXT}
+        env:
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+          # Strip leading 'v' from NEXT (e.g. v0.3.0 -> 0.3.0)
+          NEXT_NO_V="${NEXT#v}"
+          # The previous steps ran on a detached merge_commit_sha; check out main.
+          git checkout -B main origin/main
+          # Update the two manifest files using jq (select plugin by name, not index)
+          jq --arg ver "$NEXT_NO_V" '.version = $ver' plugins/jira-sdlc/.claude-plugin/plugin.json > plugin.json.tmp && mv plugin.json.tmp plugins/jira-sdlc/.claude-plugin/plugin.json
+          jq --arg ver "$NEXT_NO_V" '(.plugins[] | select(.name == "jira-sdlc") | .version) = $ver' .claude-plugin/marketplace.json > marketplace.json.tmp && mv marketplace.json.tmp .claude-plugin/marketplace.json
+          # Commit and push to main
+          git add plugins/jira-sdlc/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git commit -m "chore: bump plugin version to ${NEXT}"
+          git push origin main
+
       - name: Back-merge main into development
         id: sync
         env:
