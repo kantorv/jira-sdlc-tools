@@ -13,9 +13,10 @@ project. Given a task description from the user ($ARGUMENTS):
   these from `jira-tools-plugin.env` in the project root before following the rest of
   this skill.
 - `<WORKTREES_DIR>` — relative to project root — already exists, don't
-  create it. Just confirm with `ls <WORKTREES_DIR>` before using it; if
-  it's missing, stop and ask rather than `mkdir`-ing a new one (the
-  convention may have changed).
+  create it. **Run this check from the repo root:** `ls <WORKTREES_DIR>` and
+  verify the exit code is 0 before using it; if it's missing (non-zero exit),
+  stop and ask rather than `mkdir`-ing a new one (the convention may have
+  changed).
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
 - Branch naming is **always** `feature/<KEY>-<slug>` (`hotfix/<KEY>-<slug>`
@@ -35,21 +36,27 @@ Run `git branch --show-current` to determine your starting point.
 - **Any other branch name**: 
   Ask the user whether to treat it as a base branch or abort. Do not guess.
 
-## 2. Investigate
+## 2. Fail-fast health check (before any planning work)
+
+Before investigating or creating anything, verify the environment is configured correctly:
+- **Auth check**: run `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)" jira me` — it should print your account email. If it fails, the token is invalid or the path is wrong.
+- **Project health check**: run `jira project list | grep -w <PROJECT-KEY>` to confirm the configured project key exists and is accessible as a whole-word match (avoids partial matches like `PROJ` matching `PROJ2`). If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
+
+## 3. Investigate
 
 Search the codebase (Grep/Read/Glob) for relevant context: existing
 related code, similar past patterns, affected modules. Don't ask the user
 things you can find yourself.
 
-## 3. Clarify
+## 4. Clarify
 
 If anything material is ambiguous (scope, acceptance criteria, priority,
 or whether it's actually a defect vs. new work), ask concise, specific
 questions before creating anything. Don't proceed on guesses for anything
-that would change what gets built.
+that would change what you build.
 
 
-## 4. Decide: Branch Context, Scope, and Issue Type
+## 5. Decide: Branch Context, Scope, and Issue Type
 
 First, verify your current branch context using `git branch --show-current`.
 
@@ -69,13 +76,26 @@ If you are in **Case 1** (base branch), make the following two decisions before 
 There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types (peers), with `Sub-task` underneath. Your top-level options are `Task`, `Story`, or `Bug`.
 - Defect / regression / something broken → `Bug`.
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
+- **Scope (A) and issue type (B) are independent** — scope is about *can the pieces run at the same time*; issue type is about *size/value of the whole*. A multistep `Task` of parallel technical chores is valid; a single-step `Story` is valid.
 
-## 5. Create the Jira issue(s), branch(es), and worktrees
+## 6. Create the Jira issue(s), branch(es), and worktrees
 
 Because you aborted in Step 1 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
+**Re-run / partial-failure safety check (M3):** Before creating anything, check for a half-created parent from a previous failed run:
+- `ls <WORKTREES_DIR>/worktree-<PARENT-KEY>` (check exit code)
+- `git branch -a | grep -E "feature/<PARENT-KEY>-|hotfix/<PARENT-KEY>-"`
+If either exists, **stop and surface the cleanup command** for the user to run manually (consistent with the repo's never-auto-delete stance) — do not proceed to create a second parent:
+```
+rm -rf <WORKTREES_DIR>/worktree-<PARENT-KEY>
+git branch -D feature/<PARENT-KEY>-<slug>  # or hotfix/...
+git push origin --delete feature/<PARENT-KEY>-<slug>  # if branch was pushed
+JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)" jira issue delete <PARENT-KEY>
+```
+
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
+   - **Assignment (M4):** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `-a$(jira me)` on creation. If your project wants auto-assignment, add the flag and update this note.
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:** 
@@ -106,20 +126,20 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 
 **CLI mechanics — things to never forget:**
 - **Auth**: check whether `JIRA_API_TOKEN` is already set (`echo $JIRA_API_TOKEN`). If empty, prefix every `jira` command with `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)"`.
-- **Project health check**: before the first `jira issue create`, run `jira project list | grep <PROJECT-KEY>` to confirm the configured project key exists and is accessible. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
+- **Project health check**: before the first `jira issue create`, run `jira project list | grep -w <PROJECT-KEY>` to confirm the configured project key exists and is accessible as a whole-word match. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
 - Use `--no-input` on every write command except `delete`. Quote `"Sub-task"` exactly (with the hyphen).
 - For anything beyond a one-line description, write the body to a file and use `--template <file>` instead of inline `-b"..."`.
 - Comment syntax: use `jira issue comment add <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template -` for multi-line.
 - Put investigation findings + acceptance criteria in the issue description.
 - Make sure the branch you're branching *from* is committed/pushed before branching.
 
-## 6. Report back
+## 7. Report back
 
 List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
 
 Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, pipe it in rather than using an inline quoted `-b`/comment string (same `--template -` stdin pattern as issue creation, see `../_shared/jira-cli-reference.md` §6):
 
-## 7. Don't start implementation work, but do leave worktrees ready
+## 8. Don't start implementation work, but do leave worktrees ready
 
 Creating the worktrees above is environment setup, not implementation —
 that boundary still holds: don't write code, commit, or open a PR here.
