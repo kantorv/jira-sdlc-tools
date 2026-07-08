@@ -264,8 +264,12 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
         │   └── _shared/
-        │       ├── jira-cli-reference.md   # jira-cli syntax, auth, git conventions
-        │       └── project-config.md       # ← reference: describes each .env variable
+        │       ├── jira-cli-reference.md    # ankitpokhrel jira-cli syntax, auth, git conventions
+        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — fallback when jira-cli misbehaves
+        │       ├── project-config.md        # ← reference: describes each .env variable
+        │       └── scripts/
+        │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
+        │           └── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
         ├── docs/
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
