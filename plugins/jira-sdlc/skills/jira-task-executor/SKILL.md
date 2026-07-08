@@ -208,9 +208,9 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
       it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
       executor must re-run `jira-task-executor <KEY>` to fix it.
-    - **No parent (single-step top-level issue)** → no reviewer runs
-      for this issue (the reviewer only operates on parents with
-      sub-tasks). `<STATUS_DONE>` is handled when the human merges the
+    - **No parent (single-step top-level issue)** → the reviewer
+      (when run on the parent key) will review this PR targeting the
+      base branch. `<STATUS_DONE>` is handled when the human merges the
       PR into the base branch — via GitHub-for-Jira's merge automation
       if connected, or a manual `jira issue move <KEY> "<STATUS_DONE>"`
       otherwise. Don't transition to Done here.
