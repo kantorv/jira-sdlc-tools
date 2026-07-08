@@ -82,16 +82,7 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 
 Because you aborted in Step 1 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
-**Re-run / partial-failure safety check (M3):** Before creating anything, check for a half-created parent from a previous failed run:
-- `ls <WORKTREES_DIR>/worktree-<PARENT-KEY>` (check exit code)
-- `git branch -a | grep -E "feature/<PARENT-KEY>-|hotfix/<PARENT-KEY>-"`
-If either exists, **stop and surface the cleanup command** for the user to run manually (consistent with the repo's never-auto-delete stance) — do not proceed to create a second parent:
-```
-rm -rf <WORKTREES_DIR>/worktree-<PARENT-KEY>
-git branch -D feature/<PARENT-KEY>-<slug>  # or hotfix/...
-git push origin --delete feature/<PARENT-KEY>-<slug>  # if branch was pushed
-JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)" jira issue delete <PARENT-KEY>
-```
+**M3 (re-run / partial-failure safety) — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
