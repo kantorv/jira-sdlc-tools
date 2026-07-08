@@ -38,8 +38,15 @@ Run `git branch --show-current` to determine your starting point.
 ## 2. Investigate
 
 Search the codebase (Grep/Read/Glob) for relevant context: existing
-related code, similar past patterns, affected modules. Don't ask the user
-things you can find yourself.
+related code, similar past patterns, affected modules. **Investigate
+specifically to decide whether the work splits into pieces that can run at
+the same time** — look for shared modules, sequential dependencies, and
+single owners for interfaces. Signs it's one piece, not two:
+- Changes that must land in a specific order to compile/test
+- A single module that all work touches sequentially
+- One person owns the interface all pieces must conform to
+
+Don't ask the user things you can find yourself.
 
 ## 3. Clarify
 
@@ -47,6 +54,10 @@ If anything material is ambiguous (scope, acceptance criteria, priority,
 or whether it's actually a defect vs. new work), ask concise, specific
 questions before creating anything. Don't proceed on guesses for anything
 that would change what gets built.
+
+**Tie clarified acceptance criteria to the issue description.** Once you have
+the user's final answers, write them into the issue description at step 5A.1
+so the criteria are durable and visible to anyone picking up the work.
 
 
 ## 4. Decide: Branch Context, Scope, and Issue Type
@@ -73,6 +84,11 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 ## 5. Create the Jira issue(s), branch(es), and worktrees
 
 Because you aborted in Step 1 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
+
+Before any branch creation, ensure the base is current:
+```bash
+git fetch origin
+```
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
