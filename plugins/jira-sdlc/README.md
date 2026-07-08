@@ -305,11 +305,11 @@ short, and every skill points back to it.
 ## Usage walkthrough
 
 Say you're on `development` and want: *"Add CSV export to the reports
-page: backend endpoint, frontend button, tests."*
+page: backend endpoint, frontend button, feature-flag config."*
 
 **1. Plan it:**
 ```
-/jira-sdlc:jira-task-assigner "Add CSV export to the reports page: backend endpoint, frontend button, tests"
+/jira-sdlc:jira-task-assigner "Add CSV export to the reports page: backend endpoint, frontend button, feature-flag config"
 ```
 The assigner investigates the codebase, asks anything genuinely
 ambiguous, decides this splits into independent pieces (multistep), and
@@ -318,7 +318,7 @@ creates:
   own worktree `worktree-PROJ-401`
 - `PROJ-402` (backend endpoint) → worktree + branch
 - `PROJ-403` (frontend button) → worktree + branch
-- `PROJ-404` (tests) → worktree + branch
+- `PROJ-404` (feature-flag config) → worktree + branch
 
 It reports the keys, branches, and worktree paths in chat, and posts the
 same as a Jira comment on `PROJ-401`.

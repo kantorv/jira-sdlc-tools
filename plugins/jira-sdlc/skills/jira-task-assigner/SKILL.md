@@ -62,7 +62,7 @@ Proceed with planning the work.
 If you are in **Case 1** (base branch), make the following two decisions before moving to setup:
 
 **A. Decide Scope: single-step or multistep**
-- **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + tests) that can be worked on *at the same time* in separate worktrees.
+- **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
 - **Single-step** — one cohesive piece of work, even if it touches several files. If piece B can only start once piece A finishes, that's one piece, not two — don't split purely sequential work.
 
 **B. Pick the top-level issue type**
