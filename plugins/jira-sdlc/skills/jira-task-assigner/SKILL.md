@@ -49,17 +49,9 @@ questions before creating anything. Don't proceed on guesses for anything
 that would change what gets built.
 
 
-## 4. Decide: Branch Context, Scope, and Issue Type
+## 4. Decide scope and issue type
 
-First, verify your current branch context using `git branch --show-current`.
-
-**1. Called from base branch** (e.g., `<DEFAULT_BASE_BRANCH>`, `development`, or `main`): 
-Proceed with planning the work. 
-
-**2. Called from a feature/hotfix branch** (an existing Jira issue exists):
-**Stop immediately.** Explain to the user that creating sub-tasks or parallelizing work from an already existing feature branch is currently not supported. Do not create any Jira issues, branches, or worktrees.
-
-If you are in **Case 1** (base branch), make the following two decisions before moving to setup:
+By this point Step 1 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
 
 **A. Decide Scope: single-step or multistep**
 - **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + tests) that can be worked on *at the same time* in separate worktrees.
