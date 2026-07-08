@@ -30,8 +30,7 @@ Run `git branch --show-current` to determine your starting point.
 - **Branch is exactly `<DEFAULT_BASE_BRANCH>`**: 
   `BASE_BRANCH = <DEFAULT_BASE_BRANCH>`. Proceed to investigate and plan the work.
 - **Branch matches `feature/<KEY>-...` or `hotfix/<KEY>-...`**: 
-  **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first. 
-  *(TBD: Add instructions for starting from an issue branch, parsing existing sub-tasks, and appending new parallel work).*
+  **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
 - **Any other branch name**: 
   Ask the user whether to treat it as a base branch or abort. Do not guess.
 
