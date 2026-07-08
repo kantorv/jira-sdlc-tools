@@ -202,12 +202,12 @@ jira issue unlink <KEY-1> <KEY-2>
 
 **Single-line (simple text):**
 ```bash
-jira issue comment add <KEY> "Single-line comment text"
+jira issue comment add <KEY> "Single-line comment text" --no-input
 ```
 
 **Multi-line / markdown / backticks (safest — heredoc to `--template -`):**
 ```bash
-cat <<'EOF' | jira issue comment add <KEY> --template -
+cat <<'EOF' | jira issue comment add <KEY> --template - --no-input
 Multi-line comment with **markdown** and `inline code`.
 Line 2 of the comment.
 Line 3 of the comment.
@@ -216,24 +216,25 @@ EOF
 
 **Dynamic / single-line via `echo` pipe (good for templated strings):**
 ```bash
-echo "Comment from stdin" | jira issue comment add <KEY> --template -
+echo "Comment from stdin" | jira issue comment add <KEY> --template - --no-input
 ```
 
 **Bash dollar-quoted string (inline newlines without heredoc):**
 ```bash
-jira issue comment add <KEY> $'Line 1\nLine 2\nLine 3'
+jira issue comment add <KEY> $'Line 1\nLine 2\nLine 3' --no-input
 ```
 
 **From a file (reusable template / long report):**
 ```bash
-jira issue comment add <KEY> --template /path/to/comment.md
+jira issue comment add <KEY> --template /path/to/comment.md --no-input
 ```
 
 #### ⚠️ Important notes for comments
 - **There is no `-m` flag** — `jira issue comment add KEY -m "text"` does not exist. The positional argument works exactly as in `jira issue create`.
+- **Always include `--no-input`** on `jira issue comment add` to prevent hangs in non-interactive (subagent) runs. This is a write command that supports the flag.
 - **Backticks inside double-quoted strings are dangerous in a raw shell** because bash treats `` ` `` as command substitution. The heredoc or file methods are safest for any comment containing backticks, markdown, or newlines.
-- **The `--template -` form reads stdin** — explicit `echo "..." | jira issue comment add <KEY> --template -` is the canonical multi-line pattern used across all skills.
-- **Pipe without `--template` also works** — `echo "..." | jira issue comment add <KEY>` is accepted as a shorthand when stdin is a pipe.
+- **The `--template -` form reads stdin** — explicit `echo "..." | jira issue comment add <KEY> --template - --no-input` is the canonical multi-line pattern used across all skills.
+- **Pipe without `--template` also works** — `echo "..." | jira issue comment add <KEY> --no-input` is accepted as a shorthand when stdin is a pipe.
 
 ### Worklog
 
