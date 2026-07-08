@@ -15,7 +15,7 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
 - Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `In Progress`) are silently ignored — the executor will transition them when ready.
 - Auth follows `../_shared/jira-cli-reference.md` §0 — check `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see `jira-tools-plugin.env` in the project root).
-- **Jira Comment Mechanics**: Since reports and updates are multi-line, **always pipe via heredoc to `--template -`** (see `../_shared/jira-cli-reference.md` §6). Single-line comments can use the positional `jira issue comment add <KEY> "<text>"` form. *Never wrap markdown in a quoted inline string*—backticks are interpreted as shell command substitutions.
+- **Jira Comment Mechanics**: Since reports and updates are multi-line, **always pipe via heredoc to `--template -`** (see `../_shared/jira-cli-reference.md` §6). Single-line comments can use the positional `jira issue comment add <KEY> "<text>" --no-input` form. *Never wrap markdown in a quoted inline string*—backticks are interpreted as shell command substitutions. Always include `--no-input` on `jira issue comment add` to prevent hangs in non-interactive runs.
 
 ## 1. Resolve the parent, sub-tasks, and filter by status
 
@@ -116,7 +116,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
 
   2. **Post a Jira comment to the sub-task (or parent for single-step)** (via heredoc, per the global convention):
      ```bash
-     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template -
+     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template - --no-input
      PR #<prNumber> has been reviewed and approved.
 
      **Review summary:**
@@ -135,7 +135,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
   2. **Move the sub-task to `<STATUS_IN_PROGRESS>`** and post the findings as a Jira comment on the sub-task (or parent for single-step):
      ```bash
      jira issue move <SUBTASK-KEY-or-PARENT-KEY> "<STATUS_IN_PROGRESS>"
-     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template -
+     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template - --no-input
      PR #<prNumber> failed code review. Moving the issue back to In Progress.
 
      ### Findings:
@@ -150,7 +150,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
 Regardless of whether the review above was approve or reject, immediately post a short summary to the parent Jira issue `<PARENT-KEY>` so the progress is visible in one place:
 
 ```bash
-cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
+cat <<'EOF' | jira issue comment add <PARENT-KEY> --template - --no-input
 Review update for sub-task <SUBTASK-KEY> (PR #<prNumber>):
 - Status: **APPROVED** / **CHANGES REQUESTED**
 - <If approved: one sentence of what was reviewed>
@@ -222,7 +222,7 @@ Runs when a parent PR already merged is detected (step 5a phase check or step 1 
 GitHub-for-Jira will already have moved all related issues to `<STATUS_DONE>`, but a clean Jira comment on the parent is useful for the historical record:
 
 ```bash
-cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
+cat <<'EOF' | jira issue comment add <PARENT-KEY> --template - --no-input
 All sub-tasks approved and parent branch merged into <BASE_BRANCH>.
 
 Sub-tasks:
