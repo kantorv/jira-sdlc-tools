@@ -1,14 +1,12 @@
 # acli-reference.md (Official Atlassian CLI `acli`)
 
 Reference for Claude Code when creating/managing Jira issues via the
-**official Atlassian CLI (`acli`)** — a fallback / alternative to the
-`jira-cli` documented in [jira-cli-reference.md](jira-cli-reference.md).
-Use `acli` when `jira-cli` misbehaves on this project (see §2 "Known
-gotcha" for the one that bites in practice).
+**official Atlassian CLI (`acli`)**.
 
 Auth is set up with an API token (Cloud). Project-specific values
 (`<PROJECT-KEY>`, `<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
-`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_TOKEN_PATH>`) come from
+`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_ACCOUNT_URL>`,
+`<JIRA_ACCOUNT_EMAIL>`, `<JIRA_TOKEN_PATH>`) come from
 `jira-tools-plugin.env` in the project root — resolve them there, not
 here. `acli` stores its own credentials after `auth login`, so unlike
 `jira-cli` you do **not** prefix every command with a token env var.
@@ -35,29 +33,26 @@ here. `acli` stores its own credentials after `auth login`, so unlike
 `acli` keeps credentials in its own store — authenticate once, then every
 subsequent `acli jira ...` works without a token prefix.
 
-One-time login (token read from a file):
+One-time login (token piped via stdin — `--token` takes no value, reads from
+standard input):
 
 ```bash
 acli jira auth login \
-  --site "your-site.atlassian.net" \
-  --email "you@example.com" \
-  --token "$(cat <JIRA_TOKEN_PATH>)"
+  --site "<JIRA_ACCOUNT_URL>" \
+  --email "<JIRA_ACCOUNT_EMAIL>" \
+  --token < <JIRA_TOKEN_PATH>
 ```
 
-Or pipe the token via stdin (uses `--token` with no value, which reads
-from standard input):
-
-```bash
-acli jira auth login --site "your-site.atlassian.net" --email "you@example.com" --token < <JIRA_TOKEN_PATH>
-```
+`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
+are resolved from `jira-tools-plugin.env` in the project root.
 
 Verify:
 
 ```bash
 acli jira auth status
 # ✓ Authenticated
-#   Site: your-site.atlassian.net
-#   Email: you@example.com
+#   Site: <JIRA_ACCOUNT_URL>
+#   Email: <JIRA_ACCOUNT_EMAIL>
 #   Authentication Type: api_token
 ```
 
@@ -96,12 +91,7 @@ For this project:
 | Bug      | `Bug`           |
 | Sub-task | `Subtask`       |   ← **no hyphen** for this project (see §11)
 
-⚠️ Note the **`Subtask`** spelling (no hyphen). The sibling
-[jira-cli-reference.md](jira-cli-reference.md) §1 says `Sub-task` (with a
-hyphen) — that is wrong for this project and will make every sub-task
-create fail with `Specify a valid issue type`. If you copy type names
-between the two documents, use the *real* project name, not the
-hyphenated one.
+⚠️ Note the **`Subtask`** spelling (no hyphen).  
 
 Default project key: `<PROJECT-KEY>` (from `jira-tools-plugin.env`).
 
@@ -355,8 +345,7 @@ acli jira workitem worklog add --key <KEY> --time-spent "1h 30m" --comment "note
 
 ## 7. Git workflow — branch convention
 
-Decision rule (shared with [jira-cli-reference.md](jira-cli-reference.md)
-§7): every change goes on its own branch, `feature/<KEY>-<slug>` or
+Decision rule: every change goes on its own branch, `feature/<KEY>-<slug>` or
 `hotfix/<KEY>-<slug>` — no "small enough to commit straight to the
 working branch" shortcut. `jira-task-assigner` pre-creates the branch and
 worktree for every leaf issue; pick the prefix from the **top-level
@@ -451,27 +440,3 @@ acli-create-parent-and-subtasks.sh \
 # List what landed under the parent:
 acli-list-subtasks.py --parent <PARENT-KEY>
 ```
-
----
-
-## 11. Cross-reference to jira-cli
-
-This file and [jira-cli-reference.md](jira-cli-reference.md) cover the
-same operations against two different CLIs. They diverge in a few places
-that are easy to get wrong:
-
-| Concern | `jira-cli` (ankitpokhrel) | `acli` (Atlassian official) |
-|---|---|---|
-| Auth model | `JIRA_API_TOKEN` env var or `JIRA_API_TOKEN="$(cat <file>)"` prefix on every command | Stored by `acli jira auth login`; no per-command prefix |
-| Sub-task parent flag | `-P<PARENT>` — **silently dropped on this project** (see §2 gotcha) | `--parent "<PARENT>"` — works |
-| Sub-task type name (this project) | `Subtask` (the ref says `Sub-task`; **wrong**) | `Subtask` |
-| `list` issues | `jira issue list ...` | **No `list`** — use `acli jira workitem search --jql ...` |
-| `view` key passing | `jira issue view <KEY>` | `acli jira workitem view <KEY>` (positional) |
-| `comment add` key | `jira issue comment add <KEY> ...` (positional) | `acli ... comment create --key <KEY>` |
-| Non-interactive | `--no-input` on writes (NOT on `delete`) | `--yes` on writes/edits/delete (delete IS non-interactive) |
-| Multi-line body from stdin | `--template -` reads stdin | `--body-file -` does **not** work; use a real file |
-| JSON by default? | `--raw` on view/list | `--json` on view/search/create/edit/etc. |
-
-When you change a command in one file, check the other — the two are
-meant to be parallel, and a flag fix in one that isn't mirrored in the
-other is a drift bug.
