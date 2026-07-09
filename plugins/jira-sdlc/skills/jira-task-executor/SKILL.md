@@ -71,7 +71,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      - `<KEY>` is `Bug` → `hotfix/`.
      - `<KEY>` is `Sub-task` → look at its parent's type instead (one
        level up is always top-level — see the nesting rule in
-       `../_shared/jira-cli-reference.md` §3) and use *that* type to pick
+       `../_shared/jira-cli-reference.md` §7) and use *that* type to pick
        feature/hotfix.
      - Branch from `$STARTING_BRANCH` (now up to date, if this was a
        worktree) directly —
@@ -82,7 +82,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      - Also post the same durable fallback `jira-task-assigner` posts for
        issues it creates, so the PR target survives even if this local
        config is ever unreadable later (fresh clone, different machine):
-       `jira issue comment add <KEY> "PR target branch: $STARTING_BRANCH."` — single-line form; for multi-line/markdown comments use `cat <<'EOF' | jira issue comment add <KEY> --template -` (see `../_shared/jira-cli-reference.md` §6 for full comment syntax).
+       `jira issue comment add <KEY> "PR target branch: $STARTING_BRANCH." --no-input` — single-line form; for multi-line/markdown comments use `cat <<'EOF' | jira issue comment add <KEY> --template - --no-input` (see `../_shared/jira-cli-reference.md` §6 for full comment syntax).
 
 3. **Transition the issue** to in-progress:
    `jira issue move <KEY> "<STATUS_IN_PROGRESS>"` (see
@@ -225,7 +225,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
     heredoc, and stdin pipe). Never wrap markdown in an quoted inline
     string — backticks are interpreted as command substitution:
     ```
-    cat <<'EOF' | jira issue comment add <KEY> --template -
+cat <<'EOF' | jira issue comment add <KEY> --template - --no-input
     <the same report content shown to the user>
     EOF
     ```
