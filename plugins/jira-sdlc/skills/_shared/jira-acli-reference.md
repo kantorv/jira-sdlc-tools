@@ -455,7 +455,7 @@ run it verbatim whenever a skill asks for a PR base:
 ```bash
 CUR=$(git branch --show-current)
 PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
-[ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key "$KEY" --json \
+[ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
   | grep -oE 'PR target branch: [^ .]+' | head -1 | sed 's/PR target branch: //')
 [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
 echo "$PR_BASE"

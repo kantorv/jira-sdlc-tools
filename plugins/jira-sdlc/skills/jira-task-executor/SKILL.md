@@ -89,13 +89,18 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
        - `<KEY>` is `Subtask` → look at its parent's type instead (one
          level up is always top-level — see §7) and use *that* type to
          pick feature/hotfix.
+       - Capture the base branch **before** checkout (the branch you're
+         branching *from* will be the PR target):
+         `BASE=$(git branch --show-current)`
        - Branch from the current branch directly —
          `git checkout -b <prefix>/<KEY>-<slugified-summary>` (naming
          convention per §7).
-       - Record the parent: `git config branch."<new-branch-name>".parentbranch "$(git branch --show-current)"`.
+       - Record the parent (new branch need not be checked out to set its
+         config — the `<new-branch-name>` is already known):
+         `git config branch."<prefix>/<KEY>-<slugified-summary>".parentbranch "$BASE"`
        - Also post the durable fallback the assigner posts for issues it
          creates (single-line form — see §6 for comment mechanics):
-         `acli jira workitem comment create --key <KEY> --body "PR target branch: $(git branch --show-current)."`
+         `acli jira workitem comment create --key <KEY> --body "PR target branch: $BASE."`
 
 3. **Transition the issue** to in-progress:
    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
