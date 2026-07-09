@@ -186,12 +186,7 @@ relying on opaque GitHub-for-Jira transition rules:
   from `jira-tools-plugin.env` (see
   [Configuration](#configuration)). `acli` stores the credentials, so no
   per-command token prefix.
-  - *Legacy note:* [`jira-cli`](https://github.com/ankitpokhrel/jira-cli)
-    (the ankitpokhrel fork) is retained as an unlinked-but-kept legacy
-    reference (`jira-cli-reference.md`) — its per-command-environment-token
-    auth model is no longer used by the skills, but the file is kept for
-    historical context. Prefer `acli`; the skills only cross-reference
-    `jira-acli-reference.md`.
+
 - **GitHub CLI (`gh`)**, authenticated.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
   connected between your Jira project and GitHub repo — automatic
@@ -275,7 +270,6 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   │   └── SKILL.md
         │   └── _shared/
         │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — primary CLI reference
-        │       ├── jira-cli-reference.md    # ankitpokhrel jira-cli — retained as legacy reference (unlinked)
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
@@ -538,11 +532,7 @@ concrete before/after scenario in the PR description goes a long way.
 - The official **Atlassian CLI (`acli`)** — the primary CLI these skills
   are now written against; stores credentials after a one-time login and
   handles sub-task `--parent` correctly on this project.
-- [`ankitpokhrel/jira-cli`](https://github.com/ankitpokhrel/jira-cli) —
-  the CLI these skills were originally written against, retained as a
-  legacy reference (`jira-cli-reference.md`). Its documentation shaped the
-  command map and the git/branch conventions this toolkit still follows.
-- [`Introducing JIRA cli`](https://medium.com/@ankitpokhrel/introducing-jira-cli-the-missing-command-line-tool-for-atlassian-jira-fe44982cc1de) — Medium article
+- [`Introducing the Atlassian Command Line Interface (ACLI) for Jira`](https://www.atlassian.com/blog/jira/atlassian-command-line-interface) — Official documentation
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
   branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
