@@ -71,7 +71,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      - `<KEY>` is `Bug` → `hotfix/`.
      - `<KEY>` is `Sub-task` → look at its parent's type instead (one
        level up is always top-level — see the nesting rule in
-       `../_shared/jira-cli-reference.md` §3) and use *that* type to pick
+       `../_shared/jira-cli-reference.md` §7) and use *that* type to pick
        feature/hotfix.
      - Branch from `$STARTING_BRANCH` (now up to date, if this was a
        worktree) directly —
