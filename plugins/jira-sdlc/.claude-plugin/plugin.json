@@ -1,6 +1,6 @@
 {
   "name": "jira-sdlc",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Parallel, Jira-tracked feature delivery for Claude Code: plan work into Jira issues and git worktrees, implement each piece in parallel, then review and merge the whole set as a unit.",
   "author": {
     "name": "Valentin Kantor"
