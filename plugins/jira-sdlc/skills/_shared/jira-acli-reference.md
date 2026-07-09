@@ -8,7 +8,8 @@ gotcha" for the one that bites in practice).
 
 Auth is set up with an API token (Cloud). Project-specific values
 (`<PROJECT-KEY>`, `<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
-`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_TOKEN_PATH>`) come from
+`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_ACCOUNT_URL>`,
+`<JIRA_ACCOUNT_EMAIL>`, `<JIRA_TOKEN_PATH>`) come from
 `jira-tools-plugin.env` in the project root — resolve them there, not
 here. `acli` stores its own credentials after `auth login`, so unlike
 `jira-cli` you do **not** prefix every command with a token env var.
@@ -35,29 +36,26 @@ here. `acli` stores its own credentials after `auth login`, so unlike
 `acli` keeps credentials in its own store — authenticate once, then every
 subsequent `acli jira ...` works without a token prefix.
 
-One-time login (token read from a file):
+One-time login (token piped via stdin — `--token` takes no value, reads from
+standard input):
 
 ```bash
 acli jira auth login \
-  --site "your-site.atlassian.net" \
-  --email "you@example.com" \
-  --token "$(cat <JIRA_TOKEN_PATH>)"
+  --site "<JIRA_ACCOUNT_URL>" \
+  --email "<JIRA_ACCOUNT_EMAIL>" \
+  --token < <JIRA_TOKEN_PATH>
 ```
 
-Or pipe the token via stdin (uses `--token` with no value, which reads
-from standard input):
-
-```bash
-acli jira auth login --site "your-site.atlassian.net" --email "you@example.com" --token < <JIRA_TOKEN_PATH>
-```
+`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
+are resolved from `jira-tools-plugin.env` in the project root.
 
 Verify:
 
 ```bash
 acli jira auth status
 # ✓ Authenticated
-#   Site: your-site.atlassian.net
-#   Email: you@example.com
+#   Site: <JIRA_ACCOUNT_URL>
+#   Email: <JIRA_ACCOUNT_EMAIL>
 #   Authentication Type: api_token
 ```
 

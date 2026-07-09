@@ -8,11 +8,12 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 You are acting as the engineer picking up a single Jira issue end-to-end.
 Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
-1. **Fetch the issue** — `jira issue view <KEY> --raw` (auth per
-   `../_shared/jira-cli-reference.md` §0). Pull out: summary, description,
-   issue type, current status, and parent (if any).
-   - Also check `fields.subtasks` (CHECK this field path against real
-     output once):
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
+   (auth per `../_shared/jira-acli-reference.md` §0). Pull out: summary,
+   description, issue type, current status, and parent (if any).
+   - Also check `fields.subtasks` (the default `--json` *omits* subtasks,
+     so `--fields '*all'` is required here — see
+     `../_shared/jira-acli-reference.md` §3):
      - **Non-empty** → `<KEY>` is a multistep parent — a merge target
        for its sub-tasks' PRs, not something to implement on directly.
        Confirm with the user that they really want to implement on the
@@ -69,23 +70,23 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
      an existing branch already has its prefix baked into its name):
      - `<KEY>` is `Task`/`Story` → `feature/`.
      - `<KEY>` is `Bug` → `hotfix/`.
-     - `<KEY>` is `Sub-task` → look at its parent's type instead (one
+     - `<KEY>` is `Subtask` → look at its parent's type instead (one
        level up is always top-level — see the nesting rule in
-       `../_shared/jira-cli-reference.md` §3) and use *that* type to pick
+       `../_shared/jira-acli-reference.md` §3) and use *that* type to pick
        feature/hotfix.
      - Branch from `$STARTING_BRANCH` (now up to date, if this was a
        worktree) directly —
        `git checkout -b <prefix>/<KEY>-<slugified-summary>` (naming
-       convention per `../_shared/jira-cli-reference.md` §7).
+       convention per `../_shared/jira-acli-reference.md` §7).
      - Record the parent for later (this run, and any future resumed
        session): `git config branch."<new-branch-name>".parentbranch "$STARTING_BRANCH"`.
      - Also post the same durable fallback `jira-task-assigner` posts for
        issues it creates, so the PR target survives even if this local
        config is ever unreadable later (fresh clone, different machine):
-       `jira issue comment add <KEY> "PR target branch: $STARTING_BRANCH."` — single-line form; for multi-line/markdown comments use `cat <<'EOF' | jira issue comment add <KEY> --template -` (see `../_shared/jira-cli-reference.md` §6 for full comment syntax).
+       `acli jira workitem comment create --key <KEY> --body "PR target branch: $STARTING_BRANCH."` — single-line form; for multi-line/markdown comments write a temp file and use `--body-file <file>` (see `../_shared/jira-acli-reference.md` §6 for full comment syntax).
 
 3. **Transition the issue** to in-progress:
-   `jira issue move <KEY> "<STATUS_IN_PROGRESS>"` (see
+   `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
    `jira-tools-plugin.env` in the project root for the confirmed status name for this
    project — default example `In Progress`).
 
@@ -165,18 +166,19 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       — this is whatever was checked out *before* this issue's branch was
       created.
     - If that comes up empty, don't go straight to `<DEFAULT_BASE_BRANCH>`
-      — try the durable fallback first: `jira issue view <KEY>` and look
-      through its comments for a `PR target branch: <branch>` line (the
+      — try the durable fallback first: `acli jira workitem comment list --key <KEY> --json`
+      and look through its comments for a `PR target branch: <branch>` line (the
       one this skill, or `jira-task-assigner`, posts when first creating
       the branch). Use that as `PR_BASE` if found.
     - Only fall back to `<DEFAULT_BASE_BRANCH>` (see
       `jira-tools-plugin.env` in the project root) if *both* the local config and the
       Jira comment come up empty, and say so explicitly in the final
       report if you had to.
-    - Try to get the issue's canonical URL via `jira open <KEY> --no-browser`
-      (CHECK: expected to print the URL instead of opening it — confirm
-      once) to link back to it in the PR body, rather than hardcoding the
-      Jira site domain anywhere.
+    - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
+      (`<JIRA_ACCOUNT_URL>` comes from `jira-tools-plugin.env` in the
+      project root — acli has no browse-URL subcommand, so construct the
+      link from the token) to link back to it in the PR body, rather than
+      hardcoding the Jira site domain anywhere.
     - `gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" --body "<what changed + link to the issue>" --label <semver-label>`.
       The `--label` flag is **required** — the repo's semver-based release
       workflow reads it to decide the next version bump. Pick the label by
@@ -197,7 +199,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 11. **Update Jira — status transition, no comment yet:**
     You just opened a PR (step 10), so the work is now under review —
     transition it to in-review:
-    `jira issue move <KEY> "<STATUS_IN_REVIEW>"` (see
+    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
     `jira-tools-plugin.env` in the project root for the confirmed status
     name for this project — default example `In Review`).
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
@@ -212,25 +214,26 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       (when run on the parent key) will review this PR targeting the
       base branch. `<STATUS_DONE>` is handled when the human merges the
       PR into the base branch — via GitHub-for-Jira's merge automation
-      if connected, or a manual `jira issue move <KEY> "<STATUS_DONE>"`
+      if connected, or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Post this same
     report to the user in chat **and** as a single Jira comment — don't
     post a separate short "PR opened" comment earlier, this is the one
-    comment for the whole run. Since it's multi-line, **always pipe via
-    heredoc to `--template -`** (see `../_shared/jira-cli-reference.md`
-    §6 for all comment variants: single-line positional, multi-line
-    heredoc, and stdin pipe). Never wrap markdown in an quoted inline
-    string — backticks are interpreted as command substitution:
+    comment for the whole run. Since it's multi-line, **write it to a temp
+    file and post with `--body-file <file>`** (never wrap markdown in a
+    quoted inline `--body` string — backticks are interpreted as command
+    substitution; and `--body-file -` / stdin does not work — see
+    `../_shared/jira-acli-reference.md` §6 for all comment variants):
     ```
-    cat <<'EOF' | jira issue comment add <KEY> --template -
+    cat > /tmp/<KEY>-report.md <<'EOF'
     <the same report content shown to the user>
     EOF
+    acli jira workitem comment create --key <KEY> --body-file /tmp/<KEY>-report.md
     ```
 
-Reference: `../_shared/jira-cli-reference.md` has the full jira-cli syntax,
+Reference: `../_shared/jira-acli-reference.md` has the full acli syntax,
 confirmed issue types, and git/branch conventions this skill depends on.
 The `jira-tools-plugin.env` file in the project root has this repo's specific values for every
 `<TOKEN>` used above.

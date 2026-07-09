@@ -129,7 +129,7 @@ sequenceDiagram
         deactivate Reviewer
     else Single-step (no reviewer)
         Note over User: user merges the single PR into the base branch manually
-        Note over User: Done via GitHub-for-Jira merge automation (or manual jira issue move)
+        Note over User: Done via GitHub-for-Jira merge automation (or manual acli jira workitem transition)
     end
 
     Note over User,JIRA: Phase 4 — Human merges the release (always manual)
@@ -183,7 +183,7 @@ Two routing quirks the diagram makes visible:
    directly.
 2. In the **single-step** branches (phases 3 and 4), no skill is active
    at all — the user merges on GitHub and GitHub-for-Jira's automation
-   (or a manual `jira issue move`) takes the issue to *Done*. The skill
+   (or a manual `acli jira workitem transition`) takes the issue to *Done*. The skill
    lanes go quiet; GIT and JIRA still move, just via automation.
 
 ## Phase 1 — Plan (`jira-task-assigner`)

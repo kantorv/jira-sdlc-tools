@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues, with matching git branches and worktrees set up so the pieces can be worked on in parallel. Detects an implied parent from the current git branch, investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task that should be split into parallel sub-tasks, creates the Jira issue(s) via jira-cli, creates a branch per top-level/parent issue, and creates a `git worktree` per leaf issue (the single task, or each sub-task) so parallel work can start immediately. Every leaf issue gets its own dedicated branch and worktree, so the executor always opens an individual PR per leaf.
+description: Turn a feature/task/bug description into Jira issues, with matching git branches and worktrees set up so the pieces can be worked on in parallel. Detects an implied parent from the current git branch, investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task that should be split into parallel sub-tasks, creates the Jira issue(s) via the official Atlassian CLI (acli), creates a branch per top-level/parent issue, and creates a `git worktree` per leaf issue (the single task, or each sub-task) so parallel work can start immediately. Every leaf issue gets its own dedicated branch and worktree, so the executor always opens an individual PR per leaf.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -91,7 +91,7 @@ Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatm
 
 For each sub-task `→ <SUBTASK-KEY>`:
 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-   (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-cli-reference.md` §7)
+   (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-acli-reference.md` §7)
 2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
 3. Leave a PR-target comment on the sub-task.
 
@@ -105,19 +105,44 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 *"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
 
 **CLI mechanics — things to never forget:**
-- **Auth**: check whether `JIRA_API_TOKEN` is already set (`echo $JIRA_API_TOKEN`). If empty, prefix every `jira` command with `JIRA_API_TOKEN="$(cat <JIRA_TOKEN_PATH>)"`.
-- **Project health check**: before the first `jira issue create`, run `jira project list | grep <PROJECT-KEY>` to confirm the configured project key exists and is accessible. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
-- Use `--no-input` on every write command except `delete`. Quote `"Sub-task"` exactly (with the hyphen).
-- For anything beyond a one-line description, write the body to a file and use `--template <file>` instead of inline `-b"..."`.
-- Comment syntax: use `jira issue comment add <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template -` for multi-line.
-- Put investigation findings + acceptance criteria in the issue description.
-- Make sure the branch you're branching *from* is committed/pushed before branching.
+- **Auth**: `acli` stores credentials after a one-time
+  `acli jira auth login` (see `../_shared/jira-acli-reference.md` §0). No
+  per-command token prefix — run commands bare.
+- **Project health check**: before the first `acli jira workitem create`,
+  run `acli jira project list --json | grep <PROJECT-KEY>` to confirm the
+  configured project key exists and is accessible. If nothing matches,
+  stop — the project key may be wrong, the token may be scoped to a
+  different board, or the bot may not have been granted access to the board.
+- **Create issue**:
+  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee @me --yes`
+  Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
+  `--parent` actually works on this project — see
+  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes). Capture
+  the returned key with `--json` (parse `key`), or grep it out of the text
+  output (embedded in the returned browse URL).
+- Use `--yes` on every write command. Quote `"Subtask"` exactly (no
+  hyphen — this project's real type name, confirmed in
+  `../_shared/jira-acli-reference.md` §1).
+- **Comment**: single-line —
+  `acli jira workitem comment create --key <KEY> --body "<text>"`.
+  Multi-line — write a temp file and use `--body-file <file>`
+  (`--body-file -` / stdin does **not** work; see
+  `../_shared/jira-acli-reference.md` §6).
+- **Delete caveat**: `acli jira workitem delete --key <KEY> --yes`
+  accepts `--yes`, so it *can* run unattended — but still never
+  auto-delete; hand back the ready-to-paste command for the human to run
+  (see `../_shared/jira-acli-reference.md` §8).
+- Put investigation findings + acceptance criteria in the issue
+  description (use `--description-file <file>` for anything beyond a
+  sentence).
+- Make sure the branch you're branching *from* is committed/pushed
+  before branching.
 
 ## 6. Report back
 
 List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
 
-Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, pipe it in rather than using an inline quoted `-b`/comment string (same `--template -` stdin pattern as issue creation, see `../_shared/jira-cli-reference.md` §6):
+Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `acli jira workitem comment create --key <PARENT-KEY> --body-file <file>` rather than an inline quoted `--body` string (see `../_shared/jira-acli-reference.md` §6 — `--body-file -` / stdin does not work):
 
 ## 7. Don't start implementation work, but do leave worktrees ready
 
@@ -130,6 +155,6 @@ plugin, or drop it entirely if you installed these skills as loose files
 rather than as a plugin). Merging the parent branch back into its own
 base once all sub-tasks land is likewise out of scope for this skill.
 
-Reference: `../_shared/jira-cli-reference.md` has the full command syntax,
+Reference: `../_shared/jira-acli-reference.md` has the full command syntax,
 confirmed issue type names, and git/branch conventions. The `jira-tools-plugin.env` file in the
 project root has this repo's specific values for every `<TOKEN>` used above.

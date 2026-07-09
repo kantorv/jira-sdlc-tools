@@ -178,10 +178,20 @@ relying on opaque GitHub-for-Jira transition rules:
 ## Prerequisites
 
 - **Claude Code**, a version with plugin support.
-- **[`jira-cli`](https://github.com/ankitpokhrel/jira-cli)** — the
-  ankitpokhrel fork specifically; the shared reference documents its
-  exact non-interactive flag behavior, which isn't identical across
-  Jira CLIs. Authenticated (`jira init`) against your Jira Cloud instance.
+- **The official Atlassian CLI (`acli`)** — the primary CLI these skills
+  drive Jira through; the shared reference (`jira-acli-reference.md`)
+  documents its exact flag behavior. Authenticated once against your
+  Jira Cloud instance with `acli jira auth login` using the
+  `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN_PATH` values
+  from `jira-tools-plugin.env` (see
+  [Configuration](#configuration)). `acli` stores the credentials, so no
+  per-command token prefix.
+  - *Legacy note:* [`jira-cli`](https://github.com/ankitpokhrel/jira-cli)
+    (the ankitpokhrel fork) is retained as an unlinked-but-kept legacy
+    reference (`jira-cli-reference.md`) — its per-command-environment-token
+    auth model is no longer used by the skills, but the file is kept for
+    historical context. Prefer `acli`; the skills only cross-reference
+    `jira-acli-reference.md`.
 - **GitHub CLI (`gh`)**, authenticated.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
   connected between your Jira project and GitHub repo — automatic
@@ -264,8 +274,8 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
         │   └── _shared/
-        │       ├── jira-cli-reference.md    # ankitpokhrel jira-cli syntax, auth, git conventions
-        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — fallback when jira-cli misbehaves
+        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — primary CLI reference
+        │       ├── jira-cli-reference.md    # ankitpokhrel jira-cli — retained as legacy reference (unlinked)
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
@@ -290,10 +300,13 @@ Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
+- Your Jira account URL and email (`JIRA_ACCOUNT_URL`,
+  `JIRA_ACCOUNT_EMAIL`) — required for the one-time `acli jira auth login`
 - Your Jira workflow's real status names — these are flagged as
   "confirm once" inside the skills themselves, since status *names*
   aren't standardized across Jira projects
-- Semver label names and the Jira auth token fallback path
+- The Jira auth token path (`JIRA_TOKEN_PATH`, read by the one-time
+  `acli jira auth login --token <`) and semver label names
   (optional — sensible defaults given)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7
@@ -388,9 +401,11 @@ Deliberately never automated, regardless of how routine a run looks:
 
 - **Merging the parent branch into its base.** Always a manual step for
   a human — the reviewer only ever prepares and approves that PR.
-- **`jira issue delete`.** The skills hand back a ready-to-paste command
-  instead of running it, even for throwaway issues created in the same
-  session.
+- **`acli jira workitem delete --key <KEY> --yes`.** The skills hand back
+  a ready-to-paste command instead of running it, even for throwaway
+  issues created in the same session. (Unlike `jira-cli`'s `delete`,
+  acli's accepts `--yes` and *can* run unattended — so the guardrail
+  against auto-deleting matters more, not less.)
 - **Resolving an ambiguous branch match.** Zero or multiple branches
   matching a key means the skill asks, rather than guessing which one
   you meant.
@@ -426,16 +441,20 @@ A few things the skills themselves flag as "confirm once against real
 output" rather than assume — worth running deliberately before your first
 real task, not discovering mid-failure:
 
-- [ ] `jira issue view <any-existing-key> --raw` — confirm
-      `fields.subtasks` is shaped the way the skills expect (an array of
-      objects with a `.key`, not bare strings).
+- [ ] `acli jira workitem view <any-existing-key> --json --fields '*all'` —
+      confirm `fields.subtasks` is shaped the way the skills expect (the
+      default `--json` omits subtasks, so `--fields '*all'` is required;
+      it's an array of objects with a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
       `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-tools-plugin.env`.
-- [ ] `jira issue comment --help` — confirm the flag for piping a
-      multi-line comment from stdin (the skills assume `--template -`).
-- [ ] `jira open <any-key> --no-browser` — confirm it prints the issue URL
-      rather than trying to open a browser.
+- [ ] `acli jira workitem comment create --help` — the skills write
+      multi-line comments to a temp file and post with `--body-file <real file>`.
+      Confirm that form works (acli reads the body from a real file path
+      only — stdin is not supported).
+- [ ] Browse URL — acli has no `open` subcommand. The skills build the
+      issue link as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` from the
+      `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
 - [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
       semver labels exist (or update `<SEMVER_LABELS>` in
       `jira-tools-plugin.env` to match what does).
@@ -497,7 +516,7 @@ target-branch defaults, feature-flag wrapping, commit message format).
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-tools-plugin.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
-`jira-cli-reference.md` §7 accordingly — the skills follow whatever
+`jira-acli-reference.md` §7 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
 
 ## Contributing
@@ -516,8 +535,13 @@ concrete before/after scenario in the PR description goes a long way.
 
 ## Acknowledgments
 
+- The official **Atlassian CLI (`acli`)** — the primary CLI these skills
+  are now written against; stores credentials after a one-time login and
+  handles sub-task `--parent` correctly on this project.
 - [`ankitpokhrel/jira-cli`](https://github.com/ankitpokhrel/jira-cli) —
-  the CLI these skills are written against.
+  the CLI these skills were originally written against, retained as a
+  legacy reference (`jira-cli-reference.md`). Its documentation shaped the
+  command map and the git/branch conventions this toolkit still follows.
 - [`Introducing JIRA cli`](https://medium.com/@ankitpokhrel/introducing-jira-cli-the-missing-command-line-tool-for-atlassian-jira-fe44982cc1de) — Medium article
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
   branch-to-issue linking.
