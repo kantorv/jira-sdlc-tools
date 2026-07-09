@@ -31,8 +31,7 @@ Run `git branch --show-current` to determine your starting point.
 - **Branch is exactly `<DEFAULT_BASE_BRANCH>`**: 
   `BASE_BRANCH = <DEFAULT_BASE_BRANCH>`. Proceed to investigate and plan the work.
 - **Branch matches `feature/<KEY>-...` or `hotfix/<KEY>-...`**: 
-  **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first. 
-  *(TBD: Add instructions for starting from an issue branch, parsing existing sub-tasks, and appending new parallel work).*
+  **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
 - **Any other branch name**: 
   Ask the user whether to treat it as a base branch or abort. Do not guess.
 
@@ -45,8 +44,15 @@ Before investigating or creating anything, verify the environment is configured 
 ## 3. Investigate
 
 Search the codebase (Grep/Read/Glob) for relevant context: existing
-related code, similar past patterns, affected modules. Don't ask the user
-things you can find yourself.
+related code, similar past patterns, affected modules. **Investigate
+specifically to decide whether the work splits into pieces that can run at
+the same time** — look for shared modules, sequential dependencies, and
+single owners for interfaces. Signs it's one piece, not two:
+- Changes that must land in a specific order to compile/test
+- A single module that all work touches sequentially
+- One person owns the interface all pieces must conform to
+
+Don't ask the user things you can find yourself.
 
 ## 4. Clarify
 
@@ -55,21 +61,18 @@ or whether it's actually a defect vs. new work), ask concise, specific
 questions before creating anything. Don't proceed on guesses for anything
 that would change what you build.
 
+**Tie clarified acceptance criteria to the issue description.** Once you have
+the user's final answers, write them into the issue description at step 5A.1
+so the criteria are durable and visible to anyone picking up the work.
 
 ## 5. Decide: Branch Context, Scope, and Issue Type
 
 First, verify your current branch context using `git branch --show-current`.
 
-**1. Called from base branch** (e.g., `<DEFAULT_BASE_BRANCH>`, `development`, or `main`): 
-Proceed with planning the work. 
-
-**2. Called from a feature/hotfix branch** (an existing Jira issue exists):
-**Stop immediately.** Explain to the user that creating sub-tasks or parallelizing work from an already existing feature branch is currently not supported. Do not create any Jira issues, branches, or worktrees.
-
-If you are in **Case 1** (base branch), make the following two decisions before moving to setup:
+By this point Step 1 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
 
 **A. Decide Scope: single-step or multistep**
-- **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + tests) that can be worked on *at the same time* in separate worktrees.
+- **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
 - **Single-step** — one cohesive piece of work, even if it touches several files. If piece B can only start once piece A finishes, that's one piece, not two — don't split purely sequential work.
 
 **B. Pick the top-level issue type**
@@ -83,6 +86,12 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 Because you aborted in Step 1 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
 **M3 (re-run / partial-failure safety) — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
+
+Before any branch creation, ensure the base is current:
+```bash
+git fetch origin
+```
+
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
@@ -101,10 +110,17 @@ Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comment" 
 Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `<PARENT-BRANCH>` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
 
 For each sub-task `→ <SUBTASK-KEY>`:
-1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-   (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-cli-reference.md` §7)
-2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
-3. Leave a PR-target comment on the sub-task.
+ 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
+    (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-cli-reference.md` §7)
+ 2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
+ 3. Leave a PR-target comment on the sub-task.
+
+**PR-target comment on the parent** (required for reviewer fallback on fresh clone):
+After creating all sub-tasks in the multistep path, also post on the **parent issue** (not each sub-task) to record its PR target:
+```
+PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>.
+```
+This mirrors the single-step format and ensures the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
 
 **PR-target comment:**
 After creating each leaf issue (the single top-level task, OR each sub-task), add a Jira comment recording the branch its PR should target and the worktree to run the executor in. Every leaf — single-step or sub-task — gets its own dedicated branch and PR; this comment is what tells the executor where that PR's base is.
@@ -120,7 +136,7 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 - **Project health check**: before the first `jira issue create`, run `jira project list | grep -w <PROJECT-KEY>` to confirm the configured project key exists and is accessible as a whole-word match. If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
 - Use `--no-input` on every write command except `delete`. Quote `"Sub-task"` exactly (with the hyphen).
 - For anything beyond a one-line description, write the body to a file and use `--template <file>` instead of inline `-b"..."`.
-- Comment syntax: use `jira issue comment add <KEY> "<text>"` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template -` for multi-line.
+- Comment syntax: use `jira issue comment add <KEY> "<text>" --no-input` for single-line, or heredoc `cat <<'EOF' | jira issue comment add <KEY> --template - --no-input` for multi-line.
 - Put investigation findings + acceptance criteria in the issue description.
 - Make sure the branch you're branching *from* is committed/pushed before branching.
 
