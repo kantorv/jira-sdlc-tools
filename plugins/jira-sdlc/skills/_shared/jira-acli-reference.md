@@ -24,7 +24,8 @@ here. `acli` stores its own credentials after `auth login`, so unlike
 [8. Destructive commands](#8-destructive--risky-commands--use-with-care) ·
 [9. Other useful commands](#9-other-useful-commands) ·
 [10. Helper scripts](#10-helper-scripts) ·
-[11. Cross-reference to jira-cli](#11-cross-reference-to-jira-cli)
+[11. Cross-reference to jira-cli](#11-cross-reference-to-jira-cli) ·
+[12. PR-base resolver](#12-pr-base-resolver-git-config--jira-comment--env-default)
 
 ---
 
@@ -440,3 +441,32 @@ acli-create-parent-and-subtasks.sh \
 # List what landed under the parent:
 acli-list-subtasks.py --parent <PARENT-KEY>
 ```
+
+---
+
+## 12. PR-base resolver (git-config → Jira comment → env default)
+
+Every leaf issue's PR needs a base branch. The assigner records it in two
+places — one local (`git config branch.<branch>.parentbranch`), one
+durable (a `"PR target branch: …"` Jira comment that survives a fresh
+clone). This resolver checks both before falling back to the env default;
+run it verbatim whenever a skill asks for a PR base:
+
+```bash
+CUR=$(git branch --show-current)
+PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
+[ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
+  | grep -oE 'PR target branch: [^ .]+' | head -1 | sed 's/PR target branch: //')
+[ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
+echo "$PR_BASE"
+```
+
+Sources, in order:
+1. `git config branch.<current>.parentbranch` — set by the assigner when
+   the branch was created; local to this clone.
+2. The issue's `"PR target branch: …"` Jira comment — the durable
+   fallback the assigner (or executor, on the rare no-assigner path)
+   posts; survives a fresh clone or different machine.
+3. `<DEFAULT_BASE_BRANCH>` from `jira-tools-plugin.env` in the project
+   root — used only when both sources above are empty, and the skill
+   should call that out explicitly in its report.

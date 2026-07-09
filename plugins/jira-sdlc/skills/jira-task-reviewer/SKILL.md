@@ -10,7 +10,7 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
 **Conventions used below:**
 - `<PARENT-KEY>` = the Jira issue key passed as $ARGUMENTS.
 - `<PARENT-BRANCH>` = the git branch for `<PARENT-KEY>`, always named `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
-- `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into (typically `<DEFAULT_BASE_BRANCH>` — see `jira-tools-plugin.env` in the project root) — recovered from `git config branch.<PARENT-BRANCH>.parentbranch` (set by `jira-task-assigner` when it created the branch), falling back to that issue's `"PR target branch: ..."` Jira comment if the config is missing.
+- `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into — resolve per `../_shared/jira-acli-reference.md` §12 (git-config → Jira "PR target branch" comment → `<DEFAULT_BASE_BRANCH>` env default).
 - Sub-task PRs all target `<PARENT-BRANCH>` — every sub-task gets its own dedicated branch and PR.
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
 - Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `In Progress`) are silently ignored — the executor will transition them when ready.
@@ -32,7 +32,7 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
        Keep only those where `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review"). Others are not reviewed yet — skip quietly.
     3. Proceed to the *Multistep phase check* below.
 - Resolve `<PARENT-BRANCH>`: `git branch -a | grep <PARENT-KEY>`. Exactly one match → that's the parent branch. Zero or multiple → ask the user rather than guessing.
-- Resolve `<BASE_BRANCH>` per the convention above. Only ask the user if both the config and the Jira-comment fallback come up empty.
+- Resolve `<BASE_BRANCH>` per `../_shared/jira-acli-reference.md` §12. Only ask the user if both the config and the Jira-comment fallback come up empty.
 
 ### Single-step phase check (only for single-step top-level issues)
 
