@@ -14,20 +14,20 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
 - Sub-task PRs all target `<PARENT-BRANCH>` — every sub-task gets its own dedicated branch and PR.
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
 - Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `In Progress`) are silently ignored — the executor will transition them when ready.
-- Auth follows `../_shared/jira-cli-reference.md` §0 — check `JIRA_API_TOKEN` first, fall back to `<JIRA_TOKEN_PATH>` (see `jira-tools-plugin.env` in the project root).
-- **Jira Comment Mechanics**: Since reports and updates are multi-line, **always pipe via heredoc to `--template -`** (see `../_shared/jira-cli-reference.md` §6). Single-line comments can use the positional `jira issue comment add <KEY> "<text>"` form. *Never wrap markdown in a quoted inline string*—backticks are interpreted as shell command substitutions.
+- Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores credentials after a one-time `acli jira auth login`, so no per-command `JIRA_API_TOKEN` prefix; run commands bare.
+- **Jira Comment Mechanics**: Since reports and updates are multi-line, **write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>`** (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string*—backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 
 ## 1. Resolve the parent, sub-tasks, and filter by status
 
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
-- Fetch the parent issue: `jira issue view <PARENT-KEY> --raw`. Confirm `fields.issuetype.name` is a top-level type (`Task`, `Story`, `Bug`). If it's a `Sub-task`, stop — this skill operates on parent issues only; the user should pass the parent key, not a sub-task key.
+- Fetch the parent issue: `acli jira workitem view <PARENT-KEY> --json --fields '*all'`. Confirm `fields.issuetype.name` is a top-level type (`Task`, `Story`, `Bug`). If it's a `Subtask`, stop — this skill operates on parent issues only; the user should pass the parent key, not a sub-task key.
 - **Determine if this is a single-step or multistep parent.** After viewing the raw parent JSON once, note the value of `fields.subtasks`. Treat it as **single-step** when `fields.subtasks` is absent, `null`, or an empty array (`[]`). Anything else is **multistep**.
   - If **single-step**: Skip the sub-task steps below and go straight to the *Single-step phase check*.
   - If **multistep**:
-    1. Extract sub-task keys from `fields.subtasks` (CHECK the exact shape once against real output — likely an array of objects, i.e. `fields.subtasks[].key`, not bare strings).
+    1. Extract sub-task keys from `fields.subtasks` (the default `--json` omits subtasks, so `--fields '*all'` is required — see `../_shared/jira-acli-reference.md` §3; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings).
     2. For each sub-task key, run:
        ```
-       jira issue view <SUBTASK-KEY> --raw
+       acli jira workitem view <SUBTASK-KEY> --json --fields '*all'
        ```
        Keep only those where `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review"). Others are not reviewed yet — skip quietly.
     3. Proceed to the *Multistep phase check* below.
@@ -114,14 +114,15 @@ Evaluate the diff against these dimensions (all must pass for approve):
      gh pr review <prNumber> --approve --body "<concise review summary, 2-5 sentences>"
      ```
 
-  2. **Post a Jira comment to the sub-task (or parent for single-step)** (via heredoc, per the global convention):
+  2. **Post a Jira comment to the sub-task (or parent for single-step)** (write to a temp file, per the global convention):
      ```bash
-     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template -
+     cat > /tmp/<KEY>-approve.md <<'EOF'
      PR #<prNumber> has been reviewed and approved.
 
      **Review summary:**
      <2-3 sentences: what was reviewed and any notable observations>
      EOF
+     acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-approve.md
      ```
      Do NOT move the Jira status — let the GitHub-for-Jira automation handle it when the PR is merged.
 
@@ -134,13 +135,14 @@ Evaluate the diff against these dimensions (all must pass for approve):
 
   2. **Move the sub-task to `<STATUS_IN_PROGRESS>`** and post the findings as a Jira comment on the sub-task (or parent for single-step):
      ```bash
-     jira issue move <SUBTASK-KEY-or-PARENT-KEY> "<STATUS_IN_PROGRESS>"
-     cat <<'EOF' | jira issue comment add <SUBTASK-KEY-or-PARENT-KEY> --template -
+     acli jira workitem transition --key <SUBTASK-KEY-or-PARENT-KEY> --status "<STATUS_IN_PROGRESS>" --yes
+     cat > /tmp/<KEY>-reject.md <<'EOF'
      PR #<prNumber> failed code review. Moving the issue back to In Progress.
 
      ### Findings:
      <Clear file:line findings and required changes>
      EOF
+     acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-reject.md
      ```
 
   3. **Remember** this PR as blocked. Continue the loop — review the next sub-task PR.
@@ -150,12 +152,13 @@ Evaluate the diff against these dimensions (all must pass for approve):
 Regardless of whether the review above was approve or reject, immediately post a short summary to the parent Jira issue `<PARENT-KEY>` so the progress is visible in one place:
 
 ```bash
-cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
+cat > /tmp/<PARENT-KEY>-summary.md <<'EOF'
 Review update for sub-task <SUBTASK-KEY> (PR #<prNumber>):
 - Status: **APPROVED** / **CHANGES REQUESTED**
 - <If approved: one sentence of what was reviewed>
 - <If rejected: brief note, full details are in the sub-task's own comment>
 EOF
+acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<PARENT-KEY>-summary.md
 ```
 
 *For single-step issues, the post-review summary goes to the parent (which is the same issue), so this step still applies.*
@@ -222,13 +225,14 @@ Runs when a parent PR already merged is detected (step 5a phase check or step 1 
 GitHub-for-Jira will already have moved all related issues to `<STATUS_DONE>`, but a clean Jira comment on the parent is useful for the historical record:
 
 ```bash
-cat <<'EOF' | jira issue comment add <PARENT-KEY> --template -
+cat > /tmp/<PARENT-KEY>-wrapup.md <<'EOF'
 All sub-tasks approved and parent branch merged into <BASE_BRANCH>.
 
 Sub-tasks:
 - <SUBTASK-KEY>: PR #<n> — merged
 - ...
 EOF
+acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<PARENT-KEY>-wrapup.md
 ```
 
 *For single-step issues, the "Sub-tasks" section simply lists the single issue and its PR.*
@@ -237,7 +241,7 @@ Optionally list any orphaned local branches (`git branch --merged origin/<BASE_B
 
 ## 7. Report back
 
-Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` using the global heredoc convention. Construct the layout using the conditional structures below depending on the outcome:
+Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` using the global `--body-file` comment convention (write to a temp file). Construct the layout using the conditional structures below depending on the outcome:
 
 ```markdown
 ## Review Status: <OUTCOME_TITLE>
@@ -301,4 +305,4 @@ Fix the findings above in each blocked branch, push, then re-run /jira-sdlc:jira
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and jumps straight to step 6.
 
-Reference: `../_shared/jira-cli-reference.md` has the full jira-cli syntax, confirmed issue types, and git/branch conventions. The `jira-tools-plugin.env` file in the project root has this repo's specific values for every `<TOKEN>` used above.
+Reference: `../_shared/jira-acli-reference.md` has the full acli syntax, confirmed issue types, and git/branch conventions. The `jira-tools-plugin.env` file in the project root has this repo's specific values for every `<TOKEN>` used above.
