@@ -25,6 +25,48 @@ project. Given a task description from the user ($ARGUMENTS):
   Sub-task — this keeps the branch-parsing regex in step 1 working no
   matter which branch someone checks out later.
 
+## Health check (environment readiness)
+
+Before the numbered steps, confirm the local environment the rest of
+this skill depends on is actually in place. Every `<TOKEN>` below
+resolves from the two env files in the project root, so a missing or
+mis-tracked file would silently produce wrong branches, wrong Jira
+keys, or leaked secrets later. Run these from the repository root, and
+on any failure **stop and tell the user** rather than inventing values
+or working around it:
+
+- **Inside a Git repository**: `git rev-parse --is-inside-work-tree`
+  should exit 0. If it doesn't, you're not in a checkout — ask the user
+  where the project repo is before going further.
+- **Both env files present**: confirm `jira-sdlc-tools.env`
+  (team-shared, committed) and `jira-sdlc-tools.local.env`
+  (machine-specific, gitignored) both exist in the repo root, e.g.
+  `test -f jira-sdlc-tools.env && test -f jira-sdlc-tools.local.env`.
+  The committed file carries team defaults (`<PROJECT-KEY>`, status
+  names); the local file overrides per machine and holds the Jira
+  account URL/email plus the path to the API token
+  (`<JIRA_TOKEN_PATH>`). If either is missing, tell the user which —
+  don't fabricate settings, and don't copy a teammate's `local.env`
+  (it points at their token file and uses their account).
+  `../_shared/project-config.md` describes what each variable in these
+  files means.
+- **`jira-sdlc-tools.local.env` is gitignored**: `git check-ignore
+  jira-sdlc-tools.local.env` should print the path back (exit 0). The
+  local file is machine- and person-specific and points at secrets, so
+  it must never be committed. If it is *not* ignored, stop and ask the
+  user to add `jira-sdlc-tools.local.env` to `.gitignore` first —
+  committing it would leak the account email and credential path into
+  shared history.
+
+Reference implementations of exactly these three checks sit beside
+this skill: `../_shared/scripts/heathcheck.sh` (macOS / Linux / WSL)
+and `../_shared/scripts/healthcheck.ps1` (Windows PowerShell). Run the
+one for your platform, or run the three commands above individually.
+Both scripts print `✅` per passing check and `❌` per failing one, run
+all three before exiting, and exit non-zero if any failed — so a
+zero-exit run means the environment is ready and you can continue to
+step 1.
+
 ## 1. Determine context from the current branch
 
 Run `git branch --show-current` to determine your starting point.
