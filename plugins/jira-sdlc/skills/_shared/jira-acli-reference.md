@@ -425,9 +425,8 @@ patterns used while seeding issues from a review:
   `acli jira workitem view <PARENT> --json --fields '*all'` (the
   default JSON omits `subtasks`, which is easy to miss — see §3).
 
-Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) and
-`jira-sdlc-tools.local.env` (machine-specific) in the project root
-(override with `--project` or the `PROJECT_KEY` env var). Run them from the
+Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in the project
+root (override with `--project` or the `PROJECT_KEY` env var). Run them from the
 project root.
 
 ```bash
