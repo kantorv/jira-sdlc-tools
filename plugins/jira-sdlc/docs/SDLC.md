@@ -5,7 +5,7 @@
 > already generic (no project names, no company specifics — reviewed
 > before publishing this repo). If your process differs, adapt this
 > document to match yours, then update `<DEFAULT_BASE_BRANCH>` in
-> `jira-tools-plugin.env` in the project root (see `../skills/_shared/project-config.md`)
+> `jira-sdlc-tools.env` in the project root (see `../skills/_shared/project-config.md`)
 > and the branch-prefix rules in
 > `jira-task-assigner` and `jira-acli-reference.md` §7 to match.
 

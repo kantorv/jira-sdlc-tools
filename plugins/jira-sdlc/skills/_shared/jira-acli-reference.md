@@ -7,7 +7,7 @@ Auth is set up with an API token (Cloud). Project-specific values
 (`<PROJECT-KEY>`, `<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
 `<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_ACCOUNT_URL>`,
 `<JIRA_ACCOUNT_EMAIL>`, `<JIRA_TOKEN_PATH>`) come from
-`jira-tools-plugin.env` in the project root — resolve them there, not
+`jira-sdlc-tools.env` in the project root — resolve them there, not
 here. `acli` stores its own credentials after `auth login`, so unlike
 `jira-cli` you do **not** prefix every command with a token env var.
 
@@ -45,7 +45,7 @@ acli jira auth login \
 ```
 
 `<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
-are resolved from `jira-tools-plugin.env` in the project root.
+are resolved from `jira-sdlc-tools.env` in the project root.
 
 Verify:
 
@@ -94,7 +94,7 @@ For this project:
 
 ⚠️ Note the **`Subtask`** spelling (no hyphen).  
 
-Default project key: `<PROJECT-KEY>` (from `jira-tools-plugin.env`).
+Default project key: `<PROJECT-KEY>` (from `jira-sdlc-tools.env`).
 
 ---
 
@@ -265,7 +265,7 @@ acli jira workitem edit --jql "project = <PROJECT-KEY> AND status = \"To Do\"" -
 ### Transition
 
 Status names are project-specific — use the `<STATUS_*>` tokens from
-`jira-tools-plugin.env`.
+`jira-sdlc-tools.env`.
 
 ```bash
 acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
@@ -421,7 +421,7 @@ patterns used while seeding issues from a review:
   `acli jira workitem view <PARENT> --json --fields '*all'` (the
   default JSON omits `subtasks`, which is easy to miss — see §3).
 
-Both read `<PROJECT-KEY>` from `jira-tools-plugin.env` in the project
+Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` in the project
 root (override with `--project` or the `PROJECT_KEY` env var). Run them from the
 project root.
 
@@ -467,6 +467,6 @@ Sources, in order:
 2. The issue's `"PR target branch: …"` Jira comment — the durable
    fallback the assigner (or executor, on the rare no-assigner path)
    posts; survives a fresh clone or different machine.
-3. `<DEFAULT_BASE_BRANCH>` from `jira-tools-plugin.env` in the project
+3. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
    root — used only when both sources above are empty, and the skill
    should call that out explicitly in its report.

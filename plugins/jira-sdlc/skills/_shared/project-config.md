@@ -1,13 +1,13 @@
 # Project configuration reference
 
-This file describes every variable used in `jira-tools-plugin.env`
+This file describes every variable used in `jira-sdlc-tools.env`
 (the `.env` file in the project root). All project-specific values
-live in `jira-tools-plugin.env` — nothing else under `skills/` should need editing
+live in `jira-sdlc-tools.env` — nothing else under `skills/` should need editing
 after that.
 
 Each skill's "Conventions used below" section names the tokens it needs
 (e.g. `<PROJECT-KEY>`). Before following a skill's instructions, resolve
-every token it references against `jira-tools-plugin.env`; the tables below describe
+every token it references against `jira-sdlc-tools.env`; the tables below describe
 what each variable means.
 
 ## Required
@@ -26,7 +26,7 @@ what each variable means.
 `jira-task-executor` step 7 reads the project's own `CLAUDE.md`,
 `AGENTS.md`, or README for "run one test" / "run full suite"
 commands — it does **not** take test commands from
-`jira-tools-plugin.env`. See that step for the policy and the
+`jira-sdlc-tools.env`. See that step for the policy and the
 discovery flow when the project hasn't documented them.
 
 ## Jira workflow status names
@@ -69,7 +69,7 @@ above.
 
 ## Worked example
 
-The README's usage walkthrough assumes this filled-in `jira-tools-plugin.env`:
+The README's usage walkthrough assumes this filled-in `jira-sdlc-tools.env`:
 
 ```
 PROJECT-KEY           = PROJ
