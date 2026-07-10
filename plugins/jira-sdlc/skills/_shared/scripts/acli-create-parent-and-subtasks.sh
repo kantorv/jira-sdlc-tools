@@ -5,7 +5,7 @@
 # Bundled as a reusable form of the "turn a review into tracked sub-tasks"
 # pattern used while seeding issues from a skill review.
 #
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env in the project root
+# Reads <PROJECT-KEY> from jira-sdlc-tools.env (team-shared) in the project root
 # (override with --project or $PROJECT_KEY). Requires `acli` to be
 # authenticated (acli jira auth login — see ../jira-acli-reference.md §0).
 #
@@ -52,7 +52,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- resolve project key from jira-sdlc-tools.env if not given ---
+# --- resolve project key from jira-sdlc-tools.env (team-shared) if not given ---
 if [ -z "$PROJECT_KEY" ]; then
   PROJECT_KEY="${PROJECT_KEY:-}"
   for envfile in ./jira-sdlc-tools.env ../jira-sdlc-tools.env; do

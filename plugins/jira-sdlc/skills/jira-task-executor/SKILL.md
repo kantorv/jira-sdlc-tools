@@ -22,7 +22,8 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   base comes from the `PR target branch: …` Jira comment the assigner
   posts, resolved in step 10 via `../_shared/jira-acli-reference.md` §12.
 - `<STATUS_*>` and other `<TOKEN>`s resolve from `jira-sdlc-tools.env`
-  in the project root.
+  (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
+  project root.
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
    (auth per §0). Pull out: summary, description, issue type, current
@@ -250,5 +251,6 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 Reference: `../_shared/jira-acli-reference.md` has the full acli syntax,
 confirmed issue types, and git/branch conventions this skill depends on.
-The `jira-sdlc-tools.env` file in the project root has this repo's specific values for every
+The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
+(machine-specific) files in the project root have this repo's specific values for every
 `<TOKEN>` used above.
