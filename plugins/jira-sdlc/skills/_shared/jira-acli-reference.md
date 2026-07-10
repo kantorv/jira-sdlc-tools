@@ -25,7 +25,9 @@ Resolve tokens from the appropriate file. `acli` stores its own credentials afte
 `auth login`, so unlike `jira-cli` you do **not** prefix every command
 with a token env var.
 
-`acli` version this was confirmed against: `1.3.22-stable`.
+`acli` version this was confirmed against: `1.3.22-stable`
+(check with `acli --version` — the **`--version` flag**; the `acli version`
+*subcommand* errors with "unknown command").
 
 **Sections:** [0. Auth](#0-auth) ·
 [1. Issue types](#1-issue-type-hierarchy) ·
@@ -136,15 +138,23 @@ acli jira workitem create \
 
 ### Long descriptions — use a file, not inline
 
-Inline `--description` works for a sentence or two, but for real bodies
-(write the markdown to a file and load it):
+Inline `--description` works for a sentence or two. For real bodies, write
+the text to a file and load it with `--description-file`. Note that
+`--description` / `--description-file` accept **plain text or Atlassian
+Document Format (ADF)** (`--help`) — **not markdown**. A markdown body is
+stored verbatim as one plain-text paragraph, so `##`, `-`, and `1.` show up
+literally instead of rendering as headings/lists (verified: a `## Summary`
+description landed as a single `doc → paragraph → text` node with the `##`
+intact). For structured formatting, supply an ADF document (the shape
+`acli jira workitem create --generate-json` prints); for plain prose, plain
+text is fine.
 
 ```bash
 acli jira workitem create \
   --project "<PROJECT-KEY>" \
   --type "Task" \
   --summary "..." \
-  --description-file /tmp/issue-body.md
+  --description-file /tmp/issue-body.txt
 ```
 
 Other useful create flags (all confirmed via `acli jira workitem create --help`):
@@ -269,7 +279,7 @@ acli jira workitem view <KEY> --json
 ```bash
 acli jira workitem edit --key <KEY> --summary "New summary" --yes
 acli jira workitem edit --key <KEY> --description "Updated body"
-acli jira workitem edit --key <KEY> --description-file /tmp/new-body.md --yes
+acli jira workitem edit --key <KEY> --description-file /tmp/new-body --yes   # plain text/ADF, not markdown (§2)
 ```
 Bulk edit by JQL:
 ```bash
@@ -321,20 +331,26 @@ Bulk: `--from-json` or `--from-csv` (columns: outward, inward, type).
 # Short, inline:
 acli jira workitem comment create --key <KEY> --body "Single-line comment"
 
-# Long / markdown — write to a file, load it:
-acli jira workitem comment create --key <KEY> --body-file /tmp/comment.md
+# Long / multi-line — write to a file, load it:
+acli jira workitem comment create --key <KEY> --body-file /tmp/comment.txt
 ```
+
+`--body` / `--body-file` accept **plain text or ADF**, same rule as
+`--description*` (§2) — `--help` says so for both. Whether a comment body
+renders as markdown depends on a site-level setting acli can't report, so
+don't assume either way; use plain text or ADF deliberately.
 
 ⚠️ `--body-file -` (stdin) does **not** work — it errors with
 `failed to read comment body from file`. Always point `--body-file` at a
 real file. If you have the text in a shell variable, write it to a temp
 file first, or pass it inline with `--body`:
 ```bash
-cat > /tmp/c.md <<'EOF'
-Multi-line comment with **markdown** and `inline code`.
-Second line.
+cat > /tmp/c.txt <<'EOF'
+Multi-line comment body in plain text (or ADF — see §2).
+Backticks (`like this`) are literal in a quoted heredoc ('EOF'),
+so they're safe from shell command substitution here.
 EOF
-acli jira workitem comment create --key <KEY> --body-file /tmp/c.md
+acli jira workitem comment create --key <KEY> --body-file /tmp/c.txt
 ```
 
 Other useful `comment create` flags: `-e/--edit-last` (replace your last
@@ -404,13 +420,36 @@ acli jira workitem delete --key <KEY> --yes
 `create`, `edit`, `transition`, `comment`, `link`, `assign` are
 reversible / low-risk and fine to run once the values are confirmed.
 
+### `--yes` — which write commands accept it (verified against `1.3.22`)
+
+`--yes` is **not** universal — checked each command's `--help`.
+
+**Accept `--yes`** (prompt without it; skip with `-y` / `--yes`):
+- `workitem edit`
+- `workitem transition`
+- `workitem assign`
+- `workitem delete`
+- `workitem link create`
+- `workitem create-bulk`
+
+**Reject `--yes`** (`✗ Error: unknown flag: --yes` — the command is already
+non-interactive, so don't add `--yes`):
+- `workitem create`
+- `workitem comment create`
+
+Net: don't blanket-add `--yes` — it errors on `workitem create` and
+`comment create`. (Both rejecters were probed; accepters were read from
+`--help`.)
+
 ---
 
 ## 9. Other useful commands
 
 ```bash
-acli jira project list --json                # projects you can access (--limit, --paginate)
-acli jira project list --recent               # up to 20 recently viewed
+acli jira project list --paginate --json      # a pagination flag is REQUIRED (--paginate / --limit N / --recent);
+                                              # bare `project list --json` errors:
+                                              # "at least one of the flags in the group [recent limit paginate] is required"
+acli jira project list --recent               # up to 20 recently viewed (--recent also satisfies the group)
 acli jira board list                          # boards (use --help for subcommands)
 acli jira sprint list                         # sprints (use --help for subcommands)
 acli jira auth status                         # confirm who you're authenticated as
