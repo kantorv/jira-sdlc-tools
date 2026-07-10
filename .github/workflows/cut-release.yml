@@ -1,12 +1,13 @@
 # Cuts a release branch for the next sprint — SDLC §3 Phase 2 (Feature
-# Freeze & Release Cut). Manual dispatch: derives the next sprint number,
-# branches `release/sprint-<N>` off `development`, and opens a DRAFT PR into
-# `main` carrying the `minor` label (the sprint-default bump per SDLC §5).
-# Relabel the PR to `patch`/`major` before merging to override the bump
+# Freeze & Release Cut). Manual dispatch: takes a bump label (patch / minor /
+# major, default minor), computes the next SemVer from the latest v* tag on
+# origin + that label, branches `release/sprint-<X.Y.Z>` off `development`, and
+# opens a DRAFT PR into `main` carrying the chosen label.
+# Relabel the PR to a different bump before merging to override the version
 # that `release.yml` will compute.
 #
 # Humans QA on the branch (Phase 3) by opening fix PRs back into
-# `release/sprint-<N>`, then mark this draft PR ready and merge it (Phase 4,
+# `release/sprint-<X.Y.Z>`, then mark this draft PR ready and merge it (Phase 4,
 # step 1). `release.yml` takes over on that merge.
 #
 # Prereq: the repo setting "Allow GitHub Actions to create and approve pull
@@ -16,10 +17,15 @@ name: Cut release
 on:
   workflow_dispatch:
     inputs:
-      sprint-number:
-        description: Sprint number for the release branch (e.g. 24). Leave blank to auto-increment from the highest existing release/sprint-* branch on origin.
-        type: string
-        required: false
+      bump:
+        description: Bump level for the release (patch / minor / major). Default minor — the sprint-default per SDLC §5.
+        type: choice
+        required: true
+        default: minor
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -27,7 +33,7 @@ permissions:
 
 jobs:
   cut:
-    name: Cut release/sprint-<N> from development
+    name: Cut release/sprint-<version> from development
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,37 +41,53 @@ jobs:
           ref: development
           fetch-depth: 0
 
-      - name: Resolve sprint number
+      - name: Resolve version from latest tag + bump label
         id: resolve
         env:
-          INPUT_SPRINT: ${{ inputs.sprint-number }}
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
-          if [ -n "${INPUT_SPRINT}" ]; then
-            if ! printf '%s' "${INPUT_SPRINT}" | grep -qE '^[0-9]+$'; then
-              echo "::error::sprint-number must be a positive integer (got '${INPUT_SPRINT}'). Leave blank for auto-increment."
-              exit 1
-            fi
-            N="${INPUT_SPRINT}"
+          # Validate input (belt-and-suspenders — the choice UI already constrains)
+          case "${BUMP}" in
+            patch|minor|major) ;;
+            *) echo "::error::bump must be one of patch/minor/major (got '${BUMP}')"; exit 1 ;;
+          esac
+          # Query origin for the latest v* tag (checkout may not have fetched
+          # every tag). Use --refs to suppress peeled-ref duplicates.
+          prev="$(git ls-remote --refs --tags origin 'v[0-9]*' \
+            | sed -E 's#.*refs/tags/(v[0-9.]+)$#\1#' \
+            | sort -V | tail -1 || true)"
+          if [ -z "${prev}" ]; then
+            # No tags yet -> first release is 0.1.0 (matches release.yml logic).
+            next="0.1.0"
           else
-            # Query origin directly (checkout may not have fetched every
-            # release/* head). Highest existing sprint integer → +1, else 1.
-            max=$(git ls-remote --heads origin 'release/sprint-*' \
-                  | sed -E 's#.*refs/heads/release/sprint-([0-9]+).*#\1#' \
-                  | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
-            if [ -z "${max}" ]; then N=1; else N=$((max + 1)); fi
+            # Reuse release.yml's SemVer bump logic (Node is clearer than shell
+            # arithmetic). Output without leading 'v' — the branch name uses the
+            # bare version (release/sprint-<X.Y.Z>).
+            export PREV="${prev}" LEVEL="${BUMP}"
+            next="$(node -e '
+              const m = process.env.PREV.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+              if (!m) { console.error("unparseable prev tag:", process.env.PREV); process.exit(2); }
+              let [maj, min, pat] = [+m[1], +m[2], +m[3]];
+              const lvl = process.env.LEVEL;
+              if (lvl === "major")      { maj++; min = 0; pat = 0; }
+              else if (lvl === "minor") { min++; pat = 0; }
+              else                      { pat++; }
+              process.stdout.write(`${maj}.${min}.${pat}`);
+            ')"
           fi
-          echo "number=${N}" >> "$GITHUB_OUTPUT"
+          echo "prev=${prev:-<none — first release>}" >> "$GITHUB_OUTPUT"
+          echo "next=${next}" >> "$GITHUB_OUTPUT"
 
-      - name: Create release/sprint-${{ steps.resolve.outputs.number }}
+      - name: Create release/sprint-${{ steps.resolve.outputs.next }}
         id: create
         env:
-          N: ${{ steps.resolve.outputs.number }}
+          NEXT: ${{ steps.resolve.outputs.next }}
         run: |
           set -euo pipefail
-          branch="release/sprint-${N}"
+          branch="release/sprint-${NEXT}"
           if git ls-remote --heads origin "${branch}" | grep -q .; then
-            echo "::error::Branch ${branch} already exists on origin. Pass a higher sprint-number, or delete it first."
+            echo "::error::Branch ${branch} already exists on origin. Delete it first, or choose a different bump."
             exit 1
           fi
           git checkout -b "${branch}" origin/development
@@ -77,46 +99,49 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          N: ${{ steps.resolve.outputs.number }}
+          NEXT: ${{ steps.resolve.outputs.next }}
+          BUMP: ${{ inputs.bump }}
           BRANCH: ${{ steps.create.outputs.branch }}
         run: |
           set -euo pipefail
-          # Unquoted heredoc so ${N} expands; deliberately backtick-free so
-          # nothing in the body gets shell-interpreted.
+          # Unquoted heredoc so ${NEXT}/${BUMP} expand; deliberately backtick-free.
           body=$(cat <<EOF
           Release cut from development — SDLC Phase 2.
 
           1. QA runs against this branch (Phase 3). Fix bugs as PRs into
-             release/sprint-${N}; never merge new features here.
+             release/sprint-${NEXT}; never merge new features here.
           2. When green, mark this draft PR ready and merge it into main.
-          3. release.yml then tags vX.Y.Z, publishes the GitHub Release,
+          3. release.yml then tags v${NEXT}, publishes the GitHub Release,
              back-merges main into development, and deletes this branch.
 
-          The minor label is the sprint-default bump (SDLC section 5).
-          Relabel to patch or major before merging to override.
+          The ${BUMP} label is set at cut time from the chosen bump.
+          Relabel to patch/minor/major before merging to override.
 
-          Diff: development...release/sprint-${N}
+          Diff: development...release/sprint-${NEXT}
           EOF
           )
           url=$(gh pr create \
             --base main --head "${BRANCH}" --draft \
-            --title "Release sprint ${N}" \
-            --label minor \
+            --title "Release v${NEXT}" \
+            --label "${BUMP}" \
             --body "${body}")
           echo "draft_pr=${url}" >> "$GITHUB_OUTPUT"
           echo "${url}"
 
       - name: Job summary
         env:
-          N: ${{ steps.resolve.outputs.number }}
+          NEXT: ${{ steps.resolve.outputs.next }}
+          PREV: ${{ steps.resolve.outputs.prev }}
+          BUMP: ${{ inputs.bump }}
           BRANCH: ${{ steps.create.outputs.branch }}
           DRAFT_PR: ${{ steps.pr.outputs.draft_pr }}
         run: |
           {
-            echo "## Cut release sprint ${N}"
+            echo "## Cut release v${NEXT}"
             echo ""
+            echo "- bump  : ${BUMP} (from ${PREV})"
             echo "- branch: \`${BRANCH}\` (cut from \`development\`)"
-            echo "- draft PR (labeled \`minor\`): ${DRAFT_PR}"
+            echo "- draft PR (labeled \`${BUMP}\`): ${DRAFT_PR}"
             echo ""
             echo "Next: QA on this branch, then merge the draft PR into \`main\` — \`release.yml\` does the rest."
           } >> "$GITHUB_STEP_SUMMARY"

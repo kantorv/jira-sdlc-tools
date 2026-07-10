@@ -102,10 +102,11 @@ repo, not just the JS app these skills came from. The branching and release
 policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
 automate it:
 
-- **`cut-release.yml`** — manual `workflow_dispatch`. Derives the next sprint
-  number (or takes one), cuts `release/sprint-<N>` from `development`, opens a
-  **draft** PR into `main` carrying the `minor` label (the sprint-default bump,
-  SDLC §5). SDLC Phase 2.
+- **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump label
+  (`patch` / `minor` / `major`, default `minor`), computes the next SemVer
+  from the latest `v*` tag + that label, cuts `release/sprint-<X.Y.Z>` from
+  `development`, and opens a **draft** PR into `main` carrying the chosen
+  label. SDLC Phase 2.
 - **`release.yml`** — on a PR merge into `main` whose head is `release/*` or
   `hotfix/*`. In order: resolves the bump → tags `vX.Y.Z` on the merge commit
   → publishes the GitHub Release → back-merges `main` into `development`
@@ -113,8 +114,9 @@ automate it:
   `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
 
 Order of operations, the short version:
-1. Run `cut-release` → `release/sprint-<N>` and a draft PR appear.
-2. QA on that branch; fix PRs land back into `release/sprint-<N>` (SDLC Phase 3).
+1. Run `cut-release` → `release/sprint-<X.Y.Z>` and a draft PR appear
+   (version computed from latest `v*` tag + chosen bump label, default `minor`).
+2. QA on that branch; fix PRs land back into `release/sprint-<X.Y.Z>` (SDLC Phase 3).
 3. Mark the draft PR ready and merge it into `main`.
 4. `release.yml` tags, releases, syncs back to `development`, and deletes the
    branch automatically.
