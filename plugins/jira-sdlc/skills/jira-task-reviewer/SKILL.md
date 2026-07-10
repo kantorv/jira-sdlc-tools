@@ -307,4 +307,4 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and jumps straight to step 6.
 
-Reference: `../_shared/jira-acli-reference.md` has the full acli syntax, confirmed issue types, and git/branch conventions this skill depends on. The `jira-tools-plugin.env` file in the project root has this repo's specific values for every `<TOKEN>` used above.
+Reference: `../_shared/jira-acli-reference.md` has the full acli syntax, confirmed issue types, and git/branch conventions this skill depends on. The `jira-sdlc-tools.env` file in the project root has this repo's specific values for every `<TOKEN>` used above.

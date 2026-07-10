@@ -46,9 +46,9 @@ see [Development](#development) below for the edit-reload loop.
 
 ### Either way
 
-Create `jira-tools-plugin.env` in the root of the repo you're building
+Create `jira-sdlc-tools.env` in the root of the repo you're building
 features in — a filled-in template ships at
-[`jira-tools-plugin.env`](jira-tools-plugin.env) in this repo's root;
+[`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root;
 copy it over and fill in the blanks (the plugin README explains what
 each value means). Then you're ready to run
 `/jira-sdlc:jira-task-assigner`.
@@ -67,7 +67,7 @@ jira-sdlc-tools/
 │       ├── docs/
 │       ├── LICENSE
 │       └── README.md           # full plugin documentation
-├── jira-tools-plugin.env       # template — copy into your target app's root and fill in
+├── jira-sdlc-tools.env       # template — copy into your target app's root and fill in
 ├── AGENTS.md                   # repo-wide instructions for AI coding agents
 ├── CLAUDE.md                   # imports AGENTS.md + Claude Code–specific notes
 ├── LICENSE
@@ -114,7 +114,7 @@ LLM agent plus two JSON manifests, not compiled code. See
 [`AGENTS.md`](AGENTS.md) for what actually counts as validating a
 change. Note too that this toolkit repo isn't a valid target for its
 own skills — you'll need a separate application repo, with its own
-`jira-tools-plugin.env`, to actually exercise one against.
+`jira-sdlc-tools.env`, to actually exercise one against.
 
 ## Contributing
 
