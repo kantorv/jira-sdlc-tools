@@ -21,7 +21,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 - Every leaf gets its own dedicated branch and opens its own PR; the PR's
   base comes from the `PR target branch: …` Jira comment the assigner
   posts, resolved in step 10 via `../_shared/jira-acli-reference.md` §12.
-- `<STATUS_*>` and other `<TOKEN>`s resolve from `jira-tools-plugin.env`
+- `<STATUS_*>` and other `<TOKEN>`s resolve from `jira-sdlc-tools.env`
   in the project root.
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
@@ -104,7 +104,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 3. **Transition the issue** to in-progress:
    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
-   `jira-tools-plugin.env` in the project root for the confirmed status name for this
+   `jira-sdlc-tools.env` in the project root for the confirmed status name for this
    project — default example `In Progress`).
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
@@ -181,11 +181,11 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
         | grep -oE 'PR target branch: [^ .]+' | head -1 | sed 's/PR target branch: //')
       [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — flag in the final report
       ```
-      Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-tools-plugin.env`) if
+      Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-sdlc-tools.env`) if
       *both* the local config and the Jira comment come up empty, and say
       so explicitly in the final report if you had to.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
-      (`<JIRA_ACCOUNT_URL>` comes from `jira-tools-plugin.env` in the
+      (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.env` in the
       project root — acli has no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
@@ -202,7 +202,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       The `--label` flag is **required** — the repo's semver-based release
       workflow reads it to decide the next version bump. Pick the label by
       what the PR actually changes in the app's semantics (these three
-      names assume the `<SEMVER_LABELS>` default from `jira-tools-plugin.env`
+      names assume the `<SEMVER_LABELS>` default from `jira-sdlc-tools.env`
       — adjust if yours differ):
       - `patch` — bug fixes, small internal improvements, no new
         functionality or breaking changes
@@ -219,7 +219,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
     You just opened a PR (step 10), so the work is now under review —
     transition it to in-review:
     `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
-    `jira-tools-plugin.env` in the project root for the confirmed status
+    `jira-sdlc-tools.env` in the project root for the confirmed status
     name for this project — default example `In Review`).
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
     a parent (check `fields.parent` from step 1):
@@ -250,5 +250,5 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 Reference: `../_shared/jira-acli-reference.md` has the full acli syntax,
 confirmed issue types, and git/branch conventions this skill depends on.
-The `jira-tools-plugin.env` file in the project root has this repo's specific values for every
+The `jira-sdlc-tools.env` file in the project root has this repo's specific values for every
 `<TOKEN>` used above.

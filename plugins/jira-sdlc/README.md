@@ -59,7 +59,7 @@ Three skills, three jobs:
 /plugin install jira-sdlc@jira-sdlc-tools
 ```
 
-Create `jira-tools-plugin.env` in the project root for your repo (see
+Create `jira-sdlc-tools.env` in the project root for your repo (see
 [Configuration](#configuration)), then:
 
 ```
@@ -164,7 +164,7 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 
 **Jira status flow across the three skills.** Each skill drives the issue's
 Kanban status explicitly with the four status names from
-`jira-tools-plugin.env`, so board progress reflects the work without
+`jira-sdlc-tools.env`, so board progress reflects the work without
 relying on opaque GitHub-for-Jira transition rules:
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
@@ -184,7 +184,7 @@ relying on opaque GitHub-for-Jira transition rules:
   documents its exact flag behavior. Authenticated once against your
   Jira Cloud instance with `acli jira auth login` using the
   `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN_PATH` values
-  from `jira-tools-plugin.env` (see
+  from `jira-sdlc-tools.env` (see
   [Configuration](#configuration)). `acli` stores the credentials, so no
   per-command token prefix.
 
@@ -196,7 +196,7 @@ relying on opaque GitHub-for-Jira transition rules:
 - **A documented way to run tests** — the executor's test step reads
   the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
   test" and "full suite" commands; they no longer live in
-  `jira-tools-plugin.env`. If the project doesn't document them,
+  `jira-sdlc-tools.env`. If the project doesn't document them,
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
 - **Semver PR labels** (`patch`/`minor`/`major`, or your equivalents)
@@ -215,7 +215,7 @@ relying on opaque GitHub-for-Jira transition rules:
    /plugin marketplace add kantorv/jira-sdlc-tools
    /plugin install jira-sdlc@jira-sdlc-tools
    ```
-2. Fill in `jira-tools-plugin.env` in the project root — see
+2. Fill in `jira-sdlc-tools.env` in the project root — see
    [Configuration](#configuration).
 3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
@@ -289,7 +289,7 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in `jira-tools-plugin.env`
+All project-specific values live in `jira-sdlc-tools.env`
 — see `skills/_shared/project-config.md` for a description of each variable.
 Nothing else under `skills/` should need editing. It covers:
 
@@ -450,7 +450,7 @@ real task, not discovering mid-failure:
       it's an array of objects with a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
-      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-tools-plugin.env`.
+      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-sdlc-tools.env`.
 - [ ] `acli jira workitem comment create --help` — the skills write
       multi-line comments to a temp file and post with `--body-file <real file>`.
       Confirm that form works (acli reads the body from a real file path
@@ -460,7 +460,7 @@ real task, not discovering mid-failure:
       `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
 - [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
       semver labels exist (or update `<SEMVER_LABELS>` in
-      `jira-tools-plugin.env` to match what does).
+      `jira-sdlc-tools.env` to match what does).
 
 ## Troubleshooting / FAQ
 
@@ -518,7 +518,7 @@ directives aimed specifically at AI coding assistants (branch naming,
 target-branch defaults, feature-flag wrapping, commit message format).
 
 If your branching model differs, adapt that document to match yours, then
-update `<DEFAULT_BASE_BRANCH>` in `jira-tools-plugin.env` and the
+update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
 `jira-acli-reference.md` §7 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
