@@ -37,25 +37,36 @@ leaked secrets. Run these checks from the repository root, in order,
 and on any failure **stop and tell the user** rather than inventing
 values or working around it:
 
+The first three checks (git repo + env files + gitignore) have bundled
+scripts beside this skill: `../_shared/scripts/healthcheck.sh` (macOS /
+Linux / WSL) and `../_shared/scripts/healthcheck.ps1` (Windows
+PowerShell). Run the one for your platform, or run the commands below
+individually. Both scripts print `✅` per passing check and `❌` per
+failing one, run all three before exiting, and exit non-zero if any
+failed — so a zero-exit run means the environment side is ready. They
+don't cover the two acli checks; run those yourself afterward.
+
 - **Inside a Git repository**: `git rev-parse --is-inside-work-tree`
-  should exit 0. If it doesn't, you're not in a checkout — ask the user
-  where the project repo is before going further.
+  should exit 0. If it doesn't, you're not in a checkout — tell the user
+  to navigate to the project repo before going further (this skill
+  creates branches and worktrees, which require a git repository).
 - **Both env files present**: confirm `jira-sdlc-tools.env`
   (team-shared, committed) and `jira-sdlc-tools.local.env`
   (machine-specific, gitignored) both exist in the repo root, e.g.
   `test -f jira-sdlc-tools.env && test -f jira-sdlc-tools.local.env`.
-  The committed file carries team defaults (`<PROJECT-KEY>`, status
-  names); the local file overrides per machine and holds the Jira
-  account URL/email plus the path to the API token
-  (`<JIRA_TOKEN_PATH>`). If either is missing, tell the user which —
-  don't fabricate settings, and don't copy a teammate's `local.env`
-  (it points at their token file and uses their account).
+  If either is missing, tell the user which — don't fabricate settings.
+  - `jira-sdlc-tools.env` carries team defaults (`<PROJECT-KEY>`, status
+    names).
+  - `jira-sdlc-tools.local.env` overrides per machine and holds the Jira
+    account URL/email plus the path to the API token
+    (`<JIRA_TOKEN_PATH>`). Don't copy a teammate's `local.env` — it
+    points at their token file and uses their account.
   `../_shared/project-config.md` describes what each variable in these
   files means.
 - **`jira-sdlc-tools.local.env` is gitignored**: `git check-ignore
   jira-sdlc-tools.local.env` should print the path back (exit 0). The
   local file is machine- and person-specific and points at secrets, so
-  it must never be committed. If it is *not* ignored, stop and ask the
+  it must never be committed. If it is *not* ignored, stop and tell the
   user to add `jira-sdlc-tools.local.env` to `.gitignore` first —
   committing it would leak the account email and credential path into
   shared history.
@@ -74,16 +85,7 @@ values or working around it:
   wrong, the token may be scoped to a different board, or the bot may
   not have been granted access to the board.
 
-Reference implementations of the first three checks (git repo + env
-files + gitignore) sit beside this skill:
-`../_shared/scripts/healthcheck.sh` (macOS / Linux / WSL) and
-`../_shared/scripts/healthcheck.ps1` (Windows PowerShell). Run the
-one for your platform, or run the three commands above individually.
-Both scripts print `✅` per passing check and `❌` per failing one, run
-all three before exiting, and exit non-zero if any failed — so a
-zero-exit run means the environment side is ready. They don't cover
-the two acli checks; run those yourself afterward. With all five
-green, continue to step 2.
+With all five checks green, continue to step 2.
 
 ## 2. Determine context from the current branch
 
@@ -191,12 +193,9 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
   `acli jira auth login` (see `../_shared/jira-acli-reference.md` §0). No
   per-command token prefix — run commands bare. (The step 1 health check
   above already verified auth.)
-- **Project health check**: before the first `acli jira workitem create`,
-  run `acli jira project list --json | grep -w <PROJECT-KEY>` to confirm the
-  configured project key exists and is accessible as a whole-word match. If
-  nothing matches, stop — the project key may be wrong, the token may be
-  scoped to a different board, or the bot may not have been granted access
-  to the board.
+- **Project health check**: already verified in step 1. (If you're
+  picking up from a re-run and skipped step 1, run
+  `acli jira project list --json | grep -w <PROJECT-KEY>` first.)
 - **Create issue**:
   `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --yes`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
