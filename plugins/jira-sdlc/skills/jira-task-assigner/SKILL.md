@@ -22,18 +22,20 @@ project. Given a task description from the user ($ARGUMENTS):
   existing branches in this repo.
 - Branch naming is **always** `feature/<KEY>-<slug>` (`hotfix/<KEY>-<slug>`
   for a production bugfix) whether `<KEY>` is a top-level issue or a
-  Sub-task — this keeps the branch-parsing regex in step 1 working no
+  Sub-task — this keeps the branch-parsing regex in step 2 working no
   matter which branch someone checks out later.
 
-## Health check (environment readiness)
+## 1. Health check (environment & Jira readiness)
 
-Before the numbered steps, confirm the local environment the rest of
-this skill depends on is actually in place. Every `<TOKEN>` below
-resolves from the two env files in the project root, so a missing or
-mis-tracked file would silently produce wrong branches, wrong Jira
-keys, or leaked secrets later. Run these from the repository root, and
-on any failure **stop and tell the user** rather than inventing values
-or working around it:
+Before any planning work, gate on two things the rest of this skill
+depends on: the local environment (git repo + the two env files) and
+live Jira access. Every `<TOKEN>` below resolves from those env files,
+and the acli calls later ride on the credentials they point at — so a
+missing or mis-tracked file, or an unauthenticated session, would
+silently produce wrong branches, wrong Jira keys, a failed call, or
+leaked secrets. Run these checks from the repository root, in order,
+and on any failure **stop and tell the user** rather than inventing
+values or working around it:
 
 - **Inside a Git repository**: `git rev-parse --is-inside-work-tree`
   should exit 0. If it doesn't, you're not in a checkout — ask the user
@@ -58,16 +60,32 @@ or working around it:
   committing it would leak the account email and credential path into
   shared history.
 
-Reference implementations of exactly these three checks sit beside
-this skill: `../_shared/scripts/heathcheck.sh` (macOS / Linux / WSL)
-and `../_shared/scripts/healthcheck.ps1` (Windows PowerShell). Run the
+- **Jira auth**: run `acli jira auth status` — it should report
+  `✓ Authenticated` with your site and email (see
+  `../_shared/jira-acli-reference.md` §0). Its site, email, and token
+  path all come from the env files just checked, so do this after
+  them. If it isn't authenticated, run
+  `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN_PATH>`
+  first.
+- **Project reachable**: run `acli jira project list --json | grep -w
+  <PROJECT-KEY>` to confirm the configured project key exists and is
+  accessible as a whole-word match (avoids partial matches like `PROJ`
+  matching `PROJ2`). If nothing matches, stop — the project key may be
+  wrong, the token may be scoped to a different board, or the bot may
+  not have been granted access to the board.
+
+Reference implementations of the first three checks (git repo + env
+files + gitignore) sit beside this skill:
+`../_shared/scripts/healthcheck.sh` (macOS / Linux / WSL) and
+`../_shared/scripts/healthcheck.ps1` (Windows PowerShell). Run the
 one for your platform, or run the three commands above individually.
 Both scripts print `✅` per passing check and `❌` per failing one, run
 all three before exiting, and exit non-zero if any failed — so a
-zero-exit run means the environment is ready and you can continue to
-step 1.
+zero-exit run means the environment side is ready. They don't cover
+the two acli checks; run those yourself afterward. With all five
+green, continue to step 2.
 
-## 1. Determine context from the current branch
+## 2. Determine context from the current branch
 
 Run `git branch --show-current` to determine your starting point.
 
@@ -77,12 +95,6 @@ Run `git branch --show-current` to determine your starting point.
   **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
 - **Any other branch name**: 
   Ask the user whether to treat it as a base branch or abort. Do not guess.
-
-## 2. Fail-fast health check (before any planning work)
-
-Before investigating or creating anything, verify the environment is configured correctly:
-- **Auth check**: run `acli jira auth status` — it should report `✓ Authenticated` with your site and email (see `../_shared/jira-acli-reference.md` §0). If it isn't authenticated, run `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN_PATH>` first.
-- **Project health check**: run `acli jira project list --json | grep -w <PROJECT-KEY>` to confirm the configured project key exists and is accessible as a whole-word match (avoids partial matches like `PROJ` matching `PROJ2`). If nothing matches, stop — the project key may be wrong, the token may be scoped to a different board, or the bot may not have been granted access to the board.
 
 ## 3. Investigate
 
@@ -112,7 +124,7 @@ so the criteria are durable and visible to anyone picking up the work.
 
 First, verify your current branch context using `git branch --show-current`.
 
-By this point Step 1 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
+By this point Step 2 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
 
 **A. Decide Scope: single-step or multistep**
 - **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
@@ -126,7 +138,7 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
-Because you aborted in Step 1 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
+Because you aborted in Step 2 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
 **M3 (re-run / partial-failure safety) — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
 
@@ -177,8 +189,8 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 **CLI mechanics — things to never forget:**
 - **Auth**: `acli` stores credentials after a one-time
   `acli jira auth login` (see `../_shared/jira-acli-reference.md` §0). No
-  per-command token prefix — run commands bare. (The §2 health check above
-  already verified auth.)
+  per-command token prefix — run commands bare. (The step 1 health check
+  above already verified auth.)
 - **Project health check**: before the first `acli jira workitem create`,
   run `acli jira project list --json | grep -w <PROJECT-KEY>` to confirm the
   configured project key exists and is accessible as a whole-word match. If
