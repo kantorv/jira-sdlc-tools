@@ -186,7 +186,8 @@ sequenceDiagram
   does *not* call `gh pr merge` on the parent — merging the parent branch
   into `<BASE_BRANCH>` is the human release decision. After the parent PR
   merges, a re-run posts the final wrap-up comment (step 6) listing all
-  sub-tasks that contributed.
+  sub-tasks that contributed (optional — GitHub-for-Jira already handled
+  `<STATUS_DONE>`).
 - **Automated status transitions removed** — the reviewer no longer moves
   issues to Done on merge (GitHub-for-Jira automation handles that) and
   no longer moves the parent to Done. Transitions that the reviewer still

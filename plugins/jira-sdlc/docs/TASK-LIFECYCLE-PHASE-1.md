@@ -98,5 +98,5 @@ PRs — those are phase 2's job.
 
 ## Related
 
-- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all four phases
+- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all three phases
 - [jira-task-assigner SKILL.md](../skills/jira-task-assigner/SKILL.md)

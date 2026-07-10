@@ -290,7 +290,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 - **M-PARENT-READY** — all sub-tasks merged, parent PR reviewed/approved, awaiting manual merge into base. Outcome title: `All sub-tasks merged — parent PR ready`. Append:
   ```
   Parent PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
-  Once merged, re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY> to post the final Jira update.
+  GitHub-for-Jira will auto-transition all related issues to <STATUS_DONE> on merge. A re-run after merge is optional — it posts a wrap-up comment listing everything that landed (step 6), but this report is the final required update.
   ```
 - **M-FULLY-COMPLETE** — parent PR merged into base (step 6 already posted the wrap-up comment). Outcome title: `Fully complete — parent PR merged`. Append:
   ```

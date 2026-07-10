@@ -146,13 +146,13 @@ sequenceDiagram
 
 ## Participant routing
 
-Two lanes, one rule each — applied uniformly across all four phases:
+Two lanes, one rule each — applied uniformly across all three phases:
 
 - **GIT** — anything that mutates or reads **repo/PR state**: branch
   context reads, branch creation, the `branch.<branch>.parentbranch` git
   config entry (set in phase 1, read back in phases 2 and 3), the push,
   `git worktree add`, `git fetch --prune`, fetching PR diffs,
-  `gh pr review --approve` / `--request-changes`, state-verification reads,
+  `gh pr review --comment --body-file` (with `APPROVED —` / `CHANGES REQUESTED —` body prefix), state-verification reads,
   find-or-create parent PR, and the cleanup orphan-branch listing. The
   reviewer **never calls `gh pr merge`** — it only approves PRs, and the
   human merges them on GitHub. *The one GIT write the skills never make*
