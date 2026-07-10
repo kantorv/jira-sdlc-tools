@@ -30,7 +30,7 @@ This document defines the standard operating procedures for the Software Develop
 | `development` | ✅ Yes | `main` | `release/*` | The default working branch. Represents Staging/Integration. Code here is continuously deployed to the staging environment. |
 | `feature/ISSUE-KEY-slug` | ❌ No | `development` | `development` | Used for new features and non-critical bug fixes. |
 | `hotfix/ISSUE-KEY-slug` | ❌ No | `main` | `main` & `development` | Used **only** for critical production bugs that cannot wait for the next sprint release. |
-| `release/sprint-X` | ❌ No | `development` | `main` | Temporary branch created at the end of a sprint for QA hardening and final bug fixes before production release. |
+| `release/sprint-<X.Y.Z>` | ❌ No | `development` | `main` | Temporary branch created at the end of a sprint for QA hardening and final bug fixes before production release. Named after the intended release version (computed from latest `v*` tag + chosen bump label, default `minor` — see §5). |
 
 ---
 
@@ -45,7 +45,7 @@ Our development cycles run in 14-day sprints. The Git workflow strictly follows 
 - *Rule:* If a feature is incomplete, it MUST be wrapped in a Feature Flag before merging into `development`.
 
 ### Phase 2: Feature Freeze & Release Cut (Day 12)
-- A new release branch is cut from `development` (e.g., `release/sprint-24` or `release/v0.95.4-rc`).
+- A new release branch is cut from `development` (e.g., `release/sprint-0.3.0`). The branch name embeds the intended SemVer version — `cut-release.yml` computes it from the latest `v*` tag + the chosen bump label (`patch`/`minor`/`major`, default `minor` per §5).
 - **No new features** are allowed into this release branch. 
 - `development` remains open for developers to start merging features for the *next* sprint.
 
