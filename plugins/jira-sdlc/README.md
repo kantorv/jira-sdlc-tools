@@ -94,10 +94,11 @@ flowchart TB
     E3 --> PB
 
     PB --> R["/jira-sdlc:jira-task-reviewer"]
-    R -->|approve each PR (human merges manually)| PB
+    R -->|approve each PR| PB
     R -->|review + open aggregate PR| BASE[(Base branch)]
     BASE -->|human merges manually| DONE([Released])
 ```
+
 
 The diagram shows the multistep path — one worktree and dedicated branch
 per sub-task, all merging into the parent branch. A single-step task is
