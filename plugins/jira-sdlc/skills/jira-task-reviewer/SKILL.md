@@ -26,7 +26,7 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
 - **Resolve `<PARENT-BRANCH>`**: `git branch -a | grep <PARENT-KEY>`. Exactly one match → that's the parent branch. Zero or multiple → ask the user rather than guessing.
 - **Resolve `<BASE_BRANCH>`** per `../_shared/jira-acli-reference.md` §12. Only ask the user if both the config and the Jira-comment fallback come up empty.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
-  - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6 → 7.
+  - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 7. (Step 6 only runs if the phase check detects an already-merged PR on a later re-run — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so a re-run is not required; this run's step-7 report is the final update.)
   - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the default `--json` omits subtasks, so `--fields '*all'` is required — see `../_shared/jira-acli-reference.md` §3; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields '*all'` and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6 → 7.
 
 ### Single-step phase check (only for the single-step track)
@@ -175,7 +175,7 @@ The post-loop outcome is mutually exclusive and **track-dependent** — pick the
 
 For a single-step issue (no sub-tasks), after the PR is reviewed in step 3:
 
-- **If approved** → outcome **S-APPROVED**: tell the user "Single-step issue `<PARENT-KEY>` PR #<prNumber> approved. Merge manually into `<BASE_BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer <PARENT-KEY>` for post-merge wrap-up."
+- **If approved** → outcome **S-APPROVED**: tell the user "Single-step issue `<PARENT-KEY>` PR #<prNumber> approved. Merge manually into `<BASE_BRANCH>` — GitHub-for-Jira will auto-transition the issue to `<STATUS_DONE>` on merge. No re-run needed; this run's step-7 report is the final update."
 - **If changes requested** → outcome **S-CHANGES-REQUESTED**: report the findings to the user; the human fixes, pushes, and re-runs `/jira-sdlc:jira-task-reviewer <PARENT-KEY>`.
 
 ## 5. Parent PR management (multistep only — runs when all sub-task PRs are merged)
@@ -217,7 +217,7 @@ Apply the **3a body-prefix idempotency check** before reviewing: a prior self-re
 
 ## 6. Post-merge wrap-up
 
-*(Runs on both tracks — detected by a phase check in step 1, or by step 5a on the multistep track after the parent PR merges. On the single-step track it runs after the human merges the one PR and re-runs the reviewer.)*
+*(Runs on both tracks when a merged PR is detected — by the step-1 phase check, or by step 5a on the multistep track after the parent PR merges. On the single-step track this is reachable only if the reviewer is re-run after the PR has already been merged; it's an optional historical record, not a required step — GitHub-for-Jira already handled the `<STATUS_DONE>` transition.)*
 
 GitHub-for-Jira will already have moved all related issues to `<STATUS_DONE>`, but a clean Jira comment on the parent is useful for the historical record. Post one via the §6 `--body-file` convention:
 ```
@@ -253,10 +253,10 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 
 #### Single-step track
 
-- **S-APPROVED** — single-step PR approved, awaiting manual merge. Outcome title: `Single-step PR approved — merge manually and re-run`. Append:
+- **S-APPROVED** — single-step PR approved, awaiting manual merge (final update — no re-run needed). Outcome title: `Single-step PR approved — merge manually`. Append:
   ```
   Single-step PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
-  Once merged, re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY> to post the final Jira update.
+  GitHub-for-Jira will auto-transition the issue to <STATUS_DONE> on merge. No re-run needed — this is the final update.
   ```
 - **S-CHANGES-REQUESTED** — single-step PR rejected. Outcome title: `Single-step PR changes requested — see findings`. Append the file:line findings, then:
   ```
