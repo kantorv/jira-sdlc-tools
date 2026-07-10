@@ -10,8 +10,9 @@ project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>` — resolve
-  these from `jira-sdlc-tools.env` in the project root before following the rest of
-  this skill.
+  these from `jira-sdlc-tools.env` (team-shared) and
+  `jira-sdlc-tools.local.env` (machine-specific) in the project root before
+  following the rest of this skill.
 - `<WORKTREES_DIR>` — relative to project root — already exists, don't
   create it. **Run this check from the repo root:** `ls <WORKTREES_DIR>` and
   verify the exit code is 0 before using it; if it's missing (non-zero exit),
@@ -187,5 +188,7 @@ rather than as a plugin). Merging the parent branch back into its own
 base once all sub-tasks land is likewise out of scope for this skill.
 
 Reference: `../_shared/jira-acli-reference.md` has the full command syntax,
-confirmed issue type names, and git/branch conventions. The `jira-sdlc-tools.env` file in the
-project root has this repo's specific values for every `<TOKEN>` used above.
+confirmed issue type names, and git/branch conventions. The
+`jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
+(machine-specific) files in the project root have this repo's specific
+values for every `<TOKEN>` used above.

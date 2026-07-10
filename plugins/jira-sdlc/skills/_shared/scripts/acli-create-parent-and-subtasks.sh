@@ -5,7 +5,8 @@
 # Bundled as a reusable form of the "turn a review into tracked sub-tasks"
 # pattern used while seeding issues from a skill review.
 #
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env in the project root
+# Reads <PROJECT-KEY> from jira-sdlc-tools.env (team-shared) and
+# jira-sdlc-tools.local.env (machine-specific) in the project root
 # (override with --project or $PROJECT_KEY). Requires `acli` to be
 # authenticated (acli jira auth login — see ../jira-acli-reference.md §0).
 #
@@ -52,7 +53,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- resolve project key from jira-sdlc-tools.env if not given ---
+# --- resolve project key from jira-sdlc-tools.env (+ local) if not given ---
 if [ -z "$PROJECT_KEY" ]; then
   PROJECT_KEY="${PROJECT_KEY:-}"
   for envfile in ./jira-sdlc-tools.env ../jira-sdlc-tools.env; do
@@ -61,6 +62,15 @@ if [ -z "$PROJECT_KEY" ]; then
       [ -n "$k" ] && PROJECT_KEY="$k" && break
     fi
   done
+  # Also check local env file for PROJECT-KEY in case it's overridden there
+  if [ -z "$PROJECT_KEY" ]; then
+    for envfile in ./jira-sdlc-tools.local.env ../jira-sdlc-tools.local.env; do
+      if [ -f "$envfile" ]; then
+        k=$(grep -E '^PROJECT[-_]KEY=' "$envfile" | tail -1 | cut -d= -f2-)
+        [ -n "$k" ] && PROJECT_KEY="$k" && break
+      fi
+    done
+  fi
 fi
 if [ -z "$PROJECT_KEY" ]; then
   echo "ERROR: no project key. Pass --project or run from a dir with jira-sdlc-tools.env." >&2
