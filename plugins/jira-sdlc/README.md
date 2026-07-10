@@ -94,10 +94,11 @@ flowchart TB
     E3 --> PB
 
     PB --> R["/jira-sdlc:jira-task-reviewer"]
-    R -->|approve each PR (human merges manually)| PB
+    R -->|approve each PR| PB
     R -->|review + open aggregate PR| BASE[(Base branch)]
     BASE -->|human merges manually| DONE([Released])
 ```
+
 
 The diagram shows the multistep path — one worktree and dedicated branch
 per sub-task, all merging into the parent branch. A single-step task is
@@ -349,12 +350,14 @@ The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g. "In Review") — if a sub-task is still in progress, it is skipped for
 now. For each In Review sub-task, it checks if it has already reviewed that
 PR (skipping if yes), reads the full diff, and evaluates it against six
-criteria. An `APPROVE` means a `gh pr review --approve` and a Jira comment
-on both the sub-task and the parent — the PR is left for you to merge
-manually on GitHub. A `REQUEST_CHANGES` means a
-`gh pr review --request-changes`, a move back to `<STATUS_IN_PROGRESS>`, a
-findings comment, and then the loop simply continues to the next sub-task
-so the full state is known.
+criteria. Both verdicts are posted as review comments via
+`gh pr review --comment --body-file` with a body prefix (`APPROVED — …`
+/ `CHANGES REQUESTED — …`) — the executor and reviewer share one `gh`
+account, and GitHub blocks self-approve and self-request-changes, so
+state-based reviews can't be used. On approve, the PR is left for you to
+merge manually on GitHub. On reject, the reviewer moves the issue back to
+`<STATUS_IN_PROGRESS>` (the actual gate), posts findings, and continues
+the loop so the full state is known.
 
 Once the loop finishes, the report tells you which sub-tasks are approved
 (waiting for your manual merge) and which are rejected (need fixes). You
@@ -366,13 +369,19 @@ PR, review that too, and approve it — still leaving the merge to you.
 **4. Merge the release:**
 
 You merge `feature/PROJ-401-csv-export → development` manually on
-GitHub — always a human step. Then run the reviewer once more:
+GitHub — always a human step. GitHub-for-Jira auto-transitions all related
+issues to Done on merge. Optionally run the reviewer once more:
 ```
 /jira-sdlc:jira-task-reviewer PROJ-401
 ```
-It detects the parent PR is now merged, posts a final Jira comment on
-`PROJ-401` summarizing everything that landed, and lists any orphaned
-local branches for you to clean up.
+It detects the parent PR is now merged and posts a final wrap-up comment
+listing everything that landed, plus any orphaned local branches for you
+to clean up. This re-run is optional — GitHub-for-Jira already handled the
+Done transitions.
+
+**Single-step issues** (no sub-tasks) skip the aggregate cycle: the
+reviewer reviews the one PR directly, posts its final report, and no
+re-run is needed. GitHub-for-Jira handles Done on merge.
 
 ## Re-run behavior
 
@@ -463,12 +472,13 @@ manually) and re-run the reviewer.
 
 **I fixed a sub-task that the reviewer rejected, but re-running still shows
 changes requested.**
-The reviewer tracks which PRs it has already reviewed (via the `reviews` field
-of `gh pr view`). If the original review was `REQUEST_CHANGES`, re-running
-causes a *re-review* of the fresh code, and a fresh `gh pr review` with new
-findings. If the PR still fails criteria, the rejection remains. If all
-findings are addressed, the new review will be `APPROVE` and the PR is
-ready for you to merge manually.
+The reviewer detects prior verdicts by its own GitHub login + body prefix
+(`APPROVED —` / `CHANGES REQUESTED —`), not by review state. If the
+original verdict was `CHANGES REQUESTED —` (and no later `APPROVED —`
+overrides it), re-running causes a *re-review* of the fresh code, and a
+fresh verdict comment with new findings. If the PR still fails criteria,
+the rejection remains. If all findings are addressed, the new verdict will
+be `APPROVED —` and the PR is ready for you to merge manually.
 
 **The parent PR was closed instead of merged.**
 The reviewer stops and asks what you want to do rather than reopening it

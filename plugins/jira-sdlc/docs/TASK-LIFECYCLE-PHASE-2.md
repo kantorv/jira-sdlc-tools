@@ -82,5 +82,5 @@ sequenceDiagram
 
 ## Related
 
-- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all four phases
+- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all three phases
 - [jira-task-executor SKILL.md](../skills/jira-task-executor/SKILL.md)
