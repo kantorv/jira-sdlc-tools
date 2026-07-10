@@ -78,12 +78,15 @@ don't cover the two acli checks; run those yourself afterward.
   them. If it isn't authenticated, run
   `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN_PATH>`
   first.
-- **Project reachable**: run `acli jira project list --json | grep -w
+- **Project reachable**: run `acli jira project list --paginate --json | grep -w
   <PROJECT-KEY>` to confirm the configured project key exists and is
   accessible as a whole-word match (avoids partial matches like `PROJ`
-  matching `PROJ2`). If nothing matches, stop — the project key may be
-  wrong, the token may be scoped to a different board, or the bot may
-  not have been granted access to the board.
+  matching `PROJ2`). A pagination flag is **required** (`--paginate` /
+  `--limit N` / `--recent`) — bare `--json` errors with "at least one of
+  the flags in the group [recent limit paginate] is required". If
+  nothing matches, stop — the project key may be wrong, the token may be
+  scoped to a different board, or the bot may not have been granted
+  access to the board.
 
 With all five checks green, continue to step 2.
 
@@ -195,9 +198,10 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
   above already verified auth.)
 - **Project health check**: already verified in step 1. (If you're
   picking up from a re-run and skipped step 1, run
-  `acli jira project list --json | grep -w <PROJECT-KEY>` first.)
+  `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
+  first.)
 - **Create issue**:
-  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --yes`
+  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file>`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
   `--parent` actually works on this project — see
   `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes). Capture
@@ -205,9 +209,13 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
   output (embedded in the returned browse URL). **Do not auto-assign** —
   ownership is left to board triage (see M4 above); omit `--assignee @me`
   unless your project opts in.
-- Use `--yes` on every write command. Quote `"Subtask"` exactly (no
-  hyphen — this project's real type name, confirmed in
-  `../_shared/jira-acli-reference.md` §1).
+- `--yes` is **not** universal — `workitem create` and `comment create`
+  reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
+  default), so don't add `--yes` to either; `edit` / `transition` /
+  `assign` / `delete` / `link create` / `create-bulk` do take it. See
+  `../_shared/jira-acli-reference.md` §8 for the full `--yes` surface.
+- Quote `"Subtask"` exactly (no hyphen — this project's real type name,
+  confirmed in `../_shared/jira-acli-reference.md` §1).
 - **Comment**: single-line —
   `acli jira workitem comment create --key <KEY> --body "<text>"`.
   Multi-line — write a temp file and use `--body-file <file>`
@@ -219,7 +227,10 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
   (see `../_shared/jira-acli-reference.md` §8).
 - Put investigation findings + acceptance criteria in the issue
   description (use `--description-file <file>` for anything beyond a
-  sentence).
+  sentence). `--description` / `--description-file` accept **plain text
+  or ADF, not markdown** — a markdown body is stored verbatim as one
+  plain-text paragraph (`##` / `-` show literally); see
+  `../_shared/jira-acli-reference.md` §2.
 - Make sure the branch you're branching *from* is committed/pushed
   before branching.
 
