@@ -3,13 +3,27 @@
 Reference for Claude Code when creating/managing Jira issues via the
 **official Atlassian CLI (`acli`)**.
 
-Auth is set up with an API token (Cloud). Project-specific values
-(`<PROJECT-KEY>`, `<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
-`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_ACCOUNT_URL>`,
-`<JIRA_ACCOUNT_EMAIL>`, `<JIRA_TOKEN_PATH>`) come from
-`jira-sdlc-tools.env` in the project root — resolve them there, not
-here. `acli` stores its own credentials after `auth login`, so unlike
-`jira-cli` you do **not** prefix every command with a token env var.
+Auth is set up with an API token (Cloud). Project-specific values come
+from two files in the project root:
+
+**`jira-sdlc-tools.env` (team-shared, committed)**
+- `<PROJECT-KEY>`
+- `<DEFAULT_BASE_BRANCH>`
+- `<STATUS_TODO>`
+- `<STATUS_IN_PROGRESS>`
+- `<STATUS_IN_REVIEW>`
+- `<STATUS_DONE>`
+- `<SEMVER_LABELS>`
+
+**`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
+- `<WORKTREES_DIR>`
+- `<JIRA_ACCOUNT_URL>`
+- `<JIRA_ACCOUNT_EMAIL>`
+- `<JIRA_TOKEN_PATH>`
+
+Resolve tokens from the appropriate file. `acli` stores its own credentials after
+`auth login`, so unlike `jira-cli` you do **not** prefix every command
+with a token env var.
 
 `acli` version this was confirmed against: `1.3.22-stable`.
 
@@ -45,7 +59,7 @@ acli jira auth login \
 ```
 
 `<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
-are resolved from `jira-sdlc-tools.env` in the project root.
+are resolved from `jira-sdlc-tools.local.env` (machine-specific) in the project root.
 
 Verify:
 
@@ -421,7 +435,7 @@ patterns used while seeding issues from a review:
   `acli jira workitem view <PARENT> --json --fields '*all'` (the
   default JSON omits `subtasks`, which is easy to miss — see §3).
 
-Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` in the project
+Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in the project
 root (override with `--project` or the `PROJECT_KEY` env var). Run them from the
 project root.
 

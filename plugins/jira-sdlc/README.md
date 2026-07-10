@@ -289,26 +289,32 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in `jira-sdlc-tools.env`
-— see `skills/_shared/project-config.md` for a description of each variable.
+All project-specific values live in two files in the project root:
+
+| File | Purpose | Committed? |
+|------|---------|------------|
+| `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names, semver labels) | ✅ Yes |
+| `jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
+
+See `skills/_shared/project-config.md` for a description of each variable.
+
+Copy the templates from the marketplace root:
+```bash
+cp /path/to/jira-sdlc-tools/jira-sdlc-tools.env .
+cp /path/to/jira-sdlc-tools/jira-sdlc-tools.local.env.example jira-sdlc-tools.local.env
+# then fill in jira-sdlc-tools.local.env with your machine-specific values
+```
+
 Nothing else under `skills/` should need editing. It covers:
 
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
-- Your Jira account URL and email (`JIRA_ACCOUNT_URL`,
-  `JIRA_ACCOUNT_EMAIL`) — required for the one-time `acli jira auth login`
-- Your Jira workflow's real status names — these are flagged as
-  "confirm once" inside the skills themselves, since status *names*
-  aren't standardized across Jira projects
-- The Jira auth token path (`JIRA_TOKEN_PATH`, read by the one-time
-  `acli jira auth login --token <`) and semver label names
-  (optional — sensible defaults given)
+- Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
+- The Jira auth token path (`JIRA_TOKEN_PATH`, read by the one-time `acli jira auth login --token <`) and semver label names (optional — sensible defaults given)
 
-Test commands are **not** here anymore — `jira-task-executor` step 7
-reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
+Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
-Open that file and read it top to bottom before your first run; it's
-short, and every skill points back to it.
+Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
 
 ## Usage walkthrough
 
