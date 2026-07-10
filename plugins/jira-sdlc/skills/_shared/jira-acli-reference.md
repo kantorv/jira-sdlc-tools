@@ -3,14 +3,25 @@
 Reference for Claude Code when creating/managing Jira issues via the
 **official Atlassian CLI (`acli`)**.
 
-Auth is set up with an API token (Cloud). Project-specific values
-(`<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
-`<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
-`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`, `<JIRA_ACCOUNT_URL>`,
-`<JIRA_ACCOUNT_EMAIL>`, `<JIRA_TOKEN_PATH>`) come from
-`jira-sdlc-tools.env` (team-shared) and
-`jira-sdlc-tools.local.env` (machine-specific) in the project root —
-resolve them from both files. `acli` stores its own credentials after
+Auth is set up with an API token (Cloud). Project-specific values come
+from two files in the project root:
+
+**`jira-sdlc-tools.env` (team-shared, committed)**
+- `<PROJECT-KEY>`
+- `<DEFAULT_BASE_BRANCH>`
+- `<STATUS_TODO>`
+- `<STATUS_IN_PROGRESS>`
+- `<STATUS_IN_REVIEW>`
+- `<STATUS_DONE>`
+- `<SEMVER_LABELS>`
+
+**`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
+- `<WORKTREES_DIR>`
+- `<JIRA_ACCOUNT_URL>`
+- `<JIRA_ACCOUNT_EMAIL>`
+- `<JIRA_TOKEN_PATH>`
+
+Resolve tokens from the appropriate file. `acli` stores its own credentials after
 `auth login`, so unlike `jira-cli` you do **not** prefix every command
 with a token env var.
 
@@ -48,8 +59,7 @@ acli jira auth login \
 ```
 
 `<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
-are resolved from `jira-sdlc-tools.env` (team-shared) and
-`jira-sdlc-tools.local.env` (machine-specific) in the project root.
+are resolved from `jira-sdlc-tools.local.env` (machine-specific) in the project root.
 
 Verify:
 
