@@ -65,18 +65,68 @@ row() { # row <name> <status> <detail> [remedy]
   fi
 }
 
-# --- git repo / worktree -------------------------------------------------
+# Print the accumulated table (+ remedies); the caller chooses the exit
+# code. Called both at the end and from the mandatory-file gate below
+# when it halts before any other check runs.
+print_report() {
+  echo "## jira-sdlc statuscheck — ${KEY:-no issue key}"
+  echo
+  echo "| check | status | detail |"
+  echo "|---|---|---|"
+  printf '%s\n' "${ROWS[@]}"
+  if [ "$FAILED" -ne 0 ]; then
+    echo
+    echo "Remedies for FAIL rows (relay these to the user — don't self-repair):"
+    printf '%s\n' "${REMEDIES[@]}"
+  fi
+}
+
+# --- mandatory jira-sdlc-tools.local.env gate (runs before any other check) -
+# jira-sdlc-tools.local.env is mandatory in every checkout — it holds the
+# Jira account URL/email + token the skills depend on. It's gitignored, so
+# a linked worktree (which shares tracked files only) is born without it.
+# Resolve the main checkout root from the worktree's .git pointer and
+# auto-copy the file in; if the main checkout doesn't have it either, halt
+# non-zero before any other check runs. WT_ROOT/IS_WORKTREE computed here
+# are reused by the git_repo block below. The main checkout's own
+# missing-file case is still handled in the env_local section (FAIL +
+# continue), unchanged from before the gate.
 WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 IS_WORKTREE=""
+# A linked worktree's .git is a *file* (pointer into the main repo's
+# .git/worktrees/); the main checkout's .git is a directory.
+if [ -n "$WT_ROOT" ] && [ -f "$WT_ROOT/.git" ]; then
+  IS_WORKTREE=1
+fi
+ENV_LOCAL_COPIED=""
+ENV_LOCAL_COPIED_FROM=""
+if [ -n "$IS_WORKTREE" ] && [ ! -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
+  # .git points at "gitdir: <main>/.git/worktrees/<name>"; <main> sits
+  # three dirnames down (worktrees/<name> → .git → repo root).
+  GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
+  MAIN_ROOT=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
+  if [ -n "$MAIN_ROOT" ] && [ -d "$MAIN_ROOT/.git" ] \
+     && [ -f "$MAIN_ROOT/jira-sdlc-tools.local.env" ] \
+     && cp "$MAIN_ROOT/jira-sdlc-tools.local.env" "$WT_ROOT/jira-sdlc-tools.local.env" 2>/dev/null \
+     && [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
+    ENV_LOCAL_COPIED=1
+    ENV_LOCAL_COPIED_FROM="$MAIN_ROOT"
+  else
+    row env_local FAIL "mandatory jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
+      "create jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
+    print_report
+    exit 1
+  fi
+fi
+
+# --- git repo / worktree -------------------------------------------------
+# WT_ROOT and IS_WORKTREE were set by the mandatory-file gate above.
 if [ -z "$WT_ROOT" ]; then
   row git_repo FAIL "not inside a git repository (cwd: $PWD)" \
     "cd into the per-issue worktree jira-task-assigner created (worktree-${KEY:-<KEY>}) and $RERUN."
 else
   row git_repo OK "root: $WT_ROOT"
-  # A linked worktree's root has a .git *file* (pointer into the main
-  # repo's .git/worktrees/); the main checkout's .git is a directory.
-  if [ -f "$WT_ROOT/.git" ]; then
-    IS_WORKTREE=1
+  if [ -n "$IS_WORKTREE" ]; then
     row worktree OK "linked worktree: $(basename "$WT_ROOT")"
   else
     row worktree FAIL "this is the main checkout (.git is a directory) — the executor never runs here" \
@@ -111,12 +161,20 @@ else
   row env_config OK "PROJECT-KEY=$PROJECT_KEY"
 fi
 
-# jira-sdlc-tools.local.env — machine-specific, points at secrets (Jira
-# account URL/email + token value or path). Gitignored, so a linked
-# worktree legitimately lacks it (acli's keyring credentials still work
-# there); in the main checkout it must exist and must never be tracked.
+# jira-sdlc-tools.local.env — machine-specific, holds the Jira account
+# URL/email + token the skills depend on. It is mandatory in every
+# checkout and gitignored (it points at secrets). Gitignored files aren't
+# shared with linked worktrees, so the gate above auto-copies it into a
+# worktree from the main checkout when missing — by the time we reach here
+# the file is present (or the gate has already halted on a worktree that
+# can't recover it). The main-checkout-missing path below still FAILs and
+# continues to the rest of the checks, unchanged from before the gate.
 if [ -f "$CFG_DIR/jira-sdlc-tools.local.env" ]; then
-  row env_local OK "jira-sdlc-tools.local.env present"
+  if [ -n "$ENV_LOCAL_COPIED" ]; then
+    row env_local OK "auto-copied from main repo ($ENV_LOCAL_COPIED_FROM)"
+  else
+    row env_local OK "jira-sdlc-tools.local.env present"
+  fi
   if git -C "$CFG_DIR" ls-files --error-unmatch jira-sdlc-tools.local.env >/dev/null 2>&1; then
     row env_local_ignored FAIL "jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" \
       "git rm --cached jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
@@ -126,9 +184,6 @@ if [ -f "$CFG_DIR/jira-sdlc-tools.local.env" ]; then
     row env_local_ignored FAIL "jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" \
       "add jira-sdlc-tools.local.env to .gitignore first, then $RERUN."
   fi
-elif [ -n "$IS_WORKTREE" ]; then
-  row env_local INFO "absent — expected in a linked worktree (gitignored files aren't copied; acli keyring credentials still apply)"
-  row env_local_ignored INFO "skipped (file absent)"
 else
   row env_local FAIL "jira-sdlc-tools.local.env not found in $CFG_DIR" \
     "create it in the project root (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
@@ -234,15 +289,5 @@ else
 fi
 
 # --- report ---------------------------------------------------------------
-echo "## jira-sdlc statuscheck — ${KEY:-no issue key}"
-echo
-echo "| check | status | detail |"
-echo "|---|---|---|"
-printf '%s\n' "${ROWS[@]}"
-if [ "$FAILED" -ne 0 ]; then
-  echo
-  echo "Remedies for FAIL rows (relay these to the user — don't self-repair):"
-  printf '%s\n' "${REMEDIES[@]}"
-fi
-
+print_report
 exit "$FAILED"
