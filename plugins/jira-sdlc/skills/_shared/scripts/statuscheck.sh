@@ -30,6 +30,17 @@
 #   WARN — suspicious but not blocking
 #   INFO — context only; never affects the exit code
 #
+# Role-agnostic by design: the `worktree` and `branch` rows are context
+# INFO — the script reports what it sees (linked worktree vs. main
+# checkout; base branch vs. feature/hotfix issue branch vs. other) but does
+# NOT decide whether that context is right for whoever ran it. Each skill
+# judges that in prose after reading the table, so one script serves the
+# assigner (main checkout on the base branch), the executor, and the
+# reviewer (a linked worktree on an issue branch) without ever knowing
+# which role is calling. Genuinely role-independent failures (missing git
+# repo / env files, wrong-project branch, unauthenticated CLIs, unreachable
+# project) still FAIL and set the exit code.
+#
 # Extending: add a gather block below and end it with one `row` call:
 #   row <name> <OK|FAIL|WARN|INFO> <detail> [remedy-shown-on-FAIL]
 # Remedies default to re-running the executor; other skills can override
@@ -126,11 +137,13 @@ if [ -z "$WT_ROOT" ]; then
     "cd into the per-issue worktree jira-task-assigner created (worktree-${KEY:-<KEY>}) and $RERUN."
 else
   row git_repo OK "root: $WT_ROOT"
+  # Context only — the caller decides if this is the right place for its
+  # role (executor/reviewer want a linked worktree; the assigner wants the
+  # main checkout). Never a FAIL.
   if [ -n "$IS_WORKTREE" ]; then
-    row worktree OK "linked worktree: $(basename "$WT_ROOT")"
+    row worktree INFO "linked worktree: $(basename "$WT_ROOT") (.git is a file)"
   else
-    row worktree FAIL "this is the main checkout (.git is a directory) — the executor never runs here" \
-      "cd into the worktree jira-task-assigner created for the issue (worktree-${KEY:-<KEY>}) and $RERUN."
+    row worktree INFO "main repo checkout (.git is a directory)"
   fi
 fi
 
@@ -191,18 +204,26 @@ else
 fi
 
 # --- current branch (BR/BR_TAIL/BR_KEY parsed at the top) ------------------
+# Context only — report which kind of branch this is; the caller decides
+# whether it's the right one for its role (executor/reviewer want a
+# feature/hotfix issue branch; the assigner wants the base branch). Never a
+# FAIL. BRANCH_OK stays set for a feature/hotfix branch so branch_project
+# below can still validate the project prefix (a wrong-project worktree is
+# a role-independent error and does FAIL).
 BRANCH_OK=""
-case "$BR" in
-  feature/*|hotfix/*)
-    BRANCH_OK=1
-    row branch OK "$BR" ;;
-  "")
-    row branch FAIL "detached HEAD or no current branch" \
-      "check out the issue's feature/<KEY>-<slug> or hotfix/<KEY>-<slug> branch, then $RERUN." ;;
-  *)
-    row branch FAIL "'$BR' is not a feature/* or hotfix/* branch" \
-      "switch to the issue's own feature/<KEY>-<slug> or hotfix/<KEY>-<slug> branch in its worktree (or rerun jira-task-assigner to provision it), then $RERUN." ;;
-esac
+if [ -z "$BR" ]; then
+  row branch INFO "detached HEAD or no current branch"
+elif [ -n "$BASE_BRANCH" ] && [ "$BR" = "$BASE_BRANCH" ]; then
+  row branch INFO "$BR (base branch — matches DEFAULT_BASE_BRANCH)"
+else
+  case "$BR" in
+    feature/*|hotfix/*)
+      BRANCH_OK=1
+      row branch INFO "$BR (feature/hotfix issue branch)" ;;
+    *)
+      row branch INFO "$BR (neither DEFAULT_BASE_BRANCH nor a feature/hotfix issue branch)" ;;
+  esac
+fi
 
 # Branch tail is <KEY>-<slug>; its prefix must be this project's key,
 # otherwise the worktree was set up for a different project's issue.

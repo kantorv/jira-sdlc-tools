@@ -233,8 +233,9 @@ each try to reach a `_shared/` sitting outside themselves; that path
 won't survive the copy.
 
 **If you rename the plugin** (the `name` field in
-`.claude-plugin/plugin.json`), also update the three self-referential
-`/jira-sdlc:...` mentions inside `jira-task-assigner` (step 8),
+`.claude-plugin/plugin.json`), also update the self-referential
+`/jira-sdlc:...` mentions inside `jira-task-assigner` (its step 1
+Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
 `jira-task-executor` (step 11 and its Discovery & healthcheck error
 messages), and `jira-task-reviewer` (its own Discovery & healthcheck
 section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 7) to

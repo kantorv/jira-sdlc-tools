@@ -34,24 +34,51 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
 `../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
-See `jira-task-executor`'s Discovery & healthcheck section for the full
-row-by-row description of what the script checks — the same rows matter
-here: `gh_auth` and `acli_auth` are load-bearing (every verdict comment,
-`gh pr list` call, and Jira transition depends on them), and
-`branch`/`branch_project` gate on running from a linked worktree on this
-project's own feature/hotfix branch. This skill normally runs from the
-**parent worktree** (`worktree-<PARENT-KEY>`, per `jira-task-assigner`),
-but a sub-task's own worktree is an equally valid feature/hotfix branch —
-the `branch` row only distinguishes feature/hotfix vs. anything else
-(detached HEAD, base branch, non-conforming name), not parent vs.
-sub-task; step 1 below handles the sub-task case by climbing to the
-parent rather than treating it as a failure.
+It prints one markdown table (`check | status | detail`), where status is
+`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
+(suspicious, not blocking), or `INFO` (context only), and exits non-zero
+if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
+(every verdict comment, `gh pr list` call, and Jira transition depends on
+them). The `worktree` and `branch` rows are context INFO — the shared
+script reports them for every role and never FAILs on them.
 
-Reading the result: **exit 0 / no FAIL rows** → the `issue_key` row's
+Only the rows this skill reads in a role-specific way, or relies on later,
+are spelled out here; the rest are role-independent preconditions defined
+in `statuscheck.sh` itself (their `detail` column is self-explanatory in
+the printed output — that live output, not this table, is what the skill
+actually acts on).
+
+| row | what it verifies / gathers |
+|---|---|
+| `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
+| `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — a candidate for the `<BASE_BRANCH>` resolution (§12) |
+
+The remaining rows FAIL if broken but need no per-role interpretation
+here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
+from the main checkout when missing — see the gate in the script),
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
+`acli_auth` (both load-bearing, as noted above), `jira_project`, plus
+context INFO `base_branch` / `working_tree`.
+
+This skill normally runs from the **parent worktree**
+(`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own
+worktree is an equally valid feature/hotfix branch — the `branch` row only
+distinguishes feature/hotfix vs. anything else (base branch, detached
+HEAD, non-conforming name), not parent vs. sub-task; step 1 below handles
+the sub-task case by climbing to the parent rather than treating it as a
+failure.
+
+Reading the result: **any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't self-repair. The `worktree` and
+`branch` rows never FAIL, so judge them yourself: the `worktree` row must
+report a **linked worktree** and the `branch` row a **feature/hotfix issue
+branch** (the parent's or a sub-task's). If not — the main checkout, the
+base branch, a detached HEAD, or a non-conforming name — stop, because
+this skill runs from an issue's worktree. Otherwise the `issue_key` row's
 derived key seeds step 1 below (which resolves it to `<PARENT-KEY>`,
-climbing from a sub-task to its parent if needed). **Any FAIL row** →
-stop, relay the script's remedy line to the user, and wait — don't
-self-repair.
+climbing from a sub-task to its parent if needed).
 
 ## 1. Resolve the parent, sub-tasks, and pick a track
 

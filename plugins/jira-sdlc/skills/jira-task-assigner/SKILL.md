@@ -13,11 +13,9 @@ project. Given a task description from the user ($ARGUMENTS):
   these from `jira-sdlc-tools.env` (team-shared) and
   `jira-sdlc-tools.local.env` (machine-specific) in the project root before
   following the rest of this skill.
-- `<WORKTREES_DIR>` — relative to project root — already exists, don't
-  create it. **Run this check from the repo root:** `ls <WORKTREES_DIR>` and
-  verify the exit code is 0 before using it; if it's missing (non-zero exit),
-  stop and ask rather than `mkdir`-ing a new one (the convention may have
-  changed).
+- `<WORKTREES_DIR>` — the directory where per-issue worktrees are created
+  (see `../_shared/project-config.md`). It must already exist — this skill
+  never `mkdir`s it; step 1's healthcheck verifies it's present.
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
 - Branch naming is **always** `feature/<KEY>-<slug>` (`hotfix/<KEY>-<slug>`
@@ -25,72 +23,80 @@ project. Given a task description from the user ($ARGUMENTS):
   Sub-task — this keeps the branch-parsing regex in step 2 working no
   matter which branch someone checks out later.
 
-## 1. Health check (environment & Jira readiness)
+## 1. Discovery and healthcheck
 
-Before any planning work, gate on two things the rest of this skill
-depends on: the local environment (git repo + the two env files) and
-live Jira access. Every `<TOKEN>` below resolves from those env files,
-and the acli calls later ride on the credentials they point at — so a
-missing or mis-tracked file, or an unauthenticated session, would
-silently produce wrong branches, wrong Jira keys, a failed call, or
-leaked secrets. Run these checks from the repository root, in order,
-and on any failure **stop and tell the user** rather than inventing
-values or working around it:
+Before any planning work, run the shared pre-flight healthcheck. It
+gathers every environment fact this skill depends on — git repo, the two
+env files + their gitignore state, `acli` auth, Jira project
+reachability, `gh` auth — in one pass and prints a markdown table,
+replacing the older per-check prose. Override the rerun hint so its
+remedies name this skill:
 
-The first three checks (git repo + env files + gitignore) have bundled
-scripts beside this skill: `../_shared/scripts/healthcheck.sh` (macOS /
-Linux / WSL) and `../_shared/scripts/healthcheck.ps1` (Windows
-PowerShell). Run the one for your platform, or run the commands below
-individually. Both scripts print `✅` per passing check and `❌` per
-failing one, run all three before exiting, and exit non-zero if any
-failed — so a zero-exit run means the environment side is ready. They
-don't cover the two acli checks; run those yourself afterward.
+```bash
+STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+```
 
-- **Inside a Git repository**: `git rev-parse --is-inside-work-tree`
-  should exit 0. If it doesn't, you're not in a checkout — tell the user
-  to navigate to the project repo before going further (this skill
-  creates branches and worktrees, which require a git repository).
-- **Both env files present**: confirm `jira-sdlc-tools.env`
-  (team-shared, committed) and `jira-sdlc-tools.local.env`
-  (machine-specific, gitignored) both exist in the repo root, e.g.
-  `test -f jira-sdlc-tools.env && test -f jira-sdlc-tools.local.env`.
-  If either is missing, tell the user which — don't fabricate settings.
-  - `jira-sdlc-tools.env` carries team defaults (`<PROJECT-KEY>`, status
-    names).
-  - `jira-sdlc-tools.local.env` overrides per machine and holds the Jira
-    account URL/email plus the API token value or path
-    (`<JIRA_TOKEN>`). Don't copy a teammate's `local.env` — it
-    holds their token and account.
-  `../_shared/project-config.md` describes what each variable in these
-  files means.
-- **`jira-sdlc-tools.local.env` is gitignored**: `git check-ignore
-  jira-sdlc-tools.local.env` should print the path back (exit 0). The
-  local file is machine- and person-specific and points at secrets, so
-  it must never be committed. If it is *not* ignored, stop and tell the
-  user to add `jira-sdlc-tools.local.env` to `.gitignore` first —
-  committing it would leak the account email and credential path into
-  shared history.
+(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
+plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
+relative to this skill's directory.) It resolves `<PROJECT-KEY>` and
+`<DEFAULT_BASE_BRANCH>` from the env files itself, so you don't
+pre-resolve tokens for this section.
 
-- **Jira auth**: run `acli jira auth status` — it should report
-  `✓ Authenticated` with your site and email (see
-  `../_shared/jira-acli-reference.md` §0). Its site, email, and token
-  path all come from the env files just checked, so do this after
-  them. If it isn't authenticated, run
-  `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN>`
-  (path form — when `<JIRA_TOKEN>` is a path to a token file). If `<JIRA_TOKEN>` is the raw token value instead:
-  `printf '%s' "<JIRA_TOKEN>" | acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token`
-  first.
-- **Project reachable**: run `acli jira project list --paginate --json | grep -w
-  <PROJECT-KEY>` to confirm the configured project key exists and is
-  accessible as a whole-word match (avoids partial matches like `PROJ`
-  matching `PROJ2`). A pagination flag is **required** (`--paginate` /
-  `--limit N` / `--recent`) — bare `--json` errors with "at least one of
-  the flags in the group [recent limit paginate] is required". If
-  nothing matches, stop — the project key may be wrong, the token may be
-  scoped to a different board, or the bot may not have been granted
-  access to the board.
+It prints one markdown table (`check | status | detail`), where status is
+`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
+(suspicious, not blocking), or `INFO` (context only), and exits non-zero
+if any row is `FAIL`. The `worktree` and `branch` rows are context INFO —
+the shared script reports them for every role and never FAILs on them; the
+assigner runs from the **main repo checkout on the base branch** (not a
+per-issue worktree), so it reads those two rows the opposite way from the
+executor/reviewer.
 
-With all five checks green, continue to step 2.
+Only the rows the assigner reads in a role-specific way are spelled out
+here; the rest are role-independent preconditions defined in
+`statuscheck.sh` itself (their `detail` column is self-explanatory in the
+printed output — that live output, not this table, is what the skill
+actually acts on).
+
+| row | what it verifies / gathers |
+|---|---|
+| `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; the reading note below makes that a stop condition |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **The assigner requires the base branch**; a feature/hotfix issue branch is its explicit STOP case and any other branch is a user decision — both handled in step 2, which consumes this row |
+
+Because no issue exists yet, `branch_project`, `issue_key`, and
+`parent_branch` read as WARN/INFO here (skipped / no derivable key /
+unset) — all expected. `gh_auth` still verifies GitHub credentials even
+though the assigner only pushes branches and never opens PRs itself — a
+green row confirms the creds the executor will later need for
+`gh pr create`. The remaining rows FAIL if broken but need no per-role
+interpretation: `git_repo`, `env_config`, `env_local`,
+`env_local_ignored`, `acli_auth` (every `acli jira …` call in steps 6–7),
+`jira_project`, plus context INFO `base_branch` / `working_tree`.
+
+**Worktrees directory exists.** The assigner creates a `git worktree` per
+leaf issue under `<WORKTREES_DIR>` and never `mkdir`s it, so verify it's
+there before planning: from the repo root, `ls <WORKTREES_DIR>` and
+confirm exit 0. If it's missing, stop and ask rather than creating one
+(the convention may have changed).
+
+Reading the result: **any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
+env values, add missing files silently). Role-independent failures
+(missing git repo or env files, a mis-tracked `local.env`, an
+unauthenticated `acli`/`gh`, an unreachable project) still FAIL and block.
+
+The `worktree` and `branch` rows never FAIL, so judge them yourself: the
+`worktree` row must report the **main repo checkout** (if it reports a
+linked worktree, stop and tell the user to cd into the main checkout — the
+assigner doesn't run inside a per-issue worktree), and the `branch` row
+should report the **base branch** (`<DEFAULT_BASE_BRANCH>`). A
+`feature/*`/`hotfix/*` issue branch is the assigner's explicit STOP case
+and any other branch is a user decision — both are resolved in step 2,
+which consumes this row (so you don't re-run `git branch --show-current`
+there).
+
+With no FAIL row, the `worktree`/`branch` rows reading as above, and
+`<WORKTREES_DIR>` present, continue to step 2.
 
 ## 2. Determine context from the current branch
 
@@ -196,10 +202,10 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 **CLI mechanics — things to never forget:**
 - **Auth**: `acli` stores credentials after a one-time
   `acli jira auth login` (see `../_shared/jira-acli-reference.md` §0). No
-  per-command token prefix — run commands bare. (The step 1 health check
+  per-command token prefix — run commands bare. (Step 1's healthcheck
   above already verified auth.)
-- **Project health check**: already verified in step 1. (If you're
-  picking up from a re-run and skipped step 1, run
+- **Project health check**: already verified by step 1's healthcheck. (If
+  you're picking up from a re-run and skipped step 1, run
   `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
   first.)
 - **Create issue**:
