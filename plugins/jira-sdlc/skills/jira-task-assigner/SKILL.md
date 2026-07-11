@@ -247,11 +247,14 @@ Post this same report to the user in chat **and** as a single Jira comment on th
 Creating the worktrees above is environment setup, not implementation —
 that boundary still holds: don't write code, commit, or open a PR here.
 Once the worktrees exist, point the user (or a parallel subagent per
-worktree) at `/jira-sdlc:jira-task-executor <KEY>` to actually do the
-work in each one (adjust the `jira-sdlc:` prefix if you renamed the
-plugin, or drop it entirely if you installed these skills as loose files
-rather than as a plugin). Merging the parent branch back into its own
-base once all sub-tasks land is likewise out of scope for this skill.
+worktree) at cd'ing into each created worktree and running
+`/jira-sdlc:jira-task-executor` there with **no key argument** —
+optionally with free-form prose notes for that run — since the issue key
+is derived from that worktree's own branch (adjust the `jira-sdlc:`
+prefix if you renamed the plugin, or drop it entirely if you installed
+these skills as loose files rather than as a plugin). Merging the parent
+branch back into its own base once all sub-tasks land is likewise out of
+scope for this skill.
 
 Reference: `../_shared/jira-acli-reference.md` has the full command syntax,
 confirmed issue type names, and git/branch conventions. The

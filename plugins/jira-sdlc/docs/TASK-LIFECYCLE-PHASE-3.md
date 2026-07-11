@@ -37,7 +37,7 @@ sequenceDiagram
     participant JIRA
 
     Note over User,JIRA: Phase 3 — Review & aggregate approval<br/>(parent key only; single-step or multistep)
-    User->>Reviewer: invoke /jira-task-reviewer <PARENT-KEY>
+    User->>Reviewer: cd worktree-<PARENT-KEY>; invoke /jira-task-reviewer (no key arg)
 
     activate Reviewer
     Reviewer->>GIT: git fetch origin --prune

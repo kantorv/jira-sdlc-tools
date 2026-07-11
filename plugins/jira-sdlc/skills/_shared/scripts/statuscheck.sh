@@ -13,7 +13,10 @@
 #   (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>) and reported in the
 #   `issue_key` row — the calling agent compares it to the issue it was
 #   asked to run. Passing ISSUE-KEY explicitly makes the script do that
-#   comparison itself instead (`issue_key` FAILs on mismatch).
+#   comparison itself instead (`issue_key` FAILs on mismatch). Neither
+#   jira-task-executor nor jira-task-reviewer pass one anymore — both
+#   take no issue-key argument, so the branch is their sole source of
+#   truth for the key.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
 # jira-sdlc-tools.env + jira-sdlc-tools.local.env in the repo root
@@ -41,7 +44,7 @@ BR=$(git branch --show-current 2>/dev/null || true)
 BR_TAIL=${BR#*/}
 BR_KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
 KEY="${KEY_ARG:-$BR_KEY}"   # best known key, for remedy messages
-RERUN="${STATUSCHECK_RERUN:-rerun /jira-sdlc:jira-task-executor ${KEY:-<KEY>}}"
+RERUN="${STATUSCHECK_RERUN:-rerun /jira-sdlc:jira-task-executor}"
 
 ROWS=()
 REMEDIES=()

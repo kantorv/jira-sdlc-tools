@@ -1,15 +1,25 @@
 ---
 name: jira-task-executor
-description: Given a Jira issue key, picks it up end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. Reports back the PR link and updated Jira status.
+description: Picks up the issue implied by the current worktree's branch end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and updated Jira status.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 ---
 
 You are acting as the engineer picking up a single Jira issue end-to-end.
-Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
+Run this from inside the issue's own worktree — no issue-key argument;
+the issue key is derived from the current branch (see Discovery below).
+$ARGUMENTS, if given, is free-form notes about this run, not a key:
 
 **Conventions used below:**
-- `<KEY>` = the Jira issue key passed as $ARGUMENTS.
+- `<KEY>` = the Jira issue key derived from the current branch
+  (`feature/<KEY>-<slug>` / `hotfix/<KEY>-<slug>`), read from the
+  Discovery healthcheck's `issue_key` row below — the branch is the sole
+  source of truth, there is no user-supplied key to compare it against.
+- `$ARGUMENTS`, when non-empty, is free-form notes about this run
+  (constraints, focus areas, context) — never parsed as an issue key.
+  Fold it into investigation (step 4), clarification (step 5), and
+  implementation (step 6) alongside the Jira issue description; it
+  supplements, never replaces, that description.
 - Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores
   credentials after a one-time `acli jira auth login`, so no per-command
   token prefix; run commands bare.
@@ -73,7 +83,7 @@ printed under the table), `WARN` (suspicious, not blocking), or `INFO`
 | `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
 | `branch` | current branch is `feature/*` or `hotfix/*` (assigner's convention, §7) |
 | `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree |
-| `issue_key` | the issue key derived from the branch name — compare it to `<KEY>` from $ARGUMENTS yourself (step 2a); passing a key as `$1` makes the script do that comparison and FAIL on mismatch instead |
+| `issue_key` | the issue key derived from the branch name — this becomes `<KEY>` for the rest of the run. The script also accepts an optional key argument for manual comparisons, but this skill never passes one — the branch is the sole source of truth |
 | `gh_auth` | `gh` installed + authenticated (step 10 needs it for `gh pr create`) |
 | `acli_auth` | `acli` installed + authenticated (steps 1, 3, 11, 12 all call `acli jira ...`; credentials live in acli's keyring, so they work from a worktree even though `jira-sdlc-tools.local.env` isn't copied there) |
 | `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
@@ -81,15 +91,14 @@ printed under the table), `WARN` (suspicious, not blocking), or `INFO`
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
 | `working_tree` | WARN if uncommitted changes predate this run |
 
-Reading the result: **exit 0 / no FAIL rows** → check that the
-`issue_key` row's derived key equals `<KEY>` from $ARGUMENTS (step 2a's
-gate — a mismatch means this worktree wasn't set up for this issue;
-stop and ask the user), then continue to step 1, carrying the INFO rows
-forward as context (`parent_branch` feeds step 10's PR-base
-resolution). **Any FAIL row** → stop, relay the script's remedy line to
-the user, and wait — don't try to re-create worktrees, switch branches,
-or re-auth CLIs yourself; the executor doesn't self-repair its own
-preconditions.
+Reading the result: **exit 0 / no FAIL rows** → the `issue_key` row's
+derived key is `<KEY>` for the rest of this run — there's no
+user-supplied key to compare it against, so no separate ownership gate
+is needed. Continue to step 1, carrying the INFO rows forward as context
+(`parent_branch` feeds step 10's PR-base resolution). **Any FAIL row**
+→ stop, relay the script's remedy line to the user, and wait — don't
+try to re-create worktrees, switch branches, or re-auth CLIs yourself;
+the executor doesn't self-repair its own preconditions.
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
    (auth per §0). Pull out: summary, description, issue type, current
@@ -113,17 +122,7 @@ preconditions.
 
 2. **Branch setup:**
 
-   - **2a. Confirm this worktree is for THIS issue.** The healthcheck's
-     `issue_key` row reports the key derived from the branch name;
-     confirm it equals `<KEY>` from $ARGUMENTS. A mismatch means this
-     worktree wasn't set up for this issue — proceeding would write one
-     issue's change onto a sibling issue's branch. Stop and ask the user
-     before continuing. If the user explicitly asked to run from a
-     parent's worktree, they'll confirm it in response — treat their
-     confirmation as overriding the gate, not as a reason to skip the
-     check.
-
-   - **2b. Bring the worktree branch current.** The worktree's branch may
+   - **2a. Bring the worktree branch current.** The worktree's branch may
      be behind the branch it was created from. Look that up via
      `git config branch."$(git branch --show-current)".parentbranch`.
      - If found → bring the worktree branch up to date:
@@ -134,7 +133,7 @@ preconditions.
        predates this convention) → skip the merge, but flag in the final
        report that you proceeded on a possibly-stale worktree branch.
 
-   - **2c. Locate or create the issue branch.** `git fetch origin` then
+   - **2b. Locate or create the issue branch.** `git fetch origin` then
      `git branch -a | grep <KEY>` to check whether a branch for this issue
      already exists, local or remote.
      - **Normal path — branch already exists** (the assigner pre-created
@@ -319,7 +318,8 @@ preconditions.
       GitHub-for-Jira automation (if connected) transitions the
       sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
       it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
-      executor must re-run `/jira-sdlc:jira-task-executor <KEY>` to fix it.
+      executor must re-run `/jira-sdlc:jira-task-executor` (bare, from
+      this same worktree) to fix it.
     - **No parent (single-step top-level issue)** → the reviewer
       (when run on that issue) will review this PR targeting the
       base branch. `<STATUS_DONE>` is handled when the human merges the

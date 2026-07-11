@@ -61,7 +61,7 @@ sequenceDiagram
     Note over User,JIRA: Phase 2 — Implement<br/>(one Executor per leaf)
 
     par every leaf — own worktree (parallel)
-        User->>Executor: invoke /jira-task-executor <KEY-A>
+        User->>Executor: cd worktree-<KEY-A>; invoke /jira-task-executor (no key arg)
         activate Executor
         Executor->>JIRA: fetch issue + (parent family for ownership check)
         Executor->>GIT: validate worktree belongs to <KEY-A> (else stop & ask)
@@ -73,7 +73,7 @@ sequenceDiagram
         Executor-->>User: report (PR URL, branch, status)
         deactivate Executor
     and additional leaf (parallel)
-        User->>Executor: invoke /jira-task-executor <KEY-B>
+        User->>Executor: cd worktree-<KEY-B>; invoke /jira-task-executor (no key arg)
         activate Executor
         Executor->>Executor: same flow as KEY-A (in parallel)
         deactivate Executor
@@ -82,7 +82,7 @@ sequenceDiagram
     Note over User,JIRA: Phase 3 — Review & aggregate approval (parent key only)
 
     alt Multistep (reviewer)
-        User->>Reviewer: invoke /jira-task-reviewer <PARENT-KEY>
+        User->>Reviewer: cd worktree-<PARENT-KEY>; invoke /jira-task-reviewer (no key arg)
         activate Reviewer
         Reviewer->>GIT: git fetch origin --prune
         Reviewer->>JIRA: fetch parent + sub-tasks<br/>(filter to <STATUS_IN_REVIEW>)
