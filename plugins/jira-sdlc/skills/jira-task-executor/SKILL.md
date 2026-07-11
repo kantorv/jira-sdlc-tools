@@ -77,11 +77,11 @@ printed under the table), `WARN` (suspicious, not blocking), or `INFO`
 | row | what it verifies / gathers |
 |---|---|
 | `git_repo` | you're inside a git repository at all |
-| `worktree` | root's `.git` is a *file* → per-issue linked worktree, not the main checkout (where committing onto a shared branch would collide with the team) |
+| `worktree` | INFO: whether the repo root is a *linked worktree* (`.git` is a file) or the *main checkout* (`.git` is a directory). Context only — this skill requires a linked worktree; the reading note below turns that into a stop condition |
 | `env_config` | `jira-sdlc-tools.env` exists and defines `PROJECT-KEY` |
 | `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token). It's gitignored, so in a linked worktree the `statuscheck.sh` gate auto-copies it from the main checkout when missing — this row then reports `OK` with the copy noted; missing in both the worktree and the main checkout, the gate fails this row, prints a remedy, and halts non-zero before any other check runs |
 | `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
-| `branch` | current branch is `feature/*` or `hotfix/*` (assigner's convention, §7) |
+| `branch` | INFO: whether the current branch is the base branch, a `feature/*`/`hotfix/*` issue branch (assigner's convention, §7), or neither. Context only — this skill requires a feature/hotfix issue branch; the reading note below turns that into a stop condition |
 | `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree |
 | `issue_key` | the issue key derived from the branch name — this becomes `<KEY>` for the rest of the run. The script also accepts an optional key argument for manual comparisons, but this skill never passes one — the branch is the sole source of truth |
 | `gh_auth` | `gh` installed + authenticated (step 10 needs it for `gh pr create`) |
@@ -91,14 +91,26 @@ printed under the table), `WARN` (suspicious, not blocking), or `INFO`
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
 | `working_tree` | WARN if uncommitted changes predate this run |
 
-Reading the result: **exit 0 / no FAIL rows** → the `issue_key` row's
-derived key is `<KEY>` for the rest of this run — there's no
-user-supplied key to compare it against, so no separate ownership gate
+Reading the result: **Any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't try to re-create worktrees, switch
+branches, or re-auth CLIs yourself; the executor doesn't self-repair its
+own preconditions.
+
+The `worktree` and `branch` rows are context INFO, not FAILs — the shared
+script reports them for every role (executor, reviewer, assigner) and
+leaves the judgement to each skill. **For the executor, both must hold:**
+the `worktree` row must report a *linked worktree* (not the main checkout)
+and the `branch` row must report a *feature/hotfix issue branch* (not the
+base branch or a non-conforming name). If either doesn't — e.g. you're in
+the main checkout, or sitting on `<DEFAULT_BASE_BRANCH>` — **stop**: this
+skill runs only from an issue's own worktree. cd into the worktree
+`jira-task-assigner` created for the issue (`worktree-<KEY>`) and rerun.
+
+Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
+`issue_key` row's derived key is `<KEY>` for the rest of this run — there's
+no user-supplied key to compare it against, so no separate ownership gate
 is needed. Continue to step 1, carrying the INFO rows forward as context
-(`parent_branch` feeds step 10's PR-base resolution). **Any FAIL row**
-→ stop, relay the script's remedy line to the user, and wait — don't
-try to re-create worktrees, switch branches, or re-auth CLIs yourself;
-the executor doesn't self-repair its own preconditions.
+(`parent_branch` feeds step 10's PR-base resolution).
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
    (auth per §0). Pull out: summary, description, issue type, current
