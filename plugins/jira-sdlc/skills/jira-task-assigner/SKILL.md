@@ -58,9 +58,9 @@ don't cover the two acli checks; run those yourself afterward.
   - `jira-sdlc-tools.env` carries team defaults (`<PROJECT-KEY>`, status
     names).
   - `jira-sdlc-tools.local.env` overrides per machine and holds the Jira
-    account URL/email plus the path to the API token
-    (`<JIRA_TOKEN_PATH>`). Don't copy a teammate's `local.env` — it
-    points at their token file and uses their account.
+    account URL/email plus the API token value or path
+    (`<JIRA_TOKEN>`). Don't copy a teammate's `local.env` — it
+    holds their token and account.
   `../_shared/project-config.md` describes what each variable in these
   files means.
 - **`jira-sdlc-tools.local.env` is gitignored**: `git check-ignore
@@ -76,7 +76,9 @@ don't cover the two acli checks; run those yourself afterward.
   `../_shared/jira-acli-reference.md` §0). Its site, email, and token
   path all come from the env files just checked, so do this after
   them. If it isn't authenticated, run
-  `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN_PATH>`
+  `acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token < <JIRA_TOKEN>`
+  (path form — when `<JIRA_TOKEN>` is a path to a token file). If `<JIRA_TOKEN>` is the raw token value instead:
+  `printf '%s' "<JIRA_TOKEN>" | acli jira auth login --site <JIRA_ACCOUNT_URL> --email <JIRA_ACCOUNT_EMAIL> --token`
   first.
 - **Project reachable**: run `acli jira project list --paginate --json | grep -w
   <PROJECT-KEY>` to confirm the configured project key exists and is

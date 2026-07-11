@@ -19,7 +19,7 @@ from two files in the project root:
 - `<WORKTREES_DIR>`
 - `<JIRA_ACCOUNT_URL>`
 - `<JIRA_ACCOUNT_EMAIL>`
-- `<JIRA_TOKEN_PATH>`
+- `<JIRA_TOKEN>`
 
 Resolve tokens from the appropriate file. `acli` stores its own credentials after
 `auth login`, so unlike `jira-cli` you do **not** prefix every command
@@ -50,17 +50,27 @@ with a token env var.
 `acli` keeps credentials in its own store — authenticate once, then every
 subsequent `acli jira ...` works without a token prefix.
 
-One-time login (token piped via stdin — `--token` takes no value, reads from
-standard input):
+`--token` takes no value, reads from standard input. `<JIRA_TOKEN>` (resolved
+from `jira-sdlc-tools.local.env`) may be either a path to a token file OR the
+raw API token value itself — both work, and acli can't tell the difference
+since it only reads stdin. Use the form that matches how the variable is set
+on your machine:
 
 ```bash
+# path form — when JIRA_TOKEN is a file path:
 acli jira auth login \
   --site "<JIRA_ACCOUNT_URL>" \
   --email "<JIRA_ACCOUNT_EMAIL>" \
-  --token < <JIRA_TOKEN_PATH>
+  --token < <JIRA_TOKEN>
+
+# value form — when JIRA_TOKEN holds the raw token:
+printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
+  --site "<JIRA_ACCOUNT_URL>" \
+  --email "<JIRA_ACCOUNT_EMAIL>" \
+  --token
 ```
 
-`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN_PATH>`
+`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN>`
 are resolved from `jira-sdlc-tools.local.env` (machine-specific) in the project root.
 
 Verify:
