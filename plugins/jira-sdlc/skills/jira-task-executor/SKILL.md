@@ -25,6 +25,95 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Discovery and healthcheck — run before step 1.** Discover where you
+are (worktree + current branch) and confirm both CLIs are logged in
+before touching anything. The rest of this skill transitions Jira
+status, commits, pushes, and opens a PR — every one of those assumes the
+right starting point and working credentials, and finding a busted
+environment mid-flow (e.g. a logged-out `gh` failing at step 10, *after*
+the implementation is already written and pushed) wastes a whole run and
+can leave commits on the wrong branch. Resolve every `<TOKEN>` below from
+`jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
+(machine-specific) in the project root, run the four checks in order, and
+on the first failure **stop and tell the user how to fix it** (the
+messages below say what) — don't try to re-create worktrees or switch
+branches yourself.
+
+**Health check 1 — in a per-issue git worktree.** `jira-task-assigner`
+provisions one worktree per leaf (named `worktree-<KEY>`), and the
+executor is meant to run there — never from the main checkout, where
+committing onto a shared branch such as `<DEFAULT_BASE_BRANCH>` would
+collide with the rest of the team. A linked worktree's root has a `.git`
+*file* (pointing into the main repo's `.git/worktrees/` directory); the
+main checkout's `.git` is a directory. `git rev-parse --show-toplevel`
+finds the root from any subdirectory, so the check works wherever in the
+worktree you started:
+
+```bash
+WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$WT_ROOT" ] || [ ! -f "$WT_ROOT/.git" ]; then
+  echo "Not in a per-issue git worktree. The executor must run in the worktree jira-task-assigner created for <KEY> (named worktree-<KEY>), not the main checkout. cd into that worktree and rerun /jira-sdlc:jira-task-executor <KEY>." >&2
+  exit 1
+fi
+```
+
+**Health check 2 — on a `feature/` or `hotfix/` branch whose project matches
+`<PROJECT-KEY>`.** The branch must be `feature/<KEY>-<slug>` or
+`hotfix/<KEY>-<slug>` (the naming convention `jira-task-assigner` uses —
+see `../_shared/jira-acli-reference.md` §7), and the project key embedded
+in the branch name must equal `<PROJECT-KEY>` from
+`jira-sdlc-tools.env`. A mismatch means the worktree was set up for a
+different project's issue — implementing here would write this change
+into another project's tree:
+
+```bash
+BR=$(git branch --show-current)
+case "$BR" in
+  feature/*|hotfix/*) ;;
+  *) echo "Current branch '$BR' is not a feature/* or hotfix/* branch. The executor must run on the issue's own feature/<KEY>-<slug> or hotfix/<KEY>-<slug> branch. Switch to that branch in its worktree (or rerun jira-task-assigner to set it up) and rerun /jira-sdlc:jira-task-executor <KEY>." >&2; exit 1 ;;
+esac
+# Strip the feature/ or hotfix/ prefix: <KEY>-<slug> remains, and <KEY>
+# begins with <PROJECT-KEY>- (e.g. PROJ-278), so the prefix must match.
+BR_TAIL=${BR#*/}
+case "$BR_TAIL" in
+  "<PROJECT-KEY>"-*) ;;   # branch is for this project — OK
+  *) echo "Branch '$BR' doesn't start with <PROJECT-KEY> — it belongs to a different project. You're in a worktree set up for another project's issue. Switch to the branch for <KEY> in this project's worktree and rerun /jira-sdlc:jira-task-executor <KEY>." >&2; exit 1 ;;
+esac
+```
+
+This confirms the branch's **project** matches settings; step 2a below
+tightens it further to confirm the branch is this **specific** issue's
+(its `<KEY>` is in the branch name), so you're not about to write one
+issue's change onto a sibling issue's branch within the same project.
+
+**Health check 3 — `gh` (GitHub CLI) is authenticated.** Step 10 opens
+the PR with `gh pr create`, so a logged-out `gh` surfaces here — before
+the work is done — rather than an hour in:
+
+```bash
+if ! { gh auth status 2>&1 | grep -q 'Logged in to github.com'; }; then
+  echo "gh (GitHub CLI) is not installed or not authenticated. Install it (https://cli.github.com) and run 'gh auth login', then rerun /jira-sdlc:jira-task-executor <KEY>." >&2
+  exit 1
+fi
+```
+
+**Health check 4 — `acli` (Atlassian CLI) is authenticated.** Steps 1,
+3, 11, and 12 all call `acli jira ...`, riding on the one-time login
+`jira-task-assigner` verified in its own health check; confirm it still
+holds (acli stores credentials in its keyring, so it works from a
+worktree even though `jira-sdlc-tools.local.env` is gitignored and not
+copied into the worktree). See `../_shared/jira-acli-reference.md` §0:
+
+```bash
+if ! { acli jira auth status 2>&1 | grep -q '✓ Authenticated'; }; then
+  echo "acli (Atlassian CLI) is not installed or not authenticated with Jira, so the executor can't fetch/transition/comment on the issue. Run the one-time acli login (../_shared/jira-acli-reference.md §0 has the exact command, using <JIRA_ACCOUNT_URL>, <JIRA_ACCOUNT_EMAIL>, <JIRA_TOKEN> from jira-sdlc-tools.local.env), then rerun /jira-sdlc:jira-task-executor <KEY>." >&2
+  exit 1
+fi
+```
+
+All four green — continue to step 1. Any red — stop, tell the user, and
+wait; the executor doesn't try to self-repair its own preconditions.
+
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
    (auth per §0). Pull out: summary, description, issue type, current
    status, and parent (if any).
@@ -47,9 +136,13 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 2. **Branch setup:**
 
-   - **2a. Confirm you're in the right worktree.** If running from a
-     worktree (`[ -f .git ]` — in a worktree `.git` is a file, not a
-     directory):
+   - **2a. Confirm this worktree is for THIS issue.** The discovery
+     section above already established you're in a per-issue worktree on
+     a `feature/`/`hotfix/` branch whose project matches `<PROJECT-KEY>`.
+     What's left is the finer-grained check: that the branch is this
+     **specific** issue's — its `<KEY>` (from $ARGUMENTS) appears in the
+     branch name — so you're not about to write one issue's change onto
+     a sibling issue's branch within the same project:
      ```bash
      case "$(git branch --show-current)" in
        *"$KEY"*) ;;   # this branch is the issue's own — OK
@@ -211,8 +304,11 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       - `major` — breaking changes (API removals, behaviour reversals)
       Labels must already exist in the repo (confirm with
       `gh api repos/<org>/<repo>/labels --jq '.[].name'`).
-    - If `gh` isn't installed or not authenticated, don't fail silently —
-      report that, and give the user the compare URL instead:
+    - The discovery checks above already confirmed `gh` is installed and
+      authenticated, so a failure here is something else (a `gh pr create`
+      error, a repo-permission problem, or a transient network issue).
+      Don't fail silently — report the `gh` error and still hand back the
+      compare URL so the user can open the PR by hand:
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
       (get `<org>/<repo>` from `git remote get-url origin`).
 
