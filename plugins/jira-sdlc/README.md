@@ -234,8 +234,9 @@ won't survive the copy.
 **If you rename the plugin** (the `name` field in
 `.claude-plugin/plugin.json`), also update the three self-referential
 `/jira-sdlc:...` mentions inside `jira-task-assigner` (step 8),
-`jira-task-executor` (step 11), and `jira-task-reviewer` (steps 4a/4b/4c
-and 7) to match your new name — those are the only places the plugin name
+`jira-task-executor` (step 11 and its Discovery & healthcheck error
+messages), and `jira-task-reviewer` (steps 4a/4b/4c and 7) to match your
+new name — those are the only places the plugin name
 is hardcoded into the skill bodies themselves.
 
 ### Option B — Drop-in (no marketplace)

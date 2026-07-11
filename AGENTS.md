@@ -56,8 +56,9 @@ assuming you're done:
   `plugins/`, update that entry's `name` and `source` in
   `.claude-plugin/marketplace.json`, *and* update the three
   self-referential slash-command mentions hardcoded inside
-  `jira-task-assigner` (step 8), `jira-task-executor` (step 11), and
-  `jira-task-reviewer` (steps 4a/4b/4c and 7), which currently read
+  `jira-task-assigner` (step 8), `jira-task-executor` (step 11 and its
+  Discovery & healthcheck error messages), and `jira-task-reviewer`
+  (steps 4a/4b/4c and 7), which currently read
   `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
