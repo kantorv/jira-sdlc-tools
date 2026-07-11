@@ -18,6 +18,22 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   --body-file <file>`. Never wrap markdown in an inline `--body` string
   (backticks → command substitution), and `--body-file -` / stdin does not
   work — see §6.
+- **Task memory (Jira comments as durable per-task memory)**: treat the
+  issue's Jira comments as this task's long-term memory across sessions —
+  read prior notes before implementing (step 4) and record memory-worthy
+  findings as you work (step 6), so a later run recovering, reimplementing,
+  or reinvestigating this issue inherits the context instead of starting
+  cold. Every memory comment begins with the marker line
+  `Task memory (jira-task-executor)` so it stays greppable and is never
+  confused with the assigner's `Assignment report`, the `PR target branch:`
+  comment, or the final run report (step 12). **Routing**: truly durable or
+  architectural decisions belong in the code docs
+  (README / CLAUDE.md / AGENTS.md / inline) — a Jira memory comment is a
+  pointer for the next session, not a permanent home for design the
+  codebase itself should own; it's for task-recovery, reimplementation, and
+  already-touched-code investigation context. Post memory comments with the
+  same temp-file + `--body-file` mechanics as any other comment (§6) —
+  never an inline `--body` with backticks.
 - Every leaf gets its own dedicated branch and opens its own PR; the PR's
   base comes from the `PR target branch: …` Jira comment the assigner
   posts, resolved in step 10 via `../_shared/jira-acli-reference.md` §12.
@@ -203,6 +219,16 @@ wait; the executor doesn't try to self-repair its own preconditions.
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
+   - **Read prior task memory first.** Step 1 already fetched the issue with
+     `--fields '*all'`, which includes `fields.comment.comments`; scan those
+     (or re-list with `acli jira workitem comment list --key <KEY> --json`)
+     for the assigner's `Assignment report` context and for any
+     `Task memory (jira-task-executor)` notes an earlier session left —
+     findings, gotchas, design decisions + rationale, and recovery context.
+     Fold what you learn into this investigation instead of rediscovering it
+     cold. This matters most when re-running a failed or reviewer-rejected
+     issue: the previous session's memory is how you avoid repeating its
+     dead ends.
 
 5. **Clarify** — if the issue's description/acceptance criteria leaves
    something materially ambiguous (an implementation choice that would
@@ -210,6 +236,22 @@ wait; the executor doesn't try to self-repair its own preconditions.
    anything that matters.
 
 6. **Implement** the change.
+   - **Record task memory as you go — but only when it's worth preserving.**
+     When you learn something a later session would otherwise have to
+     rediscover — an important finding, a non-obvious piece of logic, a
+     design decision *and its rationale*, a gotcha in already-touched code,
+     or context that would help recover or reimplement this task — post a
+     `Task memory (jira-task-executor)` comment (marker + temp-file/
+     `--body-file` mechanics per the preamble and §6). This is
+     task-recovery memory, **not** running commentary: skip trivial or
+     self-evident decisions, and if a single note at the end captures
+     everything worth keeping, one comment is enough. Memory-worthy items
+     can surface as early as investigation (step 4) — post them when you
+     find them, not only here. **Routing reminder**: if the decision is
+     truly durable or architectural, put it in the code docs
+     (README / CLAUDE.md / AGENTS.md / inline) — a Jira memory comment is a
+     pointer for the next session, not a substitute for documentation the
+     codebase should own.
 
 7. **Test before committing:**
 
@@ -335,10 +377,17 @@ wait; the executor doesn't try to self-repair its own preconditions.
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Post this same
-    report to the user in chat **and** as a single Jira comment — don't
-    post a separate short "PR opened" comment earlier, this is the one
-    comment for the whole run. Since it's multi-line, post it using the
-    temp-file + `--body-file` convention (see the preamble above and §6):
+    report to the user in chat **and** as a single Jira comment: this is
+    the one comprehensive **run report** — don't fragment it (in
+    particular, no separate trivial "PR opened" comment earlier). The
+    `Task memory (jira-task-executor)` notes from step 6 are the *only*
+    sanctioned companions to it: they carry their own marker, serve a
+    different purpose (task-recovery context, not the run summary), and are
+    expected whenever the run turned up something worth preserving between
+    sessions. Keep the two kinds distinct — memory notes always carry the
+    marker line; this final run report never does. Since it's multi-line,
+    post it using the temp-file + `--body-file` convention (see the preamble
+    above and §6):
     ```
     acli jira workitem comment create --key <KEY> --body-file /tmp/<KEY>-report.md
     ```
