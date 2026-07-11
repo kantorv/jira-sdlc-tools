@@ -41,94 +41,55 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
-**Discovery and healthcheck — run before step 1.** Discover where you
-are (worktree + current branch) and confirm both CLIs are logged in
-before touching anything. The rest of this skill transitions Jira
-status, commits, pushes, and opens a PR — every one of those assumes the
-right starting point and working credentials, and finding a busted
-environment mid-flow (e.g. a logged-out `gh` failing at step 10, *after*
-the implementation is already written and pushed) wastes a whole run and
-can leave commits on the wrong branch. Resolve every `<TOKEN>` below from
-`jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
-(machine-specific) in the project root, run the four checks in order, and
-on the first failure **stop and tell the user how to fix it** (the
-messages below say what) — don't try to re-create worktrees or switch
-branches yourself.
-
-**Health check 1 — in a per-issue git worktree.** `jira-task-assigner`
-provisions one worktree per leaf (named `worktree-<KEY>`), and the
-executor is meant to run there — never from the main checkout, where
-committing onto a shared branch such as `<DEFAULT_BASE_BRANCH>` would
-collide with the rest of the team. A linked worktree's root has a `.git`
-*file* (pointing into the main repo's `.git/worktrees/` directory); the
-main checkout's `.git` is a directory. `git rev-parse --show-toplevel`
-finds the root from any subdirectory, so the check works wherever in the
-worktree you started:
+**Discovery and healthcheck — run before step 1.** The rest of this
+skill transitions Jira status, commits, pushes, and opens a PR — every
+one of those assumes the right starting point and working credentials,
+and finding a busted environment mid-flow (e.g. a logged-out `gh`
+failing at step 10, *after* the implementation is already written and
+pushed) wastes a whole run and can leave commits on the wrong branch.
+All the checks are bundled into one script, so this is a single Bash
+call rather than a sequence of separate probes:
 
 ```bash
-WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$WT_ROOT" ] || [ ! -f "$WT_ROOT/.git" ]; then
-  echo "Not in a per-issue git worktree. The executor must run in the worktree jira-task-assigner created for <KEY> (named worktree-<KEY>), not the main checkout. cd into that worktree and rerun /jira-sdlc:jira-task-executor <KEY>." >&2
-  exit 1
-fi
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
 ```
 
-**Health check 2 — on a `feature/` or `hotfix/` branch whose project matches
-`<PROJECT-KEY>`.** The branch must be `feature/<KEY>-<slug>` or
-`hotfix/<KEY>-<slug>` (the naming convention `jira-task-assigner` uses —
-see `../_shared/jira-acli-reference.md` §7), and the project key embedded
-in the branch name must equal `<PROJECT-KEY>` from
-`jira-sdlc-tools.env`. A mismatch means the worktree was set up for a
-different project's issue — implementing here would write this change
-into another project's tree:
+(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
+plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
+relative to this skill's directory.) The script resolves
+`<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
+`jira-sdlc-tools.local.env` itself; you don't need to pre-resolve tokens
+for this section. It prints one markdown table (`check | status |
+detail`), where status is `OK`, `FAIL` (blocks, with a remedy line
+printed under the table), `WARN` (suspicious, not blocking), or `INFO`
+(context only), and exits non-zero if any row is `FAIL`. The rows:
 
-```bash
-BR=$(git branch --show-current)
-case "$BR" in
-  feature/*|hotfix/*) ;;
-  *) echo "Current branch '$BR' is not a feature/* or hotfix/* branch. The executor must run on the issue's own feature/<KEY>-<slug> or hotfix/<KEY>-<slug> branch. Switch to that branch in its worktree (or rerun jira-task-assigner to set it up) and rerun /jira-sdlc:jira-task-executor <KEY>." >&2; exit 1 ;;
-esac
-# Strip the feature/ or hotfix/ prefix: <KEY>-<slug> remains, and <KEY>
-# begins with <PROJECT-KEY>- (e.g. PROJ-278), so the prefix must match.
-BR_TAIL=${BR#*/}
-case "$BR_TAIL" in
-  "<PROJECT-KEY>"-*) ;;   # branch is for this project — OK
-  *) echo "Branch '$BR' doesn't start with <PROJECT-KEY> — it belongs to a different project. You're in a worktree set up for another project's issue. Switch to the branch for <KEY> in this project's worktree and rerun /jira-sdlc:jira-task-executor <KEY>." >&2; exit 1 ;;
-esac
-```
+| row | what it verifies / gathers |
+|---|---|
+| `git_repo` | you're inside a git repository at all |
+| `worktree` | root's `.git` is a *file* → per-issue linked worktree, not the main checkout (where committing onto a shared branch would collide with the team) |
+| `env_config` | `jira-sdlc-tools.env` exists and defines `PROJECT-KEY` |
+| `env_local` | `jira-sdlc-tools.local.env` presence — required in the main checkout, INFO-absent in a worktree (gitignored files aren't copied there) |
+| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
+| `branch` | current branch is `feature/*` or `hotfix/*` (assigner's convention, §7) |
+| `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree |
+| `issue_key` | the issue key derived from the branch name — compare it to `<KEY>` from $ARGUMENTS yourself (step 2a); passing a key as `$1` makes the script do that comparison and FAIL on mismatch instead |
+| `gh_auth` | `gh` installed + authenticated (step 10 needs it for `gh pr create`) |
+| `acli_auth` | `acli` installed + authenticated (steps 1, 3, 11, 12 all call `acli jira ...`; credentials live in acli's keyring, so they work from a worktree even though `jira-sdlc-tools.local.env` isn't copied there) |
+| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
+| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
+| `working_tree` | WARN if uncommitted changes predate this run |
 
-This confirms the branch's **project** matches settings; step 2a below
-tightens it further to confirm the branch is this **specific** issue's
-(its `<KEY>` is in the branch name), so you're not about to write one
-issue's change onto a sibling issue's branch within the same project.
-
-**Health check 3 — `gh` (GitHub CLI) is authenticated.** Step 10 opens
-the PR with `gh pr create`, so a logged-out `gh` surfaces here — before
-the work is done — rather than an hour in:
-
-```bash
-if ! { gh auth status 2>&1 | grep -q 'Logged in to github.com'; }; then
-  echo "gh (GitHub CLI) is not installed or not authenticated. Install it (https://cli.github.com) and run 'gh auth login', then rerun /jira-sdlc:jira-task-executor <KEY>." >&2
-  exit 1
-fi
-```
-
-**Health check 4 — `acli` (Atlassian CLI) is authenticated.** Steps 1,
-3, 11, and 12 all call `acli jira ...`, riding on the one-time login
-`jira-task-assigner` verified in its own health check; confirm it still
-holds (acli stores credentials in its keyring, so it works from a
-worktree even though `jira-sdlc-tools.local.env` is gitignored and not
-copied into the worktree). See `../_shared/jira-acli-reference.md` §0:
-
-```bash
-if ! { acli jira auth status 2>&1 | grep -q '✓ Authenticated'; }; then
-  echo "acli (Atlassian CLI) is not installed or not authenticated with Jira, so the executor can't fetch/transition/comment on the issue. Run the one-time acli login (../_shared/jira-acli-reference.md §0 has the exact command, using <JIRA_ACCOUNT_URL>, <JIRA_ACCOUNT_EMAIL>, <JIRA_TOKEN> from jira-sdlc-tools.local.env), then rerun /jira-sdlc:jira-task-executor <KEY>." >&2
-  exit 1
-fi
-```
-
-All four green — continue to step 1. Any red — stop, tell the user, and
-wait; the executor doesn't try to self-repair its own preconditions.
+Reading the result: **exit 0 / no FAIL rows** → check that the
+`issue_key` row's derived key equals `<KEY>` from $ARGUMENTS (step 2a's
+gate — a mismatch means this worktree wasn't set up for this issue;
+stop and ask the user), then continue to step 1, carrying the INFO rows
+forward as context (`parent_branch` feeds step 10's PR-base
+resolution). **Any FAIL row** → stop, relay the script's remedy line to
+the user, and wait — don't try to re-create worktrees, switch branches,
+or re-auth CLIs yourself; the executor doesn't self-repair its own
+preconditions.
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
    (auth per §0). Pull out: summary, description, issue type, current
@@ -152,24 +113,15 @@ wait; the executor doesn't try to self-repair its own preconditions.
 
 2. **Branch setup:**
 
-   - **2a. Confirm this worktree is for THIS issue.** The discovery
-     section above already established you're in a per-issue worktree on
-     a `feature/`/`hotfix/` branch whose project matches `<PROJECT-KEY>`.
-     What's left is the finer-grained check: that the branch is this
-     **specific** issue's — its `<KEY>` (from $ARGUMENTS) appears in the
-     branch name — so you're not about to write one issue's change onto
-     a sibling issue's branch within the same project:
-     ```bash
-     case "$(git branch --show-current)" in
-       *"$KEY"*) ;;   # this branch is the issue's own — OK
-       *) echo "Worktree branch '$(git branch --show-current)' doesn't \
-     match $KEY; this worktree wasn't set up for this issue. Stop and \
-     ask the user before continuing." >&2; exit 1 ;;
-     esac
-     ```
-     If the user explicitly asked to run from a parent's worktree, they'll
-     confirm it in response — treat that confirmation as overriding the
-     gate, not as a reason to skip it.
+   - **2a. Confirm this worktree is for THIS issue.** The healthcheck's
+     `issue_key` row reports the key derived from the branch name;
+     confirm it equals `<KEY>` from $ARGUMENTS. A mismatch means this
+     worktree wasn't set up for this issue — proceeding would write one
+     issue's change onto a sibling issue's branch. Stop and ask the user
+     before continuing. If the user explicitly asked to run from a
+     parent's worktree, they'll confirm it in response — treat their
+     confirmation as overriding the gate, not as a reason to skip the
+     check.
 
    - **2b. Bring the worktree branch current.** The worktree's branch may
      be behind the branch it was created from. Look that up via
