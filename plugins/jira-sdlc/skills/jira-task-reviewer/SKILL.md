@@ -40,24 +40,27 @@ It prints one markdown table (`check | status | detail`), where status is
 if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
 (every verdict comment, `gh pr list` call, and Jira transition depends on
 them). The `worktree` and `branch` rows are context INFO — the shared
-script reports them for every role and never FAILs on them. The rows:
+script reports them for every role and never FAILs on them.
+
+Only the rows this skill reads in a role-specific way, or relies on later,
+are spelled out here; the rest are role-independent preconditions defined
+in `statuscheck.sh` itself (their `detail` column is self-explanatory in
+the printed output — that live output, not this table, is what the skill
+actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
-| `git_repo` | you're inside a git repository at all |
-| `worktree` | INFO: whether the repo root is a *linked worktree* (`.git` is a file) or the *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below turns that into a stop condition |
-| `env_config` | `jira-sdlc-tools.env` exists and defines `<PROJECT-KEY>` |
-| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token). It's gitignored, so in a linked worktree the `statuscheck.sh` gate auto-copies it from the main checkout when missing — this row then reports `OK` with the copy noted; missing in both the worktree and the main checkout, the gate FAILs this row, prints a remedy, and halts before any other check runs |
-| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
-| `branch` | INFO: whether the current branch is the base branch, a `feature/*`/`hotfix/*` issue branch (§7), or neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below turns that into a stop condition |
-| `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree (still FAILs on a wrong-project branch, a role-independent error) |
-| `issue_key` | the issue key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed). The script also accepts an optional key argument, but this skill never passes one — the branch is the sole source of truth |
-| `gh_auth` | `gh` installed + authenticated — load-bearing: every `gh pr list` / `gh pr review` verdict this skill posts depends on it |
-| `acli_auth` | `acli` installed + authenticated — load-bearing: every `acli jira ...` status read and (on the reject path) transition depends on it; credentials live in acli's keyring, not the env files |
-| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
-| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files — where `<PARENT-BRANCH>` itself merges |
+| `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
+| `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — a candidate for the `<BASE_BRANCH>` resolution (§12) |
-| `working_tree` | WARN if uncommitted changes predate this run |
+
+The remaining rows FAIL if broken but need no per-role interpretation
+here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
+from the main checkout when missing — see the gate in the script),
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
+`acli_auth` (both load-bearing, as noted above), `jira_project`, plus
+context INFO `base_branch` / `working_tree`.
 
 This skill normally runs from the **parent worktree**
 (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own

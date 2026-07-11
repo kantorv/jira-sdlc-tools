@@ -50,24 +50,28 @@ if any row is `FAIL`. The `worktree` and `branch` rows are context INFO —
 the shared script reports them for every role and never FAILs on them; the
 assigner runs from the **main repo checkout on the base branch** (not a
 per-issue worktree), so it reads those two rows the opposite way from the
-executor/reviewer. The rows:
+executor/reviewer.
+
+Only the rows the assigner reads in a role-specific way are spelled out
+here; the rest are role-independent preconditions defined in
+`statuscheck.sh` itself (their `detail` column is self-explanatory in the
+printed output — that live output, not this table, is what the skill
+actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
-| `git_repo` | you're inside a git repository at all |
-| `worktree` | INFO: whether the repo root is the *main checkout* (`.git` is a directory) or a *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; the reading note below turns that into a stop condition |
-| `env_config` | `jira-sdlc-tools.env` exists and defines `<PROJECT-KEY>` |
-| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token) and gitignored. In the main checkout the assigner runs from, this row is `OK` when present and `FAIL` (with a remedy) when missing — the linked-worktree auto-copy path doesn't apply here |
-| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
-| `branch` | INFO: whether the current branch is the *base branch* (`<DEFAULT_BASE_BRANCH>`), a `feature/*`/`hotfix/*` issue branch (§7), or neither. **The assigner requires the base branch**; a feature/hotfix issue branch is its explicit STOP case and any other branch is a user decision — both handled in step 2, which consumes this row |
-| `branch_project` | skipped here (`WARN`) — there's no issue branch yet to check a project prefix against |
-| `issue_key` | reports no derivable key (`WARN`) — no issue exists yet; the assigner is what *creates* the issue and its key |
-| `gh_auth` | `gh` installed + authenticated. The assigner pushes branches but doesn't call `gh` itself; a green row confirms the GitHub credentials the executor will need for `gh pr create` already work (a broken `gh` surfaces here rather than mid-execution) |
-| `acli_auth` | `acli` installed + authenticated — every `acli jira ...` call in steps 6–7 depends on it; credentials live in acli's keyring, not the env files |
-| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
-| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files |
-| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — unset on the base branch, which is expected here |
-| `working_tree` | WARN if uncommitted changes predate this run |
+| `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; the reading note below makes that a stop condition |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **The assigner requires the base branch**; a feature/hotfix issue branch is its explicit STOP case and any other branch is a user decision — both handled in step 2, which consumes this row |
+
+Because no issue exists yet, `branch_project`, `issue_key`, and
+`parent_branch` read as WARN/INFO here (skipped / no derivable key /
+unset) — all expected. `gh_auth` still verifies GitHub credentials even
+though the assigner only pushes branches and never opens PRs itself — a
+green row confirms the creds the executor will later need for
+`gh pr create`. The remaining rows FAIL if broken but need no per-role
+interpretation: `git_repo`, `env_config`, `env_local`,
+`env_local_ignored`, `acli_auth` (every `acli jira …` call in steps 6–7),
+`jira_project`, plus context INFO `base_branch` / `working_tree`.
 
 **Worktrees directory exists.** The assigner creates a `git worktree` per
 leaf issue under `<WORKTREES_DIR>` and never `mkdir`s it, so verify it's

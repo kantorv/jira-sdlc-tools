@@ -72,24 +72,27 @@ relative to this skill's directory.) The script resolves
 for this section. It prints one markdown table (`check | status |
 detail`), where status is `OK`, `FAIL` (blocks, with a remedy line
 printed under the table), `WARN` (suspicious, not blocking), or `INFO`
-(context only), and exits non-zero if any row is `FAIL`. The rows:
+(context only), and exits non-zero if any row is `FAIL`.
+
+Only the rows this skill reads in a role-specific way, or relies on later,
+are spelled out here; the rest are role-independent preconditions defined
+in `statuscheck.sh` itself (their `detail` column is self-explanatory in
+the printed output — that live output, not this table, is what the skill
+actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
-| `git_repo` | you're inside a git repository at all |
-| `worktree` | INFO: whether the repo root is a *linked worktree* (`.git` is a file) or the *main checkout* (`.git` is a directory). Context only — this skill requires a linked worktree; the reading note below turns that into a stop condition |
-| `env_config` | `jira-sdlc-tools.env` exists and defines `PROJECT-KEY` |
-| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token). It's gitignored, so in a linked worktree the `statuscheck.sh` gate auto-copies it from the main checkout when missing — this row then reports `OK` with the copy noted; missing in both the worktree and the main checkout, the gate fails this row, prints a remedy, and halts non-zero before any other check runs |
-| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
-| `branch` | INFO: whether the current branch is the base branch, a `feature/*`/`hotfix/*` issue branch (assigner's convention, §7), or neither. Context only — this skill requires a feature/hotfix issue branch; the reading note below turns that into a stop condition |
-| `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree |
-| `issue_key` | the issue key derived from the branch name — this becomes `<KEY>` for the rest of the run. The script also accepts an optional key argument for manual comparisons, but this skill never passes one — the branch is the sole source of truth |
-| `gh_auth` | `gh` installed + authenticated (step 10 needs it for `gh pr create`) |
-| `acli_auth` | `acli` installed + authenticated (steps 1, 3, 11, 12 all call `acli jira ...`; credentials live in acli's keyring, not the env files, so they work the same from a worktree as from the main checkout) |
-| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
-| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files |
+| `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
+| `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
-| `working_tree` | WARN if uncommitted changes predate this run |
+
+The remaining rows FAIL if broken but need no per-role interpretation
+here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
+from the main checkout when missing — see the gate in the script),
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
+(step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
+`jira_project`, plus context INFO `base_branch` / `working_tree`.
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't try to re-create worktrees, switch
