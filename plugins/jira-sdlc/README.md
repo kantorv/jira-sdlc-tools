@@ -183,8 +183,8 @@ relying on opaque GitHub-for-Jira transition rules:
   drive Jira through; the shared reference (`jira-acli-reference.md`)
   documents its exact flag behavior. Authenticated once against your
   Jira Cloud instance with `acli jira auth login` using the
-  `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN_PATH` values
-  from `jira-sdlc-tools.env` (see
+  `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
+  from `jira-sdlc-tools.local.env` (see
   [Configuration](#configuration)). `acli` stores the credentials, so no
   per-command token prefix.
 
@@ -310,7 +310,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token path (`JIRA_TOKEN_PATH`, read by the one-time `acli jira auth login --token <`) and semver label names (optional — sensible defaults given)
+- The Jira auth token value or path (`JIRA_TOKEN` — may be either a raw API token or a path to a file containing one; see the one-time `acli jira auth login` in the config reference) and semver label names (optional — sensible defaults given)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 

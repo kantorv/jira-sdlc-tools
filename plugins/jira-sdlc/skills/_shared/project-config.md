@@ -39,7 +39,7 @@ define the same variable (though they define disjoint sets by convention).
 | `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). Used for the one-time `acli jira auth login` and for constructing issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
 | `<JIRA_ACCOUNT_EMAIL>` | The email address of the Jira account that owns the API token. Used for the one-time `acli jira auth login`. | `you@example.com` |
-| `<JIRA_TOKEN_PATH>` | Path to the file containing the Jira API token (read by `acli jira auth login --token < <JIRA_TOKEN_PATH>`). Retained from the legacy `jira-cli` config. | `.jira/token.txt` |
+| `<JIRA_TOKEN>` | Jira API token value OR path to a file containing the token. `acli jira auth login --token` reads from stdin, so both forms work — use the one that matches how this variable is set on your machine:<br>• path form: `acli jira auth login … --token < <JIRA_TOKEN>`<br>• value form: `printf '%s' "<JIRA_TOKEN>" \| acli jira auth login … --token`<br>The default example below keeps `.jira/token.txt` (path still works); a raw token value is also accepted. | `.jira/token.txt` |
 
 ## Optional — sensible defaults, override if yours differ (in `jira-sdlc-tools.env`)
 
@@ -53,18 +53,25 @@ define the same variable (though they define disjoint sets by convention).
 per-command token prefix. Run this once before using any skill:
 
 ```bash
+# path form — when JIRA_TOKEN is a file path:
 acli jira auth login \
   --site "<JIRA_ACCOUNT_URL>" \
   --email "<JIRA_ACCOUNT_EMAIL>" \
-  --token < <JIRA_TOKEN_PATH>
+  --token < <JIRA_TOKEN>
+
+# value form — when JIRA_TOKEN holds the raw token:
+printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
+  --site "<JIRA_ACCOUNT_URL>" \
+  --email "<JIRA_ACCOUNT_EMAIL>" \
+  --token
 ```
 
 Verify with `acli jira auth status`.
 
 `JIRA_API_TOKEN` (the `jira-cli` per-command env-var prefix) is no longer
-used — skills assume stored acli credentials and do not mention it. The
-token file at `<JIRA_TOKEN_PATH>` is retained for the `--token <` redirect
-above.
+used — skills assume stored acli credentials and do not mention it.
+`JIRA_TOKEN` holds either the token value itself or a path to a token file
+for the `--token` stdin redirect above.
 
 ## Worked example
 
@@ -86,5 +93,5 @@ SEMVER_LABELS         = patch / minor / major
 WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 JIRA_ACCOUNT_EMAIL    = you@example.com
-JIRA_TOKEN_PATH       = .jira/token.txt
+JIRA_TOKEN             = .jira/token.txt
 ```
