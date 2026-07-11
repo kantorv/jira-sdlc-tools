@@ -69,13 +69,13 @@ printed under the table), `WARN` (suspicious, not blocking), or `INFO`
 | `git_repo` | you're inside a git repository at all |
 | `worktree` | root's `.git` is a *file* → per-issue linked worktree, not the main checkout (where committing onto a shared branch would collide with the team) |
 | `env_config` | `jira-sdlc-tools.env` exists and defines `PROJECT-KEY` |
-| `env_local` | `jira-sdlc-tools.local.env` presence — required in the main checkout, INFO-absent in a worktree (gitignored files aren't copied there) |
+| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token). It's gitignored, so in a linked worktree the `statuscheck.sh` gate auto-copies it from the main checkout when missing — this row then reports `OK` with the copy noted; missing in both the worktree and the main checkout, the gate fails this row, prints a remedy, and halts non-zero before any other check runs |
 | `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
 | `branch` | current branch is `feature/*` or `hotfix/*` (assigner's convention, §7) |
 | `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree |
 | `issue_key` | the issue key derived from the branch name — compare it to `<KEY>` from $ARGUMENTS yourself (step 2a); passing a key as `$1` makes the script do that comparison and FAIL on mismatch instead |
 | `gh_auth` | `gh` installed + authenticated (step 10 needs it for `gh pr create`) |
-| `acli_auth` | `acli` installed + authenticated (steps 1, 3, 11, 12 all call `acli jira ...`; credentials live in acli's keyring, so they work from a worktree even though `jira-sdlc-tools.local.env` isn't copied there) |
+| `acli_auth` | `acli` installed + authenticated (steps 1, 3, 11, 12 all call `acli jira ...`; credentials live in acli's keyring, not the env files, so they work the same from a worktree as from the main checkout) |
 | `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
 | `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
