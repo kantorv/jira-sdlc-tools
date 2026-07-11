@@ -26,7 +26,7 @@ sequenceDiagram
     Note over User,JIRA: Phase 2 — Implement<br/>(one Executor per leaf)
 
     par every leaf — own worktree (truly parallel)
-        User->>Executor: invoke /jira-task-executor <KEY-A>
+        User->>Executor: cd worktree-<KEY-A>; invoke /jira-task-executor (no key arg)
         activate Executor
         Executor->>JIRA: fetch issue <KEY-A>
         JIRA-->>Executor: issue (summary, AC, parent family)
@@ -44,7 +44,7 @@ sequenceDiagram
         Executor-->>User: report (PR URL, branch, status)
         deactivate Executor
     and additional leaf (same flow, in parallel)
-        User->>Executor: invoke /jira-task-executor <KEY-B>
+        User->>Executor: cd worktree-<KEY-B>; invoke /jira-task-executor (no key arg)
         activate Executor
         Executor->>Executor: same flow as KEY-A (in parallel)
         deactivate Executor

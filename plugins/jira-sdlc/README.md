@@ -65,11 +65,12 @@ Create `jira-sdlc-tools.env` in the project root for your repo (see
 ```
 /jira-sdlc:jira-task-assigner "Add CSV export to the reports page"
 
-# cd into each worktree it creates, run this in each one:
-/jira-sdlc:jira-task-executor PROJ-XXX
+# cd into each worktree it creates, run this in each one (no key —
+# derived from that worktree's branch):
+/jira-sdlc:jira-task-executor
 
-# once the sub-task PRs are up, from the main repo:
-/jira-sdlc:jira-task-reviewer PROJ-XXX   # the *parent* key
+# once the sub-task PRs are up, cd into the parent worktree:
+/jira-sdlc:jira-task-reviewer
 ```
 
 The rest of this document explains what's actually happening at each of
@@ -235,8 +236,9 @@ won't survive the copy.
 `.claude-plugin/plugin.json`), also update the three self-referential
 `/jira-sdlc:...` mentions inside `jira-task-assigner` (step 8),
 `jira-task-executor` (step 11 and its Discovery & healthcheck error
-messages), and `jira-task-reviewer` (steps 4a/4b/4c and 7) to match your
-new name — those are the only places the plugin name
+messages), and `jira-task-reviewer` (its own Discovery & healthcheck
+section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 7) to
+match your new name — those are the only places the plugin name
 is hardcoded into the skill bodies themselves.
 
 ### Option B — Drop-in (no marketplace)
@@ -343,15 +345,18 @@ same as a Jira comment on `PROJ-401`.
 In three terminals (or three subagents, one per worktree):
 ```
 cd ../myapp-worktrees/worktree-PROJ-402 && claude
-> /jira-sdlc:jira-task-executor PROJ-402
+> /jira-sdlc:jira-task-executor
 ```
-...and the same for `PROJ-403` and `PROJ-404`. Each executor implements,
-tests, commits, pushes, and opens a PR into
+No key argument — it's derived from that worktree's own branch
+(`feature/PROJ-402-...`). ...and the same for `PROJ-403` and `PROJ-404`.
+Each executor implements, tests, commits, pushes, and opens a PR into
 `feature/PROJ-401-csv-export`, then reports the PR link.
 
 **3. Review and merge the set:**
+
+cd into the parent worktree (`worktree-PROJ-401`), then:
 ```
-/jira-sdlc:jira-task-reviewer PROJ-401
+/jira-sdlc:jira-task-reviewer
 ```
 The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g. "In Review") — if a sub-task is still in progress, it is skipped for
@@ -377,9 +382,10 @@ PR, review that too, and approve it — still leaving the merge to you.
 
 You merge `feature/PROJ-401-csv-export → development` manually on
 GitHub — always a human step. GitHub-for-Jira auto-transitions all related
-issues to Done on merge. Optionally run the reviewer once more:
+issues to Done on merge. Optionally run the reviewer once more, from the
+same parent worktree:
 ```
-/jira-sdlc:jira-task-reviewer PROJ-401
+/jira-sdlc:jira-task-reviewer
 ```
 It detects the parent PR is now merged and posts a final wrap-up comment
 listing everything that landed, plus any orphaned local branches for you
