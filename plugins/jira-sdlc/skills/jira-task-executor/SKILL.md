@@ -115,11 +115,9 @@ no user-supplied key to compare it against, so no separate ownership gate
 is needed. Continue to step 1, carrying the INFO rows forward as context
 (`parent_branch` feeds step 10's PR-base resolution).
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
-   (auth per §0). Pull out: summary, description, issue type, current
-   status, and parent (if any).
-   - Also check `fields.subtasks` (the default `--json` *omits* subtasks,
-     so `--fields '*all'` is required here — see §3):
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '<canonical fetch-with-comments field list>'` (auth per §0), where the canonical fetch-with-comments field list is defined in `../_shared/jira-acli-reference.md` §3 — the project's single source of truth for issue-fetch fields; resolve it from there rather than re-deriving it here. It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
+   - Also check `fields.subtasks` (the canonical list names `subtasks`
+     explicitly — the default `--json` omits it; see §3):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
        sub-tasks' PRs, not an implementation surface. Implementing here
        risks conflicting with / shadowing the sub-tasks' separate PRs that
@@ -186,7 +184,8 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
    - **Read prior task memory first.** Step 1 already fetched the issue with
-     `--fields '*all'`, which includes `fields.comment.comments`; scan those
+     the canonical fetch-with-comments field list (§3), which includes
+     `fields.comment.comments`; scan those
      (or re-list with `acli jira workitem comment list --key <KEY> --json`)
      for the assigner's `Assignment report` context and for any
      `Task memory (jira-task-executor)` notes an earlier session left —

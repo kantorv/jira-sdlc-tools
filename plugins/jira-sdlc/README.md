@@ -458,10 +458,11 @@ A few things the skills themselves flag as "confirm once against real
 output" rather than assume — worth running deliberately before your first
 real task, not discovering mid-failure:
 
-- [ ] `acli jira workitem view <any-existing-key> --json --fields '*all'` —
+- [ ] `acli jira workitem view <any-existing-key> --json --fields '<canonical review-fetch field list, see skills/_shared/jira-acli-reference.md §3>'` —
       confirm `fields.subtasks` is shaped the way the skills expect (the
-      default `--json` omits subtasks, so `--fields '*all'` is required;
-      it's an array of objects with a `.key`, not bare strings).
+      default `--json` omits `subtasks`/`parent`/`comment`, so the canonical
+      list names `subtasks` explicitly per §3; it's an array of objects with
+      a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
       `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-sdlc-tools.env`.
