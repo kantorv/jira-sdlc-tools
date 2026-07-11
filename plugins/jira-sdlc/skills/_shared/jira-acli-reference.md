@@ -367,6 +367,23 @@ Other useful `comment create` flags: `-e/--edit-last` (replace your last
 comment instead of adding a new one — handy for updating a status note
 in place), `--jql` (comment on many issues), `--json`.
 
+### Machine-recoverable comment markers
+
+Some comments are written with a fixed leading marker so a later session
+(or a human) can grep them back out of an issue. Mirror the exact prefix
+when posting, and match on it when reading:
+
+- `PR target branch: <branch>.` — the PR base for the issue's branch,
+  posted by `jira-task-assigner` (or the executor on the no-assigner path)
+  and consumed by the §12 PR-base resolver.
+- `Task memory (jira-task-executor)` — a durable per-task **memory** note
+  the executor leaves for future sessions (findings, gotchas, design
+  decisions + rationale, recovery context). List them with
+  `acli jira workitem comment list --key <KEY> --json` and grep the marker.
+  They are deliberately distinct from the executor's single end-of-run
+  report and from the `PR target branch:` line above, so grepping the
+  marker returns only memory notes.
+
 ### List / update / delete comments
 
 ```bash
