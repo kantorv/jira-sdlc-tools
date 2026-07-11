@@ -153,4 +153,4 @@ done < "$SUBTASKS_DIR/manifest.tsv"
 echo
 echo "done. parent=$PARENT_KEY  created=$ok  failed=$fail"
 echo "keys: $KEYS_OUT"
-[ "$DRY_RUN" -eq 0 ] && echo "view: acli jira workitem view $PARENT_KEY --json --fields '*all'"
+[ "$DRY_RUN" -eq 0 ] && echo "view: acli jira workitem view $PARENT_KEY --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'"

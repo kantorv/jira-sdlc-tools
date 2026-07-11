@@ -1,14 +1,15 @@
 ---
 name: jira-task-reviewer
-description: Given a parent Jira issue key (e.g. PROJ-286), finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything.
+description: Run from the parent issue's worktree — no issue-key argument; the issue is derived from the branch, climbing from a sub-task branch to its parent automatically. Finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a parent Jira issue key ($ARGUMENTS, e.g. `PROJ-286`):
+You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run this from the parent issue's own worktree — no issue-key argument; the issue is derived from the current branch (see Discovery below). $ARGUMENTS, if given, is free-form notes about this run, not a key:
 
 **Conventions used below:**
-- `<PARENT-KEY>` = the Jira issue key passed as $ARGUMENTS. It just means "the key you passed" — it is only literally the parent of sub-tasks on the multistep track; on the single-step track it is a standalone issue with no sub-tasks.
+- `<PARENT-KEY>` = the Jira issue key derived from the current branch (via the Discovery healthcheck's `issue_key` row below) — or, when the branch belongs to a sub-task, that sub-task's `fields.parent.key` (step 1 climbs automatically and notes it in the report). It just means "the resolved key" — it is only literally the parent of sub-tasks on the multistep track; on the single-step track it is a standalone issue with no sub-tasks.
+- `$ARGUMENTS`, when non-empty, is free-form notes about this run (focus areas, constraints, context) — fold them into the review criteria (3c); never parsed as an issue key.
 - `<PARENT-BRANCH>` = the git branch for `<PARENT-KEY>`, always named `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
 - `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into — resolve per `../_shared/jira-acli-reference.md` §12 (git-config → Jira "PR target branch" comment → `<DEFAULT_BASE_BRANCH>` env default).
 - Sub-task PRs all target `<PARENT-BRANCH>` — every sub-task gets its own dedicated branch and PR.
@@ -19,15 +20,77 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Given a
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
+**Discovery and healthcheck — run before step 1.** This skill reads Jira
+status, calls `gh pr list` / `gh pr review`, and — on the reject path —
+transitions issues; finding a busted environment mid-review wastes a
+pass and can leave an inconsistent verdict trail. Run the shared
+healthcheck first, overriding its rerun hint to name this skill instead
+of the executor default:
+
+```bash
+STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+```
+
+(If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
+`../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
+It prints one markdown table (`check | status | detail`), where status is
+`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
+(suspicious, not blocking), or `INFO` (context only), and exits non-zero
+if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
+(every verdict comment, `gh pr list` call, and Jira transition depends on
+them). The `worktree` and `branch` rows are context INFO — the shared
+script reports them for every role and never FAILs on them.
+
+Only the rows this skill reads in a role-specific way, or relies on later,
+are spelled out here; the rest are role-independent preconditions defined
+in `statuscheck.sh` itself (their `detail` column is self-explanatory in
+the printed output — that live output, not this table, is what the skill
+actually acts on).
+
+| row | what it verifies / gathers |
+|---|---|
+| `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
+| `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — a candidate for the `<BASE_BRANCH>` resolution (§12) |
+
+The remaining rows FAIL if broken but need no per-role interpretation
+here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
+from the main checkout when missing — see the gate in the script),
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
+`acli_auth` (both load-bearing, as noted above), `jira_project`, plus
+context INFO `base_branch` / `working_tree`.
+
+This skill normally runs from the **parent worktree**
+(`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own
+worktree is an equally valid feature/hotfix branch — the `branch` row only
+distinguishes feature/hotfix vs. anything else (base branch, detached
+HEAD, non-conforming name), not parent vs. sub-task; step 1 below handles
+the sub-task case by climbing to the parent rather than treating it as a
+failure.
+
+Reading the result: **any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't self-repair. The `worktree` and
+`branch` rows never FAIL, so judge them yourself: the `worktree` row must
+report a **linked worktree** and the `branch` row a **feature/hotfix issue
+branch** (the parent's or a sub-task's). If not — the main checkout, the
+base branch, a detached HEAD, or a non-conforming name — stop, because
+this skill runs from an issue's worktree. Otherwise the `issue_key` row's
+derived key seeds step 1 below (which resolves it to `<PARENT-KEY>`,
+climbing from a sub-task to its parent if needed).
+
 ## 1. Resolve the parent, sub-tasks, and pick a track
 
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
-- Fetch the parent issue: `acli jira workitem view <PARENT-KEY> --json --fields '*all'`. Confirm `fields.issuetype.name` is a top-level type (`Task`, `Story`, `Bug`). If it's a `Subtask`, stop — this skill operates on parent issues only; the user should pass the parent key, not a sub-task key.
+- Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields '<canonical review-fetch field list>'`, where the canonical review-fetch field list is defined in `../_shared/jira-acli-reference.md` §3 — the project's single source of truth for issue-fetch fields; resolve it from there. It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
+  - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
+  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → climb to the parent: `<PARENT-KEY>` = `fields.parent.key`, then re-fetch `acli jira workitem view <PARENT-KEY> --json --fields '<canonical review-fetch field list>'` (same §3 list) for the rest of this skill. Note the climb (`<RUN-KEY>` → `<PARENT-KEY>`) in the final report (step 7).
 - **Resolve `<PARENT-BRANCH>`**: `git branch -a | grep <PARENT-KEY>`. Exactly one match → that's the parent branch. Zero or multiple → ask the user rather than guessing.
 - **Resolve `<BASE_BRANCH>`** per `../_shared/jira-acli-reference.md` §12. Only ask the user if both the config and the Jira-comment fallback come up empty.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
   - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 7. (Step 6 only runs if the phase check detects an already-merged PR on a later re-run — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so a re-run is not required; this run's step-7 report is the final update.)
-  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the default `--json` omits subtasks, so `--fields '*all'` is required — see `../_shared/jira-acli-reference.md` §3; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields '*all'` and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6 → 7.
+  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the canonical review-fetch field list from `../_shared/jira-acli-reference.md` §3 names `subtasks` explicitly — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields '<canonical review-fetch field list>'` (same §3 list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6 → 7.
 
 ### Single-step phase check (only for the single-step track)
 
@@ -162,13 +225,13 @@ The post-loop outcome is mutually exclusive and **track-dependent** — pick the
 ### 4a. *(Multistep)* All approved — merge and re-run
 
 1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> --json state` for each).
-2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer <PARENT-KEY>` to pick up the parent PR." (Step 7 posts the written report to Jira.)
+2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree) to pick up the parent PR." (Step 7 posts the written report to Jira.)
 3. **If all are merged** → proceed to step 5 (parent PR handling).
 
 ### 4b. *(Multistep)* Some rejected — report and stop
 
 1. **Do not** proceed to the parent PR, regardless of how many other sub-tasks were approved.
-2. Outcome **M-SOME-BLOCKED**: tell the human to fix the rejected sub-tasks, wait for the executor to move them back to `<STATUS_IN_REVIEW>`, then re-run `/jira-sdlc:jira-task-reviewer <PARENT-KEY>`. (Step 7 lists **both** approved and rejected items + the file:line findings in the Jira report.)
+2. Outcome **M-SOME-BLOCKED**: tell the human to fix the rejected sub-tasks, wait for the executor to move them back to `<STATUS_IN_REVIEW>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree). (Step 7 lists **both** approved and rejected items + the file:line findings in the Jira report.)
 3. End the session.
 
 ### 4c. *(Single-step)* PR reviewed — wait for merge
@@ -176,7 +239,7 @@ The post-loop outcome is mutually exclusive and **track-dependent** — pick the
 For a single-step issue (no sub-tasks), after the PR is reviewed in step 3:
 
 - **If approved** → outcome **S-APPROVED**: tell the user "Single-step issue `<PARENT-KEY>` PR #<prNumber> approved. Merge manually into `<BASE_BRANCH>` — GitHub-for-Jira will auto-transition the issue to `<STATUS_DONE>` on merge. No re-run needed; this run's step-7 report is the final update."
-- **If changes requested** → outcome **S-CHANGES-REQUESTED**: report the findings to the user; the human fixes, pushes, and re-runs `/jira-sdlc:jira-task-reviewer <PARENT-KEY>`.
+- **If changes requested** → outcome **S-CHANGES-REQUESTED**: report the findings to the user; the human fixes, pushes, and re-runs `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree).
 
 ## 5. Parent PR management (multistep only — runs when all sub-task PRs are merged)
 
@@ -260,7 +323,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
   ```
 - **S-CHANGES-REQUESTED** — single-step PR rejected. Outcome title: `Single-step PR changes requested — see findings`. Append the file:line findings, then:
   ```
-  Fix the findings above, push, then re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY>.
+  Fix the findings above, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
 - **S-MERGED** — single-step PR already merged (detected by the step-1 phase check; step 6 already posted the wrap-up comment). Outcome title: `Single-step PR merged — complete`. Append:
   ```
@@ -271,7 +334,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 
 - **M-ALL-APPROVED** — all sub-task PRs approved, some still open. Outcome title: `All sub-task PRs approved — merge manually and re-run`. Append:
   ```
-  All sub-task PRs approved. Merge them manually into <PARENT-BRANCH>, then re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY> to pick up the parent PR.
+  All sub-task PRs approved. Merge them manually into <PARENT-BRANCH>, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to pick up the parent PR.
   ```
 - **M-SOME-BLOCKED** — some approved, some rejected. Outcome title: `Some PRs approved, some blocked — see below`. Append two sections:
   ```
@@ -285,7 +348,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
   2. ...
 
   #### Next step:
-  Fix the findings above in each blocked branch, push, then re-run /jira-sdlc:jira-task-reviewer <PARENT-KEY>.
+  Fix the findings above in each blocked branch, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
 - **M-PARENT-READY** — all sub-tasks merged, parent PR reviewed/approved, awaiting manual merge into base. Outcome title: `All sub-tasks merged — parent PR ready`. Append:
   ```

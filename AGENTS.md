@@ -54,11 +54,15 @@ assuming you're done:
   `plugins/jira-sdlc/.claude-plugin/plugin.json`, which is also the
   skill namespace in `/jira-sdlc:...`) → rename the directory under
   `plugins/`, update that entry's `name` and `source` in
-  `.claude-plugin/marketplace.json`, *and* update the three
-  self-referential slash-command mentions hardcoded inside
-  `jira-task-assigner` (step 8), `jira-task-executor` (step 11), and
-  `jira-task-reviewer` (steps 4a/4b/4c and 7), which currently read
-  `/jira-sdlc:...`.
+  `.claude-plugin/marketplace.json`, *and* update the self-referential
+  slash-command mentions hardcoded inside
+  `jira-task-assigner` (its step 1 Discovery & healthcheck
+  `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
+  (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
+  (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
+  override, plus steps 4a/4b/4c and 7), and the healthcheck script's
+  rerun remedies (`skills/_shared/scripts/statuscheck.sh`), which
+  currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
   README for any new cross-references before assuming a rename is

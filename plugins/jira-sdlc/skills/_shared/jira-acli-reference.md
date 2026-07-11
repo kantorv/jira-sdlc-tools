@@ -263,14 +263,37 @@ on `comment`/`edit`/`transition`/`assign`/`delete`. acli is inconsistent
 here — check each command's `--help` before scripting.
 
 ⚠️ The default `view --json` returns only
-`key,issuetype,summary,status,assignee,description` — **`subtasks` is
-not included**. To get sub-tasks (or any non-default field), request all
-fields:
+`key,issuetype,summary,status,assignee,description` — it **omits
+`subtasks`, `parent`, and `comment`**. Name any field you need
+explicitly with `--fields` (the default `--fields '*all'` pulls ~50
+top-level fields). This toolkit uses two canonical issue-fetch field
+lists — the **single source of truth**: the skills cite them by name
+rather than re-listing them.
+
+| canonical list | `--fields` value | used by |
+|---|---|---|
+| **fetch-with-comments** | `summary,description,issuetype,status,parent,subtasks,comment` | `jira-task-executor` step 1 — it scans `fields.comment.comments` for the assigner's assignment report + `Task memory` notes (step 4) |
+| **review-fetch** | `summary,description,issuetype,status,parent,subtasks` | `jira-task-reviewer` — it doesn't read comments, and `comment` dominates the payload on comment-heavy issues, so omitting it shrinks the parent + every per-sub-task fetch |
+
+Naming `subtasks` explicitly returns it as an array of
+`{"key": "...", "fields": {"summary": …, …}}`, so both
+`fields.subtasks[].key` and the nested `.fields.summary` are available
+without `*all`. `parent` and `comment` appear only when the issue
+actually has them (a leaf has no `parent`; a non-parent's `subtasks` is
+`[]`), so naming them is safe on any issue.
 
 ```bash
-acli jira workitem view <PARENT-KEY> --json --fields '*all'
-# then parse fields.subtasks — an array of {"key": "...", "fields": {...}}
+# executor fetch (with comments):
+acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'
+# reviewer fetch (no comments):
+acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'
 ```
+
+On comment-heavy issues `--fields '*all'` is almost entirely `comment`
+bytes — the canonical lists above are the narrow, purpose-fitted
+replacement. (Helper scripts narrow further to just the fields they
+parse — `acli-list-subtasks.py` requests only `subtasks,issuetype`; see
+§10.)
 
 ### Checking an issue's type and parent
 
@@ -366,6 +389,23 @@ acli jira workitem comment create --key <KEY> --body-file /tmp/c.txt
 Other useful `comment create` flags: `-e/--edit-last` (replace your last
 comment instead of adding a new one — handy for updating a status note
 in place), `--jql` (comment on many issues), `--json`.
+
+### Machine-recoverable comment markers
+
+Some comments are written with a fixed leading marker so a later session
+(or a human) can grep them back out of an issue. Mirror the exact prefix
+when posting, and match on it when reading:
+
+- `PR target branch: <branch>.` — the PR base for the issue's branch,
+  posted by `jira-task-assigner` (or the executor on the no-assigner path)
+  and consumed by the §12 PR-base resolver.
+- `Task memory (jira-task-executor)` — a durable per-task **memory** note
+  the executor leaves for future sessions (findings, gotchas, design
+  decisions + rationale, recovery context). List them with
+  `acli jira workitem comment list --key <KEY> --json` and grep the marker.
+  They are deliberately distinct from the executor's single end-of-run
+  report and from the `PR target branch:` line above, so grepping the
+  marker returns only memory notes.
 
 ### List / update / delete comments
 
@@ -481,8 +521,9 @@ patterns used while seeding issues from a review:
   the manifest, run the script.
 - [`scripts/acli-list-subtasks.py`](scripts/acli-list-subtasks.py)
   — given a parent key, print every sub-task's key + summary by parsing
-  `acli jira workitem view <PARENT> --json --fields '*all'` (the
-  default JSON omits `subtasks`, which is easy to miss — see §3).
+  `acli jira workitem view <PARENT> --json --fields 'subtasks,issuetype'`
+  (the only fields it parses — narrower than the §3 canonical lists; the
+  default `--json` omits `subtasks`, which is easy to miss — see §3).
 
 Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in the project
 root (override with `--project` or the `PROJECT_KEY` env var). Run them from the

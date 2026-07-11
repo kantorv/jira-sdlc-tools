@@ -2,9 +2,12 @@
 """acli-list-subtasks.py — list a Jira parent's sub-tasks.
 
 `acli jira workitem view <KEY> --json` omits `subtasks` by default, so a
-naive JSON parse finds nothing. This script requests `--fields '*all'`
-and prints every sub-task's key + summary. Reusable form of the check
-run after bulk-seeding sub-tasks.
+naive JSON parse finds nothing. This script requests just the fields it
+parses (`--fields 'subtasks,issuetype'` — narrower than the canonical
+issue-fetch lists in ../jira-acli-reference.md §3, which exist for the
+skills' own fetches) and prints every sub-task's key + summary
+(requesting `subtasks` returns each entry's nested `fields.summary`,
+too). Reusable form of the check run after bulk-seeding sub-tasks.
 
 Requires `acli` authenticated (see ../jira-acli-reference.md §0).
 Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with --project
@@ -38,7 +41,7 @@ def resolve_project(env_path: str) -> str:
 
 def acli_view_json(parent: str) -> dict:
     out = subprocess.run(
-        ["acli", "jira", "workitem", "view", parent, "--json", "--fields", "*all"],
+        ["acli", "jira", "workitem", "view", parent, "--json", "--fields", "subtasks,issuetype"],
         capture_output=True, text=True,
     )
     if out.returncode != 0:

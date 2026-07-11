@@ -1,15 +1,25 @@
 ---
 name: jira-task-executor
-description: Given a Jira issue key, picks it up end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. Reports back the PR link and updated Jira status.
+description: Picks up the issue implied by the current worktree's branch end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and updated Jira status.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 ---
 
 You are acting as the engineer picking up a single Jira issue end-to-end.
-Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
+Run this from inside the issue's own worktree — no issue-key argument;
+the issue key is derived from the current branch (see Discovery below).
+$ARGUMENTS, if given, is free-form notes about this run, not a key:
 
 **Conventions used below:**
-- `<KEY>` = the Jira issue key passed as $ARGUMENTS.
+- `<KEY>` = the Jira issue key derived from the current branch
+  (`feature/<KEY>-<slug>` / `hotfix/<KEY>-<slug>`), read from the
+  Discovery healthcheck's `issue_key` row below — the branch is the sole
+  source of truth, there is no user-supplied key to compare it against.
+- `$ARGUMENTS`, when non-empty, is free-form notes about this run
+  (constraints, focus areas, context) — never parsed as an issue key.
+  Fold it into investigation (step 4), clarification (step 5), and
+  implementation (step 6) alongside the Jira issue description; it
+  supplements, never replaces, that description.
 - Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores
   credentials after a one-time `acli jira auth login`, so no per-command
   token prefix; run commands bare.
@@ -18,6 +28,22 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   --body-file <file>`. Never wrap markdown in an inline `--body` string
   (backticks → command substitution), and `--body-file -` / stdin does not
   work — see §6.
+- **Task memory (Jira comments as durable per-task memory)**: treat the
+  issue's Jira comments as this task's long-term memory across sessions —
+  read prior notes before implementing (step 4) and record memory-worthy
+  findings as you work (step 6), so a later run recovering, reimplementing,
+  or reinvestigating this issue inherits the context instead of starting
+  cold. Every memory comment begins with the marker line
+  `Task memory (jira-task-executor)` so it stays greppable and is never
+  confused with the assigner's `Assignment report`, the `PR target branch:`
+  comment, or the final run report (step 12). **Routing**: truly durable or
+  architectural decisions belong in the code docs
+  (README / CLAUDE.md / AGENTS.md / inline) — a Jira memory comment is a
+  pointer for the next session, not a permanent home for design the
+  codebase itself should own; it's for task-recovery, reimplementation, and
+  already-touched-code investigation context. Post memory comments with the
+  same temp-file + `--body-file` mechanics as any other comment (§6) —
+  never an inline `--body` with backticks.
 - Every leaf gets its own dedicated branch and opens its own PR; the PR's
   base comes from the `PR target branch: …` Jira comment the assigner
   posts, resolved in step 10 via `../_shared/jira-acli-reference.md` §12.
@@ -25,11 +51,73 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '*all'`
-   (auth per §0). Pull out: summary, description, issue type, current
-   status, and parent (if any).
-   - Also check `fields.subtasks` (the default `--json` *omits* subtasks,
-     so `--fields '*all'` is required here — see §3):
+**Discovery and healthcheck — run before step 1.** The rest of this
+skill transitions Jira status, commits, pushes, and opens a PR — every
+one of those assumes the right starting point and working credentials,
+and finding a busted environment mid-flow (e.g. a logged-out `gh`
+failing at step 10, *after* the implementation is already written and
+pushed) wastes a whole run and can leave commits on the wrong branch.
+All the checks are bundled into one script, so this is a single Bash
+call rather than a sequence of separate probes:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+```
+
+(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
+plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
+relative to this skill's directory.) The script resolves
+`<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
+`jira-sdlc-tools.local.env` itself; you don't need to pre-resolve tokens
+for this section. It prints one markdown table (`check | status |
+detail`), where status is `OK`, `FAIL` (blocks, with a remedy line
+printed under the table), `WARN` (suspicious, not blocking), or `INFO`
+(context only), and exits non-zero if any row is `FAIL`.
+
+Only the rows this skill reads in a role-specific way, or relies on later,
+are spelled out here; the rest are role-independent preconditions defined
+in `statuscheck.sh` itself (their `detail` column is self-explanatory in
+the printed output — that live output, not this table, is what the skill
+actually acts on).
+
+| row | what it verifies / gathers |
+|---|---|
+| `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
+| `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
+
+The remaining rows FAIL if broken but need no per-role interpretation
+here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
+from the main checkout when missing — see the gate in the script),
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
+(step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
+`jira_project`, plus context INFO `base_branch` / `working_tree`.
+
+Reading the result: **Any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't try to re-create worktrees, switch
+branches, or re-auth CLIs yourself; the executor doesn't self-repair its
+own preconditions.
+
+The `worktree` and `branch` rows are context INFO, not FAILs — the shared
+script reports them for every role (executor, reviewer, assigner) and
+leaves the judgement to each skill. **For the executor, both must hold:**
+the `worktree` row must report a *linked worktree* (not the main checkout)
+and the `branch` row must report a *feature/hotfix issue branch* (not the
+base branch or a non-conforming name). If either doesn't — e.g. you're in
+the main checkout, or sitting on `<DEFAULT_BASE_BRANCH>` — **stop**: this
+skill runs only from an issue's own worktree. cd into the worktree
+`jira-task-assigner` created for the issue (`worktree-<KEY>`) and rerun.
+
+Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
+`issue_key` row's derived key is `<KEY>` for the rest of this run — there's
+no user-supplied key to compare it against, so no separate ownership gate
+is needed. Continue to step 1, carrying the INFO rows forward as context
+(`parent_branch` feeds step 10's PR-base resolution).
+
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '<canonical fetch-with-comments field list>'` (auth per §0), where the canonical fetch-with-comments field list is defined in `../_shared/jira-acli-reference.md` §3 — the project's single source of truth for issue-fetch fields; resolve it from there rather than re-deriving it here. It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
+   - Also check `fields.subtasks` (the canonical list names `subtasks`
+     explicitly — the default `--json` omits it; see §3):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
        sub-tasks' PRs, not an implementation surface. Implementing here
        risks conflicting with / shadowing the sub-tasks' separate PRs that
@@ -47,22 +135,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 2. **Branch setup:**
 
-   - **2a. Confirm you're in the right worktree.** If running from a
-     worktree (`[ -f .git ]` — in a worktree `.git` is a file, not a
-     directory):
-     ```bash
-     case "$(git branch --show-current)" in
-       *"$KEY"*) ;;   # this branch is the issue's own — OK
-       *) echo "Worktree branch '$(git branch --show-current)' doesn't \
-     match $KEY; this worktree wasn't set up for this issue. Stop and \
-     ask the user before continuing." >&2; exit 1 ;;
-     esac
-     ```
-     If the user explicitly asked to run from a parent's worktree, they'll
-     confirm it in response — treat that confirmation as overriding the
-     gate, not as a reason to skip it.
-
-   - **2b. Bring the worktree branch current.** The worktree's branch may
+   - **2a. Bring the worktree branch current.** The worktree's branch may
      be behind the branch it was created from. Look that up via
      `git config branch."$(git branch --show-current)".parentbranch`.
      - If found → bring the worktree branch up to date:
@@ -73,7 +146,7 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
        predates this convention) → skip the merge, but flag in the final
        report that you proceeded on a possibly-stale worktree branch.
 
-   - **2c. Locate or create the issue branch.** `git fetch origin` then
+   - **2b. Locate or create the issue branch.** `git fetch origin` then
      `git branch -a | grep <KEY>` to check whether a branch for this issue
      already exists, local or remote.
      - **Normal path — branch already exists** (the assigner pre-created
@@ -110,6 +183,17 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
+   - **Read prior task memory first.** Step 1 already fetched the issue with
+     the canonical fetch-with-comments field list (§3), which includes
+     `fields.comment.comments`; scan those
+     (or re-list with `acli jira workitem comment list --key <KEY> --json`)
+     for the assigner's `Assignment report` context and for any
+     `Task memory (jira-task-executor)` notes an earlier session left —
+     findings, gotchas, design decisions + rationale, and recovery context.
+     Fold what you learn into this investigation instead of rediscovering it
+     cold. This matters most when re-running a failed or reviewer-rejected
+     issue: the previous session's memory is how you avoid repeating its
+     dead ends.
 
 5. **Clarify** — if the issue's description/acceptance criteria leaves
    something materially ambiguous (an implementation choice that would
@@ -117,6 +201,22 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
    anything that matters.
 
 6. **Implement** the change.
+   - **Record task memory as you go — but only when it's worth preserving.**
+     When you learn something a later session would otherwise have to
+     rediscover — an important finding, a non-obvious piece of logic, a
+     design decision *and its rationale*, a gotcha in already-touched code,
+     or context that would help recover or reimplement this task — post a
+     `Task memory (jira-task-executor)` comment (marker + temp-file/
+     `--body-file` mechanics per the preamble and §6). This is
+     task-recovery memory, **not** running commentary: skip trivial or
+     self-evident decisions, and if a single note at the end captures
+     everything worth keeping, one comment is enough. Memory-worthy items
+     can surface as early as investigation (step 4) — post them when you
+     find them, not only here. **Routing reminder**: if the decision is
+     truly durable or architectural, put it in the code docs
+     (README / CLAUDE.md / AGENTS.md / inline) — a Jira memory comment is a
+     pointer for the next session, not a substitute for documentation the
+     codebase should own.
 
 7. **Test before committing:**
 
@@ -211,8 +311,11 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       - `major` — breaking changes (API removals, behaviour reversals)
       Labels must already exist in the repo (confirm with
       `gh api repos/<org>/<repo>/labels --jq '.[].name'`).
-    - If `gh` isn't installed or not authenticated, don't fail silently —
-      report that, and give the user the compare URL instead:
+    - The discovery checks above already confirmed `gh` is installed and
+      authenticated, so a failure here is something else (a `gh pr create`
+      error, a repo-permission problem, or a transient network issue).
+      Don't fail silently — report the `gh` error and still hand back the
+      compare URL so the user can open the PR by hand:
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
       (get `<org>/<repo>` from `git remote get-url origin`).
 
@@ -229,7 +332,8 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
       GitHub-for-Jira automation (if connected) transitions the
       sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
       it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
-      executor must re-run `/jira-sdlc:jira-task-executor <KEY>` to fix it.
+      executor must re-run `/jira-sdlc:jira-task-executor` (bare, from
+      this same worktree) to fix it.
     - **No parent (single-step top-level issue)** → the reviewer
       (when run on that issue) will review this PR targeting the
       base branch. `<STATUS_DONE>` is handled when the human merges the
@@ -239,10 +343,17 @@ Given an issue key ($ARGUMENTS, e.g. `PROJ-278`):
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Post this same
-    report to the user in chat **and** as a single Jira comment — don't
-    post a separate short "PR opened" comment earlier, this is the one
-    comment for the whole run. Since it's multi-line, post it using the
-    temp-file + `--body-file` convention (see the preamble above and §6):
+    report to the user in chat **and** as a single Jira comment: this is
+    the one comprehensive **run report** — don't fragment it (in
+    particular, no separate trivial "PR opened" comment earlier). The
+    `Task memory (jira-task-executor)` notes from step 6 are the *only*
+    sanctioned companions to it: they carry their own marker, serve a
+    different purpose (task-recovery context, not the run summary), and are
+    expected whenever the run turned up something worth preserving between
+    sessions. Keep the two kinds distinct — memory notes always carry the
+    marker line; this final run report never does. Since it's multi-line,
+    post it using the temp-file + `--body-file` convention (see the preamble
+    above and §6):
     ```
     acli jira workitem comment create --key <KEY> --body-file /tmp/<KEY>-report.md
     ```
