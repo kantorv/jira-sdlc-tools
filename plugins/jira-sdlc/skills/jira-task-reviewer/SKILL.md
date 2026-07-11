@@ -34,29 +34,48 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
 `../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
-See `jira-task-executor`'s Discovery & healthcheck section for the full
-row-by-row description of what the script checks — the same rows matter
-here: `gh_auth` and `acli_auth` are load-bearing (every verdict comment,
-`gh pr list` call, and Jira transition depends on them). The `worktree`
-and `branch` rows are context INFO (the shared script reports them for
-every role and never FAILs on them); **for the reviewer, the `worktree`
-row must report a linked worktree and the `branch` row a feature/hotfix
-issue branch** — if not (the main checkout, the base branch, a detached
-HEAD, or a non-conforming name), stop, because this skill runs from an
-issue's worktree. This skill normally runs from the **parent worktree**
+It prints one markdown table (`check | status | detail`), where status is
+`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
+(suspicious, not blocking), or `INFO` (context only), and exits non-zero
+if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
+(every verdict comment, `gh pr list` call, and Jira transition depends on
+them). The `worktree` and `branch` rows are context INFO — the shared
+script reports them for every role and never FAILs on them. The rows:
+
+| row | what it verifies / gathers |
+|---|---|
+| `git_repo` | you're inside a git repository at all |
+| `worktree` | INFO: whether the repo root is a *linked worktree* (`.git` is a file) or the *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below turns that into a stop condition |
+| `env_config` | `jira-sdlc-tools.env` exists and defines `<PROJECT-KEY>` |
+| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token). It's gitignored, so in a linked worktree the `statuscheck.sh` gate auto-copies it from the main checkout when missing — this row then reports `OK` with the copy noted; missing in both the worktree and the main checkout, the gate FAILs this row, prints a remedy, and halts before any other check runs |
+| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
+| `branch` | INFO: whether the current branch is the base branch, a `feature/*`/`hotfix/*` issue branch (§7), or neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below turns that into a stop condition |
+| `branch_project` | the key embedded in the branch name belongs to `<PROJECT-KEY>` — not some other project's worktree (still FAILs on a wrong-project branch, a role-independent error) |
+| `issue_key` | the issue key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed). The script also accepts an optional key argument, but this skill never passes one — the branch is the sole source of truth |
+| `gh_auth` | `gh` installed + authenticated — load-bearing: every `gh pr list` / `gh pr review` verdict this skill posts depends on it |
+| `acli_auth` | `acli` installed + authenticated — load-bearing: every `acli jira ...` status read and (on the reject path) transition depends on it; credentials live in acli's keyring, not the env files |
+| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
+| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files — where `<PARENT-BRANCH>` itself merges |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — a candidate for the `<BASE_BRANCH>` resolution (§12) |
+| `working_tree` | WARN if uncommitted changes predate this run |
+
+This skill normally runs from the **parent worktree**
 (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own
 worktree is an equally valid feature/hotfix branch — the `branch` row only
 distinguishes feature/hotfix vs. anything else (base branch, detached
 HEAD, non-conforming name), not parent vs. sub-task; step 1 below handles
 the sub-task case by climbing to the parent rather than treating it as a
-failure. `branch_project` still FAILs on a wrong-project branch (a
-role-independent error).
+failure.
 
-Reading the result: **no FAIL row, `worktree` linked, `branch` an issue
-branch** → the `issue_key` row's derived key seeds step 1 below (which
-resolves it to `<PARENT-KEY>`, climbing from a sub-task to its parent if
-needed). **Any FAIL row** → stop, relay the script's remedy line to the
-user, and wait — don't self-repair.
+Reading the result: **any FAIL row** → stop, relay the script's remedy
+line to the user, and wait — don't self-repair. The `worktree` and
+`branch` rows never FAIL, so judge them yourself: the `worktree` row must
+report a **linked worktree** and the `branch` row a **feature/hotfix issue
+branch** (the parent's or a sub-task's). If not — the main checkout, the
+base branch, a detached HEAD, or a non-conforming name — stop, because
+this skill runs from an issue's worktree. Otherwise the `issue_key` row's
+derived key seeds step 1 below (which resolves it to `<PARENT-KEY>`,
+climbing from a sub-task to its parent if needed).
 
 ## 1. Resolve the parent, sub-tasks, and pick a track
 

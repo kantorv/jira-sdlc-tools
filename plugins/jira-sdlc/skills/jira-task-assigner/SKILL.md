@@ -43,26 +43,31 @@ relative to this skill's directory.) It resolves `<PROJECT-KEY>` and
 `<DEFAULT_BASE_BRANCH>` from the env files itself, so you don't
 pre-resolve tokens for this section.
 
-See `jira-task-executor`'s Discovery & healthcheck section for the full
-row-by-row description — the same rows matter here, **except the assigner
-runs from the main repo checkout on the base branch, not a per-issue
-worktree**, so it reads the two context rows the opposite way. The
-`worktree` and `branch` rows are context INFO (the shared script reports
-them for every role and never FAILs on them); for the assigner:
+It prints one markdown table (`check | status | detail`), where status is
+`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
+(suspicious, not blocking), or `INFO` (context only), and exits non-zero
+if any row is `FAIL`. The `worktree` and `branch` rows are context INFO —
+the shared script reports them for every role and never FAILs on them; the
+assigner runs from the **main repo checkout on the base branch** (not a
+per-issue worktree), so it reads those two rows the opposite way from the
+executor/reviewer. The rows:
 
-- **`worktree` must report the *main repo checkout*** (`.git` is a
-  directory), not a linked worktree — the assigner *creates* worktrees, it
-  doesn't run inside one. If it reports a linked worktree, stop and tell
-  the user to cd into the main repository checkout.
-- **`branch` should report the *base branch*** (`<DEFAULT_BASE_BRANCH>`).
-  A `feature/*`/`hotfix/*` issue branch is the assigner's explicit STOP
-  case, and any other branch is a decision for the user — both are handled
-  in step 2, which consumes this row's result (so you don't re-run
-  `git branch --show-current` there).
-
-`issue_key`, `branch_project`, and `parent_branch` read as WARN/INFO here
-— there is no issue yet for the assigner to key off, so `branch_project`
-being skipped and `issue_key` reporting no derivable key are both expected.
+| row | what it verifies / gathers |
+|---|---|
+| `git_repo` | you're inside a git repository at all |
+| `worktree` | INFO: whether the repo root is the *main checkout* (`.git` is a directory) or a *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; the reading note below turns that into a stop condition |
+| `env_config` | `jira-sdlc-tools.env` exists and defines `<PROJECT-KEY>` |
+| `env_local` | `jira-sdlc-tools.local.env` is mandatory in every checkout (Jira URL/email/token) and gitignored. In the main checkout the assigner runs from, this row is `OK` when present and `FAIL` (with a remedy) when missing — the linked-worktree auto-copy path doesn't apply here |
+| `env_local_ignored` | the local env file is gitignored and untracked — it points at secrets and must never enter shared history |
+| `branch` | INFO: whether the current branch is the *base branch* (`<DEFAULT_BASE_BRANCH>`), a `feature/*`/`hotfix/*` issue branch (§7), or neither. **The assigner requires the base branch**; a feature/hotfix issue branch is its explicit STOP case and any other branch is a user decision — both handled in step 2, which consumes this row |
+| `branch_project` | skipped here (`WARN`) — there's no issue branch yet to check a project prefix against |
+| `issue_key` | reports no derivable key (`WARN`) — no issue exists yet; the assigner is what *creates* the issue and its key |
+| `gh_auth` | `gh` installed + authenticated. The assigner pushes branches but doesn't call `gh` itself; a green row confirms the GitHub credentials the executor will need for `gh pr create` already work (a broken `gh` surfaces here rather than mid-execution) |
+| `acli_auth` | `acli` installed + authenticated — every `acli jira ...` call in steps 6–7 depends on it; credentials live in acli's keyring, not the env files |
+| `jira_project` | `<PROJECT-KEY>` exists and is reachable on the authenticated Jira site (`acli jira project list`, whole-word match) |
+| `base_branch` | INFO: `<DEFAULT_BASE_BRANCH>` as resolved from the env files |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — unset on the base branch, which is expected here |
+| `working_tree` | WARN if uncommitted changes predate this run |
 
 **Worktrees directory exists.** The assigner creates a `git worktree` per
 leaf issue under `<WORKTREES_DIR>` and never `mkdir`s it, so verify it's
@@ -74,9 +79,20 @@ Reading the result: **any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
 env values, add missing files silently). Role-independent failures
 (missing git repo or env files, a mis-tracked `local.env`, an
-unauthenticated `acli`/`gh`, an unreachable project) still FAIL and
-block. With no FAIL row, the `worktree`/`branch` rows reading as above,
-and `<WORKTREES_DIR>` present, continue to step 2.
+unauthenticated `acli`/`gh`, an unreachable project) still FAIL and block.
+
+The `worktree` and `branch` rows never FAIL, so judge them yourself: the
+`worktree` row must report the **main repo checkout** (if it reports a
+linked worktree, stop and tell the user to cd into the main checkout — the
+assigner doesn't run inside a per-issue worktree), and the `branch` row
+should report the **base branch** (`<DEFAULT_BASE_BRANCH>`). A
+`feature/*`/`hotfix/*` issue branch is the assigner's explicit STOP case
+and any other branch is a user decision — both are resolved in step 2,
+which consumes this row (so you don't re-run `git branch --show-current`
+there).
+
+With no FAIL row, the `worktree`/`branch` rows reading as above, and
+`<WORKTREES_DIR>` present, continue to step 2.
 
 ## 2. Determine context from the current branch
 
