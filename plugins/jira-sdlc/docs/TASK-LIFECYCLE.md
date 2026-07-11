@@ -210,12 +210,14 @@ commit/push, and the PR open. See
 
 ## Phase 3 — Review & aggregate approval (`jira-task-reviewer`)
 
-Triggered once by the user on the **parent** key (not a sub-task). Step 1
-determines the track from `fields.subtasks`: empty → **single-step**
-(review the one PR directly into `<BASE_BRANCH>`; approve posts the final
-report and no re-run is needed — GitHub-for-Jira handles Done on merge);
-non-empty → **multistep** (review each In Review sub-task PR, then the
-aggregate parent PR once sub-tasks are merged).
+Triggered from the parent's worktree (branch-derived key; no key argument).
+Step 1 determines the track from `fields.subtasks`: if the branch-derived
+key resolves to a Subtask, it climbs to the parent via `fields.parent.key`;
+empty `fields.subtasks` → **single-step** (review the one PR directly into
+`<BASE_BRANCH>`; approve posts the final report and no re-run is needed —
+GitHub-for-Jira handles Done on merge); non-empty → **multistep** (review
+each In Review sub-task PR, then the aggregate parent PR once sub-tasks are
+merged).
 
 On the multistep track: each matching sub-task PR is reviewed
 sequentially in one pass. Both verdicts go through `gh pr review

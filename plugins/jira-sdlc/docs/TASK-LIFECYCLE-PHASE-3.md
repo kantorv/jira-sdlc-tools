@@ -1,9 +1,9 @@
 # Task Lifecycle — Phase 3: Review & aggregate approval
 
 The review phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run by the
-**`jira-task-reviewer`** skill. Triggered by the user on the
-**parent** issue key after every leaf executor has reported back and
-transitioned its issue to `<STATUS_IN_REVIEW>`.
+**`jira-task-reviewer`** skill. Triggered from the parent's worktree
+(branch-derived key; no key argument) after every leaf executor has
+reported back and transitioned its issue to `<STATUS_IN_REVIEW>`.
 
 The reviewer handles **both** single-step top-level issues (no sub-tasks)
 and multistep parents (with sub-tasks). For single-step, it reviews the
@@ -143,10 +143,11 @@ sequenceDiagram
   the parent + sub-tasks (filtering to `<STATUS_IN_REVIEW>`), each
   rejected issue → In Progress transition with its findings comment, and
   the summary/report comments posted on the parent after every review.
-- **Parent-only, refuses sub-task keys** — the reviewer is triggered on
-  the parent key; a sub-task key is rejected. A top-level issue with
-  no sub-tasks follows the single-step track (review the one PR directly
-  into `<BASE_BRANCH>`).
+- **Parent via climb (sub-task branches climb up)** — the reviewer derives
+  the key from the current branch (feature/<KEY>-slug or hotfix/<KEY>-slug)
+  and `acli` fetches the issue. If the issue is a Subtask, step 1 climbs
+  to its parent via `fields.parent.key` and continues from there. A
+  top-level issue with no sub-tasks follows the single-step track.
 - **Phase check first** — visible as an explicit GIT `gh pr list`
   whose return dispatches the branches: *no* PR means a full review pass,
   an *open* PR skips straight to review (single-step) or the aggregate
