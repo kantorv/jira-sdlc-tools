@@ -1,0 +1,70 @@
+name: Transition Jira Issue on Branch Creation
+
+on:
+  create
+
+jobs:
+  transition-jira:
+    if: github.ref_type == 'branch' && (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'hotfix/'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract Jira issue key
+        id: jira
+        shell: bash
+        run: |
+          BRANCH="${{ github.ref_name }}"
+
+          if [[ "$BRANCH" =~ ^(feature|hotfix)/([A-Z]+-[0-9]+)- ]]; then
+            echo "key=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Jira issue found in branch '$BRANCH'. Skipping."
+            exit 0
+          fi
+
+      - name: Find In Progress transition
+        id: transition
+        env:
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
+        shell: bash
+        run: |
+          RESPONSE=$(curl -fsS \
+            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+            -H "Accept: application/json" \
+            "$JIRA_URL/rest/api/3/issue/${{ steps.jira.outputs.key }}/transitions")
+
+          TRANSITION_ID=$(echo "$RESPONSE" | jq -r '
+            .transitions[]
+            | select(.to.name == "In Progress")
+            | .id
+          ' | head -n1)
+
+          if [ -z "$TRANSITION_ID" ] || [ "$TRANSITION_ID" = "null" ]; then
+            echo "No transition to In Progress is available (issue may not be in To Do)."
+            exit 0
+          fi
+
+          echo "id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Transition Jira issue
+        env:
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
+        shell: bash
+        run: |
+          curl -fsS \
+            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "$JIRA_URL/rest/api/3/issue/${{ steps.jira.outputs.key }}/transitions" \
+            -d "{
+              \"transition\": {
+                \"id\": \"${{ steps.transition.outputs.id }}\"
+              }
+            }"
+
+          echo "Transitioned ${{ steps.jira.outputs.key }} to In Progress."
