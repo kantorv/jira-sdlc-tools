@@ -25,8 +25,8 @@ jobs:
       - name: Find In Progress transition
         id: transition
         env:
-          JIRA_URL: ${{ secrets.JIRA_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_URL: ${{ secrets.ACCOUNT_JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
         shell: bash
         run: |
@@ -50,8 +50,8 @@ jobs:
 
       - name: Transition Jira issue
         env:
-          JIRA_URL: ${{ secrets.JIRA_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
         shell: bash
         run: |
