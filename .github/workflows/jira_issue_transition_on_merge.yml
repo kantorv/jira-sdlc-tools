@@ -24,82 +24,53 @@ jobs:
             exit 0
           fi
 
-      - name: Find Done transition
-        id: transition
+      - name: Install acli
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Resolve the current acli .deb from Atlassian's apt repo so this
+          # auto-tracks new acli releases without a hard-coded version string.
+          PACKAGES="https://acli.atlassian.com/linux/deb/dists/stable/main/binary-amd64/Packages"
+          DEB=$(curl -fsSL "$PACKAGES" | awk '/^Package: acli$/{p=1} p && /^Filename:/{print $2; exit}')
+          if [ -z "$DEB" ]; then
+            echo "::error::acli .deb not found in Packages index at $PACKAGES"
+            exit 1
+          fi
+          curl -fsSL -o /tmp/acli.deb "https://acli.atlassian.com/linux/deb/$DEB"
+          sudo dpkg -i /tmp/acli.deb
+          acli --version
+
+      - name: Authenticate acli
         env:
           JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
         shell: bash
         run: |
-          JIRA_KEY="${{ steps.jira.outputs.key }}"
+          set -euo pipefail
+          # acli expects a bare site host (no https://); strip any scheme the secret may carry.
+          SITE="${JIRA_URL#*://}"
+          printf '%s' "$JIRA_TOKEN" | acli jira auth login \
+            --site "$SITE" \
+            --email "$JIRA_EMAIL" \
+            --token
+          acli jira auth status
 
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/jira_transitions.json \
-            -w "%{http_code}" \
-            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
-            -H "Accept: application/json" \
-            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions") || {
-            echo "::error::curl could not reach Jira."
-            exit 1
-          }
+      - name: Transition to Done
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="${{ steps.jira.outputs.key }}"
+          # Mirrors STATUS_DONE from jira-sdlc-tools.env.
+          TARGET="Done"
 
-          echo "GET transitions -> HTTP $HTTP_CODE"
-
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Jira responded HTTP $HTTP_CODE (expected 200). Response body:"
-            head -c 1000 /tmp/jira_transitions.json || true
-            exit 1
-          fi
-
-          if ! jq empty /tmp/jira_transitions.json 2>/dev/null; then
-            echo "::error::Jira returned HTTP 200 but the body is not valid JSON. Response body:"
-            head -c 1000 /tmp/jira_transitions.json || true
-            exit 1
-          fi
-
-          TRANSITION_ID=$(jq -r '
-            .transitions[]
-            | select(.to.name == "Done")
-            | .id
-          ' /tmp/jira_transitions.json | head -n1)
-
-          if [ -z "$TRANSITION_ID" ] || [ "$TRANSITION_ID" = "null" ]; then
-            echo "No transition to Done is available (issue may already be Done). Skipping."
+          CUR=$(acli jira workitem view "$KEY" --json --fields status \
+            | jq -r '.fields.status.name')
+          echo "Issue $KEY is currently '$CUR'."
+          if [ "$CUR" = "$TARGET" ]; then
+            echo "Already $TARGET — skipping."
             exit 0
           fi
 
-          echo "id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Transition Jira issue
-        env:
-          JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
-          JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
-        shell: bash
-        run: |
-          JIRA_KEY="${{ steps.jira.outputs.key }}"
-
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/jira_post.json \
-            -w "%{http_code}" \
-            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions" \
-            -d "{\"transition\":{\"id\":\"${{ steps.transition.outputs.id }}\"}}") || {
-            echo "::error::curl POST to Jira failed."
-            exit 1
-          }
-
-          echo "POST transition -> HTTP $HTTP_CODE"
-
-          # Jira returns 204 No Content on a successful transition (200 is also fine).
-          if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Jira transition POST failed with HTTP $HTTP_CODE. Response body:"
-            head -c 1000 /tmp/jira_post.json || true
-            exit 1
-          fi
-
-          echo "Transitioned $JIRA_KEY to Done."
+          acli jira workitem transition --key "$KEY" --status "$TARGET" --yes
+          echo "Transitioned $KEY to $TARGET."
