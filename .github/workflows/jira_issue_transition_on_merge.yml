@@ -24,53 +24,48 @@ jobs:
             exit 0
           fi
 
-      - name: Install acli
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Resolve the current acli .deb from Atlassian's apt repo so this
-          # auto-tracks new acli releases without a hard-coded version string.
-          PACKAGES="https://acli.atlassian.com/linux/deb/dists/stable/main/binary-amd64/Packages"
-          DEB=$(curl -fsSL "$PACKAGES" | awk '/^Package: acli$/{p=1} p && /^Filename:/{print $2; exit}')
-          if [ -z "$DEB" ]; then
-            echo "::error::acli .deb not found in Packages index at $PACKAGES"
-            exit 1
-          fi
-          curl -fsSL -o /tmp/acli.deb "https://acli.atlassian.com/linux/deb/$DEB"
-          sudo dpkg -i /tmp/acli.deb
-          acli --version
-
-      - name: Authenticate acli
+      - name: Transition to Done
         env:
           JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
+          KEY: ${{ steps.jira.outputs.key }}
         shell: bash
         run: |
           set -euo pipefail
-          # acli expects a bare site host (no https://); strip any scheme the secret may carry.
-          SITE="${JIRA_URL#*://}"
-          printf '%s' "$JIRA_TOKEN" | acli jira auth login \
-            --site "$SITE" \
-            --email "$JIRA_EMAIL" \
-            --token
-          acli jira auth status
-
-      - name: Transition to Done
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEY="${{ steps.jira.outputs.key }}"
           # Mirrors STATUS_DONE from jira-sdlc-tools.env.
           TARGET="Done"
 
-          CUR=$(acli jira workitem view "$KEY" --json --fields status \
-            | jq -r '.fields.status.name')
+          # The secret may carry a scheme; the REST host needs a bare host.
+          SITE="${JIRA_URL#*://}"
+
+          # A scoped API token is rejected by Basic auth on the site domain
+          # (*.atlassian.net) — it only works through the api.atlassian.com
+          # gateway, which is addressed by cloud id. Resolve the cloud id from
+          # the site's public tenant_info endpoint so no extra secret is needed.
+          CLOUD_ID=$(curl -fsSL "https://$SITE/_edge/tenant_info" | jq -r '.cloudId')
+          if [ -z "$CLOUD_ID" ] || [ "$CLOUD_ID" = "null" ]; then
+            echo "::error::Could not resolve cloudId from https://$SITE/_edge/tenant_info"
+            exit 1
+          fi
+          BASE="https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3"
+          api() { curl -sSfL -u "$JIRA_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" "$@"; }
+
+          CUR=$(api "$BASE/issue/$KEY?fields=status" | jq -r '.fields.status.name')
           echo "Issue $KEY is currently '$CUR'."
           if [ "$CUR" = "$TARGET" ]; then
             echo "Already $TARGET — skipping."
             exit 0
           fi
 
-          acli jira workitem transition --key "$KEY" --status "$TARGET" --yes
+          # acli resolved status name → transition id for us; do it explicitly.
+          TID=$(api "$BASE/issue/$KEY/transitions" \
+            | jq -r --arg t "$TARGET" 'first(.transitions[] | select(.to.name == $t) | .id) // empty')
+          if [ -z "$TID" ]; then
+            echo "::error::No available transition to '$TARGET' from '$CUR' for $KEY."
+            exit 1
+          fi
+
+          api -X POST -H "Content-Type: application/json" \
+            -d "{\"transition\":{\"id\":\"$TID\"}}" "$BASE/issue/$KEY/transitions"
           echo "Transitioned $KEY to $TARGET."
