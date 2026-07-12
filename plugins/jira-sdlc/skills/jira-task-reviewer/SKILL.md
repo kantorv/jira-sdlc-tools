@@ -135,22 +135,23 @@ steps that emit it:
 - the GitHub PR verdict comments (3d approve/reject, 5b parent),
 - the Jira per-issue comment (3d),
 - the parent per-sub-task tally (3e), and
-- the end-of-run chat + parent report (7).
+- the end-of-run chat + parent report (6).
 
 A person following the same review across GitHub, Jira, and chat therefore
 sees one layout at one level of detail. An individual emission only varies
 along two axes; the section structure never changes:
 
 - **PR set in scope** — a *per-PR* emission (3d, 5b, 3e) fills the report
-  for the single PR just reviewed; the *end-of-run* emission (7) fills it
+  for the single PR just reviewed; the *end-of-run* emission (6) fills it
   for every PR in the run's PR set (step 1).
 - **Which outcome block is filled** — exactly one outcome from step 6's
   catalogue (S-APPROVED, S-CHANGES-REQUESTED, S-MERGED, M-SUBTASK-APPROVED,
   M-SUBTASK-CHANGES-REQUESTED, M-ALL-APPROVED, M-SOME-BLOCKED, M-PARENT-READY,
-  M-FULLY-COMPLETE), chosen by track × phase — and, for a *per-PR*
-  emission, by *which* PR: the single-step parent PR uses the `S-*`
-  outcomes, a multistep sub-task PR uses the `M-SUBTASK-*` outcomes, and the
-  multistep parent PR uses M-PARENT-READY. It supplies the
+  M-PARENT-CHANGES-REQUESTED, M-FULLY-COMPLETE), chosen by track × phase —
+  and, for a *per-PR* emission, by *which* PR: the single-step parent PR
+  uses the `S-*` outcomes, a multistep sub-task PR uses the `M-SUBTASK-*`
+  outcomes, and the multistep parent PR uses M-PARENT-READY (5b approve) or
+  M-PARENT-CHANGES-REQUESTED (5b reject). It supplies the
   `<OUTCOME_TITLE>` and the `### Next step` wording; everything else is the
   same for all outcomes.
 
@@ -164,7 +165,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 
 ### Pull Request Summary
 - <KEY> PR #<n>: [✅ approved | ❌ changes requested | ⏳ skipped] <PR URL>
-- ...   (one line per PR in scope — a single PR for 3d/5b/3e, every PR in the set for 7)
+- ...   (one line per PR in scope — a single PR for 3d/5b/3e, every PR in the set for 6)
 
 ### What I reviewed
 - Track: <single-step | multistep>
@@ -194,7 +195,7 @@ literal first line of the body and starts with `APPROVED — ` or
   contract — 3a's idempotency detection matches on it. Keep it verbatim;
   never reword the two-word prefix or the ` — ` separator.
 - On the **Jira per-issue comment** (3d), the **parent tally** (3e), and
-  the **end-of-run report** (7), the same line leads the body so every
+  the **end-of-run report** (6), the same line leads the body so every
   destination opens identically. On a per-PR emission it is that PR's
   verdict; on the end-of-run report it is the run's overall verdict
   (`CHANGES REQUESTED — …` whenever any PR in the set was rejected — e.g.
@@ -349,7 +350,7 @@ Apply the **3a body-prefix idempotency check** before reviewing: a prior self-re
 
 1. Review the aggregate diff: same criteria as 3c, but lighter. The sub-tasks were already reviewed individually — focus on integration issues, conflicts, and anything that only surfaces when the pieces combine.
 2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 6 posts the run-level report.
-3. **If changes requested** → post the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
+3. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
 
 *Do not merge here.* Report that the parent PR is reviewed/approved and waiting for the user to merge it manually.
 
@@ -389,6 +390,10 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
   ```
   Parent PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
   GitHub-for-Jira will auto-transition all related issues to <STATUS_DONE> on merge. No re-run is needed after merge — this report is the final update, and no further action or skill call is expected on the issue.
+  ```
+- **M-PARENT-CHANGES-REQUESTED** — all sub-tasks merged, parent PR rejected on the 5b integration review. Title: `Parent PR changes requested — see findings`. (The integration `file:line` findings live in the report's `### What I reviewed` section — never dropped.) Next step:
+  ```
+  Fix the integration findings above on <PARENT-BRANCH>, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to re-review the parent PR.
   ```
 - **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
