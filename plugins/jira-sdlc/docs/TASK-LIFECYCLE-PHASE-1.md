@@ -50,7 +50,7 @@ sequenceDiagram
     alt Multistep (split into parallel sub-tasks)
         Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)
         JIRA-->>Assigner: <PARENT-KEY>
-        Assigner->>GIT: create branch <PREFIX>/<PARENT-KEY>-<slug><br/>(feature/ for Task·Story, hotfix/ for Bug),<br/>set parentbranch config, push, add parent worktree
+        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug><br/>(always feature/ — assigner branches from development),<br/>set parentbranch config, push, add parent worktree
         GIT-->>Assigner: branch + worktree ready
         loop per sub-task
             Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)

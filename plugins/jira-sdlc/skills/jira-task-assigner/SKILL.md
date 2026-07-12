@@ -19,16 +19,17 @@ project. Given a task description from the user ($ARGUMENTS):
   reports whether it's present.
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
-- `<PREFIX>` = the branch prefix, picked once from the **top-level
-  issue's type** (`../_shared/jira-acli-reference.md` §7): `Task`/`Story`
-  → `feature`, `Bug` → `hotfix`. Sub-tasks inherit their parent's prefix.
-  Branch naming is always `<PREFIX>/<KEY>-<slug>` whether `<KEY>` is the
+- **Branch prefix** — the prefix follows the **base branch, not the
+  issue type** (`../_shared/jira-acli-reference.md` §7; SDLC.md §2). The
+  assigner only ever branches from `<DEFAULT_BASE_BRANCH>`
+  (`development`), so every branch it creates is a **`feature/`** branch,
+  regardless of issue type: `feature/` covers all planned work —
+  new features *and* bug fixes alike. The `hotfix/` prefix is reserved
+  for emergency production fixes branched from `main`, a flow the
+  assigner does **not** provision (that's the manual bootstrap in §7).
+  Branch naming is always `feature/<KEY>-<slug>` whether `<KEY>` is the
   top-level issue or a Sub-task — this keeps the branch-parsing regex in
-  step 2 working no matter which branch someone checks out later. (One
-  known limitation: the assigner always branches from the `BASE_BRANCH`
-  step 2 decides — provisioning a production hotfix from a *different*
-  base branch than `<DEFAULT_BASE_BRANCH>` is not a supported flow here
-  yet.)
+  step 2 working no matter which branch someone checks out later.
 
 ## 1. Discovery and healthcheck
 
@@ -161,10 +162,10 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
    - **Assignment:** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `--assignee @me` on creation. If your project wants auto-assignment, add the flag and update this note.
-2. Create the branch: `git branch <PREFIX>/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin <PREFIX>/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
-3. Set parentbranch config: `git config branch.<PREFIX>/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
+2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
+3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
-   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> <PREFIX>/<PARENT-KEY>-<slug>`
+   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> feature/<PARENT-KEY>-<slug>`
    *(A worktree to check out when inspecting the assembled parent branch, and a base for future additions.)*
 
 **B. If Single-step (Cohesive work):**
@@ -175,9 +176,9 @@ Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments"
 Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
 
 For each sub-task `→ <SUBTASK-KEY>`:
- 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX>/<SUBTASK-KEY>-<slug> <PREFIX>/<PARENT-KEY>-<slug>`
-    (`<PREFIX>` is inherited from the top-level issue's type — the nesting rule in `../_shared/jira-acli-reference.md` §7)
- 2. `git config branch.<PREFIX>/<SUBTASK-KEY>-<slug>.parentbranch <PREFIX>/<PARENT-KEY>-<slug>` (required for executor)
+ 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
+    (sub-tasks use the same `feature/` prefix as the parent — the nesting rule in `../_shared/jira-acli-reference.md` §7)
+ 2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
  3. Leave a PR-target comment on the sub-task (format below).
 
 **PR-target comments** (consumed by the executor, and by the reviewer's fallback on a fresh clone):
@@ -187,7 +188,7 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 *"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>."*
 
 *Multistep sub-task:*
-*"PR target branch: <PREFIX>/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
 
 In the multistep path, after creating all sub-tasks, also post the single-step-format comment on the **parent issue** — its PR targets `<BASE_BRANCH>` — so the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
 
