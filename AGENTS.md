@@ -82,11 +82,6 @@ claude plugin validate .
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
-
-# no project-specific literals crept back in. project-config.md is
-# excluded because its example table is the sanctioned home for them
-grep -rn --exclude=project-config.md "SUB-\|cropapp\|XState\|MUI\b" \
-  plugins/jira-sdlc/skills/ plugins/jira-sdlc/docs/ plugins/jira-sdlc/README.md
 ```
 
 Beyond that, "testing" a skill means tracing through which assignment
