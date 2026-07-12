@@ -275,6 +275,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   │   └── SKILL.md
         │   └── _shared/
         │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — primary CLI reference
+        │       ├── jira-api-reference.md    # direct REST API (no acli) — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
@@ -319,6 +320,47 @@ Nothing else under `skills/` should need editing. It covers:
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
 Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
+
+### Generating the Jira API token
+
+Create the token at
+[`id.atlassian.com` → Security → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
+Atlassian offers two kinds, and the choice matters because `acli` and a
+raw REST call don't accept them the same way:
+
+- **Classic, unscoped — "Create API token".** *Always works*, everywhere:
+  with `acli` (what the three skills drive Jira through) and with every
+  REST endpoint. It carries the full Jira permissions of the account it
+  belongs to, so scope it down by restricting **that account's project
+  role/permissions**, not the token. **This is the one to use for
+  `JIRA_TOKEN`** — `acli` cannot operate with a scoped token (see below).
+
+- **Scoped — "Create API token with scopes".** Least privilege, but with
+  a hard constraint: a scoped token is **rejected by Basic auth on the
+  `*.atlassian.net` site domain**, so `acli`'s Jira operations fail with
+  it (its login may still succeed, then every `workitem` call errors). It
+  only works when you call the REST API directly through the
+  **`https://api.atlassian.com/ex/jira/<cloudId>` gateway** — which is how
+  the direct-REST transition workflows
+  (`.github/workflows/jira_issue_transition_*.yml`) authenticate. For that
+  transition flow the least-privilege set is exactly three **coarse**
+  scopes:
+
+  | Scope | Grants |
+  |---|---|
+  | `read:jira-user` | identity check at login |
+  | `read:jira-work` | read an issue's status + list its transitions |
+  | `write:jira-work` | perform the transition |
+
+  Avoid the *granular* per-resource scopes (`read:issue:jira`,
+  `read:issue.transition:jira`, …): `GET issue` requires a whole bundle of
+  them at once, and any missing member fails with
+  `Unauthorized; scope does not match`. The three coarse scopes above sidestep
+  that entirely.
+
+In short: **classic token for the `acli`-driven skills; a 3-scope token
+only if you specifically want least privilege for the REST-gateway
+transition workflows.**
 
 ## Usage walkthrough
 

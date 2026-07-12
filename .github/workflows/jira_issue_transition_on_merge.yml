@@ -24,82 +24,48 @@ jobs:
             exit 0
           fi
 
-      - name: Find Done transition
-        id: transition
+      - name: Transition to Done
         env:
           JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
+          KEY: ${{ steps.jira.outputs.key }}
         shell: bash
         run: |
-          JIRA_KEY="${{ steps.jira.outputs.key }}"
+          set -euo pipefail
+          # Mirrors STATUS_DONE from jira-sdlc-tools.env.
+          TARGET="Done"
 
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/jira_transitions.json \
-            -w "%{http_code}" \
-            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
-            -H "Accept: application/json" \
-            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions") || {
-            echo "::error::curl could not reach Jira."
-            exit 1
-          }
+          # The secret may carry a scheme; the REST host needs a bare host.
+          SITE="${JIRA_URL#*://}"
 
-          echo "GET transitions -> HTTP $HTTP_CODE"
-
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Jira responded HTTP $HTTP_CODE (expected 200). Response body:"
-            head -c 1000 /tmp/jira_transitions.json || true
+          # A scoped API token is rejected by Basic auth on the site domain
+          # (*.atlassian.net) — it only works through the api.atlassian.com
+          # gateway, which is addressed by cloud id. Resolve the cloud id from
+          # the site's public tenant_info endpoint so no extra secret is needed.
+          CLOUD_ID=$(curl -fsSL "https://$SITE/_edge/tenant_info" | jq -r '.cloudId')
+          if [ -z "$CLOUD_ID" ] || [ "$CLOUD_ID" = "null" ]; then
+            echo "::error::Could not resolve cloudId from https://$SITE/_edge/tenant_info"
             exit 1
           fi
+          BASE="https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3"
+          api() { curl -sSfL -u "$JIRA_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" "$@"; }
 
-          if ! jq empty /tmp/jira_transitions.json 2>/dev/null; then
-            echo "::error::Jira returned HTTP 200 but the body is not valid JSON. Response body:"
-            head -c 1000 /tmp/jira_transitions.json || true
-            exit 1
-          fi
-
-          TRANSITION_ID=$(jq -r '
-            .transitions[]
-            | select(.to.name == "Done")
-            | .id
-          ' /tmp/jira_transitions.json | head -n1)
-
-          if [ -z "$TRANSITION_ID" ] || [ "$TRANSITION_ID" = "null" ]; then
-            echo "No transition to Done is available (issue may already be Done). Skipping."
+          CUR=$(api "$BASE/issue/$KEY?fields=status" | jq -r '.fields.status.name')
+          echo "Issue $KEY is currently '$CUR'."
+          if [ "$CUR" = "$TARGET" ]; then
+            echo "Already $TARGET — skipping."
             exit 0
           fi
 
-          echo "id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Transition Jira issue
-        env:
-          JIRA_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_ACCOUNT_EMAIL }}
-          JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
-        shell: bash
-        run: |
-          JIRA_KEY="${{ steps.jira.outputs.key }}"
-
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/jira_post.json \
-            -w "%{http_code}" \
-            -u "$JIRA_EMAIL:$JIRA_TOKEN" \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions" \
-            -d "{\"transition\":{\"id\":\"${{ steps.transition.outputs.id }}\"}}") || {
-            echo "::error::curl POST to Jira failed."
-            exit 1
-          }
-
-          echo "POST transition -> HTTP $HTTP_CODE"
-
-          # Jira returns 204 No Content on a successful transition (200 is also fine).
-          if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Jira transition POST failed with HTTP $HTTP_CODE. Response body:"
-            head -c 1000 /tmp/jira_post.json || true
+          # acli resolved status name → transition id for us; do it explicitly.
+          TID=$(api "$BASE/issue/$KEY/transitions" \
+            | jq -r --arg t "$TARGET" 'first(.transitions[] | select(.to.name == $t) | .id) // empty')
+          if [ -z "$TID" ]; then
+            echo "::error::No available transition to '$TARGET' from '$CUR' for $KEY."
             exit 1
           fi
 
-          echo "Transitioned $JIRA_KEY to Done."
+          api -X POST -H "Content-Type: application/json" \
+            -d "{\"transition\":{\"id\":\"$TID\"}}" "$BASE/issue/$KEY/transitions"
+          echo "Transitioned $KEY to $TARGET."
