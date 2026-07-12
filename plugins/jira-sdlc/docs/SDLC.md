@@ -131,6 +131,12 @@ The bump for each release is resolved from the **merged PR's `patch` / `minor` /
 
 ## 6. Feature Flags
 
+> **Scope note:** Feature flags are a project practice the `jira-sdlc`
+> skills do **not** automate — they never create, wrap, or toggle a flag
+> on their own (see §7 #3). The guidance below applies where a project
+> adopts flags; adopting, wiring, or dropping them is a human/product
+> decision.
+
 To prevent merge conflicts and "branch rot", long-running feature branches are discouraged.
 
 * All code should ideally be merged into `development` within 3-4 days.
@@ -145,5 +151,5 @@ To prevent merge conflicts and "branch rot", long-running feature branches are d
 
 1. **Branch Naming:** When asked to generate a git branch command, strictly format it as `<type>/<ISSUE-KEY>-<kebab-case-description>`. (e.g., `git checkout -b feature/PROJ-123-add-user-auth`).
 2. **Target Branches:** Always default PR creation scripts or git merge targets to `development`, unless explicitly told it is a production `hotfix`. If it is a hotfix, the source must be `main` and the target must be `main`.
-3. **Feature Flags:** When generating code for a new UI component or API route that the user describes as "in progress" or "draft", automatically wrap the entry point in a standard feature flag check.
+3. **Feature Flags:** Do **not** add feature-flag wrapping on your own initiative. Whether incomplete work ships behind a flag (§6) is a deliberate human/product decision — wrap an entry point in a flag only when the issue or the user explicitly asks for it, and then follow the codebase's existing flag pattern rather than inventing one.
 4. **Commit Messages & Versioning:** SemVer bumps are driven by the **merged PR's label** (`patch` / `minor` / `major`), **not** by parsing commit messages — so Conventional Commits are not required. Prefix each commit with its Jira issue key (`<ISSUE-KEY> <short imperative summary>`, e.g. `PROJ-123 add user auth`) so history stays traceable to the issue; the release workflow reads the PR label to compute the next version, and the branch type sets the default when no label is present (`release/*` → `minor`, `hotfix/*` → `patch` — see §5).
