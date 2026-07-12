@@ -32,19 +32,40 @@ jobs:
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
         shell: bash
         run: |
-          RESPONSE=$(curl -fsS \
+          JIRA_KEY="${{ steps.jira.outputs.key }}"
+
+          HTTP_CODE=$(curl -sS \
+            -o /tmp/jira_transitions.json \
+            -w "%{http_code}" \
             -u "$JIRA_EMAIL:$JIRA_TOKEN" \
             -H "Accept: application/json" \
-            "$JIRA_URL/rest/api/3/issue/${{ steps.jira.outputs.key }}/transitions")
+            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions") || {
+            echo "::error::curl could not reach Jira."
+            exit 1
+          }
 
-          TRANSITION_ID=$(echo "$RESPONSE" | jq -r '
+          echo "GET transitions -> HTTP $HTTP_CODE"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Jira responded HTTP $HTTP_CODE (expected 200). Response body:"
+            head -c 1000 /tmp/jira_transitions.json || true
+            exit 1
+          fi
+
+          if ! jq empty /tmp/jira_transitions.json 2>/dev/null; then
+            echo "::error::Jira returned HTTP 200 but the body is not valid JSON. Response body:"
+            head -c 1000 /tmp/jira_transitions.json || true
+            exit 1
+          fi
+
+          TRANSITION_ID=$(jq -r '
             .transitions[]
             | select(.to.name == "Done")
             | .id
-          ' | head -n1)
+          ' /tmp/jira_transitions.json | head -n1)
 
           if [ -z "$TRANSITION_ID" ] || [ "$TRANSITION_ID" = "null" ]; then
-            echo "No transition to Done is available."
+            echo "No transition to Done is available (issue may already be Done). Skipping."
             exit 0
           fi
 
@@ -57,16 +78,28 @@ jobs:
           JIRA_TOKEN: ${{ secrets.JIRA_ISSUE_TRANSITION_TOKEN }}
         shell: bash
         run: |
-          curl -fsS \
+          JIRA_KEY="${{ steps.jira.outputs.key }}"
+
+          HTTP_CODE=$(curl -sS \
+            -o /tmp/jira_post.json \
+            -w "%{http_code}" \
             -u "$JIRA_EMAIL:$JIRA_TOKEN" \
             -H "Accept: application/json" \
             -H "Content-Type: application/json" \
             -X POST \
-            "$JIRA_URL/rest/api/3/issue/${{ steps.jira.outputs.key }}/transitions" \
-            -d "{
-              \"transition\": {
-                \"id\": \"${{ steps.transition.outputs.id }}\"
-              }
-            }"
+            "$JIRA_URL/rest/api/3/issue/$JIRA_KEY/transitions" \
+            -d "{\"transition\":{\"id\":\"${{ steps.transition.outputs.id }}\"}}") || {
+            echo "::error::curl POST to Jira failed."
+            exit 1
+          }
 
-          echo "Transitioned ${{ steps.jira.outputs.key }} to Done."
+          echo "POST transition -> HTTP $HTTP_CODE"
+
+          # Jira returns 204 No Content on a successful transition (200 is also fine).
+          if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Jira transition POST failed with HTTP $HTTP_CODE. Response body:"
+            head -c 1000 /tmp/jira_post.json || true
+            exit 1
+          fi
+
+          echo "Transitioned $JIRA_KEY to Done."
