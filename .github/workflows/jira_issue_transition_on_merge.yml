@@ -7,7 +7,15 @@ on:
 
 jobs:
   transition-jira:
-    if: github.event.pull_request.merged == true
+    # Only allocate a runner for merged issue branches. A merged release/*
+    # PR into main (or any other non-issue head branch) carries no Jira key,
+    # so gating here skips the job entirely instead of spinning one up just
+    # to `exit 0`. Mirrors the job-level guard in
+    # jira_issue_transition_on_branch.yml. head_ref is set on pull_request
+    # events and equals github.event.pull_request.head.ref used below.
+    if: >-
+      github.event.pull_request.merged == true &&
+      (startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/'))
     runs-on: ubuntu-latest
 
     steps:
