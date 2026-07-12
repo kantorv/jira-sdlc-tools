@@ -18,6 +18,7 @@ from two files in the project root:
 **`jira-sdlc-tools.env` (team-shared, committed)**
 - `<PROJECT-KEY>`
 - `<DEFAULT_BASE_BRANCH>`
+- `<PRODUCTION_BRANCH>`
 - `<STATUS_TODO>`
 - `<STATUS_IN_PROGRESS>`
 - `<STATUS_IN_REVIEW>`
@@ -344,11 +345,11 @@ working branch" shortcut. **The prefix follows the base branch, not the
 issue type** (SDLC.md §2): `feature/` = branched from
 `<DEFAULT_BASE_BRANCH>` (`development`), covering all planned work —
 features *and* bug fixes alike; `hotfix/` = an emergency fix branched
-from `main`. `jira-task-assigner` pre-creates the branch and worktree for
-every leaf issue, and since it only ever branches from `development`,
-every branch it creates is a `feature/` branch — a `hotfix/` branch is
-only ever produced by the no-assigner bootstrap below when it branches
-from `main`.
+from `<PRODUCTION_BRANCH>`. `jira-task-assigner` pre-creates the branch
+and worktree for every leaf issue, and since it only ever branches from
+`development`, every branch it creates is a `feature/` branch — a
+`hotfix/` branch is only ever produced by the no-assigner bootstrap below
+when it branches from `<PRODUCTION_BRANCH>`.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue
 key inside the branch name — no API call required.
@@ -370,8 +371,9 @@ it runs and the branch is missing. When an issue was created without
 **before** invoking the executor:
 
 1. Pick the prefix from the **base branch you're branching from** per the
-   rule above: `main` (an emergency production fix) → `hotfix/`; any other
-   base, such as `<DEFAULT_BASE_BRANCH>` (`development`) → `feature/`.
+   rule above: `<PRODUCTION_BRANCH>` (an emergency production fix) →
+   `hotfix/`; any other base, such as `<DEFAULT_BASE_BRANCH>`
+   (`development`) → `feature/`.
 2. From the intended base branch — checked out and up to date with
    origin; this is what the PR will target:
    ```bash
