@@ -414,8 +414,8 @@ Some comments are written with a fixed leading marker so a later session
 when posting, and match on it when reading:
 
 - `PR target branch: <branch>.` — the PR base for the issue's branch,
-  posted by `jira-task-assigner` (or the executor on the no-assigner path)
-  and consumed by the §12 PR-base resolver.
+  posted by `jira-task-assigner` (or manually, on the no-assigner
+  bootstrap path — §7) and consumed by the §12 PR-base resolver.
 - `Task memory (jira-task-executor)` — a durable per-task **memory** note
   the executor leaves for future sessions (findings, gotchas, design
   decisions + rationale, recovery context). List them with
@@ -445,9 +445,15 @@ acli jira workitem worklog add --key <KEY> --time-spent "1h 30m" --comment "note
 
 Decision rule: every change goes on its own branch, `feature/<KEY>-<slug>` or
 `hotfix/<KEY>-<slug>` — no "small enough to commit straight to the
-working branch" shortcut. `jira-task-assigner` pre-creates the branch and
-worktree for every leaf issue; pick the prefix from the **top-level
-parent's** type (Task/Story → `feature/`, Bug → `hotfix/`).
+working branch" shortcut. **The prefix follows the base branch, not the
+issue type** (SDLC.md §2): `feature/` = branched from
+`<DEFAULT_BASE_BRANCH>` (`development`), covering all planned work —
+features *and* bug fixes alike; `hotfix/` = an emergency fix branched
+from `main`. `jira-task-assigner` pre-creates the branch and worktree for
+every leaf issue, and since it only ever branches from `development`,
+every branch it creates is a `feature/` branch — a `hotfix/` branch is
+only ever produced by the no-assigner bootstrap below when it branches
+from `main`.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue
 key inside the branch name — no API call required.
@@ -459,6 +465,31 @@ git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
 
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 `"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
+
+### No-assigner bootstrap (issue with no branch/worktree yet)
+
+`jira-task-executor` never creates the issue branch — it derives the
+issue key *from* the branch it's standing on, so there is no state where
+it runs and the branch is missing. When an issue was created without
+`jira-task-assigner` (e.g. an ad-hoc `Bug`), provision it manually
+**before** invoking the executor:
+
+1. Pick the prefix from the **base branch you're branching from** per the
+   rule above: `main` (an emergency production fix) → `hotfix/`; any other
+   base, such as `<DEFAULT_BASE_BRANCH>` (`development`) → `feature/`.
+2. From the intended base branch — checked out and up to date with
+   origin; this is what the PR will target:
+   ```bash
+   BASE=$(git branch --show-current)
+   git worktree add <WORKTREES_DIR>/worktree-<KEY> -b <prefix>/<KEY>-<slug> "$BASE"
+   git config branch."<prefix>/<KEY>-<slug>".parentbranch "$BASE"
+   ```
+3. Post the durable PR-base fallback the assigner normally posts
+   (single-line form — §6 for comment mechanics):
+   ```bash
+   acli jira workitem comment create --key <KEY> --body "PR target branch: $BASE."
+   ```
+4. `cd` into the new worktree and run the executor.
 
 ---
 
@@ -577,7 +608,8 @@ run it verbatim whenever a skill asks for a PR base:
 CUR=$(git branch --show-current)
 PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
 [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
-  | grep -oE 'PR target branch: [^ .]+' | head -1 | sed 's/PR target branch: //')
+  | grep -oE 'PR target branch: [^" ]+' | head -1 \
+  | sed -e 's/PR target branch: //' -e 's/\.$//')
 [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
 echo "$PR_BASE"
 ```
@@ -586,8 +618,8 @@ Sources, in order:
 1. `git config branch.<current>.parentbranch` — set by the assigner when
    the branch was created; local to this clone.
 2. The issue's `"PR target branch: …"` Jira comment — the durable
-   fallback the assigner (or executor, on the rare no-assigner path)
-   posts; survives a fresh clone or different machine.
+   fallback the assigner posts (or the no-assigner bootstrap does, §7);
+   survives a fresh clone or different machine.
 3. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
    root — used only when both sources above are empty, and the skill
    should call that out explicitly in its report.
