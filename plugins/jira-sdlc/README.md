@@ -181,8 +181,11 @@ relying on opaque GitHub-for-Jira transition rules:
 
 - **Claude Code**, a version with plugin support.
 - **The official Atlassian CLI (`acli`)** — the primary CLI these skills
-  drive Jira through; the shared reference (`jira-acli-reference.md`)
-  documents its exact flag behavior. Authenticated once against your
+  drive Jira through; the lean shared reference
+  (`skills/_shared/jira-acli-reference.md`) documents the exact flag
+  behavior the skills invoke, with a detailed companion
+  (`docs/JIRA-ACLI.md`) for rationale, discovery procedures, and every
+  command no skill invokes. Authenticated once against your
   Jira Cloud instance with `acli jira auth login` using the
   `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
   from `jira-sdlc-tools.local.env` (see
@@ -274,13 +277,14 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
         │   └── _shared/
-        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — primary CLI reference
+        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — lean call-site reference (detailed companion: docs/JIRA-ACLI.md)
         │       ├── jira-api-reference.md    # direct REST API (no acli) — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
         │           └── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
         ├── docs/
+        │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
         │   └── SDLC.md            # the branching/release policy these skills assume

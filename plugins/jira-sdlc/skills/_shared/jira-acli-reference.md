@@ -1,7 +1,16 @@
-# acli-reference.md (Official Atlassian CLI `acli`)
+# acli-reference.md (Official Atlassian CLI `acli`) — lean call-site reference
 
 Reference for Claude Code when creating/managing Jira issues via the
-**official Atlassian CLI (`acli`)**.
+**official Atlassian CLI (`acli`)**. This is the **lean, runtime
+reference**: the exact command surface the three skills
+(`jira-task-assigner`, `jira-task-executor`, `jira-task-reviewer`) and
+`_shared/scripts` actually invoke, plus only the gotchas that make a
+command fail if unknown. Rationale, examples, discovery procedures, and
+every command no skill invokes live in the detailed companion
+[`../../docs/JIRA-ACLI.md`](../../docs/JIRA-ACLI.md), linked
+**per-section** below (not one link at the top). An agent can complete
+any assigner/executor/reviewer run from this lean file alone — the
+detailed companion is read on demand, never required mid-run.
 
 Auth is set up with an API token (Cloud). Project-specific values come
 from two files in the project root:
@@ -50,23 +59,23 @@ with a token env var.
 `acli` keeps credentials in its own store — authenticate once, then every
 subsequent `acli jira ...` works without a token prefix.
 
-**Rotating or switching tokens? `acli jira auth logout` FIRST.** A second
+⚠️ **Rotating or switching tokens? `acli jira auth logout` FIRST.** A second
 `auth login` does **not** overwrite an existing stored credential — acli
 preserves the old one, so a stale or revoked token silently survives the
 re-login. Worse, the failure is disguised: `acli jira auth status` keeps
-reporting `✓ Authenticated` from its cache while every real call fails with
-`unauthorized: use 'acli [product] auth login' to authenticate`. So whenever
-you change the token, log out before logging back in:
+reporting `✓ Authenticated` from its cache while every real call fails
+with `unauthorized: use 'acli [product] auth login' to authenticate`. So
+whenever you change the token, log out before logging back in:
 
 ```bash
 acli jira auth logout   # discard the previous credential so the new one takes effect
 ```
 
-`--token` takes no value, reads from standard input. `<JIRA_TOKEN>` (resolved
-from `jira-sdlc-tools.local.env`) may be either a path to a token file OR the
-raw API token value itself — both work, and acli can't tell the difference
-since it only reads stdin. Use the form that matches how the variable is set
-on your machine:
+`--token` takes no value, reads from standard input. `<JIRA_TOKEN>`
+(resolved from `jira-sdlc-tools.local.env`) may be either a path to a
+token file OR the raw API token value itself — both work, and acli can't
+tell the difference since it only reads stdin. Use the form that matches
+how the variable is set on your machine:
 
 ```bash
 # Rotating or switching tokens? Run `acli jira auth logout` first (see above).
@@ -84,21 +93,22 @@ printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
   --token
 ```
 
-`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN>`
-are resolved from `jira-sdlc-tools.local.env` (machine-specific) in the project root.
+`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN>` are
+resolved from `jira-sdlc-tools.local.env` (machine-specific) in the
+project root.
 
 Verify — with a **real call**, not just `auth status` (which reads from
-cache and can report `✓ Authenticated` on a dead credential, per the warning
-above):
+cache and can report `✓ Authenticated` on a dead credential, per the
+warning above):
 
 ```bash
 acli jira auth status                 # necessary but NOT sufficient — cached
 acli jira project list --paginate --json | grep -w "<PROJECT-KEY>"   # the real proof
-# ✓ Authenticated
-#   Site: <JIRA_ACCOUNT_URL>
-#   Email: <JIRA_ACCOUNT_EMAIL>
-#   Authentication Type: api_token
 ```
+
+→ Detailed: [`../../docs/JIRA-ACLI.md` §0](../../docs/JIRA-ACLI.md#0-auth)
+for the full token-rotation narrative and the "disguised failure"
+walkthrough.
 
 ---
 
@@ -111,22 +121,11 @@ Task / Story / Bug        (top-level, no parent)
  └── Subtask              (linked to its parent via --parent)
 ```
 
-**Issue type names are project-specific — confirm against your real
-project before relying on them.** The names below are confirmed for
-this toolkit's reference project; a different Jira project may name them
-differently. Two reliable ways to discover the exact names for *your*
-project:
-
-1. Trigger the validation error — pass a deliberately-wrong type and
-   `acli` lists every allowed type in the message:
-   ```bash
-   acli jira workitem create --project "<PROJECT-KEY>" --type "xInvalidx" --summary "probe"
-   # ✗ Error: Please provide valid issue type. Allowed issue types for project are: Subtask, Epic, Task, Story, Feature, Bug
-   ```
-2. Inspect an existing issue: `acli jira workitem view <any-key> --json`
-   → `fields.issuetype.name`.
-
-For this project:
+⚠️ **Issue type names are project-specific** — confirm against your real
+project before relying on them (the two discovery procedures — trigger the
+validation error, or inspect an existing issue's `fields.issuetype.name` —
+are in [`../../docs/JIRA-ACLI.md` §1](../../docs/JIRA-ACLI.md#1-issue-type-hierarchy)).
+For this toolkit's reference project:
 
 | Role     | Exact type name |
 |----------|-----------------|
@@ -135,7 +134,7 @@ For this project:
 | Bug      | `Bug`           |
 | Sub-task | `Subtask`       |   ← **no hyphen** for this project (see §11)
 
-⚠️ Note the **`Subtask`** spelling (no hyphen).  
+⚠️ Note the **`Subtask`** spelling (no hyphen).
 
 Default project key: `<PROJECT-KEY>` (from `jira-sdlc-tools.env`).
 
@@ -166,15 +165,15 @@ acli jira workitem create \
 ### Long descriptions — use a file, not inline
 
 Inline `--description` works for a sentence or two. For real bodies, write
-the text to a file and load it with `--description-file`. Note that
-`--description` / `--description-file` accept **plain text or Atlassian
-Document Format (ADF)** (`--help`) — **not markdown**. A markdown body is
-stored verbatim as one plain-text paragraph, so `##`, `-`, and `1.` show up
-literally instead of rendering as headings/lists (verified: a `## Summary`
-description landed as a single `doc → paragraph → text` node with the `##`
-intact). For structured formatting, supply an ADF document (the shape
-`acli jira workitem create --generate-json` prints); for plain prose, plain
-text is fine.
+the text to a file and load it with `--description-file`.
+
+⚠️ `--description` / `--description-file` accept **plain text or
+Atlassian Document Format (ADF)** (`--help`) — **not markdown**. A
+markdown body is stored verbatim as one plain-text paragraph, so `##`,
+`-`, and `1.` show up literally instead of rendering as headings/lists.
+For structured formatting, supply an ADF document (the shape `acli jira
+workitem create --generate-json` prints); for plain prose, plain text is
+fine.
 
 ```bash
 acli jira workitem create \
@@ -184,39 +183,9 @@ acli jira workitem create \
   --description-file /tmp/issue-body.txt
 ```
 
-Other useful create flags (all confirmed via `acli jira workitem create --help`):
-
-```
--a, --assignee string    Assignee email or account ID; '@me' for self, 'default' for project default
--l, --label strings      Labels, comma-separated (--label backend,urgent)
-    --parent string      Parent work item ID (the parent key)
--t, --type string        Issue type: Epic, Story, Task, Bug, Subtask, … (project-specific)
-    --json               Output the created issue as JSON (see key below)
-    --from-json string   Read the full definition from a JSON file (--generate-json shows the shape)
-```
-
-### Capturing the created issue's key
-
-Default (text) output:
-```
-✓ Work item PROJ-33 created: https://your-site.atlassian.net/browse/PROJ-33
-```
-The key is embedded in that URL. Extract it in a script:
-```bash
-KEY=$(echo "$out" | grep -oE '[A-Z]+-[0-9]+' | head -1)
-```
-Or use `--json` and parse the returned object (`key` is a top-level
-field in the JSON output).
-
-### Splitting a task into parallel Sub-tasks (the actual workflow)
-
-1. Create the parent first, capture its key.
-2. For each genuinely independent piece, create a `Subtask` with
-   `--parent "<PARENT-KEY>"`.
-3. Don't create Sub-tasks for purely sequential steps — only for
-   parallelizable work (see `jira-task-assigner` for the scoping rule).
-4. The parent `Task`/`Story`/`Bug` is the top of the hierarchy — there's
-   no grouping above it.
+Capture the created issue's key with `--json` (`key` is a top-level
+field) or grep it out of the text output (embedded in the returned browse
+URL).
 
 ### ⚠️ Known gotcha — why you might reach for `acli` here
 
@@ -226,46 +195,16 @@ flag parser but never sent in the POST body, so Jira returns `400 Issue
 type is a sub-task but parent issue key or id not specified`. `acli`'s
 `--parent` works correctly for the same operation, which is why this
 reference exists. If you see that 400 from `jira-cli`, switch to the
-`acli` command in §2 rather than debugging the flag.
+`acli` command above rather than debugging the flag.
 
-### Bulk create
-
-```bash
-acli jira workitem create-bulk --from-json /tmp/issues.json --yes --ignore-errors
-# inspect the expected JSON shape first:
-acli jira workitem create-bulk --generate-json
-```
-CSV is also supported (`--from-csv`); columns are summary, projectKey,
-issueType, description, label, parentIssueId, assignee.
+→ Detailed: [`../../docs/JIRA-ACLI.md` §2](../../docs/JIRA-ACLI.md#2-creating-issues)
+for bulk create (`--from-json` / `--from-csv`), the full `create` flag
+reference, the "split a task into parallel Sub-tasks" workflow narrative,
+and the key-extraction one-liners.
 
 ---
 
 ## 3. Reading / listing issues
-
-There is **no `list` subcommand** on `acli jira workitem` — listing is
-`search`:
-
-```bash
-# Recent issues in the project
-acli jira workitem search --jql "project = <PROJECT-KEY> ORDER BY created DESC" --limit 20
-
-# Assigned to me
-acli jira workitem search --jql "project = <PROJECT-KEY> AND assignee = currentUser()"
-
-# By status
-acli jira workitem search --jql "project = <PROJECT-KEY> AND status = \"<STATUS_IN_REVIEW>\""
-
-# Machine-readable
-acli jira workitem search --jql "project = <PROJECT-KEY>" --json
-acli jira workitem search --jql "project = <PROJECT-KEY>" --csv
-
-# Fetch everything (pagination):
-acli jira workitem search --jql "project = <PROJECT-KEY>" --paginate
-```
-
-`search` flags: `-j/--jql`, `-l/--limit`, `--paginate` (ignores `--limit`,
-fetches all), `-f/--fields` (default `issuetype,key,assignee,priority,status,summary`),
-`--count` (just a count), `--json`, `--csv`, `-w/--web`.
 
 ### View a single issue
 
@@ -281,11 +220,11 @@ here — check each command's `--help` before scripting.
 
 ⚠️ The default `view --json` returns only
 `key,issuetype,summary,status,assignee,description` — it **omits
-`subtasks`, `parent`, and `comment`**. Name any field you need
-explicitly with `--fields` (the default `--fields '*all'` pulls ~50
-top-level fields). This toolkit uses two canonical issue-fetch field
-lists — the **single source of truth**: the skills cite them by name
-rather than re-listing them.
+`subtasks`, `parent`, and `comment`**. Name any field you need explicitly
+with `--fields` (the default `--fields '*all'` pulls ~50 top-level
+fields). This toolkit uses two canonical issue-fetch field lists — the
+**single source of truth**: the skills cite them by name rather than
+re-listing them.
 
 | canonical list | `--fields` value | used by |
 |---|---|---|
@@ -295,9 +234,9 @@ rather than re-listing them.
 Naming `subtasks` explicitly returns it as an array of
 `{"key": "...", "fields": {"summary": …, …}}`, so both
 `fields.subtasks[].key` and the nested `.fields.summary` are available
-without `*all`. `parent` and `comment` appear only when the issue
-actually has them (a leaf has no `parent`; a non-parent's `subtasks` is
-`[]`), so naming them is safe on any issue.
+without `*all`. `parent` and `comment` appear only when the issue actually
+has them (a leaf has no `parent`; a non-parent's `subtasks` is `[]`), so
+naming them is safe on any issue.
 
 ```bash
 # executor fetch (with comments):
@@ -306,37 +245,16 @@ acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,sta
 acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'
 ```
 
-On comment-heavy issues `--fields '*all'` is almost entirely `comment`
-bytes — the canonical lists above are the narrow, purpose-fitted
-replacement. (Helper scripts narrow further to just the fields they
-parse — `acli-list-subtasks.py` requests only `subtasks,issuetype`; see
-§10.)
-
-### Checking an issue's type and parent
-
-```bash
-acli jira workitem view <KEY> --json
-# fields.issuetype.name    — e.g. "Task", "Story", "Bug", "Subtask"
-# fields.parent.key        — present only when <KEY> is itself a sub-task
-```
+→ Detailed: [`../../docs/JIRA-ACLI.md` §3](../../docs/JIRA-ACLI.md#3-reading--listing-issues)
+for `workitem search --jql` (listing — never invoked by a skill), the
+`search` flag reference, the `--fields '*all'` payload caution, and the
+"checking an issue's type and parent" procedure.
 
 ---
 
 ## 4. Editing / transitioning / assigning
 
-### Edit
-
-```bash
-acli jira workitem edit --key <KEY> --summary "New summary" --yes
-acli jira workitem edit --key <KEY> --description "Updated body"
-acli jira workitem edit --key <KEY> --description-file /tmp/new-body --yes   # plain text/ADF, not markdown (§2)
-```
-Bulk edit by JQL:
-```bash
-acli jira workitem edit --jql "project = <PROJECT-KEY> AND status = \"To Do\"" --assignee @me --yes --ignore-errors
-```
-
-### Transition
+### Transition (invoked by the skills)
 
 Status names are project-specific — use the `<STATUS_*>` tokens from
 `jira-sdlc-tools.env`.
@@ -346,30 +264,17 @@ acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
 acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes
 ```
 
-### Assign
-
-```bash
-acli jira workitem assign --key <KEY> --assignee @me --yes
-acli jira workitem assign --key <KEY> --assignee "teammate@example.com" --yes
-acli jira workitem assign --key <KEY> --remove-assignee --yes
-```
+→ Detailed: [`../../docs/JIRA-ACLI.md` §4](../../docs/JIRA-ACLI.md#4-editing--transitioning--assigning)
+for `workitem edit` and `workitem assign` (neither is invoked by a skill)
+plus bulk-edit-by-JQL.
 
 ---
 
 ## 5. Linking issues
 
-```bash
-# Discover available link type names first:
-acli jira workitem link type --json
-
-# Create a link (outward --out, inward --in, type is the outward description):
-acli jira workitem link create \
-  --out <KEY-1> --in <KEY-2> --type "Blocks" --yes
-
-# List a work item's links:
-acli jira workitem link list <KEY>
-```
-Bulk: `--from-json` or `--from-csv` (columns: outward, inward, type).
+No skill invokes link commands — see the detailed
+[`../../docs/JIRA-ACLI.md` §5](../../docs/JIRA-ACLI.md#5-linking-issues)
+for `link type` / `link create` / `link list` and the bulk forms.
 
 ---
 
@@ -385,11 +290,6 @@ acli jira workitem comment create --key <KEY> --body "Single-line comment"
 acli jira workitem comment create --key <KEY> --body-file /tmp/comment.txt
 ```
 
-`--body` / `--body-file` accept **plain text or ADF**, same rule as
-`--description*` (§2) — `--help` says so for both. Whether a comment body
-renders as markdown depends on a site-level setting acli can't report, so
-don't assume either way; use plain text or ADF deliberately.
-
 ⚠️ `--body-file -` (stdin) does **not** work — it errors with
 `failed to read comment body from file`. Always point `--body-file` at a
 real file. If you have the text in a shell variable, write it to a temp
@@ -403,9 +303,8 @@ EOF
 acli jira workitem comment create --key <KEY> --body-file /tmp/c.txt
 ```
 
-Other useful `comment create` flags: `-e/--edit-last` (replace your last
-comment instead of adding a new one — handy for updating a status note
-in place), `--jql` (comment on many issues), `--json`.
+(`--body` / `--body-file` accept **plain text or ADF**, same rule as
+`--description*` (§2) — not markdown.)
 
 ### Machine-recoverable comment markers
 
@@ -424,20 +323,14 @@ when posting, and match on it when reading:
   report and from the `PR target branch:` line above, so grepping the
   marker returns only memory notes.
 
-### List / update / delete comments
-
+### List a work item's comments (invoked)
 ```bash
 acli jira workitem comment list --key <KEY> --json
-acli jira workitem comment update --key <KEY> --body "..."   # see --help for the comment-id flag
-acli jira workitem comment delete --help                       # needs the comment id
-acli jira workitem comment visibility                         # get allowed visibility roles
 ```
 
-### Worklog
-
-```bash
-acli jira workitem worklog add --key <KEY> --time-spent "1h 30m" --comment "note"
-```
+→ Detailed: [`../../docs/JIRA-ACLI.md` §6](../../docs/JIRA-ACLI.md#6-comments--worklogs)
+for comment `update` / `delete` / `visibility`, worklog add, and the
+other `comment create` flags (`-e/--edit-last`, `--jql`, `--json`).
 
 ---
 
@@ -497,7 +390,6 @@ it runs and the branch is missing. When an issue was created without
 
 ```bash
 acli jira workitem delete --key <KEY> --yes
-acli jira workitem delete --jql "project = <PROJECT-KEY> AND status = \"To Do\"" --yes --ignore-errors
 ```
 
 ⚠️ Unlike `jira-cli` (whose `delete` can't be run non-interactively),
@@ -539,6 +431,9 @@ Net: don't blanket-add `--yes` — it errors on `workitem create` and
 `comment create`. (Both rejecters were probed; accepters were read from
 `--help`.)
 
+→ Detailed: [`../../docs/JIRA-ACLI.md` §8](../../docs/JIRA-ACLI.md#8-destructive--risky-commands--use-with-care)
+for bulk delete by JQL and the `jira-cli` interactivity contrast.
+
 ---
 
 ## 9. Other useful commands
@@ -547,52 +442,35 @@ Net: don't blanket-add `--yes` — it errors on `workitem create` and
 acli jira project list --paginate --json      # a pagination flag is REQUIRED (--paginate / --limit N / --recent);
                                               # bare `project list --json` errors:
                                               # "at least one of the flags in the group [recent limit paginate] is required"
-acli jira project list --recent               # up to 20 recently viewed (--recent also satisfies the group)
-acli jira board list                          # boards (use --help for subcommands)
-acli jira sprint list                         # sprints (use --help for subcommands)
-acli jira auth status                         # confirm who you're authenticated as
-acli jira field --help                        # inspect custom fields
-acli jira filter --help                       # saved filters
 ```
+
+`acli jira auth status` confirms who you're authenticated as (see §0).
+
+→ Detailed: [`../../docs/JIRA-ACLI.md` §9](../../docs/JIRA-ACLI.md#9-other-useful-commands)
+for `project list --recent`, `board`, `sprint`, `field`, and `filter`
+(none invoked by a skill).
 
 ---
 
 ## 10. Helper scripts
 
-The `scripts/` directory next to this file bundles the two reusable
-patterns used while seeding issues from a review:
+The `scripts/` directory next to this file bundles two human-run helpers
+(not invoked by any skill) —
+[`../../docs/JIRA-ACLI.md` §10](../../docs/JIRA-ACLI.md#10-helper-scripts)
+documents `acli-create-parent-and-subtasks.sh` (seed a parent + sub-tasks
+from a `manifest.tsv`) and `acli-list-subtasks.py` (list a parent's
+sub-tasks by parsing `view <PARENT> --json --fields 'subtasks,issuetype'`).
 
-- [`scripts/acli-create-parent-and-subtasks.sh`](scripts/acli-create-parent-and-subtasks.sh)
-  — create a parent work item plus N sub-tasks from a directory of body
-  files, driven by a `manifest.tsv`. This is the "turn a review into
-  tracked sub-tasks" helper: write one `.md` per finding, list them in
-  the manifest, run the script.
-- [`scripts/acli-list-subtasks.py`](scripts/acli-list-subtasks.py)
-  — given a parent key, print every sub-task's key + summary by parsing
-  `acli jira workitem view <PARENT> --json --fields 'subtasks,issuetype'`
-  (the only fields it parses — narrower than the §3 canonical lists; the
-  default `--json` omits `subtasks`, which is easy to miss — see §3).
+---
 
-Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in the project
-root (override with `--project` or the `PROJECT_KEY` env var). Run them from the
-project root.
+## 11. Cross-reference to jira-cli
 
-```bash
-# Seed a review as a parent + sub-tasks:
-mkdir -p /tmp/review/sub
-echo "C1 summary" > /tmp/review/parent-summary.txt
-printf 'c1\tC1: fix branch-context duplication\n' > /tmp/review/sub/manifest.tsv
-echo "## Problem\n..." > /tmp/review/sub/c1.md
-# (add one manifest row + one .md per finding)
-acli-create-parent-and-subtasks.sh \
-  --parent-summary "$(cat /tmp/review/parent-summary.txt)" \
-  --parent-body /tmp/review/parent.md \
-  --subtasks-dir /tmp/review/sub \
-  --parent-type Story
-
-# List what landed under the parent:
-acli-list-subtasks.py --parent <PARENT-KEY>
-```
+This section points to the detailed docs: the full comparison of `acli`
+vs `jira-cli` (the ankitpokhrel binary) — when to use which, where they
+diverge on flags, and the project-specific spelling/behaviour differences
+(including the `Subtask`-no-hyphen note referenced in §1, and the
+parent-drop failure in §2) — lives in
+[`../../docs/JIRA-ACLI.md` §11](../../docs/JIRA-ACLI.md#11-cross-reference-to-jira-cli).
 
 ---
 
