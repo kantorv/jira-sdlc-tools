@@ -299,8 +299,11 @@ fi
 # --- context rows (never block) -------------------------------------------
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
 
-# Exposes which Claude model is running this session, for a later gating
-# feature to consume — never gated on here (additive only).
+# ANTHROPIC_MODEL is an *input* variable — set to pin a model — not a
+# readout of the model actually running, so it is normally unset even
+# though a model plainly is. Report it for visibility, but never gate on
+# it, and don't treat it as the model's name: the skills that sign their
+# commits/reports do so with the model's own name, not this row.
 row model INFO "${ANTHROPIC_MODEL:-unset}"
 
 # WORKTREES_DIR is where the assigner creates per-issue worktrees. Context

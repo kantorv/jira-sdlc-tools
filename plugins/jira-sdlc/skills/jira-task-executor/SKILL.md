@@ -87,7 +87,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
-| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — surfaced here for visibility; step 8's commit sign line reads `$ANTHROPIC_MODEL` live rather than parsing this row |
+| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset. **Visibility only — not the source for step 8's commit sign line**, which names your own model literally. The env var is an *input* (set to pin a model), so it is normally unset even though a model is plainly running; "unset" here is expected and never blocks |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -252,17 +252,15 @@ resolution).
 
 8. **Commit** — stage the files this change touched explicitly
    (`git add <file>…`, not `-A`, which can sweep in strays), then commit
-   with a trailing sign line naming the model behind this run. The
-   heredoc below is intentionally unquoted so the shell substitutes
-   `$ANTHROPIC_MODEL` live at commit time — don't transcribe the value
-   from Discovery's `model` row by hand:
+   with a body line naming the model behind this run. Write your **own
+   model name literally** — you know it; don't shell out to
+   `$ANTHROPIC_MODEL`, which is an *input* variable (set to pin a model)
+   and is normally unset, so substituting it would sign every commit
+   `unset`. Discovery's `model` row reports that same env var, so don't
+   copy the value from there either — it is visibility only:
    ```bash
-   git commit -m "$(cat <<EOF
-   <KEY> <short message>
-
-   🤖 Model used in this response: ${ANTHROPIC_MODEL:-unset}
-   EOF
-   )"
+   git commit -m "<KEY> <short message>" \
+              -m "🤖 Model used in this response: <your model name, e.g. Claude Opus 4.8>"
    ```
    Split into multiple commits if the change has logically separate
    pieces — every commit in this run carries the same sign line; one
