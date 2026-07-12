@@ -90,7 +90,7 @@ climbing from a sub-task to its parent if needed).
 - **Resolve `<BASE_BRANCH>`** per `../_shared/jira-acli-reference.md` §12. Only ask the user if both the config and the Jira-comment fallback come up empty.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
   - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If the phase check detects an already-merged PR on a later re-run, jump straight to the step-6 report with the S-MERGED outcome — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so no re-run is required and no further action is expected on the issue.)
-  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6 → 7.
+  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
 
 ### Single-step phase check (only for the single-step track)
 
@@ -145,10 +145,14 @@ along two axes; the section structure never changes:
   for the single PR just reviewed; the *end-of-run* emission (7) fills it
   for every PR in the run's PR set (step 1).
 - **Which outcome block is filled** — exactly one outcome from step 6's
-  catalogue (S-APPROVED, S-CHANGES-REQUESTED, S-MERGED, M-ALL-APPROVED,
-  M-SOME-BLOCKED, M-PARENT-READY, M-FULLY-COMPLETE), chosen by track ×
-  phase. It supplies the `<OUTCOME_TITLE>` and the `### Next step` wording;
-  everything else is the same for all outcomes.
+  catalogue (S-APPROVED, S-CHANGES-REQUESTED, S-MERGED, M-SUBTASK-APPROVED,
+  M-SUBTASK-CHANGES-REQUESTED, M-ALL-APPROVED, M-SOME-BLOCKED, M-PARENT-READY,
+  M-FULLY-COMPLETE), chosen by track × phase — and, for a *per-PR*
+  emission, by *which* PR: the single-step parent PR uses the `S-*`
+  outcomes, a multistep sub-task PR uses the `M-SUBTASK-*` outcomes, and the
+  multistep parent PR uses M-PARENT-READY. It supplies the
+  `<OUTCOME_TITLE>` and the `### Next step` wording; everything else is the
+  same for all outcomes.
 
 **Template — fill every section:**
 
@@ -250,7 +254,7 @@ Record the verdict as a **review comment** — both verdicts go through `gh pr r
 
 Both the GitHub verdict comment and the Jira per-issue comment carry the **full canonical review report** (see *The canonical review report* above), scoped to this one PR — not a terse one-liner. Write **one** report body to a temp file and post that same file to both destinations, so GitHub and Jira read identically:
 
-* **If APPROVE (all dimensions pass):** fill the canonical template with the S-APPROVED outcome (`### Verdict recorded` → GitHub: APPROVED comment on PR #<n>, Jira: note posted, status not moved), verdict-header line `APPROVED — <one-line summary>`:
+* **If APPROVE (all dimensions pass):** fill the canonical template with the per-PR approve outcome **for this track** — **S-APPROVED** when this is the single-step parent PR, **M-SUBTASK-APPROVED** when this is a multistep sub-task PR (a sub-task PR merges into `<PARENT-BRANCH>`, not `<BASE_BRANCH>`, and a reviewer re-run *is* required afterwards to pick up the parent PR, so its title and `### Next step` differ from the single-step "final update" wording). Set `### Verdict recorded` → GitHub: APPROVED comment on PR #<n>, Jira: note posted, status not moved; verdict-header line `APPROVED — <one-line summary>`:
   ```bash
   cat > /tmp/<KEY>-report.md <<'EOF'
   APPROVED — <one-line summary>
@@ -262,7 +266,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   ```
   (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Do NOT move the Jira status — let the GitHub-for-Jira automation handle it when the PR is merged.
 
-* **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the S-CHANGES-REQUESTED outcome and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
+* **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
   ```bash
   cat > /tmp/<KEY>-report.md <<'EOF'
   CHANGES REQUESTED — <one-line summary>
@@ -279,7 +283,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
 *(Multistep track only — the single-step track has no sub-tasks to tally: the 3d verdict comment already landed on the one issue, and step 6 carries the report.)*
 
-Regardless of whether the review above was approved or rejected, immediately post the **canonical review report** (see *The canonical review report* above), scoped to the sub-task just reviewed, to the parent Jira issue `<PARENT-KEY>` so the progress is visible. It renders the same template as every other emission — same verdict-header line, same sections — filled for this one sub-task's PR (the S-APPROVED / S-CHANGES-REQUESTED outcome, per the 3d verdict). You have already written this exact body to `/tmp/<KEY>-report.md` in 3d; reuse it here rather than composing a second shape.
+Regardless of whether the review above was approved or rejected, immediately post the **canonical review report** (see *The canonical review report* above), scoped to the sub-task just reviewed, to the parent Jira issue `<PARENT-KEY>` so the progress is visible. It renders the same template as every other emission — same verdict-header line, same sections — filled for this one sub-task's PR (the M-SUBTASK-APPROVED / M-SUBTASK-CHANGES-REQUESTED outcome, per the 3d verdict — 3e is multistep-only, so it is always a sub-task PR). You have already written this exact body to `/tmp/<KEY>-report.md` in 3d; reuse it here rather than composing a second shape.
 
 A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment. This is reconciled with the single-final-comment invariant exactly as step 6 is — the step-6 report is the one *run-level* canonical render, and these 3e comments are its per-sub-task audit-trail companions, not replacements for it. So do **not** use `-e/--edit-last`; post a new comment each time:
 
@@ -353,7 +357,7 @@ Apply the **3a body-prefix idempotency check** before reviewing: a prior self-re
 
 Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` via the §6 `--body-file` convention. This is the **run-level** render of *The canonical review report* (defined above) — same verdict-header line and same sections as every per-PR emission, but with the *whole run's* PR set in its `### Pull Request Summary` and its verdict-header reflecting the run's overall verdict (`CHANGES REQUESTED — …` if any PR was rejected, else `APPROVED — …`). Do **not** re-spell the report shape here — fill the template.
 
-Pick **exactly one** outcome from the catalogue below — chosen by the step-1 track × the current phase (decided in step 4 or detected in step 1/5/6). The outcome supplies only the `<OUTCOME_TITLE>` and the `### Next step` wording; the rest of the report is identical across outcomes. Do not emit more than one outcome.
+Pick **exactly one** outcome from the catalogue below — chosen by the step-1 track × the current phase (decided in step 4 or detected in step 1/5/6). The outcome supplies only the `<OUTCOME_TITLE>` and the `### Next step` wording; the rest of the report is identical across outcomes. Do not emit more than one outcome. The **per-sub-task-PR outcomes** (M-SUBTASK-APPROVED / M-SUBTASK-CHANGES-REQUESTED) are for the 3d/3e per-PR emissions only — this run-level step-6 report never selects them; on the multistep track it uses the `M-*` outcomes.
 
 #### Single-step track
 
@@ -389,6 +393,26 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
 - **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
   Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  ```
+
+#### Per-sub-task-PR outcomes (multistep track — 3d/3e emissions only, never the run-level step-6 pick)
+
+These fill the *per-PR* emission for a single sub-task PR on the multistep
+track (the 3d verdict comment + its 3e parent-tally reuse). They exist
+because a sub-task PR is not single-step — it merges into `<PARENT-BRANCH>`
+rather than `<BASE_BRANCH>`, and a reviewer re-run *is* required afterwards
+to pick up the parent PR — so the single-step `S-*` wording ("merge into
+`<BASE_BRANCH>`", "final update, no re-run needed") would be wrong on it.
+Step 6's own run-level report never selects these; it uses the `M-*`
+outcomes above.
+
+- **M-SUBTASK-APPROVED** — a sub-task PR approved. Title: `Sub-task PR approved — awaiting merge into parent`. Next step:
+  ```
+  Sub-task PR #<n>: ✅ reviewed and approved. It merges into <PARENT-BRANCH>, not <BASE_BRANCH> — merging is manual. Once every sub-task PR is approved and merged into <PARENT-BRANCH>, re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to pick up the parent PR. A re-run IS required — this is not the final update.
+  ```
+- **M-SUBTASK-CHANGES-REQUESTED** — a sub-task PR rejected. Title: `Sub-task PR changes requested — see findings`. (The `file:line` findings live in the report's `### What I reviewed` section.) Next step:
+  ```
+  Fix the findings above in the sub-task's branch and push; the executor re-run moves the sub-task back to <STATUS_IN_REVIEW>. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
 
 ## 7. Edge cases
