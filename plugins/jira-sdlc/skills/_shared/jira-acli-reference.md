@@ -50,6 +50,18 @@ with a token env var.
 `acli` keeps credentials in its own store — authenticate once, then every
 subsequent `acli jira ...` works without a token prefix.
 
+**Rotating or switching tokens? `acli jira auth logout` FIRST.** A second
+`auth login` does **not** overwrite an existing stored credential — acli
+preserves the old one, so a stale or revoked token silently survives the
+re-login. Worse, the failure is disguised: `acli jira auth status` keeps
+reporting `✓ Authenticated` from its cache while every real call fails with
+`unauthorized: use 'acli [product] auth login' to authenticate`. So whenever
+you change the token, log out before logging back in:
+
+```bash
+acli jira auth logout   # discard the previous credential so the new one takes effect
+```
+
 `--token` takes no value, reads from standard input. `<JIRA_TOKEN>` (resolved
 from `jira-sdlc-tools.local.env`) may be either a path to a token file OR the
 raw API token value itself — both work, and acli can't tell the difference
@@ -57,6 +69,8 @@ since it only reads stdin. Use the form that matches how the variable is set
 on your machine:
 
 ```bash
+# Rotating or switching tokens? Run `acli jira auth logout` first (see above).
+
 # path form — when JIRA_TOKEN is a file path:
 acli jira auth login \
   --site "<JIRA_ACCOUNT_URL>" \
@@ -73,10 +87,13 @@ printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
 `<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN>`
 are resolved from `jira-sdlc-tools.local.env` (machine-specific) in the project root.
 
-Verify:
+Verify — with a **real call**, not just `auth status` (which reads from
+cache and can report `✓ Authenticated` on a dead credential, per the warning
+above):
 
 ```bash
-acli jira auth status
+acli jira auth status                 # necessary but NOT sufficient — cached
+acli jira project list --paginate --json | grep -w "<PROJECT-KEY>"   # the real proof
 # ✓ Authenticated
 #   Site: <JIRA_ACCOUNT_URL>
 #   Email: <JIRA_ACCOUNT_EMAIL>

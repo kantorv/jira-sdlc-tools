@@ -276,7 +276,7 @@ else
   ACLI_LINE=$($TMOUT_CMD acli jira auth status 2>&1 | grep -m1 '✓ Authenticated' || true)
   if [ -n "$ACLI_LINE" ]; then
     ACLI_OK=1
-    row acli_auth OK "$ACLI_LINE"
+    row acli_auth OK "$ACLI_LINE (cached status — real reachability is the jira_project row below)"
   else
     row acli_auth FAIL "acli is installed but not authenticated with Jira" \
       "run the one-time acli login (skills/_shared/jira-acli-reference.md §0, using the jira-sdlc-tools.local.env values), then $RERUN."
@@ -290,7 +290,7 @@ if [ -n "$ACLI_OK" ] && [ -n "$PROJECT_KEY" ]; then
     row jira_project OK "project $PROJECT_KEY reachable on the authenticated site"
   else
     row jira_project FAIL "project '$PROJECT_KEY' not found via 'acli jira project list' (or the call timed out)" \
-      "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site/board, whether this account was granted access to the board — or retry if Jira was just slow."
+      "if acli_auth is OK but this FAILs, the stored credential is stale (auth status caches) — 'acli jira auth logout' then re-login per §0; else check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site/board, whether this account was granted access to the board — or retry if Jira was just slow."
   fi
 else
   row jira_project WARN "skipped (acli not authenticated or PROJECT-KEY unset — see rows above)"

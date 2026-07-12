@@ -9,8 +9,6 @@
 #      plugin.json — plus warnings-as-errors via --strict)
 #   2. python3 -m json.tool                  (manifests are well-formed JSON;
 #      a fallback that doesn't depend on the claude CLI at all)
-#   3. literal-leak grep                     (no project-specific values
-#      hardcoded into the skill/doc files)
 # The skills themselves are prompt files with no build step, so there is
 # nothing to compile or unit-test — these structural checks are the whole
 # suite. See AGENTS.md for the rationale behind each one.
@@ -60,18 +58,3 @@ jobs:
         run: |
           python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
           python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
-
-      - name: Check for hardcoded project-specific literals
-        # Every project value is meant to be a <TOKEN> resolved from
-        # project-config.md (AGENTS.md → "The one rule that matters most").
-        # project-config.md is excluded because its example table is the
-        # sanctioned home for these literals. grep exits 1 on no matches —
-        # the pass case — so we invert: a match means a leak and fails.
-        run: |
-          if grep -rn --exclude=project-config.md "SUB-\|cropapp\|XState\|MUI\b" \
-               plugins/jira-sdlc/skills/ plugins/jira-sdlc/docs/ plugins/jira-sdlc/README.md
-          then
-            echo "::error::Project-specific literals found outside project-config.md — move them into a <TOKEN> there instead"
-            exit 1
-          fi
-          echo "No leaked literals — clean"

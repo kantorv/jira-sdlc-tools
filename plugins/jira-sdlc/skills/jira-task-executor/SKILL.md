@@ -115,7 +115,7 @@ no user-supplied key to compare it against, so no separate ownership gate
 is needed. Continue to step 1, carrying the INFO rows forward as context
 (`parent_branch` feeds step 10's PR-base resolution).
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields '<canonical fetch-with-comments field list>'` (auth per §0), where the canonical fetch-with-comments field list is defined in `../_shared/jira-acli-reference.md` §3 — the project's single source of truth for issue-fetch fields; resolve it from there rather than re-deriving it here. It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
    - Also check `fields.subtasks` (the canonical list names `subtasks`
      explicitly — the default `--json` omits it; see §3):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its

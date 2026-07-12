@@ -122,10 +122,9 @@ sequenceDiagram
         else Parent PR open (re-run)
             Note over Reviewer: aggregate PR already open<br/>(refresh review, skip sub-tasks)
             Reviewer-->>User: "parent PR reviewed and ready for manual merge"
-        else Parent PR merged (re-run wrap-up)
-            Note over Reviewer: short-circuit to post-merge wrap-up (step 6)
-            Reviewer->>JIRA: post wrap-up comment (sub-task summary) on <PARENT-KEY><br/>(GitHub-for-Jira handled the status → Done)
-            Reviewer->>GIT: git fetch origin (refresh refs, list orphaned branches)
+        else Parent PR merged (re-run)
+            Note over Reviewer: detect merged parent PR<br/>(GitHub-for-Jira handled the status → Done)
+            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6) — no wrap-up
             Reviewer-->>User: "fully complete — all PRs merged (M-FULLY-COMPLETE)"
         end
         deactivate Reviewer
@@ -133,7 +132,7 @@ sequenceDiagram
         Note over Reviewer: single-step track: review the one PR (step 3)
         alt Single-step APPROVE
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
-            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED, step 7)
+            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED, step 6)
             Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
         else Single-step REQUEST_CHANGES
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
@@ -153,7 +152,7 @@ Two lanes, one rule each — applied uniformly across all three phases:
   config entry (set in phase 1, read back in phases 2 and 3), the push,
   `git worktree add`, `git fetch --prune`, fetching PR diffs,
   `gh pr review --comment --body-file` (with `APPROVED —` / `CHANGES REQUESTED —` body prefix), state-verification reads,
-  find-or-create parent PR, and the cleanup orphan-branch listing. The
+  and find-or-create parent PR. The
   reviewer **never calls `gh pr merge`** — it only approves PRs, and the
   human merges them on GitHub. *The one GIT write the skills never make*
   is `gh pr merge` on the **parent** PR — that's the human release
@@ -163,7 +162,7 @@ Two lanes, one rule each — applied uniformly across all three phases:
   feeds the executor's worktree-ownership check too), every status
   transition (*In Progress*, *In Review*, *Done*), every comment
   (assigner leaf "PR target branch" comments, executor closing comments,
-  reviewer review-approval / blocked-report / wrap-up comments).
+  reviewer review-approval / blocked-report / final-report comments).
 - **Stays inside the skill** — the reasoning that turns those reads into
   decisions: the assigner's scoping, the executor's
   investigate/clarify/implement/test, the reviewer's six-dimension

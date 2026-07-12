@@ -7,9 +7,11 @@ the default base branch** — the assigner refuses to run on an existing
 any other non-base branch.
 
 This phase ends when the assigner reports back: issues exist, branches
-and worktrees are ready, and a single
-`"PR target branch: ... Worktree: ..."` comment is posted on every
-leaf issue for the next phase to read.
+and worktrees are ready, a `"PR target branch: ... Worktree: ..."`
+comment is posted on every leaf issue (plus one more on the parent
+issue itself in the multistep case) for the next phase to read, and
+the report itself is posted as a Jira comment on the parent issue in
+addition to the chat reply.
 
 The diagram surfaces the two systems the assigner actually drives as
 their own swimlanes — **GIT** (anything that mutates repo state:
@@ -32,6 +34,7 @@ sequenceDiagram
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
+    Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
     Assigner->>GIT: read current branch (base? feature/hotfix? other?)
     GIT-->>Assigner: current branch
     Note right of Assigner: base → continue · feature/hotfix → stop · other → ask user
@@ -56,6 +59,7 @@ sequenceDiagram
             GIT-->>Assigner: branch + worktree ready
             Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
         end
+        Assigner->>JIRA: post "PR target branch: <BASE_BRANCH>.<br/>Worktree: worktree-<PARENT-KEY>" comment (on the parent)
     else Single-step (one cohesive task)
         Assigner->>JIRA: create single top-level issue
         JIRA-->>Assigner: issue key
@@ -63,6 +67,7 @@ sequenceDiagram
         GIT-->>Assigner: branch + worktree ready
         Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
     end
+    Assigner->>JIRA: post report comment (on the parent issue)
     deactivate Assigner
 
     Assigner-->>User: report (keys, branches, worktrees, strategy)
@@ -89,9 +94,16 @@ sequenceDiagram
 - **Provisioning is uniform** — *every* scenario (single-step,
   multistep parent, sub-task) records `branch.<branch>.parentbranch`
   in git config via GIT, pushes the branch to the remote via GIT, and
-  ends with the assigner posting a single `PR target branch: ...
-  Worktree: ...` comment to JIRA that the executor and reviewer will
-  read later as the durable source of truth.
+  ends with the assigner posting a `PR target branch: ...
+  Worktree: ...` comment to JIRA for that leaf — the durable source of
+  truth the executor and reviewer will read later. In the multistep
+  case this happens once per sub-task *and* once more on the parent
+  issue after the sub-task loop, so it's neither one-per-leaf nor a
+  single comment overall.
+- **The final report is durable too** — before `deactivate Assigner`,
+  the report goes to JIRA as a comment on the parent issue in addition
+  to the chat reply to the user, so a later phase (or a fresh session)
+  can recover it without relying on chat history.
 
 The assigner deliberately stops short of writing any code, commits, or
 PRs — those are phase 2's job.
