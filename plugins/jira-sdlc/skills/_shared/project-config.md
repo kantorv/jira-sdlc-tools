@@ -27,6 +27,7 @@ define the same variable (though they define disjoint sets by convention).
 |---|---|---|
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
+| `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
@@ -81,6 +82,7 @@ The README's usage walkthrough assumes these filled-in files:
 ```
 PROJECT-KEY           = PROJ
 DEFAULT_BASE_BRANCH   = development
+PRODUCTION_BRANCH     = main
 STATUS_TODO           = To Do
 STATUS_IN_PROGRESS    = In Progress
 STATUS_IN_REVIEW      = In Review
