@@ -119,6 +119,8 @@ git push origin development
 
 We strictly adhere to [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`) on the `main` branch.
 
+The bump for each release is resolved from the **merged PR's `patch` / `minor` / `major` label**, falling back to the branch-type default when no label is set (`release/*` → `minor`, `hotfix/*` → `patch`). Commit-message conventions play no part in version resolution.
+
 * **MAJOR (`v2.0.0`):** Breaking changes, massive UI overhauls, or major architectural shifts.
 * **MINOR (`v1.5.0`):** New sprint releases containing backward-compatible features (the standard increment for Day 14 releases).
 * **PATCH (`v1.5.1`):** Emergency `hotfix/*` branches merged directly to `main` mid-sprint.
@@ -144,4 +146,4 @@ To prevent merge conflicts and "branch rot", long-running feature branches are d
 1. **Branch Naming:** When asked to generate a git branch command, strictly format it as `<type>/<ISSUE-KEY>-<kebab-case-description>`. (e.g., `git checkout -b feature/PROJ-123-add-user-auth`).
 2. **Target Branches:** Always default PR creation scripts or git merge targets to `development`, unless explicitly told it is a production `hotfix`. If it is a hotfix, the source must be `main` and the target must be `main`.
 3. **Feature Flags:** When generating code for a new UI component or API route that the user describes as "in progress" or "draft", automatically wrap the entry point in a standard feature flag check.
-4. **Commit Messages:** Follow Conventional Commits format (`feat:`, `fix:`, `chore:`, `docs:`) to assist with automated SemVer changelog generation.
+4. **Commit Messages & Versioning:** SemVer bumps are driven by the **merged PR's label** (`patch` / `minor` / `major`), **not** by parsing commit messages — so Conventional Commits are not required. Prefix each commit with its Jira issue key (`<ISSUE-KEY> <short imperative summary>`, e.g. `PROJ-123 add user auth`) so history stays traceable to the issue; the release workflow reads the PR label to compute the next version, and the branch type sets the default when no label is present (`release/*` → `minor`, `hotfix/*` → `patch` — see §5).
