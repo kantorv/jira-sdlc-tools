@@ -60,7 +60,7 @@ assuming you're done:
   `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
-  override, plus steps 4a/4b/4c and 7), and the healthcheck script's
+  override, plus steps 4a/4b/4c and 6), and the healthcheck script's
   rerun remedies (`skills/_shared/scripts/statuscheck.sh`), which
   currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to

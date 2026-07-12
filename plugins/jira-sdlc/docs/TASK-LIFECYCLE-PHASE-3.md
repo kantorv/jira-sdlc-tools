@@ -56,7 +56,7 @@ sequenceDiagram
         alt APPROVE
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
             Reviewer->>JIRA: comment (<PARENT-KEY>)<br/>"PR reviewed and approved"
-            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED block, step 7)
+            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED block, step 6)
             Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
         else REQUEST_CHANGES
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
@@ -66,8 +66,8 @@ sequenceDiagram
         end
 
     else Single-step — PR merged (re-run, optional)
-        Note over Reviewer: post-merge wrap-up (step 6)<br/>optional historical record — GitHub-for-Jira<br/>already handled the Done transition
-        Reviewer->>JIRA: post wrap-up comment on <PARENT-KEY>
+        Note over Reviewer: detect merged PR — GitHub-for-Jira<br/>already handled the Done transition; no wrap-up
+        Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-MERGED, step 6)
         Reviewer-->>User: "merged — complete (S-MERGED)"
 
     else Multistep — no parent PR yet (first pass)
@@ -116,10 +116,9 @@ sequenceDiagram
         Reviewer->>JIRA: post status-refresh comment on <PARENT-KEY><br/>"Parent PR still open, review confirmed."
         Reviewer-->>User: "parent PR reviewed and approved — merge manually"
 
-    else Multistep — parent PR merged (re-run wrap-up)
-        Note over Reviewer: post-merge wrap-up (step 6)
-        Reviewer->>JIRA: post wrap-up comment (sub-task summary) on <PARENT-KEY><br/>(GitHub-for-Jira handled the status → Done)
-        Reviewer->>GIT: git fetch origin (refresh refs, list orphaned branches)
+    else Multistep — parent PR merged (re-run)
+        Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled the status → Done; no wrap-up
+        Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
         Reviewer-->>User: "fully complete — all PRs merged"
     end
     deactivate Reviewer
@@ -151,9 +150,9 @@ sequenceDiagram
 - **Phase check first** — visible as an explicit GIT `gh pr list`
   whose return dispatches the branches: *no* PR means a full review pass,
   an *open* PR skips straight to review (single-step) or the aggregate
-  review (multistep), a *merged* PR short-circuits to the post-merge
-  wrap-up (step 6 — optional for single-step, where GitHub-for-Jira
-  already handled `<STATUS_DONE>`).
+  review (multistep), a *merged* PR is reported as complete (the step-6
+  report, no wrap-up — GitHub-for-Jira already handled `<STATUS_DONE>` and
+  there is no further action to take).
 - **Both verdicts go through `--comment --body-file`** — in this plugin's
   default deployment the executor and reviewer share one `gh` account, and
   GitHub blocks an author from approving *or* requesting changes on their
@@ -163,7 +162,7 @@ sequenceDiagram
   workflow gate; the GitHub comment records findings and makes the verdict
   machine-detectable by the idempotency check (step 3a).
 - **Single-step is one-and-done** — on the single-step track, approval
-  posts the final report immediately (S-APPROVED outcome, step 7).
+  posts the final report immediately (S-APPROVED outcome, step 6).
   GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` when the
   user merges; no reviewer re-run is required. Only the
   S-CHANGES-REQUESTED outcome (reject) needs a re-run after fixes.
@@ -179,26 +178,26 @@ sequenceDiagram
   continues to the next sub-task. After every single PR (approved or
   rejected), a short summary comment is posted on the parent so the human
   can see progress in real time (intentional audit trail). The final
-  report at the end (step 7) lists both approved and rejected items so the
+  report at the end (step 6) lists both approved and rejected items so the
   fix-and-re-run cycle is clear.
 - **Parent PR: review and approve, still never merge (multistep only)** —
   the reviewer reviews the lighter aggregate diff (GIT) and approves the
   parent PR (`gh pr review --comment --body-file`, GIT). It explicitly
   does *not* call `gh pr merge` on the parent — merging the parent branch
   into `<BASE_BRANCH>` is the human release decision. After the parent PR
-  merges, a re-run posts the final wrap-up comment (step 6) listing all
-  sub-tasks that contributed (optional — GitHub-for-Jira already handled
-  `<STATUS_DONE>`).
+  merges, no reviewer re-run is required — GitHub-for-Jira already handled
+  `<STATUS_DONE>` and there is no wrap-up to post. A re-run only reports the
+  already-merged state (step 6, M-FULLY-COMPLETE).
 - **Automated status transitions removed** — the reviewer no longer moves
   issues to Done on merge (GitHub-for-Jira automation handles that) and
   no longer moves the parent to Done. Transitions that the reviewer still
   performs: rejected issue → In Progress.
 - **Every terminal branch posts a JIRA report comment on the parent**
-  — per step 7, the report goes to chat *and* as a single Jira comment
+  — per step 6, the report goes to chat *and* as a single Jira comment
   on `<PARENT-KEY>` in all branches: the single-step approve/reject
   reports, the "all approved, merge manually" report, the "some rejected,
   fix and re-run" report, the parent-ready report, the status-refresh
-  report (re-run while open), and the wrap-up report (post-merge).
+  report (re-run while open), and the merged-state report (post-merge).
 
 ## Related
 
