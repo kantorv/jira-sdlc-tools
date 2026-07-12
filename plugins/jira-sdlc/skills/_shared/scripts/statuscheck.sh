@@ -299,6 +299,10 @@ fi
 # --- context rows (never block) -------------------------------------------
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
 
+# Exposes which Claude model is running this session, for a later gating
+# feature to consume — never gated on here (additive only).
+row model INFO "${ANTHROPIC_MODEL:-unset}"
+
 # WORKTREES_DIR is where the assigner creates per-issue worktrees. Context
 # for every role (only the assigner acts on it, in prose — it stops on a
 # WARN rather than mkdir-ing); a relative value is relative to the MAIN
