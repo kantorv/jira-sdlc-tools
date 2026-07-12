@@ -155,6 +155,17 @@ The lean file covers the top-level and sub-task create commands, the
 the full `create` flag reference, the "split into parallel sub-tasks"
 workflow narrative, and key-capture detail.
 
+### Plain-text / ADF / markdown — the verified evidence
+
+The lean file states the rule ("plain text or ADF, not markdown"); the
+evidence below is verification that backs it. A markdown body is stored
+verbatim as one plain-text paragraph, so `##`, `-`, and `1.` show up
+literally instead of rendering as headings/lists (verified: a
+`## Summary` description landed as a single `doc → paragraph → text`
+node with the `##` intact). For structured formatting, supply an ADF
+document (the shape `acli jira workitem create --generate-json` prints);
+for plain prose, plain text is fine.
+
 ### Other useful create flags (confirmed via `acli jira workitem create --help`)
 
 ```

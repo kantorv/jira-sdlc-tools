@@ -304,7 +304,9 @@ acli jira workitem comment create --key <KEY> --body-file /tmp/c.txt
 ```
 
 (`--body` / `--body-file` accept **plain text or ADF**, same rule as
-`--description*` (§2) — not markdown.)
+`--description*` (§2) — `--help` says so for both. Whether a comment body
+renders as markdown depends on a site-level setting acli can't report, so
+don't assume either way; use plain text or ADF deliberately.)
 
 ### Machine-recoverable comment markers
 
