@@ -54,6 +54,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — equals `<BASE_BRANCH>` only from the parent worktree; from a sub-task worktree it's `<PARENT-BRANCH>`, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
+| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — consumed by the canonical review report's sign line |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -198,6 +199,8 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 
 ### Next step
 <the outcome block's guidance from step 6: manual-merge / fix-and-re-run / no re-run needed>
+
+🤖 Model used in this response: <Discovery's model row value>
 ```
 
 **`<VERDICT-HEADER>` — the load-bearing first line.** It is always the

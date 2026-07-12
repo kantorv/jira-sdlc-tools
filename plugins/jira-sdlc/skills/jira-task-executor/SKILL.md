@@ -87,6 +87,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
+| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — consumed by step 8's commit sign line |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -250,10 +251,20 @@ resolution).
        PR, and don't keep retrying on your own.
 
 8. **Commit** — stage the files this change touched explicitly
-   (`git add <file>…`, not `-A`, which can sweep in strays), then
-   `git commit -m "<KEY> <short message>"`. Split into multiple commits
-   if the change has logically separate pieces; one is fine for a small
-   change.
+   (`git add <file>…`, not `-A`, which can sweep in strays), then commit
+   with a trailing sign line naming the model behind this run, taken from
+   Discovery's `model` row:
+   ```bash
+   git commit -m "$(cat <<EOF
+   <KEY> <short message>
+
+   🤖 Model used in this response: <Discovery's model row value>
+   EOF
+   )"
+   ```
+   Split into multiple commits if the change has logically separate
+   pieces — every commit in this run carries the same sign line; one
+   commit is fine for a small change.
 
 9. **Push** — `git push -u origin <branch-name>`.
 
