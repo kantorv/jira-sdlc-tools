@@ -8,7 +8,6 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 You are acting as the engineer picking up a single Jira issue end-to-end.
 Run this from inside the issue's own worktree — no issue-key argument;
 the issue key is derived from the current branch (see Discovery below).
-$ARGUMENTS, if given, is free-form notes about this run, not a key:
 
 **Conventions used below:**
 - `<KEY>` = the Jira issue key derived from the current branch
@@ -45,8 +44,10 @@ $ARGUMENTS, if given, is free-form notes about this run, not a key:
   same temp-file + `--body-file` mechanics as any other comment (§6) —
   never an inline `--body` with backticks.
 - Every leaf gets its own dedicated branch and opens its own PR; the PR's
-  base comes from the `PR target branch: …` Jira comment the assigner
-  posts, resolved in step 10 via `../_shared/jira-acli-reference.md` §12.
+  base is resolved in step 10 per `../_shared/jira-acli-reference.md` §12 —
+  git config `parentbranch` first, then the assigner's
+  `PR target branch: …` Jira comment (the durable fallback), then the env
+  default.
 - `<STATUS_*>` and other `<TOKEN>`s resolve from `jira-sdlc-tools.env`
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
@@ -83,16 +84,18 @@ actually acts on).
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
-| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
-| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — first candidate for the PR base in step 10 |
+| `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing — see the gate in the script),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
 (step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
-`jira_project`, plus context INFO `base_branch` / `working_tree`.
+`jira_project`, plus context `base_branch`, `working_tree` (WARN when
+dirty), and `worktrees_dir` (WARN when missing — only the assigner acts
+on it).
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't try to re-create worktrees, switch
@@ -113,7 +116,8 @@ Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 `issue_key` row's derived key is `<KEY>` for the rest of this run — there's
 no user-supplied key to compare it against, so no separate ownership gate
 is needed. Continue to step 1, carrying the INFO rows forward as context
-(`parent_branch` feeds step 10's PR-base resolution).
+(`parent_branch` feeds step 2's stale-branch merge and step 10's PR-base
+resolution).
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
    - Also check `fields.subtasks` (the canonical list names `subtasks`
@@ -129,52 +133,37 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
        implementation (its own worktree + dedicated branch, PR targeting
        the base branch). Proceed normally.
    - Every leaf gets its own dedicated branch and opens its own PR (no
-     per-issue strategy to read). The PR's base comes from the
-     `PR target branch: ...` Jira comment posted by `jira-task-assigner`,
-     read in step 10 below.
+     per-issue strategy to read). The PR's base is resolved in step 10
+     per `../_shared/jira-acli-reference.md` §12 — git config first, then
+     the assigner's `PR target branch: ...` Jira comment, then the env
+     default.
 
-2. **Branch setup:**
-
-   - **2a. Bring the worktree branch current.** The worktree's branch may
-     be behind the branch it was created from. Look that up via
-     `git config branch."$(git branch --show-current)".parentbranch`.
-     - If found → bring the worktree branch up to date:
-       `git merge <that-branch> --no-edit`. If this produces conflicts,
-       stop and ask the user to resolve them — don't attempt to resolve
-       merge conflicts automatically.
-     - If not set (this worktree branch wasn't created by this skill, or
-       predates this convention) → skip the merge, but flag in the final
-       report that you proceeded on a possibly-stale worktree branch.
-
-   - **2b. Locate or create the issue branch.** `git fetch origin` then
-     `git branch -a | grep <KEY>` to check whether a branch for this issue
-     already exists, local or remote.
-     - **Normal path — branch already exists** (the assigner pre-created
-       it): check it out — don't create a second branch for the same
-       issue. Recover its parent via
-       `git config branch."<branch-name>".parentbranch` — if that's unset
-       (branch predates the parentbranch convention, or wasn't created by
-       this skill), ask the user which branch the PR should target rather
-       than guessing.
-     - **Fallback — branch doesn't exist** (issue created without the
-       assigner): derive the prefix:
-       - `<KEY>` is `Task`/`Story` → `feature/`.
-       - `<KEY>` is `Bug` → `hotfix/`.
-       - `<KEY>` is `Subtask` → look at its parent's type instead (one
-         level up is always top-level — see §7) and use *that* type to
-         pick feature/hotfix.
-       - Capture the base branch **before** checkout (the branch you're
-         branching *from* will be the PR target):
-         `BASE=$(git branch --show-current)`
-       - Branch from the current branch directly —
-         `git checkout -b <prefix>/<KEY>-<slugified-summary>` (naming
-         convention per §7).
-       - Record the parent (new branch need not be checked out to set its
-         config — the `<new-branch-name>` is already known):
-         `git config branch."<prefix>/<KEY>-<slugified-summary>".parentbranch "$BASE"`
-       - Also post the durable fallback the assigner posts for issues it
-         creates (single-line form — see §6 for comment mechanics):
-         `acli jira workitem comment create --key <KEY> --body "PR target branch: $BASE."`
+2. **Bring the worktree branch current.** Discovery already guaranteed
+   you're on `<KEY>`'s own issue branch inside its own linked worktree —
+   the branch exists and is checked out, so there is nothing to locate or
+   create here. (An issue with no branch/worktree yet — one created
+   without the assigner — is provisioned *before* this skill runs; the
+   bootstrap recipe lives in `../_shared/jira-acli-reference.md` §7.)
+   What the branch *can* be is **stale**: the branch it was created from
+   may have moved since — most commonly a sibling sub-task's PR merging
+   into the shared parent branch. Discovery's `parent_branch` row already
+   carries the parent; read it from there rather than re-running the
+   `git config` lookup.
+   - **Set** → merge the parent's *remote* state — merging the local ref
+     would silently miss anything that landed on origin after this
+     worktree was created:
+     ```bash
+     git fetch origin
+     git merge origin/<parent-branch> --no-edit   # the local ref only if it was never pushed
+     ```
+     If the merge conflicts, stop and ask the user to resolve — don't
+     attempt to resolve merge conflicts automatically.
+   - **Unset** (the branch predates the parentbranch convention, or
+     wasn't created by the assigner) → skip the merge, but flag in the
+     final report that you proceeded on a possibly-stale worktree branch.
+     Don't stop to ask which branch the PR should target — step 10's
+     resolver handles an unset parentbranch (Jira comment, then env
+     default).
 
 3. **Transition the issue** to in-progress:
    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
@@ -183,17 +172,14 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
-   - **Read prior task memory first.** Step 1 already fetched the issue with
-     the canonical fetch-with-comments field list (§3), which includes
-     `fields.comment.comments`; scan those
-     (or re-list with `acli jira workitem comment list --key <KEY> --json`)
-     for the assigner's `Assignment report` context and for any
-     `Task memory (jira-task-executor)` notes an earlier session left —
-     findings, gotchas, design decisions + rationale, and recovery context.
-     Fold what you learn into this investigation instead of rediscovering it
-     cold. This matters most when re-running a failed or reviewer-rejected
-     issue: the previous session's memory is how you avoid repeating its
-     dead ends.
+   - **Read prior task memory first.** Step 1's fetch already includes
+     `fields.comment.comments`; scan those for the assigner's
+     `Assignment report` and for any `Task memory (jira-task-executor)`
+     notes an earlier session left (the Task-memory preamble bullet
+     defines them), and fold what you learn in instead of rediscovering
+     it cold. This matters most when re-running a failed or
+     reviewer-rejected issue: the previous session's memory is how you
+     avoid repeating its dead ends.
 
 5. **Clarify** — if the issue's description/acceptance criteria leaves
    something materially ambiguous (an implementation choice that would
@@ -203,20 +189,15 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
 6. **Implement** the change.
    - **Record task memory as you go — but only when it's worth preserving.**
      When you learn something a later session would otherwise have to
-     rediscover — an important finding, a non-obvious piece of logic, a
-     design decision *and its rationale*, a gotcha in already-touched code,
-     or context that would help recover or reimplement this task — post a
-     `Task memory (jira-task-executor)` comment (marker + temp-file/
-     `--body-file` mechanics per the preamble and §6). This is
-     task-recovery memory, **not** running commentary: skip trivial or
-     self-evident decisions, and if a single note at the end captures
-     everything worth keeping, one comment is enough. Memory-worthy items
-     can surface as early as investigation (step 4) — post them when you
-     find them, not only here. **Routing reminder**: if the decision is
-     truly durable or architectural, put it in the code docs
-     (README / CLAUDE.md / AGENTS.md / inline) — a Jira memory comment is a
-     pointer for the next session, not a substitute for documentation the
-     codebase should own.
+     rediscover — an important finding, a design decision *and its
+     rationale*, a gotcha in already-touched code, or recovery context —
+     post a `Task memory (jira-task-executor)` comment (marker line,
+     comment mechanics, and code-docs routing all per the Task-memory
+     preamble bullet). This is task-recovery memory, **not** running
+     commentary: skip trivial or self-evident decisions, and one note at
+     the end is enough if it captures everything worth keeping.
+     Memory-worthy items can surface as early as investigation (step 4) —
+     post them when you find them, not only here.
 
 7. **Test before committing:**
 
@@ -237,9 +218,11 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
          skip the rest of this step. Note in the final report that
          testing was skipped and why, then continue to step 8 (commit).
 
-     - *Edge case — tests exist but commands aren't documented* (e.g. CI
-       runs them, `package.json` has scripts, but no `CLAUDE.md` line
-       tells you how): discover them — inspect `package.json` scripts,
+     - *Edge case — tests exist but the commands are missing or only
+       half-documented* (e.g. CI runs them but no `CLAUDE.md` line tells
+       you how; or the docs give the full-suite command and nothing for
+       selecting a single test): discover the missing form(s) — inspect
+       `package.json` scripts,
        `Makefile` targets, README sections, and CI config — and
        sanity-check each candidate (`--listTests`, a dry run, or one
        trivial pass) before relying on it. **Suggest** (don't silently
@@ -250,10 +233,10 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
      identify the affected tests; if it doesn't, add the new test(s) to
      the relevant suite file first. Run each new/affected test
      individually, one at a time — don't move on until the current one
-     passes. Use the project's documented single-test command. If that
-     command selects by line number but your runner doesn't actually
-     support it, filter by name or pattern instead — the policy matters
-     more than the exact invocation. Once every individual test passes,
+     passes. Use the project's documented single-test command; if its
+     exact form doesn't fit your runner, adapt it (filter by name or
+     pattern) — the policy matters more than the exact invocation. Once
+     every individual test passes,
      run the whole affected suite to catch regressions.
 
    - **7c. Handle suite-level failures.** If the full suite run reports
@@ -266,9 +249,11 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
        failure and wait for instructions — don't commit, push, or open a
        PR, and don't keep retrying on your own.
 
-8. **Commit** — `git commit -m "<KEY> <short message>"`. Split into
-   multiple commits if the change has logically separate pieces; one is
-   fine for a small change.
+8. **Commit** — stage the files this change touched explicitly
+   (`git add <file>…`, not `-A`, which can sweep in strays), then
+   `git commit -m "<KEY> <short message>"`. Split into multiple commits
+   if the change has logically separate pieces; one is fine for a small
+   change.
 
 9. **Push** — `git push -u origin <branch-name>`.
 
@@ -279,7 +264,8 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
       CUR=$(git branch --show-current)
       PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
       [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
-        | grep -oE 'PR target branch: [^ .]+' | head -1 | sed 's/PR target branch: //')
+        | grep -oE 'PR target branch: [^" ]+' | head -1 \
+        | sed -e 's/PR target branch: //' -e 's/\.$//')
       [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — flag in the final report
       ```
       Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-sdlc-tools.env`) if
@@ -290,6 +276,18 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
       project root — acli has no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
+    - Pick the semver label **before** creating the PR — `--label` is
+      required (the repo's semver-based release workflow reads it to
+      decide the next version bump), and the label must already exist in
+      the repo, so confirm it now rather than after `gh pr create` fails:
+      `gh api repos/<org>/<repo>/labels --jq '.[].name'`. Pick by what
+      the PR actually changes in the app's semantics (these three names
+      assume the `<SEMVER_LABELS>` default from `jira-sdlc-tools.env` —
+      adjust if yours differ):
+      - `patch` — bug fixes, small internal improvements, no new
+        functionality or breaking changes
+      - `minor` — new features or non-breaking enhancements
+      - `major` — breaking changes (API removals, behaviour reversals)
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
@@ -300,17 +298,6 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
       gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
         --body-file /tmp/<KEY>-pr-body.md --label <semver-label>
       ```
-      The `--label` flag is **required** — the repo's semver-based release
-      workflow reads it to decide the next version bump. Pick the label by
-      what the PR actually changes in the app's semantics (these three
-      names assume the `<SEMVER_LABELS>` default from `jira-sdlc-tools.env`
-      — adjust if yours differ):
-      - `patch` — bug fixes, small internal improvements, no new
-        functionality or breaking changes
-      - `minor` — new features or non-breaking enhancements
-      - `major` — breaking changes (API removals, behaviour reversals)
-      Labels must already exist in the repo (confirm with
-      `gh api repos/<org>/<repo>/labels --jq '.[].name'`).
     - The discovery checks above already confirmed `gh` is installed and
       authenticated, so a failure here is something else (a `gh pr create`
       error, a repo-permission problem, or a transient network issue).
@@ -347,11 +334,8 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
     the one comprehensive **run report** — don't fragment it (in
     particular, no separate trivial "PR opened" comment earlier). The
     `Task memory (jira-task-executor)` notes from step 6 are the *only*
-    sanctioned companions to it: they carry their own marker, serve a
-    different purpose (task-recovery context, not the run summary), and are
-    expected whenever the run turned up something worth preserving between
-    sessions. Keep the two kinds distinct — memory notes always carry the
-    marker line; this final run report never does. Since it's multi-line,
+    sanctioned companions to it (they carry the marker line; this run
+    report never does). Since it's multi-line,
     post it using the temp-file + `--body-file` convention (see the preamble
     above and §6):
     ```

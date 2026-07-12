@@ -568,7 +568,8 @@ cadence with a feature-freeze cut, an emergency hotfix flow that bypasses
 `development` entirely, SemVer tagging on `main`, and feature flags for
 anything that spans more than one sprint. It also includes a short set of
 directives aimed specifically at AI coding assistants (branch naming,
-target-branch defaults, feature-flag wrapping, commit message format).
+target-branch defaults, feature-flag policy, and how the merged PR's
+label — not commit messages — drives the version bump).
 
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the

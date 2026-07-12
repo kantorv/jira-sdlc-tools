@@ -1,9 +1,9 @@
 # Task Lifecycle — Phase 3: Review & aggregate approval
 
-The review phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run by the
-**`jira-task-reviewer`** skill. Triggered from the parent's worktree
-(branch-derived key; no key argument) after every leaf executor has
-reported back and transitioned its issue to `<STATUS_IN_REVIEW>`.
+Phase 3 of the task lifecycle, run by the **`jira-task-reviewer`** skill.
+Triggered from the parent's worktree (branch-derived key; no key
+argument) after every leaf executor has reported back and transitioned
+its issue to `<STATUS_IN_REVIEW>`.
 
 The reviewer handles **both** single-step top-level issues (no sub-tasks)
 and multistep parents (with sub-tasks). For single-step, it reviews the
@@ -37,15 +37,15 @@ sequenceDiagram
     participant GIT
     participant JIRA
 
-    Note over User,JIRA: Phase 3 — Review & aggregate approval<br/>(parent key only; single-step or multistep)
-    User->>Reviewer: cd worktree-<PARENT-KEY>; invoke /jira-task-reviewer (no key arg)
+    Note over User,JIRA: Phase 3 — Review & aggregate approval<br/>(parent key only, single-step or multistep)
+    User->>Reviewer: cd worktree-<PARENT-KEY>, invoke /jira-task-reviewer (no key arg)
 
     activate Reviewer
     Reviewer->>GIT: git fetch origin --prune
     Reviewer->>JIRA: fetch issue from branch key<br/>(type, status, parent, subtasks)
     JIRA-->>Reviewer: issue fields
     opt branch key is a Subtask
-        Reviewer->>JIRA: climb to fields.parent.key; re-fetch parent<br/>(note the climb in the report)
+        Reviewer->>JIRA: climb to fields.parent.key, re-fetch parent<br/>(note the climb in the report)
         JIRA-->>Reviewer: parent issue
     end
     Note over Reviewer: determine track from fields.subtasks<br/>(empty → single-step · non-empty → multistep)
@@ -82,13 +82,13 @@ sequenceDiagram
         end
 
     else Single-step — PR merged (re-run)
-        Note over Reviewer: detect merged PR — GitHub-for-Jira<br/>already handled Done; no wrap-up
+        Note over Reviewer: detect merged PR — GitHub-for-Jira<br/>already handled Done, no wrap-up
         Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-MERGED, step 6)
         Reviewer-->>User: "merged — complete (S-MERGED)"
 
     else Multistep — no parent PR yet (first pass)
         loop step 2 — per In Review sub-task: discover branch + PR
-            Reviewer->>GIT: git branch -a | grep <SUBTASK-KEY>; gh pr list
+            Reviewer->>GIT: git branch -a | grep <SUBTASK-KEY>, gh pr list
             GIT-->>Reviewer: sub-task branch + open PR (or none)
             Note over Reviewer: no branch / no open PR → flag & skip this sub-task
         end
@@ -148,7 +148,7 @@ sequenceDiagram
             end
         end
 
-    else Multistep — parent PR open (re-run; sub-tasks already merged)
+    else Multistep — parent PR open (re-run, sub-tasks already merged)
         Note over Reviewer: phase check found an open parent PR → step 5b
         Reviewer->>GIT: 3a idempotency + refresh aggregate diff
         GIT-->>Reviewer: prior verdict + aggregate diff
@@ -164,7 +164,7 @@ sequenceDiagram
         end
 
     else Multistep — parent PR merged (re-run)
-        Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled Done; no wrap-up
+        Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled Done, no wrap-up
         Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
         Reviewer-->>User: "fully complete — all PRs merged"
     end
@@ -280,5 +280,6 @@ sequenceDiagram
 
 ## Related
 
-- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all phases
+- [Phase 1 — Plan](TASK-LIFECYCLE-PHASE-1.md)
+- [Phase 2 — Implement](TASK-LIFECYCLE-PHASE-2.md)
 - [jira-task-reviewer SKILL.md](../skills/jira-task-reviewer/SKILL.md)
