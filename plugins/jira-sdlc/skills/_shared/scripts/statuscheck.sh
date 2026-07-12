@@ -164,6 +164,7 @@ cfg() { # cfg <NAME-PATTERN> -> value; jira-sdlc-tools.local.env overrides .env
 # files) and PROJECT-KEY (the token name in project-config.md's tables)
 PROJECT_KEY=$(cfg 'PROJECT[-_]KEY' || true)
 BASE_BRANCH=$(cfg DEFAULT_BASE_BRANCH || true)
+PRODUCTION_BRANCH=$(cfg PRODUCTION_BRANCH || true)
 if [ ! -f "$CFG_DIR/jira-sdlc-tools.env" ]; then
   row env_config FAIL "jira-sdlc-tools.env not found in $CFG_DIR" \
     "create jira-sdlc-tools.env in the project root (variables described in skills/_shared/project-config.md), then $RERUN."
@@ -298,6 +299,7 @@ fi
 
 # --- context rows (never block) -------------------------------------------
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
+row production_branch INFO "PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-unset}"
 
 # WORKTREES_DIR is where the assigner creates per-issue worktrees. Context
 # for every role (only the assigner acts on it, in prose — it stops on a

@@ -9,10 +9,10 @@ You are acting as a technical project manager for the **`<PROJECT-KEY>`**
 project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
-- `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>` — resolve
-  these from `jira-sdlc-tools.env` (team-shared) and
-  `jira-sdlc-tools.local.env` (machine-specific) in the project root before
-  following the rest of this skill.
+- `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
+  `<PRODUCTION_BRANCH>` — resolve these from `jira-sdlc-tools.env`
+  (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
+  project root before following the rest of this skill.
 - `<WORKTREES_DIR>` — the directory where per-issue worktrees are created
   (see `../_shared/project-config.md`). It must already exist — this skill
   never `mkdir`s it; step 1's healthcheck (the `worktrees_dir` row)
@@ -25,8 +25,9 @@ project. Given a task description from the user ($ARGUMENTS):
   (`development`), so every branch it creates is a **`feature/`** branch,
   regardless of issue type: `feature/` covers all planned work —
   new features *and* bug fixes alike. The `hotfix/` prefix is reserved
-  for emergency production fixes branched from `main`, a flow the
-  assigner does **not** provision (that's the manual bootstrap in §7).
+  for emergency production fixes branched from `<PRODUCTION_BRANCH>`, a
+  flow the assigner does **not** provision (that's the manual bootstrap
+  in §7).
   Branch naming is always `feature/<KEY>-<slug>` whether `<KEY>` is the
   top-level issue or a Sub-task — this keeps the branch-parsing regex in
   step 2 working no matter which branch someone checks out later.
