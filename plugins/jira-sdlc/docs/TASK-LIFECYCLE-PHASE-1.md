@@ -1,10 +1,9 @@
 # Task Lifecycle — Phase 1: Plan
 
-The planning phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run by the
-**`jira-task-assigner`** skill. Triggered once per task, **invoked from
-the default base branch** — the assigner refuses to run on an existing
-`feature/`/`hotfix/` issue branch, and asks the user how to proceed on
-any other non-base branch.
+Phase 1 of the task lifecycle, run by the **`jira-task-assigner`** skill.
+Triggered once per task, **invoked from the default base branch** — the
+assigner refuses to run on an existing `feature/`/`hotfix/` issue branch,
+and asks the user how to proceed on any other non-base branch.
 
 This phase ends when the assigner reports back: issues exist, branches
 and worktrees are ready, a `"PR target branch: ... Worktree: ..."`
@@ -110,5 +109,6 @@ PRs — those are phase 2's job.
 
 ## Related
 
-- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all three phases
+- [Phase 2 — Implement](TASK-LIFECYCLE-PHASE-2.md)
+- [Phase 3 — Review & aggregate approval](TASK-LIFECYCLE-PHASE-3.md)
 - [jira-task-assigner SKILL.md](../skills/jira-task-assigner/SKILL.md)

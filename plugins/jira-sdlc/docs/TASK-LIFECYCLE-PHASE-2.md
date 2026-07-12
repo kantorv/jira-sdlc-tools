@@ -1,8 +1,7 @@
 # Task Lifecycle — Phase 2: Implement
 
-The implementation phase of [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md), run
-by the **`jira-task-executor`** skill. Triggered **once per leaf
-issue**, from inside its own worktree. Multiple
+Phase 2 of the task lifecycle, run by the **`jira-task-executor`** skill.
+Triggered **once per leaf issue**, from inside its own worktree. Multiple
 executors run in parallel against the worktrees the assigner set up.
 
 The diagram surfaces the two systems the executor drives as their own
@@ -34,7 +33,7 @@ sequenceDiagram
         Executor->>GIT: validate worktree belongs to <KEY-A> (else stop & ask)
         GIT-->>Executor: worktree branch + parent family
         Note right of Executor: wrong worktree → stop & ask · multistep parent → confirm
-        Executor->>GIT: bring worktree branch current (merge parent branch; branch already exists)
+        Executor->>GIT: bring worktree branch current (merge parent branch — branch already exists)
         GIT-->>Executor: working branch ready
         Note right of Executor: merge conflict → stop & ask · unset parentbranch → skip merge, flag possibly-stale
         Executor->>JIRA: transition → In Progress
@@ -98,5 +97,6 @@ sequenceDiagram
 
 ## Related
 
-- [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — full lifecycle with all three phases
+- [Phase 1 — Plan](TASK-LIFECYCLE-PHASE-1.md)
+- [Phase 3 — Review & aggregate approval](TASK-LIFECYCLE-PHASE-3.md)
 - [jira-task-executor SKILL.md](../skills/jira-task-executor/SKILL.md)
