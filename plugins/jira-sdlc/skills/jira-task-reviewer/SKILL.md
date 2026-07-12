@@ -19,6 +19,11 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
+- **Model sign line mechanics**: the canonical review report's trailing `🤖 Model used in this response: …` line (see *The canonical review report* below) always reads `$ANTHROPIC_MODEL` live at write time — never transcribe a value from the Discovery table by hand. Because the report body is written inside a quoted heredoc (`<<'EOF'`, for the backtick safety above), that substitution can't happen inline; append the line in a separate unquoted command right after the heredoc closes and before posting:
+  ```bash
+  echo "🤖 Model used in this response: ${ANTHROPIC_MODEL:-unset}" >> /tmp/<KEY>-report.md
+  ```
+  Every code block below that builds a report file ends with this line before the `gh pr review` / `acli` post.
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
 status, calls `gh pr list` / `gh pr review`, and — on the reject path —
@@ -54,7 +59,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — equals `<BASE_BRANCH>` only from the parent worktree; from a sub-task worktree it's `<PARENT-BRANCH>`, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
-| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — consumed by the canonical review report's sign line |
+| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — surfaced here for visibility; the canonical review report's sign line reads `$ANTHROPIC_MODEL` live rather than parsing this row (see the Model sign line mechanics bullet above) |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -200,7 +205,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 ### Next step
 <the outcome block's guidance from step 6: manual-merge / fix-and-re-run / no re-run needed>
 
-🤖 Model used in this response: <Discovery's model row value>
+🤖 Model used in this response: <$ANTHROPIC_MODEL, or "unset" — appended live, see the Model sign line mechanics bullet above>
 ```
 
 **`<VERDICT-HEADER>` — the load-bearing first line.** It is always the
@@ -279,6 +284,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
   ## Review Status: ...        # the full canonical report, scoped to this PR
   EOF
+  echo "🤖 Model used in this response: ${ANTHROPIC_MODEL:-unset}" >> /tmp/<KEY>-report.md
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
@@ -291,6 +297,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
   EOF
+  echo "🤖 Model used in this response: ${ANTHROPIC_MODEL:-unset}" >> /tmp/<KEY>-report.md
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   acli jira workitem transition --key <SUBTASK-KEY-or-PARENT-KEY> --status "<STATUS_IN_PROGRESS>" --yes

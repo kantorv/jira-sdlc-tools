@@ -87,7 +87,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
-| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — consumed by step 8's commit sign line |
+| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset — surfaced here for visibility; step 8's commit sign line reads `$ANTHROPIC_MODEL` live rather than parsing this row |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -252,13 +252,15 @@ resolution).
 
 8. **Commit** — stage the files this change touched explicitly
    (`git add <file>…`, not `-A`, which can sweep in strays), then commit
-   with a trailing sign line naming the model behind this run, taken from
-   Discovery's `model` row:
+   with a trailing sign line naming the model behind this run. The
+   heredoc below is intentionally unquoted so the shell substitutes
+   `$ANTHROPIC_MODEL` live at commit time — don't transcribe the value
+   from Discovery's `model` row by hand:
    ```bash
    git commit -m "$(cat <<EOF
    <KEY> <short message>
 
-   🤖 Model used in this response: <Discovery's model row value>
+   🤖 Model used in this response: ${ANTHROPIC_MODEL:-unset}
    EOF
    )"
    ```
