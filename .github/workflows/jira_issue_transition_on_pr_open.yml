@@ -8,6 +8,13 @@ on:
 
 jobs:
   transition-jira:
+    # Only allocate a runner for issue branches. release/* (e.g. the
+    # cut-release draft PR into main) and any other non-issue head branch
+    # carry no Jira key, so gating here skips the job entirely instead of
+    # spinning one up just to `exit 0`. Mirrors the job-level guard in
+    # jira_issue_transition_on_branch.yml. head_ref is set on pull_request
+    # events and equals github.event.pull_request.head.ref used below.
+    if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
 
     steps:
