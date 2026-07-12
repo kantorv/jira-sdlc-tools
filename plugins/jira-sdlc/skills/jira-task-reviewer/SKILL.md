@@ -85,11 +85,11 @@ climbing from a sub-task to its parent if needed).
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
 - Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (source of truth for this review-fetch field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
-  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → climb to the parent: `<PARENT-KEY>` = `fields.parent.key`, then re-fetch `acli jira workitem view <PARENT-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) for the rest of this skill. Note the climb (`<RUN-KEY>` → `<PARENT-KEY>`) in the final report (step 7).
+  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → climb to the parent: `<PARENT-KEY>` = `fields.parent.key`, then re-fetch `acli jira workitem view <PARENT-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) for the rest of this skill. Note the climb (`<RUN-KEY>` → `<PARENT-KEY>`) in the final report (step 6).
 - **Resolve `<PARENT-BRANCH>`**: `git branch -a | grep <PARENT-KEY>`. Exactly one match → that's the parent branch. Zero or multiple → ask the user rather than guessing.
 - **Resolve `<BASE_BRANCH>`** per `../_shared/jira-acli-reference.md` §12. Only ask the user if both the config and the Jira-comment fallback come up empty.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
-  - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 7. (Step 6 only runs if the phase check detects an already-merged PR on a later re-run — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so a re-run is not required; this run's step-7 report is the final update.)
+  - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If the phase check detects an already-merged PR on a later re-run, jump straight to the step-6 report with the S-MERGED outcome — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so no re-run is required and no further action is expected on the issue.)
   - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6 → 7.
 
 ### Single-step phase check (only for the single-step track)
@@ -102,7 +102,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 
 - **No PR exists yet** → The executor hasn't opened one. Report: "Single-step issue `<PARENT-KEY>` has no open PR yet. The reviewer will run once the PR is created." Exit.
 - **PR exists and is OPEN** → Proceed to step 3 to review this PR (skip step 2; jump to the review loop).
-- **PR exists and is MERGED** → The human already merged it. Skip to step 6 for post-merge wrap-up.
+- **PR exists and is MERGED** → The human already merged it. GitHub-for-Jira has transitioned the issue to `<STATUS_DONE>` — jump to the step-6 report with the S-MERGED outcome and exit. No wrap-up comment, and no further action is expected on the issue.
 
 ### Multistep phase check (only for the multistep track)
 
@@ -112,7 +112,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 
 - **No parent PR exists yet** → Sub-tasks aren't all merged. Continue to step 2 for a full review pass.
 - **A parent PR exists and is OPEN** → Sub-tasks are already merged; skip straight to step 5 to review the parent PR.
-- **A parent PR exists and is MERGED** → The user merged the aggregate PR manually. Skip straight to step 6 for post-merge wrap-up.
+- **A parent PR exists and is MERGED** → The user merged the aggregate PR manually. GitHub-for-Jira has transitioned all related issues to `<STATUS_DONE>` — jump to the step-6 report with the M-FULLY-COMPLETE outcome and exit. No wrap-up comment, and no further action is expected.
 
 ## 2. Discover open PRs for each In Review sub-task (multistep only)
 
@@ -144,7 +144,7 @@ along two axes; the section structure never changes:
 - **PR set in scope** — a *per-PR* emission (3d, 5b, 3e) fills the report
   for the single PR just reviewed; the *end-of-run* emission (7) fills it
   for every PR in the run's PR set (step 1).
-- **Which outcome block is filled** — exactly one outcome from step 7's
+- **Which outcome block is filled** — exactly one outcome from step 6's
   catalogue (S-APPROVED, S-CHANGES-REQUESTED, S-MERGED, M-ALL-APPROVED,
   M-SOME-BLOCKED, M-PARENT-READY, M-FULLY-COMPLETE), chosen by track ×
   phase. It supplies the `<OUTCOME_TITLE>` and the `### Next step` wording;
@@ -179,7 +179,7 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 - Jira: <note posted on <KEY>; whether status moved to <STATUS_IN_PROGRESS>>
 
 ### Next step
-<the outcome block's guidance from step 7: manual-merge / fix-and-re-run / no re-run needed>
+<the outcome block's guidance from step 6: manual-merge / fix-and-re-run / no re-run needed>
 ```
 
 **`<VERDICT-HEADER>` — the load-bearing first line.** It is always the
@@ -217,7 +217,7 @@ gh pr view <prNumber> --json reviews --jq \
   '.reviews[] | select(.author.login == "'"$SELF"'") | .body'
 ```
 
-(`SELF` must resolve — if `gh api user` errors, gh isn't installed or authenticated; see the edge case in step 8.) Inspect the prior self-review bodies this returns. An `APPROVED —` body wins over a `CHANGES REQUESTED —` one — approval is terminal (the reviewer doesn't keep re-reviewing something it already approved; request a forced re-review via the step-8 flag if you genuinely need a fresh pass):
+(`SELF` must resolve — if `gh api user` errors, gh isn't installed or authenticated; see the edge case in step 7.) Inspect the prior self-review bodies this returns. An `APPROVED —` body wins over a `CHANGES REQUESTED —` one — approval is terminal (the reviewer doesn't keep re-reviewing something it already approved; request a forced re-review via the step-7 flag if you genuinely need a fresh pass):
 
 - **A prior self-review whose body starts `APPROVED —`** → already approved. Report the PR as "already approved — waiting for manual merge" and move to the next PR without re-reviewing.
 - **A prior self-review whose body starts `CHANGES REQUESTED —` (and none starts `APPROVED —`)** → re-review: this is a fix-and-re-run scenario, and fresh code may have been pushed since. Continue to 3b.
@@ -277,11 +277,11 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
 ### 3e. Post a summary on the parent after each sub-task
 
-*(Multistep track only — the single-step track has no sub-tasks to tally: the 3d verdict comment already landed on the one issue, and step 7 carries the report.)*
+*(Multistep track only — the single-step track has no sub-tasks to tally: the 3d verdict comment already landed on the one issue, and step 6 carries the report.)*
 
 Regardless of whether the review above was approved or rejected, immediately post the **canonical review report** (see *The canonical review report* above), scoped to the sub-task just reviewed, to the parent Jira issue `<PARENT-KEY>` so the progress is visible. It renders the same template as every other emission — same verdict-header line, same sections — filled for this one sub-task's PR (the S-APPROVED / S-CHANGES-REQUESTED outcome, per the 3d verdict). You have already written this exact body to `/tmp/<KEY>-report.md` in 3d; reuse it here rather than composing a second shape.
 
-A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment. This is reconciled with the single-final-comment invariant exactly as step 7 is — the step-7 report is the one *run-level* canonical render, and these 3e comments are its per-sub-task audit-trail companions, not replacements for it. So do **not** use `-e/--edit-last`; post a new comment each time:
+A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment. This is reconciled with the single-final-comment invariant exactly as step 6 is — the step-6 report is the one *run-level* canonical render, and these 3e comments are its per-sub-task audit-trail companions, not replacements for it. So do **not** use `-e/--edit-last`; post a new comment each time:
 
 ```
 acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<KEY>-report.md
@@ -291,30 +291,30 @@ acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<KEY>-repo
 
 Once step 3 has processed every PR in the set, the reviewer ends the session with a report **even if some were rejected**. The human fixes and re-runs; on a later run, any sub-tasks whose Jira status is no longer `<STATUS_IN_REVIEW>` will be skipped, and only resumed-yet-still-in-review items are picked up.
 
-The post-loop outcome is mutually exclusive and **track-dependent** — pick the one matching the track and the run's state; step 7 posts the written report keyed to the same label.
+The post-loop outcome is mutually exclusive and **track-dependent** — pick the one matching the track and the run's state; step 6 posts the written report keyed to the same label.
 
 ### 4a. *(Multistep)* All approved — merge and re-run
 
 1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> --json state` for each).
-2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree) to pick up the parent PR." (Step 7 posts the written report to Jira.)
+2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree) to pick up the parent PR." (Step 6 posts the written report to Jira.)
 3. **If all are merged** → proceed to step 5 (parent PR handling).
 
 ### 4b. *(Multistep)* Some rejected — report and stop
 
 1. **Do not** proceed to the parent PR, regardless of how many other sub-tasks were approved.
-2. Outcome **M-SOME-BLOCKED**: tell the human to fix the rejected sub-tasks, wait for the executor to move them back to `<STATUS_IN_REVIEW>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree). (Step 7 lists **both** approved and rejected items + the file:line findings in the Jira report.)
+2. Outcome **M-SOME-BLOCKED**: tell the human to fix the rejected sub-tasks, wait for the executor to move them back to `<STATUS_IN_REVIEW>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree). (Step 6 lists **both** approved and rejected items + the file:line findings in the Jira report.)
 3. End the session.
 
 ### 4c. *(Single-step)* PR reviewed — wait for merge
 
 For a single-step issue (no sub-tasks), after the PR is reviewed in step 3:
 
-- **If approved** → outcome **S-APPROVED**: tell the user "Single-step issue `<PARENT-KEY>` PR #<prNumber> approved. Merge manually into `<BASE_BRANCH>` — GitHub-for-Jira will auto-transition the issue to `<STATUS_DONE>` on merge. No re-run needed; this run's step-7 report is the final update."
+- **If approved** → outcome **S-APPROVED**: tell the user "Single-step issue `<PARENT-KEY>` PR #<prNumber> approved. Merge manually into `<BASE_BRANCH>` — GitHub-for-Jira will auto-transition the issue to `<STATUS_DONE>` on merge. No re-run needed; this run's step-6 report is the final update."
 - **If changes requested** → outcome **S-CHANGES-REQUESTED**: report the findings to the user; the human fixes, pushes, and re-runs `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree).
 
 ## 5. Parent PR management (multistep only — runs when all sub-task PRs are merged)
 
-*(Multistep track only — runs when all sub-task PRs are merged into `<PARENT-BRANCH>`, either merged by the user in a prior run or already merged before this one. The single-step track never reaches step 5; its one PR is reviewed directly in step 3 and its post-merge flow is step 6.)*
+*(Multistep track only — runs when all sub-task PRs are merged into `<PARENT-BRANCH>`, either merged by the user in a prior run or already merged before this one. The single-step track never reaches step 5; its one PR is reviewed directly in step 3, and after merge GitHub-for-Jira handles the `<STATUS_DONE>` transition — there is no post-merge step.)*
 
 ### 5a. Find or create the parent PR
 
@@ -336,7 +336,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state
     --body-file /tmp/<PARENT-KEY>-pr-body.md
   ```
 - **PR exists (state OPEN)** → use it.
-- **PR exists and is MERGED** → go straight to step 6 (post-merge actions).
+- **PR exists and is MERGED** → the user already merged the aggregate PR; GitHub-for-Jira has transitioned all related issues to `<STATUS_DONE>`. Report the merged state via the step-6 report with the M-FULLY-COMPLETE outcome and exit — no wrap-up, no further action.
 - **PR exists and is CLOSED** → stop and let the user decide (same rule as before).
 
 ### 5b. Review the parent PR (apply the 3a idempotency check first)
@@ -344,32 +344,12 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state
 Apply the **3a body-prefix idempotency check** before reviewing: a prior self-review whose body starts `APPROVED —` → report "Parent PR already reviewed — waiting for manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the fresh aggregate code. Otherwise:
 
 1. Review the aggregate diff: same criteria as 3c, but lighter. The sub-tasks were already reviewed individually — focus on integration issues, conflicts, and anything that only surfaces when the pieces combine.
-2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 7 posts the run-level report.
+2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 6 posts the run-level report.
 3. **If changes requested** → post the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
 
 *Do not merge here.* Report that the parent PR is reviewed/approved and waiting for the user to merge it manually.
 
-## 6. Post-merge wrap-up
-
-*(Runs on both tracks when a merged PR is detected — by the step-1 phase check, or by step 5a on the multistep track after the parent PR merges. On the single-step track this is reachable only if the reviewer is re-run after the PR has already been merged; it's an optional historical record, not a required step — GitHub-for-Jira already handled the `<STATUS_DONE>` transition.)*
-
-GitHub-for-Jira will already have moved all related issues to `<STATUS_DONE>`, but a clean Jira comment on the parent is useful for the historical record. Post one via the §6 `--body-file` convention:
-```
-acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<PARENT-KEY>-wrapup.md
-```
-with the content:
-```
-All sub-tasks approved and parent branch merged into <BASE_BRANCH>.
-
-Sub-tasks:
-- <SUBTASK-KEY>: PR #<n> — merged
-- ...
-```
-*(Single-step track: the "Sub-tasks" section simply lists the single issue and its PR, and the outcome is **S-MERGED** if the single-step PR itself merged. On the multistep track the outcome is **M-FULLY-COMPLETE** once the parent PR has merged.)*
-
-Optionally list any orphaned local branches (`git branch --merged origin/<BASE_BRANCH>`) and report them. Don't auto-delete local branches. Then proceed to step 7 for the final report.
-
-## 7. Report back
+## 6. Report back
 
 Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` via the §6 `--body-file` convention. This is the **run-level** render of *The canonical review report* (defined above) — same verdict-header line and same sections as every per-PR emission, but with the *whole run's* PR set in its `### Pull Request Summary` and its verdict-header reflecting the run's overall verdict (`CHANGES REQUESTED — …` if any PR was rejected, else `APPROVED — …`). Do **not** re-spell the report shape here — fill the template.
 
@@ -386,7 +366,7 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
   ```
   Fix the findings above, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
-- **S-MERGED** — single-step PR already merged (detected by the step-1 phase check; step 6 already posted the wrap-up comment). Title: `Single-step PR merged — complete`. Next step:
+- **S-MERGED** — single-step PR already merged (detected by the step-1 phase check). Title: `Single-step PR merged — complete`. Next step:
   ```
   Single-step PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
   ```
@@ -404,14 +384,14 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
 - **M-PARENT-READY** — all sub-tasks merged, parent PR reviewed/approved, awaiting manual merge into base. Title: `All sub-tasks merged — parent PR ready`. Next step:
   ```
   Parent PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
-  GitHub-for-Jira will auto-transition all related issues to <STATUS_DONE> on merge. A re-run after merge is optional — it posts a wrap-up comment listing everything that landed (step 6), but this report is the final required update.
+  GitHub-for-Jira will auto-transition all related issues to <STATUS_DONE> on merge. No re-run is needed after merge — this report is the final update, and no further action or skill call is expected on the issue.
   ```
-- **M-FULLY-COMPLETE** — parent PR merged into base (step 6 already posted the wrap-up comment). Title: `Fully complete — parent PR merged`. Next step:
+- **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
   Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
   ```
 
-## 8. Edge cases
+## 7. Edge cases
 
 - **No sub-tasks in review status, but sub-tasks exist** → report that the executor hasn't pushed any PRs to In Review yet; the user may re-run later.
 - **Sub-task with no branch / no PR**: flag in the report. The skill can only review what has been pushed and has a PR open. Don't attempt to create branches or PRs — that's the executor's job.
@@ -419,6 +399,6 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
 - **Already reviewed by this skill (idempotency)**: see 3a — a prior self-review whose body starts `APPROVED —` skips re-review (waiting for manual merge); one starting `CHANGES REQUESTED —` triggers a re-review of the fresh code. For a forced re-review, flag it manually.
 - **`gh` not installed or not authenticated**: `gh api user --jq .login` fails, so 3a can't resolve the identity — report the error and give the user the PR URLs so they can review/merge manually.
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
-- **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and jumps straight to step 6.
+- **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and reports the merged state via step 6 (S-MERGED), then exits — no wrap-up; GitHub-for-Jira already handled the `<STATUS_DONE>` transition.
 
 Reference: `../_shared/jira-acli-reference.md` has the full acli syntax, confirmed issue types, and git/branch conventions this skill depends on. The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the project root have this repo's specific values for every `<TOKEN>` used above.

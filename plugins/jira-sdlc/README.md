@@ -238,7 +238,7 @@ won't survive the copy.
 Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
 `jira-task-executor` (step 11 and its Discovery & healthcheck error
 messages), and `jira-task-reviewer` (its own Discovery & healthcheck
-section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 7) to
+section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 6) to
 match your new name — those are the only places the plugin name
 is hardcoded into the skill bodies themselves.
 
@@ -383,15 +383,9 @@ PR, review that too, and approve it — still leaving the merge to you.
 
 You merge `feature/PROJ-401-csv-export → development` manually on
 GitHub — always a human step. GitHub-for-Jira auto-transitions all related
-issues to Done on merge. Optionally run the reviewer once more, from the
-same parent worktree:
-```
-/jira-sdlc:jira-task-reviewer
-```
-It detects the parent PR is now merged and posts a final wrap-up comment
-listing everything that landed, plus any orphaned local branches for you
-to clean up. This re-run is optional — GitHub-for-Jira already handled the
-Done transitions.
+issues to Done on merge. No reviewer re-run is needed once the parent PR is
+merged — GitHub-for-Jira already handled the Done transitions, and the
+reviewer has no post-merge action to take.
 
 **Single-step issues** (no sub-tasks) skip the aggregate cycle: the
 reviewer reviews the one PR directly, posts its final report, and no
@@ -410,7 +404,8 @@ mid-flight is safe by design:
   it rather than creating a second branch for the same issue.
 - **Reviewer** — no parent PR yet → full review pass. Parent PR open →
   only refreshes the aggregate review, doesn't re-touch sub-tasks. Parent
-  PR merged → runs the post-merge wrap-up and nothing else.
+  PR merged → reports the merged state and exits; there's nothing left to
+  do (GitHub-for-Jira already transitioned the issues to Done).
 
 ## Safety model
 
