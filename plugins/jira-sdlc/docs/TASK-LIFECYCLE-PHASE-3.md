@@ -56,7 +56,7 @@ sequenceDiagram
         alt APPROVE
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
             Reviewer->>JIRA: comment (<PARENT-KEY>)<br/>"PR reviewed and approved"
-            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED block, step 7)
+            Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-APPROVED block, step 6)
             Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
         else REQUEST_CHANGES
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
