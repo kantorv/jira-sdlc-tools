@@ -92,7 +92,9 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing — see the gate in the script),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
 (step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
-`jira_project`, plus context INFO `base_branch` / `working_tree`.
+`jira_project`, plus context `base_branch`, `working_tree` (WARN when
+dirty), and `worktrees_dir` (WARN when missing — only the assigner acts
+on it).
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't try to re-create worktrees, switch

@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues, with matching git branches and worktrees set up so the pieces can be worked on in parallel. Detects an implied parent from the current git branch, investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task that should be split into parallel sub-tasks, creates the Jira issue(s) via the official Atlassian CLI (acli), creates a branch per top-level/parent issue, and creates a `git worktree` per leaf issue (the single task, or each sub-task) so parallel work can start immediately. Every leaf issue gets its own dedicated branch and worktree, so the executor always opens an individual PR per leaf.
+description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the official Atlassian CLI (acli). Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -15,13 +15,20 @@ project. Given a task description from the user ($ARGUMENTS):
   following the rest of this skill.
 - `<WORKTREES_DIR>` — the directory where per-issue worktrees are created
   (see `../_shared/project-config.md`). It must already exist — this skill
-  never `mkdir`s it; step 1's healthcheck verifies it's present.
+  never `mkdir`s it; step 1's healthcheck (the `worktrees_dir` row)
+  reports whether it's present.
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
-- Branch naming is **always** `feature/<KEY>-<slug>` (`hotfix/<KEY>-<slug>`
-  for a production bugfix) whether `<KEY>` is a top-level issue or a
-  Sub-task — this keeps the branch-parsing regex in step 2 working no
-  matter which branch someone checks out later.
+- `<PREFIX>` = the branch prefix, picked once from the **top-level
+  issue's type** (`../_shared/jira-acli-reference.md` §7): `Task`/`Story`
+  → `feature`, `Bug` → `hotfix`. Sub-tasks inherit their parent's prefix.
+  Branch naming is always `<PREFIX>/<KEY>-<slug>` whether `<KEY>` is the
+  top-level issue or a Sub-task — this keeps the branch-parsing regex in
+  step 2 working no matter which branch someone checks out later. (One
+  known limitation: the assigner always branches from the `BASE_BRANCH`
+  step 2 decides — provisioning a production hotfix from a *different*
+  base branch than `<DEFAULT_BASE_BRANCH>` is not a supported flow here
+  yet.)
 
 ## 1. Discovery and healthcheck
 
@@ -46,22 +53,22 @@ pre-resolve tokens for this section.
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero
-if any row is `FAIL`. The `worktree` and `branch` rows are context INFO —
-the shared script reports them for every role and never FAILs on them; the
-assigner runs from the **main repo checkout on the base branch** (not a
-per-issue worktree), so it reads those two rows the opposite way from the
-executor/reviewer.
+if any row is `FAIL`.
 
 Only the rows the assigner reads in a role-specific way are spelled out
 here; the rest are role-independent preconditions defined in
 `statuscheck.sh` itself (their `detail` column is self-explanatory in the
 printed output — that live output, not this table, is what the skill
-actually acts on).
+actually acts on). The script never FAILs the three rows below — it
+reports them for every role, and each skill judges them for itself; the
+assigner runs from the **main repo checkout on the base branch** (not a
+per-issue worktree), the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
 |---|---|
-| `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; the reading note below makes that a stop condition |
-| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **The assigner requires the base branch**; a feature/hotfix issue branch is its explicit STOP case and any other branch is a user decision — both handled in step 2, which consumes this row |
+| `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; a linked-worktree reading is a stop condition (see "Reading the result" below) |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **The assigner requires the base branch**; step 2 consumes this row and resolves the other two readings |
+| `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
 Because no issue exists yet, `branch_project`, `issue_key`, and
 `parent_branch` read as WARN/INFO here (skipped / no derivable key /
@@ -71,42 +78,32 @@ green row confirms the creds the executor will later need for
 `gh pr create`. The remaining rows FAIL if broken but need no per-role
 interpretation: `git_repo`, `env_config`, `env_local`,
 `env_local_ignored`, `acli_auth` (every `acli jira …` call in steps 6–7),
-`jira_project`, plus context INFO `base_branch` / `working_tree`.
-
-**Worktrees directory exists.** The assigner creates a `git worktree` per
-leaf issue under `<WORKTREES_DIR>` and never `mkdir`s it, so verify it's
-there before planning: from the repo root, `ls <WORKTREES_DIR>` and
-confirm exit 0. If it's missing, stop and ask rather than creating one
-(the convention may have changed).
+`jira_project`, plus context `base_branch` (INFO) and `working_tree`
+(INFO, or WARN when the tree is dirty — that doesn't block, but mention
+it to the user before branching from a dirty base checkout).
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
-env values, add missing files silently). Role-independent failures
-(missing git repo or env files, a mis-tracked `local.env`, an
-unauthenticated `acli`/`gh`, an unreachable project) still FAIL and block.
+env values, add missing files silently). The three role-specific rows
+never FAIL, so judge them yourself per the table above: a linked-worktree
+reading → stop and tell the user to cd into the main checkout; a missing
+worktrees dir → stop and ask; the `branch` row carries into step 2, which
+acts on it (so you don't re-run `git branch --show-current` there).
 
-The `worktree` and `branch` rows never FAIL, so judge them yourself: the
-`worktree` row must report the **main repo checkout** (if it reports a
-linked worktree, stop and tell the user to cd into the main checkout — the
-assigner doesn't run inside a per-issue worktree), and the `branch` row
-should report the **base branch** (`<DEFAULT_BASE_BRANCH>`). A
-`feature/*`/`hotfix/*` issue branch is the assigner's explicit STOP case
-and any other branch is a user decision — both are resolved in step 2,
-which consumes this row (so you don't re-run `git branch --show-current`
-there).
-
-With no FAIL row, the `worktree`/`branch` rows reading as above, and
-`<WORKTREES_DIR>` present, continue to step 2.
+With no FAIL row and the three role-specific rows reading as above,
+continue to step 2.
 
 ## 2. Determine context from the current branch
 
-Run `git branch --show-current` to determine your starting point.
+Read the `branch` row from step 1's healthcheck to determine your
+starting point (the script already ran `git branch --show-current`; don't
+re-run it):
 
-- **Branch is exactly `<DEFAULT_BASE_BRANCH>`**: 
+- **Base branch (`<DEFAULT_BASE_BRANCH>`)**:
   `BASE_BRANCH = <DEFAULT_BASE_BRANCH>`. Proceed to investigate and plan the work.
-- **Branch matches `feature/<KEY>-...` or `hotfix/<KEY>-...`**: 
+- **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch**:
   **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
-- **Any other branch name**: 
+- **Any other branch name**:
   Ask the user whether to treat it as a base branch or abort. Do not guess.
 
 ## 3. Investigate
@@ -133,9 +130,7 @@ that would change what you build.
 the user's final answers, write them into the issue description at step 6A.1
 so the criteria are durable and visible to anyone picking up the work.
 
-## 5. Decide: Branch Context, Scope, and Issue Type
-
-First, verify your current branch context using `git branch --show-current`.
+## 5. Decide: Scope and Issue Type
 
 By this point Step 2 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
 
@@ -151,53 +146,50 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
-Because you aborted in Step 2 if an existing parent was found, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
+Because step 2 stopped you if you were already on an issue branch, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
-**M3 (re-run / partial-failure safety) — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
+**Re-run / partial-failure safety — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
 
-Before any branch creation, ensure the base is current:
+Before any branch creation, make sure the local base branch actually
+matches the remote — a bare `git fetch` moves only the remote-tracking
+ref, not the branch you're about to branch from:
 ```bash
 git fetch origin
+git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forward, stop and ask
 ```
-
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
-   - **Assignment (M4):** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `--assignee @me` on creation. If your project wants auto-assignment, add the flag and update this note.
-2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
-3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
-4. **Always create a parent worktree:** 
-   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> feature/<PARENT-KEY>-<slug>`
+   - **Assignment:** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `--assignee @me` on creation. If your project wants auto-assignment, add the flag and update this note.
+2. Create the branch: `git branch <PREFIX>/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin <PREFIX>/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
+3. Set parentbranch config: `git config branch.<PREFIX>/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
+4. **Always create a parent worktree:**
+   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> <PREFIX>/<PARENT-KEY>-<slug>`
    *(A worktree to check out when inspecting the assembled parent branch, and a base for future additions.)*
 
 **B. If Single-step (Cohesive work):**
-The top-level issue is your only issue. You are done creating issues. 
-Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comment" section below).
+The top-level issue is your only issue. You are done creating issues.
+Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `<PARENT-BRANCH>` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
 
 For each sub-task `→ <SUBTASK-KEY>`:
- 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-    (use `hotfix/<SUBTASK-KEY>-<slug>` instead when the top-level issue is a `Bug` — see the nesting rule in `../_shared/jira-acli-reference.md` §7)
- 2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
- 3. Leave a PR-target comment on the sub-task.
+ 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX>/<SUBTASK-KEY>-<slug> <PREFIX>/<PARENT-KEY>-<slug>`
+    (`<PREFIX>` is inherited from the top-level issue's type — the nesting rule in `../_shared/jira-acli-reference.md` §7)
+ 2. `git config branch.<PREFIX>/<SUBTASK-KEY>-<slug>.parentbranch <PREFIX>/<PARENT-KEY>-<slug>` (required for executor)
+ 3. Leave a PR-target comment on the sub-task (format below).
 
-**PR-target comment on the parent** (required for reviewer fallback on fresh clone):
-After creating all sub-tasks in the multistep path, also post on the **parent issue** (not each sub-task) to record its PR target:
-```
-PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>.
-```
-This mirrors the single-step format and ensures the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
-
-**PR-target comment:**
+**PR-target comments** (consumed by the executor, and by the reviewer's fallback on a fresh clone):
 After creating each leaf issue (the single top-level task, OR each sub-task), add a Jira comment recording the branch its PR should target and the worktree to run the executor in. Every leaf — single-step or sub-task — gets its own dedicated branch and PR; this comment is what tells the executor where that PR's base is.
 
-*Example format for Single-step (Top-level issue):*
+*Single-step (top-level issue):*
 *"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>."*
 
-*Example format for Multistep Sub-task:*
-*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+*Multistep sub-task:*
+*"PR target branch: <PREFIX>/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+
+In the multistep path, after creating all sub-tasks, also post the single-step-format comment on the **parent issue** — its PR targets `<BASE_BRANCH>` — so the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
 
 **CLI mechanics — things to never forget:**
 - **Auth**: `acli` stores credentials after a one-time
@@ -215,8 +207,8 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
   `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes). Capture
   the returned key with `--json` (parse `key`), or grep it out of the text
   output (embedded in the returned browse URL). **Do not auto-assign** —
-  ownership is left to board triage (see M4 above); omit `--assignee @me`
-  unless your project opts in.
+  ownership is left to board triage (see the Assignment note in 6A);
+  omit `--assignee @me` unless your project opts in.
 - `--yes` is **not** universal — `workitem create` and `comment create`
   reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
   default), so don't add `--yes` to either; `edit` / `transition` /
@@ -246,7 +238,7 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 
 List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
 
-Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `acli jira workitem comment create --key <PARENT-KEY> --body-file <file>` rather than an inline quoted `--body` string (see `../_shared/jira-acli-reference.md` §6 — `--body-file -` / stdin does not work):
+Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `acli jira workitem comment create --key <PARENT-KEY> --body-file <file>` rather than an inline quoted `--body` string (see `../_shared/jira-acli-reference.md` §6 — `--body-file -` / stdin does not work).
 
 ## 8. Don't start implementation work, but do leave worktrees ready
 

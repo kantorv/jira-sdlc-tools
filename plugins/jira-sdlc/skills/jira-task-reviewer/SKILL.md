@@ -60,7 +60,8 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing — see the gate in the script),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
 `acli_auth` (both load-bearing, as noted above), `jira_project`, plus
-context INFO `base_branch` / `working_tree`.
+context `base_branch`, `working_tree` (WARN when dirty), and
+`worktrees_dir` (WARN when missing — only the assigner acts on it).
 
 This skill normally runs from the **parent worktree**
 (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own

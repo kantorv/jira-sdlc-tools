@@ -299,6 +299,31 @@ fi
 # --- context rows (never block) -------------------------------------------
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
 
+# WORKTREES_DIR is where the assigner creates per-issue worktrees. Context
+# for every role (only the assigner acts on it, in prose — it stops on a
+# WARN rather than mkdir-ing); a relative value is relative to the MAIN
+# checkout root (see project-config.md), not to a linked worktree that may
+# itself live inside that directory.
+WORKTREES_DIR=$(cfg WORKTREES_DIR || true)
+if [ -z "$WORKTREES_DIR" ]; then
+  row worktrees_dir WARN "WORKTREES_DIR unset in jira-sdlc-tools(.local).env"
+else
+  WD_BASE="${WT_ROOT:-$PWD}"
+  if [ -n "$IS_WORKTREE" ]; then
+    WD_GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
+    [ -n "$WD_GITDIR" ] && WD_BASE=$(dirname "$(dirname "$(dirname "$WD_GITDIR")")")
+  fi
+  case "$WORKTREES_DIR" in
+    /*) WD_PATH="$WORKTREES_DIR" ;;
+    *)  WD_PATH="$WD_BASE/$WORKTREES_DIR" ;;
+  esac
+  if [ -d "$WD_PATH" ]; then
+    row worktrees_dir INFO "$WD_PATH (present)"
+  else
+    row worktrees_dir WARN "$WD_PATH missing — the assigner won't create it; check WORKTREES_DIR in jira-sdlc-tools.env if the convention changed"
+  fi
+fi
+
 PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
 row parent_branch INFO "${PARENT:-unset} (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
