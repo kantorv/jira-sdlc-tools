@@ -13,8 +13,7 @@
 # captured by `eval "$(get_executor_creds.sh)"` — capture STDOUT ONLY;
 # diagnostics go to stderr and would pollute the eval blob if merged:
 #   EXECUTOR_EMAIL='<resolved email>'
-#   EXECUTOR_TOKEN='<resolved token, OR a path to a token file>'
-#   EXECUTOR_TOKEN_IS_FILE=0|1     # 1 ⇒ EXECUTOR_TOKEN is a path to a token file
+#   EXECUTOR_TOKEN='<the raw API token value — never a path to a token file>'
 #   EXECUTOR_SITE='<JIRA_ACCOUNT_URL>'   # the Jira site for `acli jira auth login --site`
 #   EXECUTOR_FALLBACK=0|1          # 1 ⇒ JIRA_EXECUTOR_EMAIL was unset/empty, so the
 #                                  #   identity fell back to the default account
@@ -85,22 +84,18 @@ if [ -z "$EXECUTOR_EMAIL" ]; then
   exit 1
 fi
 
-# --- resolve token (raw value OR path to a file — same two forms as JIRA_TOKEN)
+# --- resolve token ---------------------------------------------------------
+# JIRA_EXECUTOR_TOKEN / JIRA_TOKEN hold the raw API token VALUE — a path to a
+# token file is not supported. acli only reads stdin and cannot tell a path from
+# a token, so a path would be stored as if it were the credential and fail later,
+# opaquely; the caller always pipes the value in with
+# `printf '%s' "$EXECUTOR_TOKEN" | acli jira auth login … --token`.
 EXECUTOR_TOKEN=$(cfg JIRA_EXECUTOR_TOKEN || true)
 [ -z "$EXECUTOR_TOKEN" ] && EXECUTOR_TOKEN=$(cfg JIRA_TOKEN || true)
 if [ -z "$EXECUTOR_TOKEN" ]; then
   echo "get_executor_creds.sh: cannot resolve a token — neither JIRA_EXECUTOR_TOKEN" \
        "nor JIRA_TOKEN is set in $CFG_DIR/jira-sdlc-tools(.local).env." >&2
   exit 1
-fi
-# JIRA_TOKEN / JIRA_EXECUTOR_TOKEN may hold the raw token OR a path to a
-# token file (project-config.md documents both forms; the acli reference §0
-# notes acli can't tell them apart from stdin). Detect which by whether the
-# value points at an existing file.
-if [ -f "$EXECUTOR_TOKEN" ]; then
-  EXECUTOR_TOKEN_IS_FILE=1
-else
-  EXECUTOR_TOKEN_IS_FILE=0
 fi
 
 # --- resolve site (the Jira site — shared, no executor-specific override) ---
@@ -124,6 +119,5 @@ if [ "$EXECUTOR_FALLBACK" = 1 ]; then
 fi
 emit EXECUTOR_EMAIL "$EXECUTOR_EMAIL"
 emit EXECUTOR_TOKEN "$EXECUTOR_TOKEN"
-printf 'EXECUTOR_TOKEN_IS_FILE=%s\n' "$EXECUTOR_TOKEN_IS_FILE"
 emit EXECUTOR_SITE "$EXECUTOR_SITE"
 printf 'EXECUTOR_FALLBACK=%s\n' "$EXECUTOR_FALLBACK"

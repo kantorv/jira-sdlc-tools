@@ -142,8 +142,8 @@ redirect this script's stdout, never merge `2>&1` into the eval capture,
 or the token lands in a Jira comment / chat transcript:
 ```bash
 eval "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_executor_creds.sh)"
-# sets: EXECUTOR_EMAIL, EXECUTOR_TOKEN, EXECUTOR_TOKEN_IS_FILE (1 ⇒ path form),
-#       EXECUTOR_SITE, EXECUTOR_FALLBACK (1 ⇒ fell back to JIRA_ACCOUNT_EMAIL)
+# sets: EXECUTOR_EMAIL, EXECUTOR_TOKEN (the raw token value), EXECUTOR_SITE,
+#       EXECUTOR_FALLBACK (1 ⇒ fell back to JIRA_ACCOUNT_EMAIL)
 ```
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
 plugin session — the script lives at
@@ -164,17 +164,13 @@ A second `acli jira auth login` does **not** overwrite the stored
 credential (acli keeps the old one), so a plain re-login silently leaves
 you on the previous account while `acli jira auth status` still reports
 `✓ Authenticated` from its cache — the disguised-failure gotcha in
-`../_shared/jira-acli-reference.md` §0. Log out, then log in. The
-`EXECUTOR_TOKEN` is either a raw value or a path to a token file (the
-script set `EXECUTOR_TOKEN_IS_FILE` to tell them apart — same two forms
-`JIRA_TOKEN` itself may take, per `../_shared/project-config.md`):
+`../_shared/jira-acli-reference.md` §0. Log out, then log in. `--token`
+takes no value and reads stdin, and `EXECUTOR_TOKEN` holds the raw token
+**value** — never a path to a token file (§0) — so pipe it in:
 ```bash
 acli jira auth logout
-if [ "$EXECUTOR_TOKEN_IS_FILE" = 1 ]; then
-  acli jira auth login --site "$EXECUTOR_SITE" --email "$EXECUTOR_EMAIL" --token < "$EXECUTOR_TOKEN"
-else
-  printf '%s' "$EXECUTOR_TOKEN" | acli jira auth login --site "$EXECUTOR_SITE" --email "$EXECUTOR_EMAIL" --token
-fi
+printf '%s' "$EXECUTOR_TOKEN" | acli jira auth login \
+  --site "$EXECUTOR_SITE" --email "$EXECUTOR_EMAIL" --token
 ```
 
 ⚠️ **Machine-global side effect.** `acli`'s credential store is
@@ -253,7 +249,7 @@ the gate.
 
 If the gate passes, continue to step 1.
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
      explicitly — the default `--json` omits it; see §3):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
@@ -269,8 +265,8 @@ If the gate passes, continue to step 1.
    - Every leaf gets its own dedicated branch and opens its own PR (no
      per-issue strategy to read). The PR's base is resolved in step 10
      per `../_shared/jira-acli-reference.md` §12 — git config first, then
-     the assigner's `PR target branch: ...` Jira comment, then the env
-     default.
+     the assigner's `PR target branch: ...` Jira comment, then (for
+     sub-tasks) a parent-branch search, then the env default.
 
 2. **Bring the worktree branch current.** Discovery already guaranteed
    you're on `<KEY>`'s own issue branch inside its own linked worktree —
@@ -393,18 +389,43 @@ If the gate passes, continue to step 1.
 
 10. **Open a PR:**
     - Resolve the PR base per `../_shared/jira-acli-reference.md` §12
-      (git-config → Jira "PR target branch" comment → env default):
+      (git-config → Jira "PR target branch" comment → parent-branch search →
+      env default). `PARENT_KEY` is step 1's `fields.parent.key` — set for a
+      sub-task, empty for a top-level issue:
       ```bash
       CUR=$(git branch --show-current)
       PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
       [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
         | grep -oE 'PR target branch: [^" ]+' | head -1 \
         | sed -e 's/PR target branch: //' -e 's/\.$//')
-      [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — flag in the final report
+      # Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+      # Normalize before counting, or one branch reads as several and looks "ambiguous":
+      # strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+      # (checked out in another linked worktree, the normal state of a parent branch
+      # while a sub-task's worktree runs this search) — and fold the remotes/origin/
+      # copy of a pushed branch into its local name (§7).
+      if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+        CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+          | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
+        MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+        [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
+      fi
+      # The env default is the right answer ONLY for a top-level issue (no parent).
+      # A sub-task that reached here is unresolved — leave PR_BASE empty so you stop.
+      [ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"
+      echo "$PR_BASE"
       ```
-      Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-sdlc-tools.env`) if
-      *both* the local config and the Jira comment come up empty, and say
-      so explicitly in the final report if you had to.
+      Then act on the result before touching `gh pr create`:
+      - **`PR_BASE` empty** — only possible for a sub-task whose parent branch
+        search found zero or several candidates. **Stop and ask the user which
+        branch is the base.** Do not open the PR, and do not substitute
+        `<DEFAULT_BASE_BRANCH>`: a sub-task's base is its parent's branch, never
+        the env default — silently defaulting there is the bug this resolver exists
+        to prevent.
+      - **Recovered by the branch search** (the first two sources were empty) —
+        proceed, and say so explicitly in the final report, naming the branch.
+      - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `jira-sdlc-tools.env`;
+        top-level issues only) — proceed, and say so explicitly in the final report.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
       (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.env` in the
       project root — acli has no browse-URL subcommand, so construct the

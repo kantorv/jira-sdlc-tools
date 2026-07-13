@@ -316,7 +316,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token value or path (`JIRA_TOKEN` — may be either a raw API token or a path to a file containing one; see the one-time `acli jira auth login` in the config reference)
+- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one; see the one-time `acli jira auth login` in the config reference)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
