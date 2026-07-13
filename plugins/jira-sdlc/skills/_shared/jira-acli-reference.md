@@ -495,11 +495,14 @@ PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
   | grep -oE 'PR target branch: [^" ]+' | head -1 \
   | sed -e 's/PR target branch: //' -e 's/\.$//')
 # Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
-# Dedupe the local + remotes/origin/ pair (§7): a pushed branch is listed twice,
-# so counting raw lines would read one branch as two and wrongly call it ambiguous.
+# Normalize before counting, or one branch reads as several and looks "ambiguous":
+# strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+# (checked out in another linked worktree, the normal state of a parent branch
+# while a sub-task's worktree runs this search) — and fold the remotes/origin/
+# copy of a pushed branch into its local name (§7).
 if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
   CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
-    | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u)
+    | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
   MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
   [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
 fi
