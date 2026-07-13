@@ -120,23 +120,23 @@ is needed. Continue to step 1, carrying the INFO rows forward as context
 resolution).
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
-    - Also check `fields.subtasks` (the canonical list names `subtasks`
-      explicitly — the default `--json` omits it; see §3):
-      - **Non-empty** → `<KEY>` is a parent: a merge target for its
-        sub-tasks' PRs, not an implementation surface. Implementing here
-        risks conflicting with / shadowing the sub-tasks' separate PRs that
-        target this same branch, and breaks the "every leaf gets its own PR"
-        invariant. Confirm with the user before continuing — don't proceed
-        on a "this one's small" judgment call.
-      - **Empty** → `<KEY>` is a leaf: either a sub-task, or a
-        single-step top-level issue the assigner provisioned for direct
-        implementation (its own worktree + dedicated branch, PR targeting
-        the base branch). Proceed normally.
-    - Every leaf gets its own dedicated branch and opens its own PR (no
-      per-issue strategy to read). The PR's base is resolved in step 10
-      per `../_shared/jira-acli-reference.md` §12 — git config first, then
-      the assigner's `PR target branch: ...` Jira comment, then (for sub-tasks)
-      a parent-branch search, then the env default.
+   - Also check `fields.subtasks` (the canonical list names `subtasks`
+     explicitly — the default `--json` omits it; see §3):
+     - **Non-empty** → `<KEY>` is a parent: a merge target for its
+       sub-tasks' PRs, not an implementation surface. Implementing here
+       risks conflicting with / shadowing the sub-tasks' separate PRs that
+       target this same branch, and breaks the "every leaf gets its own PR"
+       invariant. Confirm with the user before continuing — don't proceed
+       on a "this one's small" judgment call.
+     - **Empty** → `<KEY>` is a leaf: either a sub-task, or a
+       single-step top-level issue the assigner provisioned for direct
+       implementation (its own worktree + dedicated branch, PR targeting
+       the base branch). Proceed normally.
+   - Every leaf gets its own dedicated branch and opens its own PR (no
+     per-issue strategy to read). The PR's base is resolved in step 10
+     per `../_shared/jira-acli-reference.md` §12 — git config first, then
+     the assigner's `PR target branch: ...` Jira comment, then (for
+     sub-tasks) a parent-branch search, then the env default.
 
 2. **Bring the worktree branch current.** Discovery already guaranteed
    you're on `<KEY>`'s own issue branch inside its own linked worktree —
@@ -258,32 +258,41 @@ resolution).
 9. **Push** — `git push -u origin <branch-name>`.
 
 10. **Open a PR:**
-    - Resolve the PR base. Run the resolver from `../_shared/jira-acli-reference.md` §12,
-      but with the parent-branch recovery step included. The `PARENT_KEY` variable
-      should already be set from step 1's `fields.parent.key` extraction (for
-      sub-tasks) or left empty (for top-level issues):
+    - Resolve the PR base per `../_shared/jira-acli-reference.md` §12
+      (git-config → Jira "PR target branch" comment → parent-branch search →
+      env default). `PARENT_KEY` is step 1's `fields.parent.key` — set for a
+      sub-task, empty for a top-level issue:
       ```bash
       CUR=$(git branch --show-current)
       PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
       [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
         | grep -oE 'PR target branch: [^" ]+' | head -1 \
         | sed -e 's/PR target branch: //' -e 's/\.$//')
-      # Parent-branch recovery for sub-tasks: if still empty AND issue has a parent,
-      # search for the parent's feature branch before falling back to DEFAULT_BASE_BRANCH
+      # Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+      # Dedupe the local + remotes/origin/ pair (§7): a pushed branch is listed twice,
+      # so counting raw lines would read one branch as two and wrongly call it ambiguous.
       if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
-        MATCHES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null | wc -l)
-        if [ "$MATCHES" -eq 1 ]; then
-          PR_BASE=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null | sed -E 's#^[* ]+##; s#^remotes/origin/##' | head -1)
-        elif [ "$MATCHES" -gt 1 ]; then
-          echo "Ambiguous: found $MATCHES branches matching parent key $PARENT_KEY. Cannot determine PR base automatically."
-          exit 1
-        fi
+        CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+          | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u)
+        MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+        [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
       fi
-      [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — flag in the final report
+      # The env default is the right answer ONLY for a top-level issue (no parent).
+      # A sub-task that reached here is unresolved — leave PR_BASE empty so you stop.
+      [ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"
+      echo "$PR_BASE"
       ```
-      Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-sdlc-tools.env`) if
-      *both* the local config, Jira comment, and (for sub-tasks) the parent-branch search
-      come up empty, and say so explicitly in the final report if you had to.
+      Then act on the result before touching `gh pr create`:
+      - **`PR_BASE` empty** — only possible for a sub-task whose parent branch
+        search found zero or several candidates. **Stop and ask the user which
+        branch is the base.** Do not open the PR, and do not substitute
+        `<DEFAULT_BASE_BRANCH>`: a sub-task's base is its parent's branch, never
+        the env default — silently defaulting there is the bug this resolver exists
+        to prevent.
+      - **Recovered by the branch search** (the first two sources were empty) —
+        proceed, and say so explicitly in the final report, naming the branch.
+      - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `jira-sdlc-tools.env`;
+        top-level issues only) — proceed, and say so explicitly in the final report.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
       (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.env` in the
       project root — acli has no browse-URL subcommand, so construct the

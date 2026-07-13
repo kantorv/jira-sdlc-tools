@@ -92,21 +92,23 @@ climbing from a sub-task to its parent if needed).
   git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <PARENT-KEY>
   ```
   Exactly one match → that's `<PARENT-BRANCH>`. Zero or multiple → ask the user rather than guessing.
-- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Use §12's resolver (`../_shared/jira-acli-reference.md`) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current` (they coincide only in the parent worktree; from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` — using it would set `<BASE_BRANCH>` = `<PARENT-BRANCH>` and make step 5a open a parent PR into itself). Branch config lives in the shared `.git/config`, keyed off `<PARENT-BRANCH>` works from any worktree:
-   ```bash
-   BASE_BRANCH=$(git config branch."<PARENT-BRANCH>".parentbranch 2>/dev/null)
-   [ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(acli jira workitem comment list --key <PARENT-KEY> --json \
-     | grep -oE 'PR target branch: [^" ]+' | head -1 \
-     | sed -e 's/PR target branch: //' -e 's/\.$//')
-   [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
-   ```
-   Only ask the user if all three come up empty.
-   
-   **Note**: Unlike the executor resolver (§12), this does NOT need a parent-of-parent
-   recovery step. The reviewer works from `<PARENT-KEY>` which is always a top-level issue
-   (step 1 climbs from a sub-task to its parent), and `<PARENT-KEY>` correctly resolves
-   to `<DEFAULT_BASE_BRANCH>` when no override exists. A sub-task's parent is always a
-   top-level issue with no grandparent in this workflow.
+- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Use §12's resolver (`../_shared/jira-acli-reference.md`) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current` (they coincide only in the parent worktree; from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` — using it would set `<BASE_BRANCH>` = `<PARENT-BRANCH>` and make step 5a open a parent PR into itself). Branch config lives in the shared `.git/config`, so keying off `<PARENT-BRANCH>` works from any worktree:
+  ```bash
+  BASE_BRANCH=$(git config branch."<PARENT-BRANCH>".parentbranch 2>/dev/null)
+  [ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(acli jira workitem comment list --key <PARENT-KEY> --json \
+    | grep -oE 'PR target branch: [^" ]+' | head -1 \
+    | sed -e 's/PR target branch: //' -e 's/\.$//')
+  [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
+  ```
+  Only ask the user if all three come up empty.
+
+  **Why this copy has no parent-branch search, unlike §12's resolver.** That
+  recovery step exists for a *sub-task*, whose base is its parent's branch and
+  never `<DEFAULT_BASE_BRANCH>`. Here the key is always `<PARENT-KEY>` — step 1
+  already climbed from any sub-task to its parent — and a parent is by
+  definition top-level, with no grandparent branch to search for. So the
+  `<DEFAULT_BASE_BRANCH>` fallback is the *correct* last resort on this path,
+  exactly as it is for a top-level issue in §12. Don't copy the search here.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
   - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If the phase check detects an already-merged PR on a later re-run, jump straight to the step-6 report with the S-MERGED outcome — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so no re-run is required and no further action is expected on the issue.)
   - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
