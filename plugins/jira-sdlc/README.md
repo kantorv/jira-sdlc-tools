@@ -49,7 +49,7 @@ Three skills, three jobs:
 | Skill | Runs | Does |
 |---|---|---|
 | `jira-task-assigner` | Once, on a task description | Plans: creates the Jira issue(s), decides single-step vs. multistep, creates branches and `git worktree`s, decides how each piece should land in git. Never writes code. |
-| `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, Jira status transition, investigation, implementation, tests, commit, push, PR. |
+| `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, investigation, implementation, tests, commit, push, PR. |
 | `jira-task-reviewer` | Once, on the parent issue | Reviews: iterates over each In Review sub-task PR, approves or requests changes per-PR (continuing past rejections), posts findings to Jira, and reviews the aggregate parent PR. Never merges anything — all merges are manual. |
 
 ## Quick start
@@ -163,19 +163,28 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 `Story`, `Task`, and `Bug` are the top-level types (peers), with
 `Sub-task` underneath.
 
-**Jira status flow across the three skills.** Each skill drives the issue's
-Kanban status explicitly with the four status names from
-`jira-sdlc-tools.env`, so board progress reflects the work without
-relying on opaque GitHub-for-Jira transition rules:
+**Jira status flow across the three skills.** No skill ever writes an
+issue's Kanban status — every transition is owned by the repo's three
+`jira_issue_transition_*.yml` GitHub Actions workflows, keyed to git
+events, using the four status names from `jira-sdlc-tools.env` (the
+skills only *read* status — the reviewer's In-Review filter, the
+executor's status check):
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
-- `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
-  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
-  the sub-task's PR (step 11, dedicated-branch path only).
-- `jira-task-reviewer` transitions a rejected sub-task back to
-  `<STATUS_IN_PROGRESS>` (step 3d, `REQUEST_CHANGES` path) so the executor
-  can pick it up again. It never transitions anything to `<STATUS_DONE>` —
-  GitHub-for-Jira automation handles that when the human merges the PRs.
+- `jira_issue_transition_on_branch.yml` moves an issue to
+  `<STATUS_IN_PROGRESS>` when its `feature/`/`hotfix/` branch is first
+  pushed (the executor's step-9 push, if the assigner didn't push it
+  earlier).
+- `jira_issue_transition_on_pr_open.yml` moves it to `<STATUS_IN_REVIEW>`
+  when the executor opens the PR (it never regresses from
+  `<STATUS_DONE>`).
+- `jira_issue_transition_on_merge.yml` moves it to `<STATUS_DONE>` when
+  the human merges the PR.
+- A reviewer rejection moves **no** status: the issue stays
+  `<STATUS_IN_REVIEW>`, and the reviewer's `CHANGES REQUESTED` verdict
+  comment (on the PR and mirrored to Jira) is the signal the executor
+  re-run keys on — no GitHub event corresponds to a comment-based
+  rejection, so this is by design, not an omission.
 
 ## Prerequisites
 
@@ -193,9 +202,14 @@ relying on opaque GitHub-for-Jira transition rules:
   per-command token prefix.
 
 - **GitHub CLI (`gh`)**, authenticated.
-- **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
-  connected between your Jira project and GitHub repo — automatic
-  branch-to-issue linking depends on it.
+- **The three `jira_issue_transition_*.yml` GitHub Actions workflows**
+  (in this repo's `.github/workflows/`) installed in the target repo,
+  with the `JIRA_ACCOUNT_URL` / `JIRA_ACCOUNT_EMAIL` /
+  `JIRA_ISSUE_TRANSITION_TOKEN` secrets configured — all Jira status
+  transitions run through them (branch push → In Progress, PR open →
+  In Review, PR merge → Done); the skills never write status. They link
+  a branch/PR to its issue by extracting the issue key from the branch
+  name.
 - **Git with worktree support** (any reasonably current git).
 - **A documented way to run tests** — the executor's test step reads
   the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
@@ -428,14 +442,15 @@ PR, review that too, and approve it — still leaving the merge to you.
 **4. Merge the release:**
 
 You merge `feature/PROJ-401-csv-export → development` manually on
-GitHub — always a human step. GitHub-for-Jira auto-transitions all related
-issues to Done on merge. No reviewer re-run is needed once the parent PR is
-merged — GitHub-for-Jira already handled the Done transitions, and the
-reviewer has no post-merge action to take.
+GitHub — always a human step. The `jira_issue_transition_on_merge.yml`
+workflow transitions the issue to Done on merge. No reviewer re-run is
+needed once the parent PR is merged — the workflow already handled the
+Done transition, and the reviewer has no post-merge action to take.
 
 **Single-step issues** (no sub-tasks) skip the aggregate cycle: the
 reviewer reviews the one PR directly, posts its final report, and no
-re-run is needed. GitHub-for-Jira handles Done on merge.
+re-run is needed. `jira_issue_transition_on_merge.yml` handles Done on
+merge.
 
 ## Re-run behavior
 
@@ -451,7 +466,8 @@ mid-flight is safe by design:
 - **Reviewer** — no parent PR yet → full review pass. Parent PR open →
   only refreshes the aggregate review, doesn't re-touch sub-tasks. Parent
   PR merged → reports the merged state and exits; there's nothing left to
-  do (GitHub-for-Jira already transitioned the issues to Done).
+  do (`jira_issue_transition_on_merge.yml` already transitioned the
+  issues to Done).
 
 ## Safety model
 
@@ -469,15 +485,18 @@ Deliberately never automated, regardless of how routine a run looks:
   you meant.
 - **Conflict resolution.** A merge conflict — sub-task into parent, or
   parent into base — stops the relevant skill for you to resolve by hand.
-- **Continuing past a rejected PR.** One `REQUEST_CHANGES` moves that
-  sub-task back to `<STATUS_IN_PROGRESS>` and continues reviewing the
-  rest. The full state is reported at the end.
+- **Continuing past a rejected PR.** One `CHANGES REQUESTED` verdict
+  marks that sub-task blocked (its Jira status stays
+  `<STATUS_IN_REVIEW>` — no transition fires on rejection) and the
+  reviewer continues with the rest. The full state is reported at the
+  end.
 
 ## Known limitations
 
-- Built around **GitHub + GitHub-for-Jira** specifically — branch-to-issue
-  linking relies on that integration. Adapting to GitLab/Bitbucket means
-  replacing that mechanism, not just swapping CLI commands.
+- Built around **GitHub + GitHub Actions** specifically — Jira status
+  transitions and branch-to-issue linking live in the three
+  `jira_issue_transition_*.yml` workflows. Adapting to GitLab/Bitbucket
+  means porting those workflows, not just swapping CLI commands.
 - Assumes **no `Epic` type** and doesn't create or group under Epics —
   `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
 - The assigner runs **only from your base branch**. Invoked from an
@@ -524,8 +543,10 @@ real task, not discovering mid-failure:
 **A sub-task with an open PR is not being reviewed by `jira-task-reviewer`.**
 The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g., "In Review"). A sub-task still in `<STATUS_IN_PROGRESS>` (or any other
-status) is silently skipped. Ask the executor to transition it (or move it
-manually) and re-run the reviewer.
+status) is silently skipped. The `jira_issue_transition_on_pr_open.yml`
+workflow moves an issue to `<STATUS_IN_REVIEW>` when its PR opens — if
+the status lags anyway, check that workflow's run for the PR (or move
+the issue manually in Jira) and re-run the reviewer.
 
 **I fixed a sub-task that the reviewer rejected, but re-running still shows
 changes requested.**
@@ -601,8 +622,9 @@ concrete before/after scenario in the PR description goes a long way.
   are now written against; stores credentials after a one-time login and
   handles sub-task `--parent` correctly on this project.
 - [`Introducing the Atlassian Command Line Interface (ACLI) for Jira`](https://www.atlassian.com/blog/jira/atlassian-command-line-interface) — Official documentation
-- [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
-  branch-to-issue linking.
+- [GitHub-for-Jira](https://github.com/github/github-for-jira) — the
+  integration whose branch-to-issue linking convention (issue key in the
+  branch name) this plugin's transition workflows follow.
 - Built for [Claude Code](https://claude.com/claude-code).
 - [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
 

@@ -255,19 +255,27 @@ for `workitem search --jql` (listing — never invoked by a skill), the
 
 ## 4. Editing / transitioning / assigning
 
-### Transition (invoked by the skills)
+### Transition (never invoked by a skill)
 
-Status names are project-specific — use the `<STATUS_*>` tokens from
-`jira-sdlc-tools.env`.
+**No skill in this plugin transitions Jira status.** Transitions are
+owned entirely by the repo's GitHub Actions workflows, keyed to git
+events (status names mirror the `<STATUS_*>` tokens from
+`jira-sdlc-tools.env`):
 
-```bash
-acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
-acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes
-```
+| workflow | trigger | transition |
+|---|---|---|
+| `jira_issue_transition_on_branch.yml` | issue branch first pushed | `<STATUS_TODO>` → `<STATUS_IN_PROGRESS>` |
+| `jira_issue_transition_on_pr_open.yml` | PR opened / reopened | → `<STATUS_IN_REVIEW>` (never regresses from `<STATUS_DONE>`) |
+| `jira_issue_transition_on_merge.yml` | PR merged | → `<STATUS_DONE>` |
+
+The workflows call the Jira REST API directly — the mechanics are in
+`jira-api-reference.md` §4. Skills only *read* status (the reviewer's
+In-Review filter, the executor's status check); a reviewer rejection
+moves no status — the CHANGES REQUESTED verdict comment is the signal.
 
 → Detailed: [`../../docs/JIRA-ACLI.md` §4](../../docs/JIRA-ACLI.md#4-editing--transitioning--assigning)
-for `workitem edit` and `workitem assign` (neither is invoked by a skill)
-plus bulk-edit-by-JQL.
+for the acli `transition` / `workitem edit` / `workitem assign` syntax
+(none invoked by a skill — human/manual use only) plus bulk-edit-by-JQL.
 
 ---
 
@@ -351,8 +359,9 @@ and worktree for every leaf issue, and since it only ever branches from
 `hotfix/` branch is only ever produced by the no-assigner bootstrap below
 when it branches from `<PRODUCTION_BRANCH>`.
 
-GitHub-for-Jira links a branch to an issue purely by finding the issue
-key inside the branch name — no API call required.
+The `jira_issue_transition_*.yml` workflows link a branch to an issue
+purely by extracting the issue key from the branch name — no API call
+required, which is why the naming convention below is load-bearing.
 
 ```
 git checkout -b feature/<ISSUE-KEY>-<slugified-summary>
