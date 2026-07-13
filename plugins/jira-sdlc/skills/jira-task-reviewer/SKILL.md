@@ -7,6 +7,8 @@ allowed-tools: Bash, Read, Grep, Glob
 
 You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run this from the parent issue's own worktree — no issue-key argument; the issue is derived from the current branch (see Discovery below). $ARGUMENTS, if given, is free-form notes about this run, not a key:
 
+> **You are reviewing `<ISSUE-KEY>` — the issue for *this* worktree's branch — and nothing else.** When you have finished it, stop and report. Never continue on to another issue: not a sibling sub-task, not the parent PR. If `<ISSUE-KEY>` is a sub-task, a full pass over every sub-task plus the parent PR is a *separate* run of this skill from the parent's own worktree.
+
 **Conventions used below:**
 - `<PARENT-KEY>` = the Jira issue key derived from the current branch (via the Discovery healthcheck's `issue_key` row below) — or, when the branch belongs to a sub-task, that sub-task's `fields.parent.key` (step 1 climbs automatically and notes it in the report). It just means "the resolved key" — it is only literally the parent of sub-tasks on the multistep track; on the single-step track it is a standalone issue with no sub-tasks.
 - `$ARGUMENTS`, when non-empty, is free-form notes about this run (focus areas, constraints, context) — fold them into the review criteria (3c); never parsed as an issue key.
@@ -86,7 +88,7 @@ climbing from a sub-task to its parent if needed).
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
 - Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (source of truth for this review-fetch field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
-  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → climb to the parent: `<PARENT-KEY>` = `fields.parent.key`, then re-fetch `acli jira workitem view <PARENT-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) for the rest of this skill. Note the climb (`<RUN-KEY>` → `<PARENT-KEY>`) in the final report (step 6).
+  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → per the rule at the top, review **this sub-task's own PR only**. Do *not* re-fetch the parent as an acting issue and do *not* read its `fields.subtasks` — that sweep belongs to a run from the parent's worktree. `<PARENT-BRANCH>` (this PR's base) = §12's resolver with `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report (step 6) that only `<RUN-KEY>` was reviewed.
 - **Resolve `<PARENT-BRANCH>`**: list branch names deduped to unique shorts — strip the local `*`/indent and the `remotes/origin/` prefix so a branch that exists both locally and on origin counts once — then match the key:
   ```bash
   git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <PARENT-KEY>
