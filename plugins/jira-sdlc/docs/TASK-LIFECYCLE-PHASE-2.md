@@ -7,7 +7,7 @@ executors run in parallel against the worktrees the assigner set up.
 The diagram surfaces the two systems the executor drives as their own
 swimlanes — **GIT** (anything that mutates repo state: reading the
 worktree's branch and `parentbranch` config, merging the parent branch
-current, committing, pushing, opening the PR with its semver label) and
+current, committing, pushing, opening the PR) and
 **JIRA** (anything that mutates issue state: fetching the issue and its
 prior comments, the *In Progress* / *In Review* transitions, any `Task
 memory` comments posted along the way, and the final run-report
@@ -43,7 +43,7 @@ sequenceDiagram
         end
         Executor->>Executor: implement • test
         Note right of Executor: repeated individual test failure → stop & ask, no commit/push/PR
-        Executor->>GIT: commit + push + open PR (with semver label)
+        Executor->>GIT: commit + push + open PR
         GIT-->>Executor: PR URL
         Executor->>JIRA: transition → In Review
         Executor->>JIRA: post run-report comment (PR URL, branch, status)
@@ -61,8 +61,8 @@ sequenceDiagram
 
 - **Participant routing** — the executor orchestrates between three
   parties. **GIT** owns repo state (the worktree-ownership read, merging
-  the parent branch current, the commit, the push, and the PR open with
-  its required semver label). **JIRA** owns issue state (the issue fetch
+  the parent branch current, the commit, the push, and the PR open).
+  **JIRA** owns issue state (the issue fetch
   that carries the parent family *and prior comments* used in the
   ownership check and task-memory read, the *In Progress* and *In
   Review* transitions, any `Task memory` comments posted along the way,
@@ -73,8 +73,8 @@ sequenceDiagram
   worktree-level parallelism the assigner's phase 1 setup makes
   possible. **Every leaf has its own worktree** and can run concurrently.
 - **Uniform path** — the executor validates its worktree (GIT), brings
-  its branch current, commits, pushes, opens a PR (GIT — with a required
-  semver label), transitions to *In Review* (JIRA), and posts its run-report
+  its branch current, commits, pushes, opens a PR (GIT),
+  transitions to *In Review* (JIRA), and posts its run-report
   comment (JIRA). The PR is the thing phase 3 reviews.
 - **Status transitions the executor owns** — to *In Progress* on start,
   to *In Review* on PR open (both JIRA).
