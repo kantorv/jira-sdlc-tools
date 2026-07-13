@@ -264,9 +264,15 @@ acli jira workitem view <KEY> --json
 
 ## 4. Editing / transitioning / assigning
 
-The lean file covers `transition` (the only §4 command a skill invokes)
-and the status-names-are-tokens note. This section holds `edit` and
-`assign`, neither invoked by a skill.
+No §4 command is invoked by a skill — status transitions are owned by
+the repo's `jira_issue_transition_*.yml` GitHub Actions workflows (the
+lean file's §4 has the trigger → transition table), and `edit` /
+`assign` below are for human/manual use. The `transition` syntax is kept
+here for the same manual use:
+
+```bash
+acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
+```
 
 ### Edit
 

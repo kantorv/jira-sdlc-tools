@@ -1,6 +1,6 @@
 ---
 name: jira-task-executor
-description: Picks up the issue implied by the current worktree's branch end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and updated Jira status.
+description: Picks up the issue implied by the current worktree's branch end-to-end — branch, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and the issue's Jira status (transitions are owned by the repo's GitHub Actions workflows, never this skill).
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 ---
@@ -53,7 +53,7 @@ the issue key is derived from the current branch (see Discovery below).
   project root.
 
 **Discovery and healthcheck — run before step 1.** The rest of this
-skill transitions Jira status, commits, pushes, and opens a PR — every
+skill comments on Jira, commits, pushes, and opens a PR — every
 one of those assumes the right starting point and working credentials,
 and finding a busted environment mid-flow (e.g. a logged-out `gh`
 failing at step 10, *after* the implementation is already written and
@@ -166,10 +166,26 @@ resolution).
      resolver handles an unset parentbranch (Jira comment, then env
      default).
 
-3. **Transition the issue** to in-progress:
-   `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
-   `jira-sdlc-tools.env` in the project root for the confirmed status name for this
-   project — default example `In Progress`).
+3. **Check the issue's status — never transition it.** All Jira status
+   transitions are owned by the repo's GitHub Actions workflows, not by
+   this skill (or any skill in this plugin): on the issue branch's first
+   push to origin, `jira_issue_transition_on_branch.yml` moves the issue
+   `<STATUS_TODO>` → `<STATUS_IN_PROGRESS>`; opening the PR (step 10)
+   triggers `jira_issue_transition_on_pr_open.yml` → `<STATUS_IN_REVIEW>`;
+   the human merging the PR triggers `jira_issue_transition_on_merge.yml`
+   → `<STATUS_DONE>`. This skill only *reads* status and reports it.
+   Interpret the status step 1 fetched:
+   - `<STATUS_TODO>` → normal for a first run: the branch hasn't been
+     pushed yet, so the on-branch workflow hasn't fired. Step 9's push
+     will trigger it. Proceed.
+   - `<STATUS_IN_PROGRESS>` → normal for a re-run (branch already
+     pushed) or after a reviewer rejection. Proceed.
+   - `<STATUS_IN_REVIEW>` → normal when re-running to fix a
+     reviewer-rejected PR (rejection does not move the status back — the
+     reviewer's CHANGES REQUESTED verdict comment is the re-run signal).
+     Proceed, and note it in the final report.
+   - `<STATUS_DONE>` → suspicious: the issue's PR was already merged.
+     Stop and confirm with the user before touching anything.
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
@@ -317,27 +333,25 @@ resolution).
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
       (get `<org>/<repo>` from `git remote get-url origin`).
 
-11. **Update Jira — status transition, no comment yet:**
-    You just opened a PR (step 10), so the work is now under review —
-    transition it to in-review:
-    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
-    `jira-sdlc-tools.env` in the project root for the confirmed status
-    name for this project — default example `In Review`).
-    How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
-    a parent (check `fields.parent` from step 1):
+11. **Jira status after the PR — hands off, workflows own it:**
+    Opening the PR (step 10) fired `jira_issue_transition_on_pr_open.yml`,
+    which moves the issue to `<STATUS_IN_REVIEW>` (it no-ops if the issue
+    is already there and never regresses from `<STATUS_DONE>`). Do not
+    transition anything via acli — just carry the expected status into
+    step 12's report. What happens next:
     - **Has a parent (multistep sub-task)** → Once the reviewer
-      approves the PR, the human merges it into the parent branch.
-      GitHub-for-Jira automation (if connected) transitions the
-      sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
-      it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
-      executor must re-run `/jira-sdlc:jira-task-executor` (bare, from
-      this same worktree) to fix it.
+      approves the PR, the human merges it into the parent branch, and
+      `jira_issue_transition_on_merge.yml` transitions the sub-task to
+      `<STATUS_DONE>` on merge. If the reviewer rejects it, the Jira
+      status stays `<STATUS_IN_REVIEW>` — the rejection signal is the
+      reviewer's CHANGES REQUESTED verdict (PR review + Jira comment),
+      and the executor must re-run `/jira-sdlc:jira-task-executor`
+      (bare, from this same worktree) to fix it.
     - **No parent (single-step top-level issue)** → the reviewer
       (when run on that issue) will review this PR targeting the
       base branch. `<STATUS_DONE>` is handled when the human merges the
-      PR into the base branch — via GitHub-for-Jira's merge automation
-      if connected, or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`
-      otherwise. Don't transition to Done here.
+      PR into the base branch — `jira_issue_transition_on_merge.yml`
+      transitions the issue on that merge event. Nothing to do here.
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Post this same

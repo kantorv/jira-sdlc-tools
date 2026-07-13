@@ -29,9 +29,9 @@ define the same variable (though they define disjoint sets by convention).
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
-| `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
-| `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
-| `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state directly; it is handled by automation or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`. Must match your workflow's real status name exactly. | `Done` |
+| `<STATUS_IN_PROGRESS>` | Status the `jira_issue_transition_on_branch.yml` workflow moves an issue to when its branch is first pushed. No skill writes it — skills only read status; every transition is owned by the repo's `jira_issue_transition_*.yml` GitHub Actions workflows. | `In Progress` |
+| `<STATUS_IN_REVIEW>` | Status the `jira_issue_transition_on_pr_open.yml` workflow moves an issue to when its PR is opened. A reviewer rejection does not move it back — the CHANGES REQUESTED verdict comment is the rejection signal. | `In Review` |
+| `<STATUS_DONE>` | Final status, reached when the `jira_issue_transition_on_merge.yml` workflow fires on a PR merge into the base/parent branch. No skill transitions to this state (or any other) directly. Must match your workflow's real status name exactly. | `Done` |
 
 ## Required (in `jira-sdlc-tools.local.env`)
 
