@@ -30,7 +30,7 @@ This document defines the standard operating procedures for the Software Develop
 | `development` | ✅ Yes | `main` | `release/*` | The default working branch. Represents Staging/Integration. Code here is continuously deployed to the staging environment. |
 | `feature/ISSUE-KEY-slug` | ❌ No | `development` | `development` | Used for new features and non-critical bug fixes. |
 | `hotfix/ISSUE-KEY-slug` | ❌ No | `main` | `main` & `development` | Used **only** for critical production bugs that cannot wait for the next sprint release. |
-| `release/sprint-<X.Y.Z>` | ❌ No | `development` | `main` | Temporary branch created at the end of a sprint for QA hardening and final bug fixes before production release. Named after the intended release version (computed from latest `v*` tag + chosen bump label, default `minor` — see §5). |
+| `release/sprint-<X.Y.Z>` | ❌ No | `development` | `main` | Temporary branch created at the end of a sprint for QA hardening and final bug fixes before production release. Named after the intended release version (computed from latest `v*` tag + chosen bump level, default `minor` — see §5). |
 
 ---
 
@@ -45,7 +45,7 @@ Our development cycles run in 14-day sprints. The Git workflow strictly follows 
 - *Rule:* If a feature is incomplete, it MUST be wrapped in a Feature Flag before merging into `development`.
 
 ### Phase 2: Feature Freeze & Release Cut (Day 12)
-- A new release branch is cut from `development` (e.g., `release/sprint-0.3.0`). The branch name embeds the intended SemVer version — `cut-release.yml` computes it from the latest `v*` tag + the chosen bump label (`patch`/`minor`/`major`, default `minor` per §5).
+- A new release branch is cut from `development` (e.g., `release/sprint-0.3.0`). The branch name embeds the intended SemVer version — `cut-release.yml` computes it from the latest `v*` tag + the chosen bump level (`patch`/`minor`/`major`, default `minor` per §5). The version lives in the branch name from this point on; `release.yml` reads it back out at merge time (§5), so the way to change a release's version is to rename or re-cut the branch, not to relabel a PR.
 - **No new features** are allowed into this release branch. 
 - `development` remains open for developers to start merging features for the *next* sprint.
 
@@ -119,10 +119,15 @@ git push origin development
 
 We strictly adhere to [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`) on the `main` branch.
 
-The bump for each release is resolved from the **merged PR's `patch` / `minor` / `major` label**, falling back to the branch-type default when no label is set (`release/*` → `minor`, `hotfix/*` → `patch`). Commit-message conventions play no part in version resolution.
+The version for each release is taken from the **branch name** — no PR label is read:
+
+* A `release/sprint-<X.Y.Z>` branch carries its SemVer version in the name (set at cut time by `cut-release.yml`). `release.yml` parses that version back out at merge time; a malformed name (anything other than `release/sprint-<X.Y.Z>`, including a leading `v`) fails the release. To ship a different version, rename or re-cut the branch.
+* A `hotfix/*` branch always takes a **patch** bump on the latest `v*` tag. A hotfix is by §4's definition an emergency fix for a critical production bug — that IS a patch; work needing a minor or major bump belongs in a `release/*` branch, where the version is explicit.
+
+Commit-message conventions play no part in version resolution.
 
 * **MAJOR (`v2.0.0`):** Breaking changes, massive UI overhauls, or major architectural shifts.
-* **MINOR (`v1.5.0`):** New sprint releases containing backward-compatible features (the standard increment for Day 14 releases).
+* **MINOR (`v1.5.0`):** New sprint releases containing backward-compatible features (the standard increment for Day 14 releases — the `cut-release.yml` default).
 * **PATCH (`v1.5.1`):** Emergency `hotfix/*` branches merged directly to `main` mid-sprint.
 
 > *Note: Version tags must contain ONLY the semantic version number (e.g., `v1.5.0`), never sprint identifiers (e.g., `v1.5.0-sprint24`), to ensure compatibility with standard package managers and CI tools.*
@@ -152,4 +157,4 @@ To prevent merge conflicts and "branch rot", long-running feature branches are d
 1. **Branch Naming:** Work branched off `development` is **always** named `feature/<ISSUE-KEY>-<kebab-case-description>` (e.g. `git checkout -b feature/PROJ-123-add-user-auth`) — `feature/` is the only branch type cut from `development`, and it covers all planned work, features and bug fixes alike. The one exception is an emergency `hotfix/` off `main` (see #2); never create a `hotfix/` branch from `development`.
 2. **Target Branches:** Always default PR creation scripts or git merge targets to `development`, unless explicitly told it is a production **hotfix** — those (and only those) branch from `main`, are named `hotfix/<ISSUE-KEY>-<kebab-case-description>`, and target `main`.
 3. **Feature Flags:** Do **not** add feature-flag wrapping on your own initiative. Whether incomplete work ships behind a flag (§6) is a deliberate human/product decision — wrap an entry point in a flag only when the issue or the user explicitly asks for it, and then follow the codebase's existing flag pattern rather than inventing one.
-4. **Commit Messages & Versioning:** SemVer bumps are driven by the **merged PR's label** (`patch` / `minor` / `major`), **not** by parsing commit messages — so Conventional Commits are not required. Prefix each commit with its Jira issue key (`<ISSUE-KEY> <short imperative summary>`, e.g. `PROJ-123 add user auth`) so history stays traceable to the issue; the release workflow reads the PR label to compute the next version, and the branch type sets the default when no label is present (`release/*` → `minor`, `hotfix/*` → `patch` — see §5).
+4. **Commit Messages & Versioning:** SemVer bumps are driven by the **branch name** (`release/sprint-<X.Y.Z>` carries the version; `hotfix/*` is always a patch), **not** by PR labels or commit-message parsing — so Conventional Commits are not required. Prefix each commit with its Jira issue key (`<ISSUE-KEY> <short imperative summary>`, e.g. `PROJ-123 add user auth`) so history stays traceable to the issue; `release.yml` resolves the version from the head ref on the merge (see §5).

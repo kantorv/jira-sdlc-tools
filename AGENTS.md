@@ -101,31 +101,34 @@ repo, not just the JS app these skills came from. The branching and release
 policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
 automate it:
 
-- **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump label
+- **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump level
   (`patch` / `minor` / `major`, default `minor`), computes the next SemVer
-  from the latest `v*` tag + that label, cuts `release/sprint-<X.Y.Z>` from
-  `development`, and opens a **draft** PR into `main` carrying the chosen
-  label. SDLC Phase 2.
+  from the latest `v*` tag + that level, cuts `release/sprint-<X.Y.Z>` from
+  `development`, and opens a **draft** PR into `main`. The version lives in
+  the branch name from here on. SDLC Phase 2.
 - **`release.yml`** — on a PR merge into `main` whose head is `release/*` or
-  `hotfix/*`. In order: resolves the bump → tags `vX.Y.Z` on the merge commit
-  → publishes the GitHub Release → back-merges `main` into `development`
-  (opens a sync PR instead if it conflicts, never force-pushing) → deletes the
-  `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
+  `hotfix/*`. In order: resolves the version (from the `release/*` branch
+  name, or a patch on the latest tag for `hotfix/*`) → tags `vX.Y.Z` on the
+  merge commit → publishes the GitHub Release → back-merges `main` into
+  `development` (opens a sync PR instead if it conflicts, never
+  force-pushing) → deletes the `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
 
 Order of operations, the short version:
 1. Run `cut-release` → `release/sprint-<X.Y.Z>` and a draft PR appear
-   (version computed from latest `v*` tag + chosen bump label, default `minor`).
+   (version computed from latest `v*` tag + chosen bump level, default `minor`,
+   baked into the branch name).
 2. QA on that branch; fix PRs land back into `release/sprint-<X.Y.Z>` (SDLC Phase 3).
 3. Mark the draft PR ready and merge it into `main`.
 4. `release.yml` tags, releases, syncs back to `development`, and deletes the
    branch automatically.
 
-Bump resolution (SDLC §5): branch-type default — `release/*` → **minor**,
-`hotfix/*` → **patch** — overridden by a `patch`/`minor`/`major` label on the
-merged PR (the same labels `jira-task-executor` already stamps, and that
-already exist on this repo). Tags are pure SemVer, no sprint suffix. The
-first release (no `v*` tag exists) is `v0.1.0`. A `hotfix/*` merge defaults to
-a `patch` bump and runs the same sync-back + cleanup steps.
+Bump resolution (SDLC §5): `release/*` takes its version from the branch name
+(`release/sprint-<X.Y.Z>` — malformed names fail the release; rename or
+re-cut to change the version), and `hotfix/*` is always a **patch** on the
+latest `v*` tag. No PR label is read for versioning. Tags are pure SemVer, no
+sprint suffix. The first release (no `v*` tag exists) is `v0.1.0`. A
+`hotfix/*` merge runs the same tag→release→sync-back→cleanup steps with a
+patch bump.
 
 Auth: the default `GITHUB_TOKEN` suffices while `main`/`development` are
 unprotected (the workflows push tags, delete branches, create releases, and

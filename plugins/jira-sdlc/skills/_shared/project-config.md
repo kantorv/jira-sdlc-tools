@@ -14,7 +14,7 @@ describe what each variable means.
 
 | File | Purpose | Committed? |
 |------|---------|------------|
-| `jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch, semver labels). Same for every developer. | **Yes** — checked into the repo |
+| `jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
 | `jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` |
 
 Both files are sourced by tools that need them. Values in
@@ -41,12 +41,6 @@ define the same variable (though they define disjoint sets by convention).
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). Used for the one-time `acli jira auth login` and for constructing issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
 | `<JIRA_ACCOUNT_EMAIL>` | The email address of the Jira account that owns the API token. Used for the one-time `acli jira auth login`. | `you@example.com` |
 | `<JIRA_TOKEN>` | Jira API token value OR path to a file containing the token. `acli jira auth login --token` reads from stdin, so both forms work — use the one that matches how this variable is set on your machine:<br>• path form: `acli jira auth login … --token < <JIRA_TOKEN>`<br>• value form: `printf '%s' "<JIRA_TOKEN>" \| acli jira auth login … --token`<br>The default example below keeps `.jira/token.txt` (path still works); a raw token value is also accepted. | `.jira/token.txt` |
-
-## Optional — sensible defaults, override if yours differ (in `jira-sdlc-tools.env`)
-
-| Token | What it is | Default |
-|---|---|---|
-| `<SEMVER_LABELS>` | The three GitHub label names `jira-task-executor` applies to PRs for release automation. Must already exist on the repo. | `patch` / `minor` / `major` |
 
 ### acli auth (one-time setup)
 
@@ -87,7 +81,6 @@ STATUS_TODO           = To Do
 STATUS_IN_PROGRESS    = In Progress
 STATUS_IN_REVIEW      = In Review
 STATUS_DONE           = Done
-SEMVER_LABELS         = patch / minor / major
 ```
 
 **`jira-sdlc-tools.local.env` (gitignored):**

@@ -289,18 +289,6 @@ resolution).
       project root — acli has no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
-    - Pick the semver label **before** creating the PR — `--label` is
-      required (the repo's semver-based release workflow reads it to
-      decide the next version bump), and the label must already exist in
-      the repo, so confirm it now rather than after `gh pr create` fails:
-      `gh api repos/<org>/<repo>/labels --jq '.[].name'`. Pick by what
-      the PR actually changes in the app's semantics (these three names
-      assume the `<SEMVER_LABELS>` default from `jira-sdlc-tools.env` —
-      adjust if yours differ):
-      - `patch` — bug fixes, small internal improvements, no new
-        functionality or breaking changes
-      - `minor` — new features or non-breaking enhancements
-      - `major` — breaking changes (API removals, behaviour reversals)
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
@@ -309,7 +297,7 @@ resolution).
       <what changed + link to the issue>
       EOF
       gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
-        --body-file /tmp/<KEY>-pr-body.md --label <semver-label>
+        --body-file /tmp/<KEY>-pr-body.md
       ```
     - The discovery checks above already confirmed `gh` is installed and
       authenticated, so a failure here is something else (a `gh pr create`
