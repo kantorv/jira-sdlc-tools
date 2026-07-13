@@ -478,13 +478,14 @@ parent-drop failure in §2) — lives in
 
 ---
 
-## 12. PR-base resolver (git-config → Jira comment → env default)
+## 12. PR-base resolver (git-config → Jira comment → parent-branch search → env default)
 
 Every leaf issue's PR needs a base branch. The assigner records it in two
 places — one local (`git config branch.<branch>.parentbranch`), one
 durable (a `"PR target branch: …"` Jira comment that survives a fresh
-clone). This resolver checks both before falling back to the env default;
-run it verbatim whenever a skill asks for a PR base:
+clone). This resolver checks both before attempting a parent-branch search,
+then falling back to the env default; run it verbatim whenever a skill asks
+for a PR base:
 
 ```bash
 CUR=$(git branch --show-current)
@@ -492,6 +493,17 @@ PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
 [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
   | grep -oE 'PR target branch: [^" ]+' | head -1 \
   | sed -e 's/PR target branch: //' -e 's/\.$//')
+# Parent-branch recovery for sub-tasks: if still empty AND issue has a parent,
+# search for the parent's feature branch before falling back to DEFAULT_BASE_BRANCH
+if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+  MATCHES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null | wc -l)
+  if [ "$MATCHES" -eq 1 ]; then
+    PR_BASE=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null | sed -E 's#^[* ]+##; s#^remotes/origin/##' | head -1)
+  elif [ "$MATCHES" -gt 1 ]; then
+    echo "Ambiguous: found $MATCHES branches matching parent key $PARENT_KEY. Cannot determine PR base automatically."
+    exit 1
+  fi
+fi
 [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
 echo "$PR_BASE"
 ```
@@ -502,6 +514,12 @@ Sources, in order:
 2. The issue's `"PR target branch: …"` Jira comment — the durable
    fallback the assigner posts (or the no-assigner bootstrap does, §7);
    survives a fresh clone or different machine.
-3. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
-   root — used only when both sources above are empty, and the skill
+3. **Parent-branch search** (sub-tasks only) — when the leaf issue has a
+   parent (`PARENT_KEY` is an environment variable holding the parent's key),
+   search for `feature/<PARENT_KEY>-*` or `hotfix/<PARENT_KEY>-*` branches.
+   - Exactly one match → use it as `PR_BASE`.
+   - Zero or multiple matches (ambiguous) → stop and ask the user for the
+     correct base branch. Do NOT fall back to `DEFAULT_BASE_BRANCH`.
+4. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
+   root — used only when all sources above are empty, and the skill
    should call that out explicitly in its report.
