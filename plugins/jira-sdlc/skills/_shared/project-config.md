@@ -68,6 +68,70 @@ used — skills assume stored acli credentials and do not mention it.
 `JIRA_TOKEN` holds either the token value itself or a path to a token file
 for the `--token` stdin redirect above.
 
+The `jira-task-executor` skill re-runs this login as the optional
+"executor" worker account before working an issue (`acli jira auth
+logout` first, so the new credential actually takes effect — the §0
+gotcha above) — see the **Optional** section below for the executor
+variables and the machine-global side effect of that re-login.
+
+## Optional (in `jira-sdlc-tools.local.env`)
+
+Both variables below are **optional**. When unset or empty, the skills
+fall back to the corresponding `<JIRA_ACCOUNT_*>` value above, so an
+existing setup keeps working — with one deliberate behavior shift
+documented under "What this enables" below.
+
+| Token | What it is | Example |
+|---|---|---|
+| `<JIRA_EXECUTOR_EMAIL>` | Email of an optional dedicated "executor" worker account that owns every issue the skills create and act on. Falls back to `<JIRA_ACCOUNT_EMAIL>` when unset/empty. | `someworker@example.com` |
+| `<JIRA_EXECUTOR_TOKEN>` | API token (raw value **OR** path to a token file — the same two forms as `<JIRA_TOKEN>`) for the executor account. Falls back to `<JIRA_TOKEN>` when unset/empty. | `.jira/executor-token.txt` |
+
+**What this enables.** When `jira-task-assigner` creates an issue
+(top-level or sub-task), it assigns it to the executor email (falling
+back to `<JIRA_ACCOUNT_EMAIL>` when no executor is configured) — instead
+of leaving it unassigned for board triage, the previous default. Then
+`jira-task-executor`, after its Discovery healthcheck and before any
+status transition or work, re-logs `acli` in as that identity and
+**gates on ownership**: it refuses to work an issue that is not assigned
+to the executor email, tells the user to assign it (or assign it
+explicitly in Jira) and rerun, and exits without transitioning,
+branching, committing, or commenting. This is the default even with
+nothing configured — issues are owned by the default account instead of
+being unassigned.
+
+**Resolution lives in a shell script, not in skill prose.**
+`skills/_shared/scripts/get_executor_creds.sh` greps
+`jira-sdlc-tools.local.env` then `jira-sdlc-tools.env` using the same
+`NAME = value` parser and local-overrides-team precedence as
+`statuscheck.sh`, and emits shell-eval-able `EXECUTOR_*` variables the
+skills consume:
+
+```bash
+eval "$(bash skills/_shared/scripts/get_executor_creds.sh)"
+# sets: EXECUTOR_EMAIL, EXECUTOR_TOKEN, EXECUTOR_TOKEN_IS_FILE,
+#       EXECUTOR_SITE, EXECUTOR_FALLBACK
+```
+
+Capture **stdout only** (its diagnostics go to stderr); `EXECUTOR_FALLBACK=1`
+means the identity fell back to the default account. The token is on
+stdout by necessity (eval must load it for the re-login) — never echo
+`$EXECUTOR_TOKEN`, redirect the script's stdout, or merge stderr
+(`2>&1`) into the eval capture, or the token lands in a Jira comment or
+chat transcript. `get_executor_creds.sh` exits non-zero with a message
+on stderr if it cannot resolve an email (also if the token or site are
+missing — all three are required to actually log in).
+
+⚠️ **Machine-global side effect of the re-login.** `acli`'s credential
+store is single-active-account and shared across every shell on the
+machine, so `acli jira auth logout` + `acli jira auth login` as the
+executor makes that account the active one for *every* other shell and
+skill until something re-logs it. The executor accepts this deliberately
+and does **not** restore the default account at the end of a run —
+restoring it would race with parallel executors — and calls the side
+effect out in its run report. (`acli jira auth switch` was considered as
+a non-destructive alternative but deferred: it requires both accounts to
+be pre-authenticated.)
+
 ## Worked example
 
 The README's usage walkthrough assumes these filled-in files:
@@ -89,4 +153,8 @@ WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 JIRA_ACCOUNT_EMAIL    = you@example.com
 JIRA_TOKEN             = .jira/token.txt
+# Optional executor worker identity (defaults to JIRA_ACCOUNT_EMAIL/JIRA_TOKEN above) —
+# uncomment + fill to run the skills as a dedicated account:
+#JIRA_EXECUTOR_EMAIL   = someworker@example.com
+#JIRA_EXECUTOR_TOKEN   = .jira/executor-token.txt
 ```

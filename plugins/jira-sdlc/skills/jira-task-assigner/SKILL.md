@@ -161,8 +161,35 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 ```
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
+
+**Assign on create** — resolve the executor worker identity once here, at
+the start of step 6, and reuse it for every issue this run creates (the
+top-level issue AND every sub-task). `get_executor_creds.sh` greps
+`jira-sdlc-tools(.local).env` with the same parser as `statuscheck.sh`
+and emits shell-eval-able `EXECUTOR_*` variables; capture **stdout only**
+— its diagnostics go to stderr, and the token is on stdout by design for
+the executor's re-login (never echo `$EXECUTOR_TOKEN` nor merge `2>&1`
+into the eval capture, or the token lands in a Jira comment / transcript):
+```bash
+eval "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_executor_creds.sh)"   # EXECUTOR_EMAIL (also TOKEN/SITE/FALLBACK)
+```
+(If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
+`../_shared/scripts/get_executor_creds.sh` relative to this skill's
+directory.) It falls back to `JIRA_ACCOUNT_EMAIL` when
+`JIRA_EXECUTOR_EMAIL` is unset, so a project without a dedicated executor
+account still resolves — to the default account (see
+`../_shared/project-config.md`). If it exits non-zero, relay its stderr
+message (no email / token / site resolvable) and **stop** — do not create
+an issue you can't assign. Hold `$EXECUTOR_EMAIL` in a shell variable for
+the rest of step 6.
+
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
-   - **Assignment:** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `--assignee @me` on creation. If your project wants auto-assignment, add the flag and update this note.
+   - **Assign on create** — pass `--assignee "$EXECUTOR_EMAIL"` on the
+     `acli jira workitem create` call. One flag does it (no separate
+     `workitem assign`); `--assignee` accepts an email, `@me`, or
+     `default`, and we pass the resolved executor email so the issue
+     lands on the configured worker identity, not the human running this
+     skill.
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
@@ -174,7 +201,7 @@ The top-level issue is your only issue. You are done creating issues.
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$EXECUTOR_EMAIL"` as the top-level issue — resolve executor identity once in 6A above and pass `$EXECUTOR_EMAIL` on every `workitem create` here.
 
 For each sub-task `→ <SUBTASK-KEY>`:
  1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
@@ -203,14 +230,17 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
   `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
   first.)
 - **Create issue**:
-  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file>`
+  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee "$EXECUTOR_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
   `--parent` actually works on this project — see
-  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes). Capture
-  the returned key with `--json` (parse `key`), or grep it out of the text
-  output (embedded in the returned browse URL). **Do not auto-assign** —
-  ownership is left to board triage (see the Assignment note in 6A);
-  omit `--assignee @me` unless your project opts in.
+  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes) and
+  carry the same `--assignee "$EXECUTOR_EMAIL"` as the top-level issue.
+  Capture the returned key with `--json` (parse `key`), or grep it out of
+  the text output (embedded in the returned browse URL). **Always pass
+  `--assignee "$EXECUTOR_EMAIL"`** on every create — top-level AND each
+  sub-task — `$EXECUTOR_EMAIL` being the executor identity resolved once
+  at the top of 6A via `get_executor_creds.sh`. One flag does it on
+  create; do not issue a separate `workitem assign`.
 - `--yes` is **not** universal — `workitem create` and `comment create`
   reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
   default), so don't add `--yes` to either; `edit` / `transition` /
