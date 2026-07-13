@@ -25,6 +25,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Configuration](#configuration)
 - [Usage walkthrough](#usage-walkthrough)
 - [Re-run behavior](#re-run-behavior)
+- [Status dashboard](#status-dashboard)
 - [Safety model](#safety-model)
 - [Known limitations](#known-limitations)
 - [First-run verification checklist](#first-run-verification-checklist)
@@ -282,7 +283,9 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
-        │           └── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
+        │           ├── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
+        │           ├── statuscheck.sh                      # pre-flight healthcheck the three skills run before acting
+        │           └── statusboard.sh                      # read-only cross-worktree status dashboard (see Status dashboard)
         ├── docs/
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
@@ -452,6 +455,39 @@ mid-flight is safe by design:
   only refreshes the aggregate review, doesn't re-touch sub-tasks. Parent
   PR merged → reports the merged state and exits; there's nothing left to
   do (GitHub-for-Jira already transitioned the issues to Done).
+
+## Status dashboard
+
+Running several worktrees in parallel (multiple terminals or subagents,
+one per leaf issue) means "where is everything?" stops being a single
+answer. `skills/_shared/scripts/statusboard.sh` answers it in one pass:
+it walks `git worktree list`, derives each worktree's issue key from its
+branch, and prints one markdown table with the Jira status, PR state,
+review verdict, and a deterministic next-action hint per worktree — run
+it from anywhere inside the repo (main checkout or any worktree):
+
+```bash
+bash plugins/jira-sdlc/skills/_shared/scripts/statusboard.sh
+```
+
+```
+## jira-sdlc statusboard — PROJ
+
+| worktree | key | type | jira status | PR | verdict | next action |
+|---|---|---|---|---|---|---|
+| worktree-PROJ-401 | PROJ-401 | Story (parent, 3 sub) | In Progress | none | — | run the reviewer from here |
+| worktree-PROJ-402 | PROJ-402 | Task | In Review | #84 open → PROJ-401 | ✅ approved | approved — merge the PR manually |
+| worktree-PROJ-403 | PROJ-403 | Task | In Progress | none | — | run the executor from here |
+```
+
+It's read-only by design — it never transitions Jira, comments, pushes,
+or merges, and resolves `<PROJECT-KEY>` / `<DEFAULT_BASE_BRANCH>` /
+`<STATUS_*>` from `jira-sdlc-tools.env` / `jira-sdlc-tools.local.env`
+the same way `statuscheck.sh` does, so it carries no hardcoded
+project values. A missing or unauthenticated `gh`/`acli` degrades the
+affected columns to `n/a` (with a warning printed under the table)
+rather than failing the whole run — unlike `statuscheck.sh`, this is a
+dashboard, not a precondition gate.
 
 ## Safety model
 
