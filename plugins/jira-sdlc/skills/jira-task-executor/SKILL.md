@@ -52,6 +52,29 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Executor identity & ownership gate — run this FIRST, before the
+healthcheck.** It logs `acli` in as the executor worker identity (so every
+Jira write in this run — transitions, comments — is attributed to that
+account, not to whoever was logged in) and confirms `<KEY>` is assigned to
+it. Everything is in the script; the exit code is the whole contract:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/executor_identity.sh"
+```
+
+- **Exit 0** → you are the executor, `<KEY>` is yours: continue to the
+  healthcheck below.
+- **Non-zero** → **STOP.** Relay the script's stderr verbatim (it names the
+  reason and, for an ownership failure, the ready-to-paste
+  `acli jira workitem assign …` command and the Jira link). Do **not**
+  transition status, branch, commit, comment, or work the issue, and do not
+  work it as a different identity.
+
+(It takes the key from the branch, like the healthcheck does; pass one
+explicitly only when running outside the issue's worktree. If
+`CLAUDE_PLUGIN_ROOT` isn't set, it lives at
+`../_shared/scripts/executor_identity.sh` relative to this skill.)
+
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
 one of those assumes the right starting point and working credentials,
@@ -114,140 +137,10 @@ skill runs only from an issue's own worktree. cd into the worktree
 
 Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 `issue_key` row's derived key is `<KEY>` for the rest of this run — there's
-no user-supplied key to compare it against. **Do not skip the next phase:**
-the healthcheck verified *some* valid account is authenticated, but the
-executor works as a *configured worker identity*, and the phase below
-re-logs acli in as it and **gates on ownership** (`<KEY>` must be assigned
-to that identity) before any status transition or work. Carry the INFO
-rows forward as context (`parent_branch` feeds step 2's stale-branch
-merge and step 10's PR-base resolution) and continue to that phase, not
-straight to step 1.
-
-## Executor identity & ownership gate — run after the healthcheck, before step 1
-
-This gate runs after Discovery's
-healthcheck and before step 1, and it must exit the run cleanly (no
-status transition, branch, commit, comment) on a failed credential or a
-mismatched assignment — so a broken executor config or an issue the
-human hasn't pointed at the executor can't be worked by accident. It has
-five parts; run them in order and **stop at the first failure**.
-
-### Gate 1 — Resolve the executor identity
-
-Same script and same parser `jira-task-assigner` used at its step 6A, so
-both skills agree on who the executor is. Capture **stdout only** — its
-diagnostics go to stderr, and the token is on stdout *by design* (eval
-must load it for the login in Gate 2). Never echo `$EXECUTOR_*`, never
-redirect this script's stdout, never merge `2>&1` into the eval capture,
-or the token lands in a Jira comment / chat transcript:
-```bash
-eval "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_executor_creds.sh)"
-# sets: EXECUTOR_EMAIL, EXECUTOR_TOKEN (the raw token value), EXECUTOR_SITE,
-#       EXECUTOR_FALLBACK (1 ⇒ fell back to JIRA_ACCOUNT_EMAIL)
-```
-(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
-plugin session — the script lives at
-`../_shared/scripts/get_executor_creds.sh` relative to this skill's
-directory.) If it exits non-zero (relays on stderr that no email / token /
-site is resolvable in `jira-sdlc-tools(.local).env`), relay that message
-to the user and **stop** — do not log in or touch anything.
-`EXECUTOR_FALLBACK=1` is *not* a failure: it means no
-`JIRA_EXECUTOR_EMAIL` is configured, so the identity fell back to the
-default `<JIRA_ACCOUNT_EMAIL>`. Gate 2–5 run identically against that
-account; the only behavior shift is documented under "What this enables"
-in `../_shared/project-config.md` (issues are owned now by the default
-account instead of left unassigned).
-
-### Gate 2 — Re-log acli in as the executor, `auth logout` FIRST
-
-A second `acli jira auth login` does **not** overwrite the stored
-credential (acli keeps the old one), so a plain re-login silently leaves
-you on the previous account while `acli jira auth status` still reports
-`✓ Authenticated` from its cache — the disguised-failure gotcha in
-`../_shared/jira-acli-reference.md` §0. Log out, then log in. `--token`
-takes no value and reads stdin, and `EXECUTOR_TOKEN` holds the raw token
-**value** — never a path to a token file (§0) — so pipe it in:
-```bash
-acli jira auth logout
-printf '%s' "$EXECUTOR_TOKEN" | acli jira auth login \
-  --site "$EXECUTOR_SITE" --email "$EXECUTOR_EMAIL" --token
-```
-
-⚠️ **Machine-global side effect.** `acli`'s credential store is
-single-active-account and shared across every shell on this machine, so
-this makes the executor account active for *all* of them — not just this
-run. This is deliberate and is **not** restored at the end of the run
-(restoring would race with parallel executors); call it out in the
-step-12 run report and in a failed-gate relay, and see the Optional
-section of `../_shared/project-config.md`.
-
-### Gate 3 — Verify the re-login with a real call, AND fetch `<KEY>`'s assignee
-
-The cache lies (§0), so confirm the executor credential actually
-authenticates with a *real* call — not `acli jira auth status`. Make that
-call a `<KEY>` view scoped to `assignee`: it does double duty (proves the
-credential works and returns the assignee Gate 4 compares against), so it
-runs exactly once here — do not re-run it in Gate 4.
-```bash
-acli jira workitem view <KEY> --json --fields 'assignee'
-```
-If the call errors (unauthorized, forbidden, project not found), the
-executor token/email/site in the env files is wrong or the account lacks
-project access — relay that to the user and **stop**. Do not fall back to
-the previous account: the re-login's machine-global side effect already
-happened, but no work proceeds on a broken credential.
-
-### Gate 4 — Gate on ownership
-
-Inspect `fields.assignee` in the JSON Gate 3 just returned (do not re-run
-the view):
-- **`null`** — the issue is unassigned. The `jira-task-assigner` that
-  created it predated assign-on-create, or a human unassigned it. **Not
-  mine — stop at Gate 5.**
-- **an object** — compare `fields.assignee.emailAddress` to
-  `$EXECUTOR_EMAIL`, case-insensitively and after trimming surrounding
-  whitespace. (`accountId` is the more stable identifier, but this skill
-  resolves an email from the env, so email is the value on both sides;
-  Jira Cloud shows a user's own `emailAddress` to them, so it is present
-  for the common case — the executor confirming an issue assigned to
-  itself. If `emailAddress` is absent/null on the object but `accountId`
-  is present, the site is redacting the email — don't guess; treat as
-  **cannot confirm — stop at Gate 5** and ask the user to confirm the
-  assignment in the Jira UI.)
-  - A match ⇒ `<KEY>` is owned by the executor identity — **proceed to
-    step 1**.
-  - A mismatch ⇒ the issue is assigned to someone else — **not mine —
-    stop at Gate 5.**
-
-### Gate 5 — If not the executor's, STOP without touching anything
-
-Do not transition status, branch, commit, or comment, and do not work
-the issue as a different identity — exit clean. Relay to the user, in
-chat:
-1. The ready-to-paste assign command (the only `--assignee` value the
-   assigner would have used; `workitem assign` accepts an email and
-   `--yes`, per `../_shared/jira-acli-reference.md` §8):
-   ```
-   acli jira workitem assign --key <KEY> --assignee "<EXECUTOR_EMAIL>" --yes
-   ```
-   …or assign it by hand in the Jira UI at
-   `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` (build the link from
-   `<JIRA_ACCOUNT_URL>` in the env files — acli has no browse subcommand).
-2. The instruction to assign `<KEY>` to the executor identity
-   (`<EXECUTOR_EMAIL>`) and then **rerun this skill bare, from this same
-   worktree** (it will re-run this gate and pass once `<KEY>` is assigned
-   to the executor).
-3. The machine-global side effect from Gate 2: acli is now logged in as
-   the executor identity on this machine, so their other shells/skills
-   run as it too until re-logged — note this so the human isn't surprised.
-
-This gate is what stops a human from accidentally pointing the executor
-at someone else's issue and what makes the assigner's assign-on-create
-meaningful. **Never work around it on a "this one's fine" judgment call**
-— if Gate 5 fires, the right fix is assigning the issue, not skipping
-the gate.
-
-If the gate passes, continue to step 1.
+no user-supplied key to compare it against, and the identity gate above
+already confirmed `<KEY>` is assigned to the executor. Continue to step 1,
+carrying the INFO rows forward as context (`parent_branch` feeds step 2's
+stale-branch merge and step 10's PR-base resolution).
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
@@ -472,13 +365,9 @@ If the gate passes, continue to step 1.
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the issue's new status. **If Gate 2 logged
-    in a dedicated executor account (`EXECUTOR_FALLBACK=0`), add a one-line
-    note** that acli is now that identity machine-globally — every other
-    shell/skill on this machine runs as it until re-logged (Gate 2 / the
-    Optional section of `../_shared/project-config.md`). With the fallback
-    (`EXECUTOR_FALLBACK=1`), the re-login was to the default account that
-    was already active, so there's nothing notable to call out. Post this
+    commit(s), the PR link, and the issue's new status. Pass through any
+    note the identity gate printed on success (it flags when acli is now a
+    dedicated executor account machine-globally). Post this
     same report to the user in chat **and** as a single Jira comment: this is
     the one comprehensive **run report** — don't fragment it (in
     particular, no separate trivial "PR opened" comment earlier). The

@@ -162,34 +162,21 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 
-**Assign on create** — resolve the executor worker identity once here, at
-the start of step 6, and reuse it for every issue this run creates (the
-top-level issue AND every sub-task). `get_executor_creds.sh` greps
-`jira-sdlc-tools(.local).env` with the same parser as `statuscheck.sh`
-and emits shell-eval-able `EXECUTOR_*` variables; capture **stdout only**
-— its diagnostics go to stderr, and the token is on stdout by design for
-the executor's re-login (never echo `$EXECUTOR_TOKEN` nor merge `2>&1`
-into the eval capture, or the token lands in a Jira comment / transcript):
+**Assign on create** — resolve the executor worker email once here and reuse
+it for every issue this run creates (top-level AND every sub-task). The
+script prints the email and nothing else, falling back to
+`JIRA_ACCOUNT_EMAIL` when `JIRA_EXECUTOR_EMAIL` is unset:
 ```bash
-eval "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_executor_creds.sh)"   # EXECUTOR_EMAIL (also TOKEN/SITE/FALLBACK)
+EXECUTOR_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/executor_email.sh") || exit 1
 ```
-(If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
-`../_shared/scripts/get_executor_creds.sh` relative to this skill's
-directory.) It falls back to `JIRA_ACCOUNT_EMAIL` when
-`JIRA_EXECUTOR_EMAIL` is unset, so a project without a dedicated executor
-account still resolves — to the default account (see
-`../_shared/project-config.md`). If it exits non-zero, relay its stderr
-message (no email / token / site resolvable) and **stop** — do not create
-an issue you can't assign. Hold `$EXECUTOR_EMAIL` in a shell variable for
-the rest of step 6.
+(If `CLAUDE_PLUGIN_ROOT` isn't set, it lives at
+`../_shared/scripts/executor_email.sh` relative to this skill.) On non-zero,
+relay its stderr and **stop** — don't create an issue you can't assign.
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
    - **Assign on create** — pass `--assignee "$EXECUTOR_EMAIL"` on the
      `acli jira workitem create` call. One flag does it (no separate
-     `workitem assign`); `--assignee` accepts an email, `@me`, or
-     `default`, and we pass the resolved executor email so the issue
-     lands on the configured worker identity, not the human running this
-     skill.
+     `workitem assign`).
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
@@ -238,9 +225,9 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
   Capture the returned key with `--json` (parse `key`), or grep it out of
   the text output (embedded in the returned browse URL). **Always pass
   `--assignee "$EXECUTOR_EMAIL"`** on every create — top-level AND each
-  sub-task — `$EXECUTOR_EMAIL` being the executor identity resolved once
-  at the top of 6A via `get_executor_creds.sh`. One flag does it on
-  create; do not issue a separate `workitem assign`.
+  sub-task — `$EXECUTOR_EMAIL` being the email resolved once at the top of
+  6A via `executor_email.sh`. One flag does it on create; do not issue a
+  separate `workitem assign`.
 - `--yes` is **not** universal — `workitem create` and `comment create`
   reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
   default), so don't add `--yes` to either; `edit` / `transition` /

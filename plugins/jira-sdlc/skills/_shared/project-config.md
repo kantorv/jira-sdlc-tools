@@ -91,26 +91,28 @@ branching, committing, or commenting. This is the default even with
 nothing configured — issues are owned by the default account instead of
 being unassigned.
 
-**Resolution lives in a shell script, not in skill prose.**
-`skills/_shared/scripts/get_executor_creds.sh` greps
-`jira-sdlc-tools.local.env` then `jira-sdlc-tools.env` using the same
-`NAME = value` parser and local-overrides-team precedence as
-`statuscheck.sh`, and emits shell-eval-able `EXECUTOR_*` variables the
-skills consume:
+**It's all in two scripts, not in skill prose.** Both parse the env files
+with the same `NAME = value` parser and local-overrides-team precedence as
+`statuscheck.sh`, and both are driven by their **exit code** — the skills
+carry no resolution logic of their own:
 
 ```bash
-eval "$(bash skills/_shared/scripts/get_executor_creds.sh)"
-# sets: EXECUTOR_EMAIL, EXECUTOR_TOKEN, EXECUTOR_SITE, EXECUTOR_FALLBACK
+# jira-task-assigner — the email, and nothing else (no token is resolved):
+EXECUTOR_EMAIL=$(bash skills/_shared/scripts/executor_email.sh) || exit 1
+
+# jira-task-executor — runs FIRST, before statuscheck.sh: logs acli in as the
+# executor, then verifies the issue is assigned to it.
+bash skills/_shared/scripts/executor_identity.sh   # exit 0 = continue, non-zero = stop
 ```
 
-Capture **stdout only** (its diagnostics go to stderr); `EXECUTOR_FALLBACK=1`
-means the identity fell back to the default account. The token is on
-stdout by necessity (eval must load it for the re-login) — never echo
-`$EXECUTOR_TOKEN`, redirect the script's stdout, or merge stderr
-(`2>&1`) into the eval capture, or the token lands in a Jira comment or
-chat transcript. `get_executor_creds.sh` exits non-zero with a message
-on stderr if it cannot resolve an email (also if the token or site are
-missing — all three are required to actually log in).
+`executor_identity.sh` does the whole gate itself — resolve identity,
+`acli jira auth logout` then log in (logout **first**: a second `auth login`
+does not overwrite acli's stored credential, and `auth status` keeps
+reporting Authenticated from cache), read the issue's assignee, compare. On
+failure it exits non-zero and prints the reason plus the ready-to-paste
+`acli jira workitem assign …` command on stderr; the skill relays that and
+stops. The token is piped into `acli` on stdin — it is never printed, and
+never passed on a command line.
 
 ⚠️ **Machine-global side effect of the re-login.** `acli`'s credential
 store is single-active-account and shared across every shell on the
