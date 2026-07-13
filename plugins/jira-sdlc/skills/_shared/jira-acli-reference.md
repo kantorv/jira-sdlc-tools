@@ -23,7 +23,6 @@ from two files in the project root:
 - `<STATUS_IN_PROGRESS>`
 - `<STATUS_IN_REVIEW>`
 - `<STATUS_DONE>`
-- `<SEMVER_LABELS>`
 
 **`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
 - `<WORKTREES_DIR>`
