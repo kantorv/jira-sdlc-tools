@@ -380,6 +380,26 @@ Post the review summary to the user in chat **and** as a single Jira comment on 
 
 Pick **exactly one** outcome from the catalogue below — chosen by the step-1 track × the current phase (decided in step 4 or detected in step 1/5/6). The outcome supplies only the `<OUTCOME_TITLE>` and the `### Next step` wording; the rest of the report is identical across outcomes. Do not emit more than one outcome. The **per-sub-task-PR outcomes** (M-SUBTASK-APPROVED / M-SUBTASK-CHANGES-REQUESTED) are for the 3d/3e per-PR emissions only — this run-level step-6 report never selects them; on the multistep track it uses the `M-*` outcomes.
 
+**Cleanup block — merged outcomes only.** On the two already-merged
+outcomes (S-MERGED, M-FULLY-COMPLETE) the work has fully landed, so the
+issue's worktrees and local branches are now removable clutter. Before
+emitting the report, run the shared cleanup script in its default
+dry-run mode (detection only — it deletes nothing):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/cleanup.sh"
+```
+
+(same `../_shared/scripts/` fallback as the Discovery healthcheck if
+`CLAUDE_PLUGIN_ROOT` is unset). Fill the outcome's `<cleanup block>`
+placeholder with the script's "Merged — safe to remove" commands, so the
+human can paste the removals from the main checkout — or with one line
+saying nothing is removable yet, if that's what it reports. **Never run
+it with `--apply` yourself**: per the never-auto-delete policy, actual
+removal stays the human's paste, exactly like merging. If the script
+fails (e.g. reading this outside a git checkout), drop the block and
+note the failure — the merged outcome itself is unaffected.
+
 #### Single-step track
 
 - **S-APPROVED** — single-step PR approved, awaiting manual merge (final update — no re-run needed). Title: `Single-step PR approved — merge manually`. Next step:
@@ -394,6 +414,8 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
 - **S-MERGED** — single-step PR already merged (detected by the step-1 phase check). Title: `Single-step PR merged — complete`. Next step:
   ```
   Single-step PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  Cleanup — paste from the main checkout (or run cleanup.sh --apply there):
+  <cleanup block — see the Cleanup block note above>
   ```
 
 #### Multistep track
@@ -418,6 +440,8 @@ Pick **exactly one** outcome from the catalogue below — chosen by the step-1 t
 - **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
   Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  Cleanup — paste from the main checkout (or run cleanup.sh --apply there):
+  <cleanup block — see the Cleanup block note above>
   ```
 
 #### Per-sub-task-PR outcomes (multistep track — 3d/3e emissions only, never the run-level step-6 pick)

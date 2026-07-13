@@ -25,6 +25,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Configuration](#configuration)
 - [Usage walkthrough](#usage-walkthrough)
 - [Re-run behavior](#re-run-behavior)
+- [Cleaning up after merges](#cleaning-up-after-merges)
 - [Safety model](#safety-model)
 - [Known limitations](#known-limitations)
 - [First-run verification checklist](#first-run-verification-checklist)
@@ -282,7 +283,9 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
-        │           └── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
+        │           ├── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
+        │           ├── cleanup.sh            # post-merge worktree/branch cleanup (see Cleaning up after merges)
+        │           └── statuscheck.sh        # pre-flight healthcheck every skill runs first
         ├── docs/
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
@@ -453,6 +456,44 @@ mid-flight is safe by design:
   PR merged → reports the merged state and exits; there's nothing left to
   do (GitHub-for-Jira already transitioned the issues to Done).
 
+## Cleaning up after merges
+
+Merged work leaves its per-issue worktrees and local branches behind —
+no skill deletes them, by design — so on a busy repo `git worktree list`
+slowly fills with finished tasks. `skills/_shared/scripts/cleanup.sh`
+owns that last step:
+
+```bash
+# dry run (default, works from anywhere): detect + print removal commands
+bash <plugin>/skills/_shared/scripts/cleanup.sh
+
+# actually remove — only with the explicit flag, only from the main checkout
+bash <plugin>/skills/_shared/scripts/cleanup.sh --apply
+```
+
+(`<plugin>` = this repo's `plugins/jira-sdlc` in a clone, or the cached
+plugin root in a marketplace install — skills invoke it via
+`${CLAUDE_PLUGIN_ROOT}`, like the healthcheck.)
+
+The default mode deletes nothing: for every worktree/branch whose work
+is *proven* merged it prints a ready-to-paste
+`git worktree remove … && git branch -d …` line. Detection keys on real
+merge state — PR state via `gh pr view`, git ancestry against the
+recorded parentbranch (then `<DEFAULT_BASE_BRANCH>`, then
+`<PRODUCTION_BRANCH>`) — never on branch names alone. Anything unproven
+is skipped with the reason: dirty worktrees, open PRs, branches other
+work still builds on (the recorded parentbranch of an unmerged local
+branch, or the base of an open PR), stale local refs whose origin
+counterpart has newer commits, and squash/rebase-merged branches whose
+commits `git branch -d` can't verify.
+
+`--apply` executes exactly the printed removals and nothing more:
+`git branch -d` semantics only (never `-D`), no `--force`, and remote
+branches are never deleted — merged ones get a `git push origin
+--delete` suggestion to paste instead. The reviewer embeds the same
+dry-run block in its S-MERGED / M-FULLY-COMPLETE reports, so the paste
+is at hand exactly when a task set finishes.
+
 ## Safety model
 
 Deliberately never automated, regardless of how routine a run looks:
@@ -467,6 +508,11 @@ Deliberately never automated, regardless of how routine a run looks:
 - **Resolving an ambiguous branch match.** Zero or multiple branches
   matching a key means the skill asks, rather than guessing which one
   you meant.
+- **Deleting worktrees and branches.** `cleanup.sh` only prints the
+  removal commands by default; deletion happens solely behind its
+  explicit `--apply` flag, with `git branch -d` semantics (never `-D`),
+  and dirty worktrees, unmerged refs, and remote branches are never
+  touched (see [Cleaning up after merges](#cleaning-up-after-merges)).
 - **Conflict resolution.** A merge conflict — sub-task into parent, or
   parent into base — stops the relevant skill for you to resolve by hand.
 - **Continuing past a rejected PR.** One `REQUEST_CHANGES` moves that
