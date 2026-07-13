@@ -477,13 +477,16 @@ parent-drop failure in §2) — lives in
 
 ---
 
-## 12. PR-base resolver (git-config → Jira comment → env default)
+## 12. PR-base resolver (git-config → Jira comment → parent-branch search → env default)
 
 Every leaf issue's PR needs a base branch. The assigner records it in two
 places — one local (`git config branch.<branch>.parentbranch`), one
 durable (a `"PR target branch: …"` Jira comment that survives a fresh
-clone). This resolver checks both before falling back to the env default;
-run it verbatim whenever a skill asks for a PR base:
+clone). This resolver checks both, then — for a sub-task, whose real base
+is its parent's branch and never the env default — recovers by searching
+for that parent branch. Run it verbatim whenever a skill asks for a PR
+base. `PARENT_KEY` is not an env var: it's the leaf's `fields.parent.key`
+from the issue fetch, empty for a top-level issue.
 
 ```bash
 CUR=$(git branch --show-current)
@@ -491,8 +494,22 @@ PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
 [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
   | grep -oE 'PR target branch: [^" ]+' | head -1 \
   | sed -e 's/PR target branch: //' -e 's/\.$//')
-[ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
-echo "$PR_BASE"
+# Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+# Normalize before counting, or one branch reads as several and looks "ambiguous":
+# strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+# (checked out in another linked worktree, the normal state of a parent branch
+# while a sub-task's worktree runs this search) — and fold the remotes/origin/
+# copy of a pushed branch into its local name (§7).
+if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+  CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+    | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
+  MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+  [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
+fi
+# The env default is the right answer ONLY for a top-level issue (no parent).
+# A sub-task that reached here is unresolved — leave PR_BASE empty so the skill stops.
+[ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"  # skill flags this
+echo "$PR_BASE"   # empty ⇒ sub-task base unresolved: STOP, ask the user, do not open the PR
 ```
 
 Sources, in order:
@@ -501,6 +518,16 @@ Sources, in order:
 2. The issue's `"PR target branch: …"` Jira comment — the durable
    fallback the assigner posts (or the no-assigner bootstrap does, §7);
    survives a fresh clone or different machine.
-3. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
-   root — used only when both sources above are empty, and the skill
-   should call that out explicitly in its report.
+3. **Parent-branch search** — sub-tasks only, i.e. when the leaf's
+   `PARENT_KEY` (step-1 `fields.parent.key`) is non-empty. Searches for a
+   `feature/<PARENT_KEY>-*` / `hotfix/<PARENT_KEY>-*` branch, deduping the
+   local and `remotes/origin/` copies of the same branch (§7) so a pushed
+   branch counts once.
+   - Exactly one match → use it as `PR_BASE`, and say in the report that the
+     base was **recovered by branch search**, not read from the primary sources.
+   - Zero or multiple matches → `PR_BASE` stays empty. **Stop before
+     `gh pr create` and ask the user for the correct base branch** — do not
+     fall back to `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
+4. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project root —
+   reachable **only for a top-level issue** (empty `PARENT_KEY`), for which it
+   is the correct base. The skill should still call it out in its report.
