@@ -84,6 +84,37 @@ python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 ```
 
+### Touched a mermaid diagram? Render it — don't eyeball it
+
+The lifecycle diagrams (`plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-*.md`,
+plus the plugin README) are the one thing here a machine can actually check,
+and they fail in a way that is **invisible in review**: a broken block still
+looks like a perfectly reasonable diagram in the diff, and only turns into an
+error box once GitHub renders it. So parse it with a real parser:
+
+```bash
+bash scripts/check-mermaid.sh                      # every ```mermaid block in the repo
+bash scripts/check-mermaid.sh path/to/changed.md   # or just the file you touched
+```
+
+(Uses `npx @mermaid-js/mermaid-cli` — needs network on first run. Exits
+non-zero and names the offending file + block.)
+
+⚠️ **The trap that bites: `;` is a statement separator in mermaid.** A
+semicolon anywhere in message text silently truncates the line and breaks the
+whole diagram — and the parser's complaint points at the token *after* the
+semicolon, so the error message actively misdirects you. Write `—` or `·`
+instead:
+
+```
+A->>B: resolve the email (executor identity; none configured → stop)   # BREAKS
+A->>B: resolve the email (executor identity — none configured → stop)  # fine
+```
+
+Angle-bracket tokens (`<KEY>`, `<PARENT-KEY>`) and em-dashes are *fine* inside
+message text — they look like the culprit and aren't. Don't rewrite them
+chasing a parse error; run the checker and read the line number.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core
