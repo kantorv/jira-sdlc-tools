@@ -33,6 +33,9 @@ sequenceDiagram
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
+    Assigner->>JIRA: jira_acli_login.sh assigner<br/>(idempotent — no-op if already it)
+    JIRA-->>Assigner: acli is now the assigner account
+    Note right of Assigner: login fails → stop.<br/>Everything below is now filed BY the assigner<br/>(Jira sets creator + reporter from it)
     Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
     Assigner->>GIT: read current branch (base? feature/hotfix? other?)
     GIT-->>Assigner: current branch
@@ -46,13 +49,16 @@ sequenceDiagram
 
     Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)
 
+    Assigner->>Assigner: get_assignee_email.sh — resolve ASSIGNEE_EMAIL<br/>(the executor's identity — no email configured → stop)
+    Note right of Assigner: every create below carries<br/>--assignee ASSIGNEE_EMAIL
+
     alt Multistep (split into parallel sub-tasks)
-        Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)
+        Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: <PARENT-KEY>
         Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug><br/>(always feature/ — assigner branches from development),<br/>set parentbranch config, push, add parent worktree
         GIT-->>Assigner: branch + worktree ready
         loop per sub-task
-            Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)
+            Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)<br/>--assignee ASSIGNEE_EMAIL
             JIRA-->>Assigner: sub-task key
             Assigner->>GIT: create sub-task branch + worktree,<br/>set parentbranch config, push
             GIT-->>Assigner: branch + worktree ready
@@ -60,7 +66,7 @@ sequenceDiagram
         end
         Assigner->>JIRA: post "PR target branch: <BASE_BRANCH>.<br/>Worktree: worktree-<PARENT-KEY>" comment (on the parent)
     else Single-step (one cohesive task)
-        Assigner->>JIRA: create single top-level issue
+        Assigner->>JIRA: create single top-level issue<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: issue key
         Assigner->>GIT: create branch + worktree,<br/>set parentbranch config, push
         GIT-->>Assigner: branch + worktree ready
@@ -82,6 +88,18 @@ sequenceDiagram
   parent link — and posting the durable `PR target branch` comment).
   Everything else (investigating the codebase, deciding scope) stays
   inside the assigner.
+- **Two identities, and they are not the same one** — the assigner
+  **logs in as itself** (`jira_acli_login.sh assigner`) before anything
+  else, so Jira records it as the `creator` and `reporter` of every issue
+  here — both are derived from the authenticated account, no flag needed.
+  But each issue is **assigned to the executor** (`get_assignee_email.sh`
+  → `--assignee` on every create, top-level *and* sub-task), because the
+  executor is who will pick it up — and phase 2 *refuses* an issue that
+  isn't assigned to it. So the board reads correctly end to end: filed by
+  the assigner, owned by the executor. With no per-role accounts
+  configured, both resolve to the default account and nothing else
+  changes. See
+  [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md).
 - **Investigate + clarify loop** — the only place the user is asked
   anything by `jira-task-assigner`; questions persist until scope,
   acceptance criteria, and priority are settled. (The branch-context

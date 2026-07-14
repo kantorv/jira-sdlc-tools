@@ -52,6 +52,22 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Be the executor, and own the issue — run these FIRST, before the
+healthcheck.** Both are idempotent and take no decisions of their own; a
+non-zero exit from either means **STOP** — relay its stderr verbatim and do
+not transition status, branch, commit, comment, or work the issue.
+
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts"
+bash "$S/jira_acli_login.sh" executor || exit 1   # 1. become the executor
+bash "$S/check_assignee.sh"            || exit 1   # 2. <KEY> must be assigned to it
+```
+
+(`check_assignee.sh` takes the key from the branch, as the healthcheck does;
+pass one explicitly only when running outside the issue's worktree. If
+`CLAUDE_PLUGIN_ROOT` isn't set, both live in `../_shared/scripts/` relative
+to this skill.)
+
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
 one of those assumes the right starting point and working credentials,
@@ -87,7 +103,6 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
-| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset. **Visibility only — not the source for step 8's commit sign line**, which names your own model literally. The env var is an *input* (set to pin a model), so it is normally unset even though a model is plainly running; "unset" here is expected and never blocks |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -115,12 +130,12 @@ skill runs only from an issue's own worktree. cd into the worktree
 
 Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 `issue_key` row's derived key is `<KEY>` for the rest of this run — there's
-no user-supplied key to compare it against, so no separate ownership gate
-is needed. Continue to step 1, carrying the INFO rows forward as context
-(`parent_branch` feeds step 2's stale-branch merge and step 10's PR-base
-resolution).
+no user-supplied key to compare it against, and the identity gate above
+already confirmed `<KEY>` is assigned to the executor. Continue to step 1,
+carrying the INFO rows forward as context (`parent_branch` feeds step 2's
+stale-branch merge and step 10's PR-base resolution).
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and parent (if any).
+1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
      explicitly — the default `--json` omits it; see §3):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
@@ -136,8 +151,8 @@ resolution).
    - Every leaf gets its own dedicated branch and opens its own PR (no
      per-issue strategy to read). The PR's base is resolved in step 10
      per `../_shared/jira-acli-reference.md` §12 — git config first, then
-     the assigner's `PR target branch: ...` Jira comment, then the env
-     default.
+     the assigner's `PR target branch: ...` Jira comment, then (for
+     sub-tasks) a parent-branch search, then the env default.
 
 2. **Bring the worktree branch current.** Discovery already guaranteed
    you're on `<KEY>`'s own issue branch inside its own linked worktree —
@@ -251,54 +266,57 @@ resolution).
        PR, and don't keep retrying on your own.
 
 8. **Commit** — stage the files this change touched explicitly
-   (`git add <file>…`, not `-A`, which can sweep in strays), then commit
-   with a body line naming the model behind this run. Write your **own
-   model name literally** — you know it; don't shell out to
-   `$ANTHROPIC_MODEL`, which is an *input* variable (set to pin a model)
-   and is normally unset, so substituting it would sign every commit
-   `unset`. Discovery's `model` row reports that same env var, so don't
-   copy the value from there either — it is visibility only:
-   ```bash
-   git commit -m "<KEY> <short message>" \
-              -m "🤖 Model used in this response: <your model name, e.g. Claude Opus 4.8>"
-   ```
-   Split into multiple commits if the change has logically separate
-   pieces — every commit in this run carries the same sign line; one
-   commit is fine for a small change.
+   (`git add <file>…`, not `-A`, which can sweep in strays), then
+   `git commit -m "<KEY> <short message>"`. Split into multiple commits
+   if the change has logically separate pieces; one is fine for a small
+   change.
 
 9. **Push** — `git push -u origin <branch-name>`.
 
 10. **Open a PR:**
     - Resolve the PR base per `../_shared/jira-acli-reference.md` §12
-      (git-config → Jira "PR target branch" comment → env default):
+      (git-config → Jira "PR target branch" comment → parent-branch search →
+      env default). `PARENT_KEY` is step 1's `fields.parent.key` — set for a
+      sub-task, empty for a top-level issue:
       ```bash
       CUR=$(git branch --show-current)
       PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
       [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
         | grep -oE 'PR target branch: [^" ]+' | head -1 \
         | sed -e 's/PR target branch: //' -e 's/\.$//')
-      [ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — flag in the final report
+      # Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+      # Normalize before counting, or one branch reads as several and looks "ambiguous":
+      # strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+      # (checked out in another linked worktree, the normal state of a parent branch
+      # while a sub-task's worktree runs this search) — and fold the remotes/origin/
+      # copy of a pushed branch into its local name (§7).
+      if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+        CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+          | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
+        MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+        [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
+      fi
+      # The env default is the right answer ONLY for a top-level issue (no parent).
+      # A sub-task that reached here is unresolved — leave PR_BASE empty so you stop.
+      [ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"
+      echo "$PR_BASE"
       ```
-      Only fall back to `<DEFAULT_BASE_BRANCH>` (see `jira-sdlc-tools.env`) if
-      *both* the local config and the Jira comment come up empty, and say
-      so explicitly in the final report if you had to.
+      Then act on the result before touching `gh pr create`:
+      - **`PR_BASE` empty** — only possible for a sub-task whose parent branch
+        search found zero or several candidates. **Stop and ask the user which
+        branch is the base.** Do not open the PR, and do not substitute
+        `<DEFAULT_BASE_BRANCH>`: a sub-task's base is its parent's branch, never
+        the env default — silently defaulting there is the bug this resolver exists
+        to prevent.
+      - **Recovered by the branch search** (the first two sources were empty) —
+        proceed, and say so explicitly in the final report, naming the branch.
+      - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `jira-sdlc-tools.env`;
+        top-level issues only) — proceed, and say so explicitly in the final report.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
       (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.env` in the
       project root — acli has no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
-    - Pick the semver label **before** creating the PR — `--label` is
-      required (the repo's semver-based release workflow reads it to
-      decide the next version bump), and the label must already exist in
-      the repo, so confirm it now rather than after `gh pr create` fails:
-      `gh api repos/<org>/<repo>/labels --jq '.[].name'`. Pick by what
-      the PR actually changes in the app's semantics (these three names
-      assume the `<SEMVER_LABELS>` default from `jira-sdlc-tools.env` —
-      adjust if yours differ):
-      - `patch` — bug fixes, small internal improvements, no new
-        functionality or breaking changes
-      - `minor` — new features or non-breaking enhancements
-      - `major` — breaking changes (API removals, behaviour reversals)
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
@@ -307,7 +325,7 @@ resolution).
       <what changed + link to the issue>
       EOF
       gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
-        --body-file /tmp/<KEY>-pr-body.md --label <semver-label>
+        --body-file /tmp/<KEY>-pr-body.md
       ```
     - The discovery checks above already confirmed `gh` is installed and
       authenticated, so a failure here is something else (a `gh pr create`
@@ -340,8 +358,10 @@ resolution).
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the issue's new status. Post this same
-    report to the user in chat **and** as a single Jira comment: this is
+    commit(s), the PR link, and the issue's new status. Pass through any
+    note the identity gate printed on success (it flags when acli is now a
+    dedicated executor account machine-globally). Post this
+    same report to the user in chat **and** as a single Jira comment: this is
     the one comprehensive **run report** — don't fragment it (in
     particular, no separate trivial "PR opened" comment earlier). The
     `Task memory (jira-task-executor)` notes from step 6 are the *only*

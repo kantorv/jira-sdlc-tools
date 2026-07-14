@@ -203,9 +203,6 @@ relying on opaque GitHub-for-Jira transition rules:
   `jira-sdlc-tools.env`. If the project doesn't document them,
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
-- **Semver PR labels** (`patch`/`minor`/`major`, or your equivalents)
-  already created on the GitHub repo — the executor requires one on every
-  PR it opens.
 - **A worktrees directory that already exists**, as a sibling of your
   repo — the assigner refuses to create it for you.
 
@@ -302,7 +299,7 @@ All project-specific values live in two files in the project root:
 
 | File | Purpose | Committed? |
 |------|---------|------------|
-| `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names, semver labels) | ✅ Yes |
+| `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
 | `jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
 
 See `skills/_shared/project-config.md` for a description of each variable.
@@ -319,7 +316,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token value or path (`JIRA_TOKEN` — may be either a raw API token or a path to a file containing one; see the one-time `acli jira auth login` in the config reference) and semver label names (optional — sensible defaults given)
+- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one; see the one-time `acli jira auth login` in the config reference)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
@@ -515,9 +512,6 @@ real task, not discovering mid-failure:
 - [ ] Browse URL — acli has no `open` subcommand. The skills build the
       issue link as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` from the
       `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
-- [ ] `gh api repos/<org>/<repo>/labels --jq '.[].name'` — confirm your
-      semver labels exist (or update `<SEMVER_LABELS>` in
-      `jira-sdlc-tools.env` to match what does).
 
 ## Troubleshooting / FAQ
 
@@ -572,8 +566,8 @@ cadence with a feature-freeze cut, an emergency hotfix flow that bypasses
 `development` entirely, SemVer tagging on `main`, and feature flags for
 anything that spans more than one sprint. It also includes a short set of
 directives aimed specifically at AI coding assistants (branch naming,
-target-branch defaults, feature-flag policy, and how the merged PR's
-label — not commit messages — drives the version bump).
+target-branch defaults, feature-flag policy, and how the release branch's
+name — not PR labels or commit messages — drives the version bump).
 
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the

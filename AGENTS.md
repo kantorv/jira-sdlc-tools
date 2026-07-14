@@ -22,6 +22,54 @@ table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
 
+## Editing a skill — keep it small but effective
+
+The three `SKILL.md` files under `plugins/jira-sdlc/skills/` are prompts
+an LLM re-reads on every run, so every line costs context and adds a
+place to misread. The guidelines below are working hypotheses — each
+helps in a specific way and has a known failure mode; the full
+reasoning, caveats, and how we plan to test them live in
+[docs/skill-development-considerations.md](plugins/jira-sdlc/docs/skill-development-considerations.md).
+
+- **If it fits in one line, prefer one line.** The payoff is
+  reliability, not tokens: instructions buried mid-file get skipped or
+  half-applied. Caveat: over-terse is worse than over-long — cut
+  redundancy and hedging, keep the "why" on load-bearing rules. If a
+  rule won't compress, it's probably not crisp yet; fix the rule first.
+- **If it can be scripted, consider scripting it.** Deterministic
+  sequences belong in `skills/_shared/scripts/`, with the SKILL.md
+  reduced to "run X, act on its output" — a script collapses N model
+  round trips into one bash call and runs identically every time,
+  where prose re-derivation is slower and each run is a fresh chance
+  to glitch. `statuscheck.sh` is the pattern to copy. Caveat: scripts
+  fail differently, not less — a script bug is wrong 100% of the time
+  and rots silently in a repo with no tests. Script the stable
+  deterministic parts; leave judgment and error recovery to the model.
+- **Pseudo-code over prose — for closed decision spaces.** When every
+  case the model will meet is one of the enumerated branches, a
+  decision table or numbered if/else misparses less than paragraphs.
+  Caveat: when reality can land outside the listed branches, rigid
+  structure makes the model force-fit the nearest branch instead of
+  reasoning — there, a sentence of "prefer X because Y" generalizes
+  better.
+- **Explain why over stacking MUSTs.** ALL-CAPS ALWAYS/NEVER is a
+  yellow flag; one clause of reasoning generalizes better than a bare
+  imperative.
+- **Stay under ~500 lines per SKILL.md.** Detail not needed on every
+  run goes to `skills/_shared/*.md` reference files, loaded only when
+  the skill says to — the progressive-disclosure layering these skills
+  already use.
+
+For any non-trivial skill change (new skill, restructure, description
+rewrite), use the **skill-creator** skill
+(https://claude.com/plugins/skill-creator; github copy of its guide:
+[https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)) instead of
+freehanding — it covers drafting, eval loops, and when to bundle
+scripts. One caveat: skip its description-optimization advice ("make
+descriptions pushy" for auto-triggering) — all three skills set
+`disable-model-invocation: true`, so descriptions here are
+documentation for humans browsing `/plugin`, not trigger bait.
+
 ## Structural constraints — easy to break while "tidying up"
 
 This repo is a **marketplace**, so there are *two* `.claude-plugin/`
@@ -84,6 +132,55 @@ python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 ```
 
+### Touched a mermaid diagram? Render it — don't eyeball it
+
+The lifecycle diagrams (`plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-*.md`,
+plus the plugin README) are the one thing here a machine can actually check,
+and they fail in a way that is **invisible in review**: a broken block still
+looks like a perfectly reasonable diagram in the diff, and only turns into an
+error box once GitHub renders it. So parse it with a real parser:
+
+```bash
+bash scripts/check-mermaid.sh                      # every ```mermaid block in the repo
+bash scripts/check-mermaid.sh path/to/changed.md   # or just the file you touched
+```
+
+It parses each block with the real mermaid parser (`npx @mermaid-js/mermaid-cli`
+— needs Node, and network on first run), exits non-zero, and names the offending
+file and block.
+
+**No Node / offline?** It falls back automatically — or force it with
+`--lint`:
+
+```bash
+bash scripts/check-mermaid.sh --lint               # pure bash/grep, no deps, ~0.2s
+```
+
+Lint mode catches the three things that actually break these diagrams (the
+semicolon below, an `alt`/`loop`/`opt`/`par` with no matching `end`, and a
+missing `sequenceDiagram`/`flowchart` line) — but it **cannot prove a diagram is
+valid**, only that it has no *known* trap. So when you lint, also look at the
+thing: paste the block into <https://mermaid.live>, or open the file on GitHub,
+which renders it. The script says so on every run rather than letting a green
+line imply more than it means.
+
+⚠️ **The trap that bites: `;` is a statement separator in mermaid.** A
+semicolon anywhere in message text silently truncates the line and breaks the
+whole diagram — and the parser's complaint points at the token *after* the
+semicolon, so the error message actively misdirects you. Write `—` or `·`
+instead:
+
+```
+A->>B: resolve the email (executor identity; none configured → stop)   # BREAKS
+A->>B: resolve the email (executor identity — none configured → stop)  # fine
+```
+
+Everything else you might suspect is **fine** inside message text — angle-bracket
+tokens (`<KEY>`), em-dashes, `→`, colons, commas, `#`, backticks, pipes, braces,
+unmatched parens, and participants used without being declared (mermaid
+auto-creates those). All confirmed against the parser. Don't rewrite them chasing
+an error; the semicolon is the one that bites, and the checker will point at it.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core
@@ -101,31 +198,34 @@ repo, not just the JS app these skills came from. The branching and release
 policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
 automate it:
 
-- **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump label
+- **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump level
   (`patch` / `minor` / `major`, default `minor`), computes the next SemVer
-  from the latest `v*` tag + that label, cuts `release/sprint-<X.Y.Z>` from
-  `development`, and opens a **draft** PR into `main` carrying the chosen
-  label. SDLC Phase 2.
+  from the latest `v*` tag + that level, cuts `release/sprint-<X.Y.Z>` from
+  `development`, and opens a **draft** PR into `main`. The version lives in
+  the branch name from here on. SDLC Phase 2.
 - **`release.yml`** — on a PR merge into `main` whose head is `release/*` or
-  `hotfix/*`. In order: resolves the bump → tags `vX.Y.Z` on the merge commit
-  → publishes the GitHub Release → back-merges `main` into `development`
-  (opens a sync PR instead if it conflicts, never force-pushing) → deletes the
-  `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
+  `hotfix/*`. In order: resolves the version (from the `release/*` branch
+  name, or a patch on the latest tag for `hotfix/*`) → tags `vX.Y.Z` on the
+  merge commit → publishes the GitHub Release → back-merges `main` into
+  `development` (opens a sync PR instead if it conflicts, never
+  force-pushing) → deletes the `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
 
 Order of operations, the short version:
 1. Run `cut-release` → `release/sprint-<X.Y.Z>` and a draft PR appear
-   (version computed from latest `v*` tag + chosen bump label, default `minor`).
+   (version computed from latest `v*` tag + chosen bump level, default `minor`,
+   baked into the branch name).
 2. QA on that branch; fix PRs land back into `release/sprint-<X.Y.Z>` (SDLC Phase 3).
 3. Mark the draft PR ready and merge it into `main`.
 4. `release.yml` tags, releases, syncs back to `development`, and deletes the
    branch automatically.
 
-Bump resolution (SDLC §5): branch-type default — `release/*` → **minor**,
-`hotfix/*` → **patch** — overridden by a `patch`/`minor`/`major` label on the
-merged PR (the same labels `jira-task-executor` already stamps, and that
-already exist on this repo). Tags are pure SemVer, no sprint suffix. The
-first release (no `v*` tag exists) is `v0.1.0`. A `hotfix/*` merge defaults to
-a `patch` bump and runs the same sync-back + cleanup steps.
+Bump resolution (SDLC §5): `release/*` takes its version from the branch name
+(`release/sprint-<X.Y.Z>` — malformed names fail the release; rename or
+re-cut to change the version), and `hotfix/*` is always a **patch** on the
+latest `v*` tag. No PR label is read for versioning. Tags are pure SemVer, no
+sprint suffix. The first release (no `v*` tag exists) is `v0.1.0`. A
+`hotfix/*` merge runs the same tag→release→sync-back→cleanup steps with a
+patch bump.
 
 Auth: the default `GITHUB_TOKEN` suffices while `main`/`development` are
 unprotected (the workflows push tags, delete branches, create releases, and

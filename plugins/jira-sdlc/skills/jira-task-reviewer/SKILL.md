@@ -7,6 +7,8 @@ allowed-tools: Bash, Read, Grep, Glob
 
 You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run this from the parent issue's own worktree — no issue-key argument; the issue is derived from the current branch (see Discovery below). $ARGUMENTS, if given, is free-form notes about this run, not a key:
 
+> **You are reviewing `<ISSUE-KEY>` — the issue for *this* worktree's branch — and nothing else.** When you have finished it, stop and report. Never continue on to another issue: not a sibling sub-task, not the parent PR. If `<ISSUE-KEY>` is a sub-task, a full pass over every sub-task plus the parent PR is a *separate* run of this skill from the parent's own worktree.
+
 **Conventions used below:**
 - `<PARENT-KEY>` = the Jira issue key derived from the current branch (via the Discovery healthcheck's `issue_key` row below) — or, when the branch belongs to a sub-task, that sub-task's `fields.parent.key` (step 1 climbs automatically and notes it in the report). It just means "the resolved key" — it is only literally the parent of sub-tasks on the multistep track; on the single-step track it is a standalone issue with no sub-tasks.
 - `$ARGUMENTS`, when non-empty, is free-form notes about this run (focus areas, constraints, context) — fold them into the review criteria (3c); never parsed as an issue key.
@@ -19,7 +21,16 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
-- **Model sign line mechanics**: the canonical review report ends with a `🤖 Model used in this response: …` line (see *The canonical review report* below). Write your **own model name literally** — you know it. Do **not** shell out to `$ANTHROPIC_MODEL`: it is an *input* variable (set to pin a model), normally unset, so substituting it would sign every report `unset`; Discovery's `model` row reports that same env var and is visibility only, so don't copy the value from there either. Because the name is a literal, the line lives inside the report's quoted heredoc (`<<'EOF'`, for the backtick safety above) like every other line — it needs no separate append step, and it therefore travels automatically to every destination the one body is posted to (3d, 3e, 5b, 6).
+
+**Log in as the reviewer — run this FIRST, before the healthcheck.** Every
+Jira write this skill makes (verdict comments, reject-path transitions)
+should come from the reviewer's account, not from whoever was last logged
+in. The call is idempotent — a no-op when acli is already the reviewer — so
+run it unconditionally. On non-zero, relay its stderr and **stop**.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" reviewer || exit 1
+```
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
 status, calls `gh pr list` / `gh pr review`, and — on the reject path —
@@ -55,7 +66,6 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — equals `<BASE_BRANCH>` only from the parent worktree; from a sub-task worktree it's `<PARENT-BRANCH>`, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
-| `model` | INFO: `$ANTHROPIC_MODEL`, or "unset" if the variable is empty/unset. **Visibility only — not the source for the report's sign line**, which names your own model literally (see the Model sign line mechanics bullet above). The env var is an *input* (set to pin a model), so it is normally unset even though a model is plainly running; "unset" here is expected and never blocks |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -88,7 +98,7 @@ climbing from a sub-task to its parent if needed).
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
 - Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (source of truth for this review-fetch field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
-  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → climb to the parent: `<PARENT-KEY>` = `fields.parent.key`, then re-fetch `acli jira workitem view <PARENT-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) for the rest of this skill. Note the climb (`<RUN-KEY>` → `<PARENT-KEY>`) in the final report (step 6).
+  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → per the rule at the top, review **this sub-task's own PR only**. Do *not* re-fetch the parent as an acting issue and do *not* read its `fields.subtasks` — that sweep belongs to a run from the parent's worktree. `<PARENT-BRANCH>` (this PR's base) = §12's resolver with `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report (step 6) that only `<RUN-KEY>` was reviewed.
 - **Resolve `<PARENT-BRANCH>`**: list branch names deduped to unique shorts — strip the local `*`/indent and the `remotes/origin/` prefix so a branch that exists both locally and on origin counts once — then match the key:
   ```bash
   git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <PARENT-KEY>
@@ -103,6 +113,14 @@ climbing from a sub-task to its parent if needed).
   [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
   ```
   Only ask the user if all three come up empty.
+
+  **Why this copy has no parent-branch search, unlike §12's resolver.** That
+  recovery step exists for a *sub-task*, whose base is its parent's branch and
+  never `<DEFAULT_BASE_BRANCH>`. Here the key is always `<PARENT-KEY>` — step 1
+  already climbed from any sub-task to its parent — and a parent is by
+  definition top-level, with no grandparent branch to search for. So the
+  `<DEFAULT_BASE_BRANCH>` fallback is the *correct* last resort on this path,
+  exactly as it is for a top-level issue in §12. Don't copy the search here.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
   - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If the phase check detects an already-merged PR on a later re-run, jump straight to the step-6 report with the S-MERGED outcome — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so no re-run is required and no further action is expected on the issue.)
   - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
@@ -200,8 +218,6 @@ Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
 
 ### Next step
 <the outcome block's guidance from step 6: manual-merge / fix-and-re-run / no re-run needed>
-
-🤖 Model used in this response: <your model name, e.g. Claude Opus 4.8 — written literally, see the Model sign line mechanics bullet above>
 ```
 
 **`<VERDICT-HEADER>` — the load-bearing first line.** It is always the
@@ -279,7 +295,6 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   APPROVED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, scoped to this PR
-                               # — incl. its trailing 🤖 model sign line
   EOF
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
@@ -292,7 +307,6 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   CHANGES REQUESTED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
-                               # — and its trailing 🤖 model sign line
   EOF
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md

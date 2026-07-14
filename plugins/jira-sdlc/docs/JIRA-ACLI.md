@@ -61,24 +61,20 @@ whenever you change the token, log out before logging back in:
 acli jira auth logout   # discard the previous credential so the new one takes effect
 ```
 
-### `--token` reads stdin — path or value, both work
+### `--token` reads stdin — pipe the token value in
 
 `--token` takes no value, reads from standard input. `<JIRA_TOKEN>`
-(resolved from `jira-sdlc-tools.local.env`) may be either a path to a
-token file OR the raw API token value itself — both work, and acli can't
-tell the difference since it only reads stdin. Use the form that matches
-how the variable is set on your machine:
+(resolved from `jira-sdlc-tools.local.env`) holds the **raw API token
+value itself** — a path to a token file is not supported. acli only reads
+stdin and can't tell the two apart, so a path would be accepted and stored
+as if it were the token; keeping a single value form is what makes
+`JIRA_TOKEN` safe to interpolate elsewhere (e.g. the `curl -u
+"$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN"` calls in
+`skills/_shared/jira-api-reference.md`, which a path would silently break).
 
 ```bash
 # Rotating or switching tokens? Run `acli jira auth logout` first (see above).
 
-# path form — when JIRA_TOKEN is a file path:
-acli jira auth login \
-  --site "<JIRA_ACCOUNT_URL>" \
-  --email "<JIRA_ACCOUNT_EMAIL>" \
-  --token < <JIRA_TOKEN>
-
-# value form — when JIRA_TOKEN holds the raw token:
 printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
   --site "<JIRA_ACCOUNT_URL>" \
   --email "<JIRA_ACCOUNT_EMAIL>" \

@@ -23,7 +23,6 @@ from two files in the project root:
 - `<STATUS_IN_PROGRESS>`
 - `<STATUS_IN_REVIEW>`
 - `<STATUS_DONE>`
-- `<SEMVER_LABELS>`
 
 **`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
 - `<WORKTREES_DIR>`
@@ -73,21 +72,13 @@ acli jira auth logout   # discard the previous credential so the new one takes e
 ```
 
 `--token` takes no value, reads from standard input. `<JIRA_TOKEN>`
-(resolved from `jira-sdlc-tools.local.env`) may be either a path to a
-token file OR the raw API token value itself — both work, and acli can't
-tell the difference since it only reads stdin. Use the form that matches
-how the variable is set on your machine:
+(resolved from `jira-sdlc-tools.local.env`) holds the **raw API token
+value itself** — a path to a token file is not supported. Pipe the value
+in:
 
 ```bash
 # Rotating or switching tokens? Run `acli jira auth logout` first (see above).
 
-# path form — when JIRA_TOKEN is a file path:
-acli jira auth login \
-  --site "<JIRA_ACCOUNT_URL>" \
-  --email "<JIRA_ACCOUNT_EMAIL>" \
-  --token < <JIRA_TOKEN>
-
-# value form — when JIRA_TOKEN holds the raw token:
 printf '%s' "<JIRA_TOKEN>" | acli jira auth login \
   --site "<JIRA_ACCOUNT_URL>" \
   --email "<JIRA_ACCOUNT_EMAIL>" \
@@ -106,6 +97,39 @@ warning above):
 acli jira auth status                 # necessary but NOT sufficient — cached
 acli jira project list --paginate --json | grep -w "<PROJECT-KEY>"   # the real proof
 ```
+
+### ⚠️ `auth status` is slow — don't use it as a probe
+
+`acli jira auth status` takes **~20 seconds** per call (measured, consistent
+across runs). It is *also* cache-backed, per the warning above, so it can't
+prove a credential works anyway. Between the two, it is the wrong tool for
+"am I already logged in as X?" — a question the skills ask on every run.
+
+**Read acli's own config instead.** It records the active account at
+`~/.config/acli/jira_config.yaml` — written on `auth login`, cleared on
+`auth logout` — so the same question is answered by a local file read in
+**~30ms**, no network:
+
+```yaml
+current_profile: <cloud_id>:<account_id>
+profiles:
+    - site: your-site.atlassian.net
+      account_id: <ACCOUNT_ID>          # the identifier to compare on (see §3)
+      email: you@example.com
+      auth_type: api_token
+```
+
+This is what lets `skills/_shared/scripts/jira_acli_login.sh` be
+**idempotent** — already the requested role ⇒ a ~30ms no-op, so every skill
+can call it unconditionally as its first act. A real account switch costs
+~31s (acli's login round-trip), which is the other reason not to re-login
+blindly.
+
+⚠️ The credential store is **machine-global and single-account**: whichever
+role logged in last is active in *every* shell on the machine. The skills
+accept this deliberately (restoring the previous account would race with
+skills running in parallel) — which is precisely why each one logs in for
+itself rather than assuming.
 
 → Detailed: [`../../docs/JIRA-ACLI.md` §0](../../docs/JIRA-ACLI.md#0-auth)
 for the full token-rotation narrative and the "disguised failure"
@@ -246,6 +270,39 @@ acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,sta
 acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'
 ```
 
+### ⚠️ Comparing an assignee? Use `accountId`, never `emailAddress`
+
+Jira returns `assignee.emailAddress` **only for your own account**. When the
+issue is assigned to *anyone else*, the field is **absent from the object
+entirely** — you get `accountId` and `displayName` and nothing more (it's a
+user-privacy setting, on by default, not a permissions error):
+
+```jsonc
+// assigned to ME — email present
+"assignee": { "accountId": "<MY_ACCOUNT_ID>", "displayName": "Task Executor",
+              "emailAddress": "executor@example.com" }
+
+// assigned to SOMEONE ELSE — no emailAddress key at all
+"assignee": { "accountId": "<OTHER_ACCOUNT_ID>", "displayName": "Task Reviewer" }
+
+// unassigned
+"assignee": null
+```
+
+So an **email comparison can confirm a match but can never detect a
+mismatch**: "assigned to someone else" and "unassigned" both collapse to an
+empty string, and code that tests `email == mine` reports the wrong reason
+for the failure. This was a live bug — an issue assigned to the reviewer was
+reported to the executor as *unassigned*, sending the user to Jira to assign
+an issue that already had an assignee.
+
+**Compare `accountId`**, which is always present on both sides: acli stores
+your own under `account_id` in `~/.config/acli/jira_config.yaml` (§0), and
+every assignee object carries it. Use `displayName` for the human-readable
+message, never for the comparison.
+
+`skills/_shared/scripts/check_assignee.sh` is the invoked implementation.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §3](../../docs/JIRA-ACLI.md#3-reading--listing-issues)
 for `workitem search --jql` (listing — never invoked by a skill), the
 `search` flag reference, the `--fields '*all'` payload caution, and the
@@ -265,9 +322,28 @@ acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
 acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes
 ```
 
+### Assign
+
+```bash
+acli jira workitem assign --key <KEY> --assignee "<EMAIL>" --yes   # or '@me' / 'default'
+acli jira workitem assign --key <KEY> --remove-assignee --yes
+```
+
+`--assignee` also exists on `workitem create` (one flag — no separate assign
+call needed) and on `workitem edit`.
+
+⚠️ **`reporter` is not settable through `acli`** — there is no `--reporter`
+flag on *any* subcommand (`workitem edit --reporter` → `unknown flag`). It is
+REST-only, and needs the **Modify Reporter** permission: see
+[`jira-api-reference.md` §6](jira-api-reference.md#6-people-fields--assignee-and-reporter),
+which also covers bulk-retrofitting assignee/reporter across a whole project
+(§7). Normally you don't need any of that — Jira sets `creator` *and*
+`reporter` from whoever is authenticated at create time, so being the right
+account (`jira_acli_login.sh assigner`) gets it right for free. `creator` can
+never be changed afterwards.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §4](../../docs/JIRA-ACLI.md#4-editing--transitioning--assigning)
-for `workitem edit` and `workitem assign` (neither is invoked by a skill)
-plus bulk-edit-by-JQL.
+for `workitem edit` plus bulk-edit-by-JQL.
 
 ---
 
@@ -478,13 +554,16 @@ parent-drop failure in §2) — lives in
 
 ---
 
-## 12. PR-base resolver (git-config → Jira comment → env default)
+## 12. PR-base resolver (git-config → Jira comment → parent-branch search → env default)
 
 Every leaf issue's PR needs a base branch. The assigner records it in two
 places — one local (`git config branch.<branch>.parentbranch`), one
 durable (a `"PR target branch: …"` Jira comment that survives a fresh
-clone). This resolver checks both before falling back to the env default;
-run it verbatim whenever a skill asks for a PR base:
+clone). This resolver checks both, then — for a sub-task, whose real base
+is its parent's branch and never the env default — recovers by searching
+for that parent branch. Run it verbatim whenever a skill asks for a PR
+base. `PARENT_KEY` is not an env var: it's the leaf's `fields.parent.key`
+from the issue fetch, empty for a top-level issue.
 
 ```bash
 CUR=$(git branch --show-current)
@@ -492,8 +571,22 @@ PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
 [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
   | grep -oE 'PR target branch: [^" ]+' | head -1 \
   | sed -e 's/PR target branch: //' -e 's/\.$//')
-[ -z "$PR_BASE" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"   # last resort — the skill flags this
-echo "$PR_BASE"
+# Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+# Normalize before counting, or one branch reads as several and looks "ambiguous":
+# strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+# (checked out in another linked worktree, the normal state of a parent branch
+# while a sub-task's worktree runs this search) — and fold the remotes/origin/
+# copy of a pushed branch into its local name (§7).
+if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+  CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+    | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
+  MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+  [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
+fi
+# The env default is the right answer ONLY for a top-level issue (no parent).
+# A sub-task that reached here is unresolved — leave PR_BASE empty so the skill stops.
+[ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"  # skill flags this
+echo "$PR_BASE"   # empty ⇒ sub-task base unresolved: STOP, ask the user, do not open the PR
 ```
 
 Sources, in order:
@@ -502,6 +595,16 @@ Sources, in order:
 2. The issue's `"PR target branch: …"` Jira comment — the durable
    fallback the assigner posts (or the no-assigner bootstrap does, §7);
    survives a fresh clone or different machine.
-3. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project
-   root — used only when both sources above are empty, and the skill
-   should call that out explicitly in its report.
+3. **Parent-branch search** — sub-tasks only, i.e. when the leaf's
+   `PARENT_KEY` (step-1 `fields.parent.key`) is non-empty. Searches for a
+   `feature/<PARENT_KEY>-*` / `hotfix/<PARENT_KEY>-*` branch, deduping the
+   local and `remotes/origin/` copies of the same branch (§7) so a pushed
+   branch counts once.
+   - Exactly one match → use it as `PR_BASE`, and say in the report that the
+     base was **recovered by branch search**, not read from the primary sources.
+   - Zero or multiple matches → `PR_BASE` stays empty. **Stop before
+     `gh pr create` and ask the user for the correct base branch** — do not
+     fall back to `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
+4. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` in the project root —
+   reachable **only for a top-level issue** (empty `PARENT_KEY`), for which it
+   is the correct base. The skill should still call it out in its report.
