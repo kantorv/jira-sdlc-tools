@@ -22,6 +22,54 @@ table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
 
+## Editing a skill — keep it small but effective
+
+The three `SKILL.md` files under `plugins/jira-sdlc/skills/` are prompts
+an LLM re-reads on every run, so every line costs context and adds a
+place to misread. The guidelines below are working hypotheses — each
+helps in a specific way and has a known failure mode; the full
+reasoning, caveats, and how we plan to test them live in
+[docs/skill-development-considerations.md](plugins/jira-sdlc/docs/skill-development-considerations.md).
+
+- **If it fits in one line, prefer one line.** The payoff is
+  reliability, not tokens: instructions buried mid-file get skipped or
+  half-applied. Caveat: over-terse is worse than over-long — cut
+  redundancy and hedging, keep the "why" on load-bearing rules. If a
+  rule won't compress, it's probably not crisp yet; fix the rule first.
+- **If it can be scripted, consider scripting it.** Deterministic
+  sequences belong in `skills/_shared/scripts/`, with the SKILL.md
+  reduced to "run X, act on its output" — a script collapses N model
+  round trips into one bash call and runs identically every time,
+  where prose re-derivation is slower and each run is a fresh chance
+  to glitch. `statuscheck.sh` is the pattern to copy. Caveat: scripts
+  fail differently, not less — a script bug is wrong 100% of the time
+  and rots silently in a repo with no tests. Script the stable
+  deterministic parts; leave judgment and error recovery to the model.
+- **Pseudo-code over prose — for closed decision spaces.** When every
+  case the model will meet is one of the enumerated branches, a
+  decision table or numbered if/else misparses less than paragraphs.
+  Caveat: when reality can land outside the listed branches, rigid
+  structure makes the model force-fit the nearest branch instead of
+  reasoning — there, a sentence of "prefer X because Y" generalizes
+  better.
+- **Explain why over stacking MUSTs.** ALL-CAPS ALWAYS/NEVER is a
+  yellow flag; one clause of reasoning generalizes better than a bare
+  imperative.
+- **Stay under ~500 lines per SKILL.md.** Detail not needed on every
+  run goes to `skills/_shared/*.md` reference files, loaded only when
+  the skill says to — the progressive-disclosure layering these skills
+  already use.
+
+For any non-trivial skill change (new skill, restructure, description
+rewrite), use the **skill-creator** skill
+(https://claude.com/plugins/skill-creator; github copy of its guide:
+[https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)) instead of
+freehanding — it covers drafting, eval loops, and when to bundle
+scripts. One caveat: skip its description-optimization advice ("make
+descriptions pushy" for auto-triggering) — all three skills set
+`disable-model-invocation: true`, so descriptions here are
+documentation for humans browsing `/plugin`, not trigger bait.
+
 ## Structural constraints — easy to break while "tidying up"
 
 This repo is a **marketplace**, so there are *two* `.claude-plugin/`
