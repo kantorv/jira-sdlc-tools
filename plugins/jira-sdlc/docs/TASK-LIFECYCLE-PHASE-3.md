@@ -41,6 +41,9 @@ sequenceDiagram
     User->>Reviewer: cd worktree-<PARENT-KEY>, invoke /jira-task-reviewer (no key arg)
 
     activate Reviewer
+    Reviewer->>JIRA: jira_acli_login.sh reviewer<br/>(idempotent — no-op if already it)
+    JIRA-->>Reviewer: acli is now the reviewer account
+    Note right of Reviewer: login fails → stop.<br/>Every verdict comment + reject transition below<br/>is now attributed to the reviewer
     Reviewer->>GIT: git fetch origin --prune
     Reviewer->>JIRA: fetch issue from branch key<br/>(type, status, parent, subtasks)
     JIRA-->>Reviewer: issue fields
@@ -207,6 +210,15 @@ sequenceDiagram
   review; a *merged* parent PR → the M-FULLY-COMPLETE report and exit.
   Every merged-state exit posts the step-6 report only — GitHub-for-Jira
   already handled `<STATUS_DONE>` and there is no wrap-up to take.
+- **The reviewer logs in as itself first** — `jira_acli_login.sh reviewer`,
+  before any read or write, so every canonical report and every reject-path
+  transition below is attributed to the reviewer's Jira account rather than
+  to whoever was logged in last (acli's credential store is machine-global,
+  so that could be the executor from phase 2). The call is idempotent — a
+  no-op when acli is already the reviewer — so it runs unconditionally. Note
+  this is the reviewer's **Jira** identity; its **GitHub** identity is a
+  separate thing, and the one that matters for the idempotency check below.
+  See [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md).
 - **Idempotent review (step 3a)** — before every PR review — the
   single-step PR, each multistep sub-task PR, and the aggregate parent PR
   (5b) — the reviewer checks whether *its own* GitHub identity already left
