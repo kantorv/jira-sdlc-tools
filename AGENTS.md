@@ -97,8 +97,24 @@ bash scripts/check-mermaid.sh                      # every ```mermaid block in t
 bash scripts/check-mermaid.sh path/to/changed.md   # or just the file you touched
 ```
 
-(Uses `npx @mermaid-js/mermaid-cli` — needs network on first run. Exits
-non-zero and names the offending file + block.)
+It parses each block with the real mermaid parser (`npx @mermaid-js/mermaid-cli`
+— needs Node, and network on first run), exits non-zero, and names the offending
+file and block.
+
+**No Node / offline?** It falls back automatically — or force it with
+`--lint`:
+
+```bash
+bash scripts/check-mermaid.sh --lint               # pure bash/grep, no deps, ~0.2s
+```
+
+Lint mode catches the three things that actually break these diagrams (the
+semicolon below, an `alt`/`loop`/`opt`/`par` with no matching `end`, and a
+missing `sequenceDiagram`/`flowchart` line) — but it **cannot prove a diagram is
+valid**, only that it has no *known* trap. So when you lint, also look at the
+thing: paste the block into <https://mermaid.live>, or open the file on GitHub,
+which renders it. The script says so on every run rather than letting a green
+line imply more than it means.
 
 ⚠️ **The trap that bites: `;` is a statement separator in mermaid.** A
 semicolon anywhere in message text silently truncates the line and breaks the
@@ -111,9 +127,11 @@ A->>B: resolve the email (executor identity; none configured → stop)   # BREAK
 A->>B: resolve the email (executor identity — none configured → stop)  # fine
 ```
 
-Angle-bracket tokens (`<KEY>`, `<PARENT-KEY>`) and em-dashes are *fine* inside
-message text — they look like the culprit and aren't. Don't rewrite them
-chasing a parse error; run the checker and read the line number.
+Everything else you might suspect is **fine** inside message text — angle-bracket
+tokens (`<KEY>`), em-dashes, `→`, colons, commas, `#`, backticks, pipes, braces,
+unmatched parens, and participants used without being declared (mermaid
+auto-creates those). All confirmed against the parser. Don't rewrite them chasing
+an error; the semicolon is the one that bites, and the checker will point at it.
 
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
