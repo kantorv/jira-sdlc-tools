@@ -98,7 +98,7 @@ carry no resolution logic of their own:
 
 ```bash
 # jira-task-assigner — the email, and nothing else (no token is resolved):
-EXECUTOR_EMAIL=$(bash skills/_shared/scripts/executor_email.sh) || exit 1
+ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/get_assignee_email.sh) || exit 1
 
 # jira-task-executor — runs FIRST, before statuscheck.sh: logs acli in as the
 # executor, then verifies the issue is assigned to it.

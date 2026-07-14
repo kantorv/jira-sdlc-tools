@@ -162,19 +162,17 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 
-**Assign on create** — resolve the executor worker email once here and reuse
-it for every issue this run creates (top-level AND every sub-task). The
-script prints the email and nothing else, falling back to
-`JIRA_ACCOUNT_EMAIL` when `JIRA_EXECUTOR_EMAIL` is unset:
+**Assign on create** — get the assignee email once here; every issue this run
+creates (top-level AND every sub-task) is assigned to it. On non-zero, relay
+the script's stderr and **stop**.
 ```bash
-EXECUTOR_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/executor_email.sh") || exit 1
+ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_assignee_email.sh") || exit 1
 ```
 (If `CLAUDE_PLUGIN_ROOT` isn't set, it lives at
-`../_shared/scripts/executor_email.sh` relative to this skill.) On non-zero,
-relay its stderr and **stop** — don't create an issue you can't assign.
+`../_shared/scripts/get_assignee_email.sh` relative to this skill.)
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
-   - **Assign on create** — pass `--assignee "$EXECUTOR_EMAIL"` on the
+   - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
      `acli jira workitem create` call. One flag does it (no separate
      `workitem assign`).
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
@@ -188,7 +186,7 @@ The top-level issue is your only issue. You are done creating issues.
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$EXECUTOR_EMAIL"` as the top-level issue — resolve executor identity once in 6A above and pass `$EXECUTOR_EMAIL` on every `workitem create` here.
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue — resolved once in 6A above, passed on every `workitem create` here.
 
 For each sub-task `→ <SUBTASK-KEY>`:
  1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
@@ -217,17 +215,16 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
   `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
   first.)
 - **Create issue**:
-  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee "$EXECUTOR_EMAIL"`
+  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee "$ASSIGNEE_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
   `--parent` actually works on this project — see
   `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes) and
-  carry the same `--assignee "$EXECUTOR_EMAIL"` as the top-level issue.
+  carry the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue.
   Capture the returned key with `--json` (parse `key`), or grep it out of
   the text output (embedded in the returned browse URL). **Always pass
-  `--assignee "$EXECUTOR_EMAIL"`** on every create — top-level AND each
-  sub-task — `$EXECUTOR_EMAIL` being the email resolved once at the top of
-  6A via `executor_email.sh`. One flag does it on create; do not issue a
-  separate `workitem assign`.
+  `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
+  sub-task — resolved once at the top of 6A. One flag does it on create; do
+  not issue a separate `workitem assign`.
 - `--yes` is **not** universal — `workitem create` and `comment create`
   reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
   default), so don't add `--yes` to either; `edit` / `transition` /

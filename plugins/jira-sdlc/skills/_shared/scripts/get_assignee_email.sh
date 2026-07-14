@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# executor_email.sh — print the Jira "executor" worker email, nothing else.
+# get_assignee_email.sh — print the email every issue should be assigned to.
 #
-# The executor identity is JIRA_EXECUTOR_EMAIL, falling back to
-# JIRA_ACCOUNT_EMAIL when it is unset or empty. jira-task-assigner uses this to
-# assign every issue it creates (`--assignee "$(bash executor_email.sh)"`); it
-# never needs the token, so no token is ever resolved or printed here.
-#
-# The executor's own re-login + ownership gate is executor_identity.sh.
+# JIRA_EXECUTOR_EMAIL, falling back to JIRA_ACCOUNT_EMAIL. Callers get one line
+# on stdout and don't need to know which one it came from.
 #
 # Exit 0 — the email is on stdout.
-# Exit 1 — no email configured; the reason is on stderr.
+# Exit 1 — neither is set; the reason is on stderr. The caller stops: an issue
+#          nobody owns is what this whole mechanism exists to prevent.
+#
+# No token is resolved or printed here — assigning only needs the address.
+# (The executor's re-login + ownership gate is executor_identity.sh.)
 #
 # The env-file parser (`cfg`) is copied VERBATIM from statuscheck.sh — same
 # `NAME = value` grep, same local-overrides-team precedence. Keep them in sync.
@@ -34,7 +34,7 @@ EMAIL=$(cfg JIRA_EXECUTOR_EMAIL || true)
 [ -z "$EMAIL" ] && EMAIL=$(cfg JIRA_ACCOUNT_EMAIL || true)
 
 if [ -z "$EMAIL" ]; then
-  printf '%s\n' "executor_email: no executor email — set JIRA_EXECUTOR_EMAIL (or JIRA_ACCOUNT_EMAIL) in $CFG_DIR/jira-sdlc-tools.local.env." >&2
+  printf '%s\n' "get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL (or JIRA_ACCOUNT_EMAIL) in $CFG_DIR/jira-sdlc-tools.local.env, then rerun." >&2
   exit 1
 fi
 
