@@ -52,28 +52,21 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
-**Executor identity & ownership gate — run this FIRST, before the
-healthcheck.** It logs `acli` in as the executor worker identity (so every
-Jira write in this run — transitions, comments — is attributed to that
-account, not to whoever was logged in) and confirms `<KEY>` is assigned to
-it. Everything is in the script; the exit code is the whole contract:
+**Be the executor, and own the issue — run these FIRST, before the
+healthcheck.** Both are idempotent and take no decisions of their own; a
+non-zero exit from either means **STOP** — relay its stderr verbatim and do
+not transition status, branch, commit, comment, or work the issue.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/executor_identity.sh"
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts"
+bash "$S/jira_acli_login.sh" executor || exit 1   # 1. become the executor
+bash "$S/check_assignee.sh"            || exit 1   # 2. <KEY> must be assigned to it
 ```
 
-- **Exit 0** → you are the executor, `<KEY>` is yours: continue to the
-  healthcheck below.
-- **Non-zero** → **STOP.** Relay the script's stderr verbatim (it names the
-  reason and, for an ownership failure, the ready-to-paste
-  `acli jira workitem assign …` command and the Jira link). Do **not**
-  transition status, branch, commit, comment, or work the issue, and do not
-  work it as a different identity.
-
-(It takes the key from the branch, like the healthcheck does; pass one
-explicitly only when running outside the issue's worktree. If
-`CLAUDE_PLUGIN_ROOT` isn't set, it lives at
-`../_shared/scripts/executor_identity.sh` relative to this skill.)
+(`check_assignee.sh` takes the key from the branch, as the healthcheck does;
+pass one explicitly only when running outside the issue's worktree. If
+`CLAUDE_PLUGIN_ROOT` isn't set, both live in `../_shared/scripts/` relative
+to this skill.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every

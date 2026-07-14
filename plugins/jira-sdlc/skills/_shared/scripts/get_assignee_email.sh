@@ -9,7 +9,8 @@
 #          nobody owns is what this whole mechanism exists to prevent.
 #
 # No token is resolved or printed here — assigning only needs the address.
-# (The executor's re-login + ownership gate is executor_identity.sh.)
+# (Logging in as a role is jira_acli_login.sh; the executor's ownership gate is
+# check_assignee.sh.)
 #
 # The env-file parser (`cfg`) is copied VERBATIM from statuscheck.sh — same
 # `NAME = value` grep, same local-overrides-team precedence. Keep them in sync.

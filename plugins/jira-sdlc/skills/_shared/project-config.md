@@ -104,9 +104,16 @@ bash skills/_shared/scripts/jira_acli_login.sh <executor|assigner|reviewer> || e
 # jira-task-assigner — the address to put on --assignee, and nothing else:
 ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/get_assignee_email.sh) || exit 1
 
-# jira-task-executor — login + ownership gate in one call:
-bash skills/_shared/scripts/executor_identity.sh   # 0 = continue, non-zero = stop
+# jira-task-executor — the issue must belong to the account just logged in:
+bash skills/_shared/scripts/check_assignee.sh   # 0 = continue, non-zero = stop
 ```
+
+`check_assignee.sh` compares the issue's assignee to whoever `acli` is
+logged in as (read from acli's own config, not re-derived from the env), so
+the login above is what decides which identity is demanded. Unassigned,
+assigned to someone else, unreadable, or a hidden assignee email are all the
+same answer: halt, with the `acli jira workitem assign …` command to fix it
+on stderr.
 
 `jira_acli_login.sh` is the one place a login happens. It is **idempotent**:
 acli records the active account in `~/.config/acli/jira_config.yaml`, so if
