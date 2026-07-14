@@ -215,7 +215,7 @@ People fields take an **`accountId`**, not an email. Resolve it first:
 ```bash
 # email → accountId
 api --get --data-urlencode "query=<EMAIL>" "$BASE/user/search" | jq -r '.[0].accountId'
-# → "712020:65b369e4-8308-4edc-9899-6629aeab35e0"
+# → "<ACCOUNT_ID>"   (an opaque string — treat it as such; do not parse it)
 ```
 
 ```bash

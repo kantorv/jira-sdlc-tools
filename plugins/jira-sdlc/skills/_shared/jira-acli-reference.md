@@ -114,7 +114,7 @@ prove a credential works anyway. Between the two, it is the wrong tool for
 current_profile: <cloud_id>:<account_id>
 profiles:
     - site: your-site.atlassian.net
-      account_id: 712020:65b369e4-…      # the identifier to compare on (see §3)
+      account_id: <ACCOUNT_ID>          # the identifier to compare on (see §3)
       email: you@example.com
       auth_type: api_token
 ```
@@ -279,11 +279,11 @@ user-privacy setting, on by default, not a permissions error):
 
 ```jsonc
 // assigned to ME — email present
-"assignee": { "accountId": "712020:65b…", "displayName": "Jira Task Executor",
+"assignee": { "accountId": "<MY_ACCOUNT_ID>", "displayName": "Task Executor",
               "emailAddress": "executor@example.com" }
 
 // assigned to SOMEONE ELSE — no emailAddress key at all
-"assignee": { "accountId": "712020:573…", "displayName": "Jira Task Reviewer" }
+"assignee": { "accountId": "<OTHER_ACCOUNT_ID>", "displayName": "Task Reviewer" }
 
 // unassigned
 "assignee": null
