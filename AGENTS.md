@@ -132,6 +132,55 @@ python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 ```
 
+### Touched a mermaid diagram? Render it — don't eyeball it
+
+The lifecycle diagrams (`plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-*.md`,
+plus the plugin README) are the one thing here a machine can actually check,
+and they fail in a way that is **invisible in review**: a broken block still
+looks like a perfectly reasonable diagram in the diff, and only turns into an
+error box once GitHub renders it. So parse it with a real parser:
+
+```bash
+bash scripts/check-mermaid.sh                      # every ```mermaid block in the repo
+bash scripts/check-mermaid.sh path/to/changed.md   # or just the file you touched
+```
+
+It parses each block with the real mermaid parser (`npx @mermaid-js/mermaid-cli`
+— needs Node, and network on first run), exits non-zero, and names the offending
+file and block.
+
+**No Node / offline?** It falls back automatically — or force it with
+`--lint`:
+
+```bash
+bash scripts/check-mermaid.sh --lint               # pure bash/grep, no deps, ~0.2s
+```
+
+Lint mode catches the three things that actually break these diagrams (the
+semicolon below, an `alt`/`loop`/`opt`/`par` with no matching `end`, and a
+missing `sequenceDiagram`/`flowchart` line) — but it **cannot prove a diagram is
+valid**, only that it has no *known* trap. So when you lint, also look at the
+thing: paste the block into <https://mermaid.live>, or open the file on GitHub,
+which renders it. The script says so on every run rather than letting a green
+line imply more than it means.
+
+⚠️ **The trap that bites: `;` is a statement separator in mermaid.** A
+semicolon anywhere in message text silently truncates the line and breaks the
+whole diagram — and the parser's complaint points at the token *after* the
+semicolon, so the error message actively misdirects you. Write `—` or `·`
+instead:
+
+```
+A->>B: resolve the email (executor identity; none configured → stop)   # BREAKS
+A->>B: resolve the email (executor identity — none configured → stop)  # fine
+```
+
+Everything else you might suspect is **fine** inside message text — angle-bracket
+tokens (`<KEY>`), em-dashes, `→`, colons, commas, `#`, backticks, pipes, braces,
+unmatched parens, and participants used without being declared (mermaid
+auto-creates those). All confirmed against the parser. Don't rewrite them chasing
+an error; the semicolon is the one that bites, and the checker will point at it.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core

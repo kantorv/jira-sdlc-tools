@@ -28,6 +28,11 @@ sequenceDiagram
     par every leaf — own worktree (truly parallel)
         User->>Executor: cd worktree-<KEY-A>, invoke /jira-task-executor (no key arg, optional free-form notes)
         activate Executor
+        Executor->>JIRA: jira_acli_login.sh executor<br/>(idempotent — no-op if already it)
+        JIRA-->>Executor: acli is now the executor account
+        Executor->>JIRA: check_assignee.sh — is <KEY-A> assigned to me?<br/>(compares accountId, not email)
+        JIRA-->>Executor: assignee
+        Note right of Executor: NOT mine (unassigned · someone else · unreadable)<br/>→ STOP: print the assign command, exit.<br/>No transition, no branch, no commit, no comment.
         Executor->>JIRA: fetch issue <KEY-A> (incl. prior comments)
         JIRA-->>Executor: issue (summary, AC, parent family, prior task memory)
         Executor->>GIT: validate worktree belongs to <KEY-A> (else stop & ask)
@@ -86,6 +91,21 @@ sequenceDiagram
   are expected companions to the **one** comprehensive run report posted
   after the *In Review* transition (PR URL, branch, final status) — the
   invariant is "one run report per run," not "one Jira comment per run."
+- **Identity first, then ownership** — before anything else, the executor
+  **logs in as itself** (`jira_acli_login.sh executor`), so every Jira write
+  in the run — the *In Progress* and *In Review* transitions, the task-memory
+  notes, the run report — is attributed to the executor account rather than
+  to whoever happened to be logged in. It then **gates on ownership**
+  (`check_assignee.sh`): `<KEY>` must be assigned to that account. Anything
+  else — unassigned, assigned to someone else, unreadable — stops the run
+  *before* it has touched anything, printing the ready-to-paste
+  `acli jira workitem assign …` command. This is the counterpart to phase 1
+  assigning every issue to the executor on create: the assigner says who owns
+  the work, and the executor refuses to work anything it doesn't own.
+  (Ownership is compared by `accountId`, not by email — Jira only exposes an
+  assignee's `emailAddress` to that user themselves, so an email comparison
+  cannot tell "someone else's" from "unassigned". See
+  [`../skills/_shared/jira-acli-reference.md` §3](../skills/_shared/jira-acli-reference.md).)
 - **Guards before work starts, and along the way** — the executor
   validates that its worktree actually belongs to `<KEY>` (or its parent
   family) by reading GIT before doing anything, and if `<KEY>` turns out

@@ -34,7 +34,16 @@ project. Given a task description from the user ($ARGUMENTS):
 
 ## 1. Discovery and healthcheck
 
-Before any planning work, run the shared pre-flight healthcheck. It
+**Log in as the assigner first.** Every issue and comment this skill creates
+should come from the assigner's account, not from whoever was last logged in.
+The call is idempotent — a no-op when acli is already the assigner — so run it
+unconditionally. On non-zero, relay its stderr and **stop**.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" assigner || exit 1
+```
+
+Then run the shared pre-flight healthcheck. It
 gathers every environment fact this skill depends on — git repo, the two
 env files + their gitignore state, `acli` auth, Jira project
 reachability, `gh` auth — in one pass and prints a markdown table,
@@ -161,8 +170,20 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 ```
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
+
+**Assign on create** — get the assignee email once here; every issue this run
+creates (top-level AND every sub-task) is assigned to it. On non-zero, relay
+the script's stderr and **stop**.
+```bash
+ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_assignee_email.sh") || exit 1
+```
+(If `CLAUDE_PLUGIN_ROOT` isn't set, it lives at
+`../_shared/scripts/get_assignee_email.sh` relative to this skill.)
+
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
-   - **Assignment:** This repo **does not auto-assign** created issues — ownership is left to board triage. Do not add `--assignee @me` on creation. If your project wants auto-assignment, add the flag and update this note.
+   - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
+     `acli jira workitem create` call. One flag does it (no separate
+     `workitem assign`).
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
@@ -174,7 +195,7 @@ The top-level issue is your only issue. You are done creating issues.
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut.
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue — resolved once in 6A above, passed on every `workitem create` here.
 
 For each sub-task `→ <SUBTASK-KEY>`:
  1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
@@ -203,14 +224,16 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
   `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
   first.)
 - **Create issue**:
-  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file>`
+  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee "$ASSIGNEE_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
   `--parent` actually works on this project — see
-  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes). Capture
-  the returned key with `--json` (parse `key`), or grep it out of the text
-  output (embedded in the returned browse URL). **Do not auto-assign** —
-  ownership is left to board triage (see the Assignment note in 6A);
-  omit `--assignee @me` unless your project opts in.
+  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes) and
+  carry the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue.
+  Capture the returned key with `--json` (parse `key`), or grep it out of
+  the text output (embedded in the returned browse URL). **Always pass
+  `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
+  sub-task — resolved once at the top of 6A. One flag does it on create; do
+  not issue a separate `workitem assign`.
 - `--yes` is **not** universal — `workitem create` and `comment create`
   reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
   default), so don't add `--yes` to either; `edit` / `transition` /

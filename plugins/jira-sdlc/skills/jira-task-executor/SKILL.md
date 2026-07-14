@@ -52,6 +52,22 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Be the executor, and own the issue — run these FIRST, before the
+healthcheck.** Both are idempotent and take no decisions of their own; a
+non-zero exit from either means **STOP** — relay its stderr verbatim and do
+not transition status, branch, commit, comment, or work the issue.
+
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts"
+bash "$S/jira_acli_login.sh" executor || exit 1   # 1. become the executor
+bash "$S/check_assignee.sh"            || exit 1   # 2. <KEY> must be assigned to it
+```
+
+(`check_assignee.sh` takes the key from the branch, as the healthcheck does;
+pass one explicitly only when running outside the issue's worktree. If
+`CLAUDE_PLUGIN_ROOT` isn't set, both live in `../_shared/scripts/` relative
+to this skill.)
+
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
 one of those assumes the right starting point and working credentials,
@@ -114,10 +130,10 @@ skill runs only from an issue's own worktree. cd into the worktree
 
 Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 `issue_key` row's derived key is `<KEY>` for the rest of this run — there's
-no user-supplied key to compare it against, so no separate ownership gate
-is needed. Continue to step 1, carrying the INFO rows forward as context
-(`parent_branch` feeds step 2's stale-branch merge and step 10's PR-base
-resolution).
+no user-supplied key to compare it against, and the identity gate above
+already confirmed `<KEY>` is assigned to the executor. Continue to step 1,
+carrying the INFO rows forward as context (`parent_branch` feeds step 2's
+stale-branch merge and step 10's PR-base resolution).
 
 1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
@@ -342,8 +358,10 @@ resolution).
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the issue's new status. Post this same
-    report to the user in chat **and** as a single Jira comment: this is
+    commit(s), the PR link, and the issue's new status. Pass through any
+    note the identity gate printed on success (it flags when acli is now a
+    dedicated executor account machine-globally). Post this
+    same report to the user in chat **and** as a single Jira comment: this is
     the one comprehensive **run report** — don't fragment it (in
     particular, no separate trivial "PR opened" comment earlier). The
     `Task memory (jira-task-executor)` notes from step 6 are the *only*

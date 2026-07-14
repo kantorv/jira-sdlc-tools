@@ -98,6 +98,39 @@ acli jira auth status                 # necessary but NOT sufficient — cached
 acli jira project list --paginate --json | grep -w "<PROJECT-KEY>"   # the real proof
 ```
 
+### ⚠️ `auth status` is slow — don't use it as a probe
+
+`acli jira auth status` takes **~20 seconds** per call (measured, consistent
+across runs). It is *also* cache-backed, per the warning above, so it can't
+prove a credential works anyway. Between the two, it is the wrong tool for
+"am I already logged in as X?" — a question the skills ask on every run.
+
+**Read acli's own config instead.** It records the active account at
+`~/.config/acli/jira_config.yaml` — written on `auth login`, cleared on
+`auth logout` — so the same question is answered by a local file read in
+**~30ms**, no network:
+
+```yaml
+current_profile: <cloud_id>:<account_id>
+profiles:
+    - site: your-site.atlassian.net
+      account_id: <ACCOUNT_ID>          # the identifier to compare on (see §3)
+      email: you@example.com
+      auth_type: api_token
+```
+
+This is what lets `skills/_shared/scripts/jira_acli_login.sh` be
+**idempotent** — already the requested role ⇒ a ~30ms no-op, so every skill
+can call it unconditionally as its first act. A real account switch costs
+~31s (acli's login round-trip), which is the other reason not to re-login
+blindly.
+
+⚠️ The credential store is **machine-global and single-account**: whichever
+role logged in last is active in *every* shell on the machine. The skills
+accept this deliberately (restoring the previous account would race with
+skills running in parallel) — which is precisely why each one logs in for
+itself rather than assuming.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §0](../../docs/JIRA-ACLI.md#0-auth)
 for the full token-rotation narrative and the "disguised failure"
 walkthrough.
@@ -237,6 +270,39 @@ acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,sta
 acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'
 ```
 
+### ⚠️ Comparing an assignee? Use `accountId`, never `emailAddress`
+
+Jira returns `assignee.emailAddress` **only for your own account**. When the
+issue is assigned to *anyone else*, the field is **absent from the object
+entirely** — you get `accountId` and `displayName` and nothing more (it's a
+user-privacy setting, on by default, not a permissions error):
+
+```jsonc
+// assigned to ME — email present
+"assignee": { "accountId": "<MY_ACCOUNT_ID>", "displayName": "Task Executor",
+              "emailAddress": "executor@example.com" }
+
+// assigned to SOMEONE ELSE — no emailAddress key at all
+"assignee": { "accountId": "<OTHER_ACCOUNT_ID>", "displayName": "Task Reviewer" }
+
+// unassigned
+"assignee": null
+```
+
+So an **email comparison can confirm a match but can never detect a
+mismatch**: "assigned to someone else" and "unassigned" both collapse to an
+empty string, and code that tests `email == mine` reports the wrong reason
+for the failure. This was a live bug — an issue assigned to the reviewer was
+reported to the executor as *unassigned*, sending the user to Jira to assign
+an issue that already had an assignee.
+
+**Compare `accountId`**, which is always present on both sides: acli stores
+your own under `account_id` in `~/.config/acli/jira_config.yaml` (§0), and
+every assignee object carries it. Use `displayName` for the human-readable
+message, never for the comparison.
+
+`skills/_shared/scripts/check_assignee.sh` is the invoked implementation.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §3](../../docs/JIRA-ACLI.md#3-reading--listing-issues)
 for `workitem search --jql` (listing — never invoked by a skill), the
 `search` flag reference, the `--fields '*all'` payload caution, and the
@@ -256,9 +322,28 @@ acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
 acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes
 ```
 
+### Assign
+
+```bash
+acli jira workitem assign --key <KEY> --assignee "<EMAIL>" --yes   # or '@me' / 'default'
+acli jira workitem assign --key <KEY> --remove-assignee --yes
+```
+
+`--assignee` also exists on `workitem create` (one flag — no separate assign
+call needed) and on `workitem edit`.
+
+⚠️ **`reporter` is not settable through `acli`** — there is no `--reporter`
+flag on *any* subcommand (`workitem edit --reporter` → `unknown flag`). It is
+REST-only, and needs the **Modify Reporter** permission: see
+[`jira-api-reference.md` §6](jira-api-reference.md#6-people-fields--assignee-and-reporter),
+which also covers bulk-retrofitting assignee/reporter across a whole project
+(§7). Normally you don't need any of that — Jira sets `creator` *and*
+`reporter` from whoever is authenticated at create time, so being the right
+account (`jira_acli_login.sh assigner`) gets it right for free. `creator` can
+never be changed afterwards.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §4](../../docs/JIRA-ACLI.md#4-editing--transitioning--assigning)
-for `workitem edit` and `workitem assign` (neither is invoked by a skill)
-plus bulk-edit-by-JQL.
+for `workitem edit` plus bulk-edit-by-JQL.
 
 ---
 
