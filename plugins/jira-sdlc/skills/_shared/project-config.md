@@ -66,53 +66,63 @@ logout` first, so the new credential actually takes effect — the §0
 gotcha above) — see the **Optional** section below for the executor
 variables and the machine-global side effect of that re-login.
 
-## Optional (in `jira-sdlc-tools.local.env`)
+## Optional — per-role Jira accounts (in `jira-sdlc-tools.local.env`)
 
-Both variables below are **optional**. When unset or empty, the skills
-fall back to the corresponding `<JIRA_ACCOUNT_*>` value above, so an
-existing setup keeps working — with one deliberate behavior shift
-documented under "What this enables" below.
+Each skill can run as its **own** Jira account, so the board shows who did
+what: the assigner filed it, the executor implemented it, the reviewer
+approved it. Every variable below is optional and falls back to the default
+account, so a project that configures none of them keeps working.
 
 | Token | What it is | Example |
 |---|---|---|
-| `<JIRA_EXECUTOR_EMAIL>` | Email of an optional dedicated "executor" worker account that owns every issue the skills create and act on. Falls back to `<JIRA_ACCOUNT_EMAIL>` when unset/empty. | `someworker@example.com` |
-| `<JIRA_EXECUTOR_TOKEN>` | The executor account's Jira API token **value** itself — not a path to a file containing it, exactly as with `<JIRA_TOKEN>`. Falls back to `<JIRA_TOKEN>` when unset/empty. | `ATATT3xFfGF0…` |
+| `<JIRA_ASSIGNER_EMAIL>` / `<JIRA_ASSIGNER_TOKEN>` | The account `jira-task-assigner` runs as — it creates the issues and their comments. | `assigner@example.com` / `ATATT3xFfGF0…` |
+| `<JIRA_EXECUTOR_EMAIL>` / `<JIRA_EXECUTOR_TOKEN>` | The account `jira-task-executor` runs as. Doubles as the **assignee**: the assigner puts this email on every issue it creates, and the executor refuses to work an issue that isn't assigned to it. | `executor@example.com` / `ATATT3xFfGF0…` |
+| `<JIRA_REVIEWER_EMAIL>` / `<JIRA_REVIEWER_TOKEN>` | The account `jira-task-reviewer` runs as — it posts the verdict comments. | `reviewer@example.com` / `ATATT3xFfGF0…` |
 
-**What this enables.** When `jira-task-assigner` creates an issue
-(top-level or sub-task), it assigns it to the executor email (falling
-back to `<JIRA_ACCOUNT_EMAIL>` when no executor is configured) — instead
-of leaving it unassigned for board triage, the previous default. Then
-`jira-task-executor`, after its Discovery healthcheck and before any
-status transition or work, re-logs `acli` in as that identity and
-**gates on ownership**: it refuses to work an issue that is not assigned
-to the executor email, tells the user to assign it (or assign it
-explicitly in Jira) and rerun, and exits without transitioning,
-branching, committing, or commenting. This is the default even with
-nothing configured — issues are owned by the default account instead of
-being unassigned.
+Tokens are the raw API token **value**, never a path to a file (as with
+`<JIRA_TOKEN>`). Email and token fall back **independently**: a role that
+sets only `<ROLE>_EMAIL` shares the default token, which is useful when one
+Atlassian account has several addresses.
 
-**It's all in two scripts, not in skill prose.** Both parse the env files
+**What this enables.** The assigner assigns every issue it creates
+(top-level and sub-task) to the executor's email rather than leaving it
+unassigned for board triage — the previous default. The executor then
+**gates on ownership**: before any status transition or work, it refuses an
+issue not assigned to the executor, prints the command to assign it, and
+exits without transitioning, branching, committing, or commenting. With
+nothing configured, all three roles resolve to the default account and the
+gate still holds — issues are simply owned by that one account.
+
+**It's in the scripts, not in skill prose.** All of them parse the env files
 with the same `NAME = value` parser and local-overrides-team precedence as
-`statuscheck.sh`, and both are driven by their **exit code** — the skills
-carry no resolution logic of their own:
+`statuscheck.sh`, and all are driven by their **exit code**:
 
 ```bash
-# jira-task-assigner — the email, and nothing else (no token is resolved):
+# any skill, first thing — idempotent, so call it unconditionally:
+bash skills/_shared/scripts/jira_acli_login.sh <executor|assigner|reviewer> || exit 1
+
+# jira-task-assigner — the address to put on --assignee, and nothing else:
 ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/get_assignee_email.sh) || exit 1
 
-# jira-task-executor — runs FIRST, before statuscheck.sh: logs acli in as the
-# executor, then verifies the issue is assigned to it.
-bash skills/_shared/scripts/executor_identity.sh   # exit 0 = continue, non-zero = stop
+# jira-task-executor — login + ownership gate in one call:
+bash skills/_shared/scripts/executor_identity.sh   # 0 = continue, non-zero = stop
 ```
 
-`executor_identity.sh` does the whole gate itself — resolve identity,
-`acli jira auth logout` then log in (logout **first**: a second `auth login`
-does not overwrite acli's stored credential, and `auth status` keeps
-reporting Authenticated from cache), read the issue's assignee, compare. On
-failure it exits non-zero and prints the reason plus the ready-to-paste
-`acli jira workitem assign …` command on stderr; the skill relays that and
-stops. The token is piped into `acli` on stdin — it is never printed, and
-never passed on a command line.
+`jira_acli_login.sh` is the one place a login happens. It is **idempotent**:
+acli records the active account in `~/.config/acli/jira_config.yaml`, so if
+that already matches the role, the call is a ~30ms no-op that never touches
+the network. (It deliberately does *not* use `acli jira auth status`, which
+takes ~20s per call and answers from cache anyway.) When a switch *is*
+needed it runs `acli jira auth logout` **first** — a second `auth login` does
+not overwrite acli's stored credential, so without the logout the old account
+silently stays active while `auth status` still reports success. Tokens are
+piped to acli on stdin: never printed, never on a command line.
+
+⚠️ **Switching roles is machine-global.** acli's credential store is
+single-account and shared by every shell on the machine, so whichever skill
+ran last leaves its account active. That's accepted deliberately — restoring
+the previous account would race with skills running in parallel — and it is
+why each skill logs in for itself instead of assuming.
 
 ⚠️ **Machine-global side effect of the re-login.** `acli`'s credential
 store is single-active-account and shared across every shell on the
@@ -146,8 +156,12 @@ WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 JIRA_ACCOUNT_EMAIL    = you@example.com
 JIRA_TOKEN            = ATATT3xFfGF0…
-# Optional executor worker identity (defaults to JIRA_ACCOUNT_EMAIL/JIRA_TOKEN above) —
-# uncomment + fill to run the skills as a dedicated account:
-#JIRA_EXECUTOR_EMAIL   = someworker@example.com
+# Optional per-role accounts (each defaults to JIRA_ACCOUNT_EMAIL/JIRA_TOKEN above) —
+# uncomment + fill to have each skill act as its own Jira user:
+#JIRA_ASSIGNER_EMAIL   = assigner@example.com
+#JIRA_ASSIGNER_TOKEN   = ATATT3xFfGF0…
+#JIRA_EXECUTOR_EMAIL   = executor@example.com
 #JIRA_EXECUTOR_TOKEN   = ATATT3xFfGF0…
+#JIRA_REVIEWER_EMAIL   = reviewer@example.com
+#JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
 ```

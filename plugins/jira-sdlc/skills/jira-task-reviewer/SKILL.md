@@ -22,6 +22,16 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
+**Log in as the reviewer — run this FIRST, before the healthcheck.** Every
+Jira write this skill makes (verdict comments, reject-path transitions)
+should come from the reviewer's account, not from whoever was last logged
+in. The call is idempotent — a no-op when acli is already the reviewer — so
+run it unconditionally. On non-zero, relay its stderr and **stop**.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" reviewer || exit 1
+```
+
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
 status, calls `gh pr list` / `gh pr review`, and — on the reject path —
 transitions issues; finding a busted environment mid-review wastes a

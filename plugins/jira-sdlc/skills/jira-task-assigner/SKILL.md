@@ -34,7 +34,16 @@ project. Given a task description from the user ($ARGUMENTS):
 
 ## 1. Discovery and healthcheck
 
-Before any planning work, run the shared pre-flight healthcheck. It
+**Log in as the assigner first.** Every issue and comment this skill creates
+should come from the assigner's account, not from whoever was last logged in.
+The call is idempotent — a no-op when acli is already the assigner — so run it
+unconditionally. On non-zero, relay its stderr and **stop**.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" assigner || exit 1
+```
+
+Then run the shared pre-flight healthcheck. It
 gathers every environment fact this skill depends on — git repo, the two
 env files + their gitignore state, `acli` auth, Jira project
 reachability, `gh` auth — in one pass and prints a markdown table,
