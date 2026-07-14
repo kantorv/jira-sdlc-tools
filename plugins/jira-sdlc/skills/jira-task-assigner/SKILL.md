@@ -34,12 +34,13 @@ project. Given a task description from the user ($ARGUMENTS):
 
 ## 1. Discovery and healthcheck
 
-**Log in as the assigner first.** Every issue and comment this skill creates
-should come from the assigner's account, not from whoever was last logged in.
-The call is idempotent — a no-op when acli is already the assigner — so run it
-unconditionally. On non-zero, relay its stderr and **stop**.
+**Make sure local credentials exist, then log in as the assigner — run
+both FIRST, before the healthcheck.** Both are idempotent (a no-op when
+the file/identity are already right), so run them unconditionally. On
+non-zero from either, relay its stderr and **stop**.
 
 ```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" assigner || exit 1
 ```
 

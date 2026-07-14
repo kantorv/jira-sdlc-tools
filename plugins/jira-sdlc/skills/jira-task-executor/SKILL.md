@@ -52,21 +52,23 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
-**Be the executor, and own the issue — run these FIRST, before the
-healthcheck.** Both are idempotent and take no decisions of their own; a
-non-zero exit from either means **STOP** — relay its stderr verbatim and do
-not transition status, branch, commit, comment, or work the issue.
+**Get local credentials, be the executor, and own the issue — run these
+FIRST, before the healthcheck.** All three are idempotent and take no
+decisions of their own; a non-zero exit from any of them means **STOP** —
+relay its stderr verbatim and do not transition status, branch, commit,
+comment, or work the issue.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts"
-bash "$S/jira_acli_login.sh" executor || exit 1   # 1. become the executor
-bash "$S/check_assignee.sh"            || exit 1   # 2. <KEY> must be assigned to it
+bash "$S/ensure_local_env.sh"          || exit 1   # 1. worktree gets local.env if it's missing
+bash "$S/jira_acli_login.sh" executor  || exit 1   # 2. become the executor
+bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned to it
 ```
 
 (`check_assignee.sh` takes the key from the branch, as the healthcheck does;
 pass one explicitly only when running outside the issue's worktree. If
-`CLAUDE_PLUGIN_ROOT` isn't set, both live in `../_shared/scripts/` relative
-to this skill.)
+`CLAUDE_PLUGIN_ROOT` isn't set, all three live in `../_shared/scripts/`
+relative to this skill.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
@@ -106,7 +108,8 @@ actually acts on).
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
-from the main checkout when missing — see the gate in the script),
+from the main checkout when missing by `ensure_local_env.sh`, called
+before this script — see step 1 above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
 (step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
 `jira_project`, plus context `base_branch`, `working_tree` (WARN when
