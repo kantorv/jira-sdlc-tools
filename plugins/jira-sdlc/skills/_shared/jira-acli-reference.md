@@ -322,9 +322,28 @@ acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes
 acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes
 ```
 
+### Assign
+
+```bash
+acli jira workitem assign --key <KEY> --assignee "<EMAIL>" --yes   # or '@me' / 'default'
+acli jira workitem assign --key <KEY> --remove-assignee --yes
+```
+
+`--assignee` also exists on `workitem create` (one flag — no separate assign
+call needed) and on `workitem edit`.
+
+⚠️ **`reporter` is not settable through `acli`** — there is no `--reporter`
+flag on *any* subcommand (`workitem edit --reporter` → `unknown flag`). It is
+REST-only, and needs the **Modify Reporter** permission: see
+[`jira-api-reference.md` §6](jira-api-reference.md#6-people-fields--assignee-and-reporter),
+which also covers bulk-retrofitting assignee/reporter across a whole project
+(§7). Normally you don't need any of that — Jira sets `creator` *and*
+`reporter` from whoever is authenticated at create time, so being the right
+account (`jira_acli_login.sh assigner`) gets it right for free. `creator` can
+never be changed afterwards.
+
 → Detailed: [`../../docs/JIRA-ACLI.md` §4](../../docs/JIRA-ACLI.md#4-editing--transitioning--assigning)
-for `workitem edit` and `workitem assign` (neither is invoked by a skill)
-plus bulk-edit-by-JQL.
+for `workitem edit` plus bulk-edit-by-JQL.
 
 ---
 
