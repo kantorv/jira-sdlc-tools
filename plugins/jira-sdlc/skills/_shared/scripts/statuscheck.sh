@@ -96,12 +96,13 @@ print_report() {
 # jira-sdlc-tools.local.env is mandatory in every checkout — it holds the
 # Jira account URL/email + token the skills depend on. It's gitignored, so
 # a linked worktree (which shares tracked files only) is born without it.
-# Resolve the main checkout root from the worktree's .git pointer and
-# auto-copy the file in; if the main checkout doesn't have it either, halt
-# non-zero before any other check runs. WT_ROOT/IS_WORKTREE computed here
-# are reused by the git_repo block below. The main checkout's own
-# missing-file case is still handled in the env_local section (FAIL +
-# continue), unchanged from before the gate.
+# The copy logic itself lives in exactly one place, ensure_local_env.sh —
+# every skill already calls it before jira_acli_login.sh, so by the time
+# statuscheck.sh runs here it's normally a no-op; delegate to it (rather
+# than duplicating the copy) so a standalone run of this script still
+# self-heals the same way. WT_ROOT/IS_WORKTREE computed here are reused by
+# the git_repo block below. The main checkout's own missing-file case is
+# still handled in the env_local section (FAIL + continue), unchanged.
 WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 IS_WORKTREE=""
 # A linked worktree's .git is a *file* (pointer into the main repo's
@@ -111,22 +112,20 @@ if [ -n "$WT_ROOT" ] && [ -f "$WT_ROOT/.git" ]; then
 fi
 ENV_LOCAL_COPIED=""
 ENV_LOCAL_COPIED_FROM=""
-if [ -n "$IS_WORKTREE" ] && [ ! -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
-  # .git points at "gitdir: <main>/.git/worktrees/<name>"; <main> sits
-  # three dirnames down (worktrees/<name> → .git → repo root).
-  GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
-  MAIN_ROOT=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
-  if [ -n "$MAIN_ROOT" ] && [ -d "$MAIN_ROOT/.git" ] \
-     && [ -f "$MAIN_ROOT/jira-sdlc-tools.local.env" ] \
-     && cp "$MAIN_ROOT/jira-sdlc-tools.local.env" "$WT_ROOT/jira-sdlc-tools.local.env" 2>/dev/null \
-     && [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
-    ENV_LOCAL_COPIED=1
-    ENV_LOCAL_COPIED_FROM="$MAIN_ROOT"
-  else
+if [ -n "$WT_ROOT" ]; then
+  PRE_EXISTED=""
+  [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if ! bash "$SCRIPT_DIR/ensure_local_env.sh" >/dev/null 2>&1; then
     row env_local FAIL "mandatory jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
       "create jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
     print_report
     exit 1
+  fi
+  if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
+    ENV_LOCAL_COPIED=1
+    GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
+    ENV_LOCAL_COPIED_FROM=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
   fi
 fi
 
