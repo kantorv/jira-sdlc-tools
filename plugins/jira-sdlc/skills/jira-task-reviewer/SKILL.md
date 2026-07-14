@@ -22,13 +22,16 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
-**Log in as the reviewer — run this FIRST, before the healthcheck.** Every
-Jira write this skill makes (verdict comments, reject-path transitions)
-should come from the reviewer's account, not from whoever was last logged
-in. The call is idempotent — a no-op when acli is already the reviewer — so
-run it unconditionally. On non-zero, relay its stderr and **stop**.
+**Make sure local credentials exist, then log in as the reviewer — run
+both FIRST, before the healthcheck.** Every Jira write this skill makes
+(verdict comments, reject-path transitions) should come from the
+reviewer's account, not from whoever was last logged in. Both calls are
+idempotent (a no-op when the file/identity are already right), so run
+them unconditionally. On non-zero from either, relay its stderr and
+**stop**.
 
 ```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" reviewer || exit 1
 ```
 
@@ -69,7 +72,8 @@ actually acts on).
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
-from the main checkout when missing — see the gate in the script),
+from the main checkout when missing by `ensure_local_env.sh`, called
+before this script — see the login step above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
 `acli_auth` (both load-bearing, as noted above), `jira_project`, plus
 context `base_branch`, `working_tree` (WARN when dirty), and
