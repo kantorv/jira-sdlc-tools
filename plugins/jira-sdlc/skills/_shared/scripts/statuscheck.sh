@@ -146,6 +146,55 @@ else
   fi
 fi
 
+# --- platform (single source of truth for "am I on Windows") --------------
+# Reports the OS and, on Windows, verifies the runtime the Windows dispatch
+# path needs: pwsh 7 (NOT Windows PowerShell 5.1, which is `powershell`, never
+# `pwsh`), acli/gh, and the win/*.ps1 ports. Each SKILL.md's dispatch
+# convention keys off this row — POSIX runs the bash scripts here, windows runs
+# scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
+# detection so the Windows branch can be exercised on Linux/CI (statuscheck.ps1
+# honors the same override and emits an identical row).
+PLAT_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+_detect_os() {
+  case "$(uname -s 2>/dev/null)" in
+    Linux)                OS=linux ;;
+    Darwin)               OS=darwin ;;
+    MINGW*|MSYS*|CYGWIN*) OS=windows ;;
+    *)                    OS=unknown ;;
+  esac
+}
+case "${STATUSCHECK_FORCE_OS:-}" in
+  linux|darwin|windows) OS="$STATUSCHECK_FORCE_OS"; OS_FORCED=" (forced via STATUSCHECK_FORCE_OS)" ;;
+  "")                   OS_FORCED=""; _detect_os ;;
+  *)                    OS_FORCED=" (STATUSCHECK_FORCE_OS='${STATUSCHECK_FORCE_OS}' invalid — ignored)"; _detect_os ;;
+esac
+if [ "$OS" = "windows" ]; then
+  WIN_DIR="$PLAT_SCRIPT_DIR/win"
+  MISSING=""
+  if command -v pwsh >/dev/null 2>&1; then
+    PWSH_MAJOR=$(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
+    case "$PWSH_MAJOR" in
+      ''|*[!0-9]*) MISSING="$MISSING pwsh(version?)" ;;
+      *) [ "$PWSH_MAJOR" -ge 7 ] || MISSING="$MISSING pwsh(v$PWSH_MAJOR<7)" ;;
+    esac
+  else
+    MISSING="$MISSING pwsh"
+  fi
+  command -v acli >/dev/null 2>&1 || MISSING="$MISSING acli"
+  command -v gh   >/dev/null 2>&1 || MISSING="$MISSING gh"
+  for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+    [ -f "$WIN_DIR/$s.ps1" ] || MISSING="$MISSING win/$s.ps1"
+  done
+  if [ -n "$MISSING" ]; then
+    row platform FAIL "os=windows$OS_FORCED — missing:$MISSING" \
+      "on Windows the skills dispatch to pwsh scripts/win/*.ps1 — install PowerShell 7 + acli + gh and ensure the win/ ports are present, then $RERUN."
+  else
+    row platform OK "os=windows$OS_FORCED — pwsh 7 + acli + gh + win/ ports present (Windows dispatch path ready)"
+  fi
+else
+  row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/"
+fi
+
 # --- project config ------------------------------------------------------
 CFG_DIR="${WT_ROOT:-$PWD}"
 cfg() { # cfg <NAME-PATTERN> -> value; jira-sdlc-tools.local.env overrides .env
