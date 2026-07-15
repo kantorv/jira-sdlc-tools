@@ -1,45 +1,48 @@
 # Antigravity Integration (Agent Skills spec)
 
-Antigravity **does** implement the Agent Skills (agentskills.io) spec — a
-skill folder with a `SKILL.md` file, `name`/`description` loaded up front,
-full instructions loaded on activation. The spec itself does not mandate
-any particular discovery directory (the spec defines the skill-folder
-format, not a root path), so each client picks its own: Codex uses
-`.codex/skills/`, and Antigravity uses `.claude/skills/` — the same path
-Claude Code itself uses for project-level skills, not the `.agent/skills/`
-+ `agents/openai.yml` convention Codex happens to use. Two working paths:
+Antigravity implements the Agent Skills (agentskills.io) spec — a skill
+folder with a `SKILL.md` file, `name`/`description` loaded up front, full
+instructions loaded on activation. The spec itself does not mandate any
+particular discovery directory (it defines the skill-folder format, not a
+root path), and Antigravity's own native chat panel reads skills straight
+from **`.agent/skills/`** — confirmed by a live test: placing this plugin's
+three skills at `.agent/skills/<skill-name>/SKILL.md` and typing
+`/jira-task-executor` in Antigravity's native (Gemini-based) chat ran it
+immediately, no settings changed. Three working paths:
 
 - **Method 1 (recommended) — the bundled Claude Code extension.** Antigravity
   ships the official `anthropic.claude-code` VS Code extension pre-installed.
   This is Claude Code itself running inside Antigravity — no adaptation
   layer, and `disable-model-invocation: true` works exactly as it does in
   plain Claude Code.
-- **Method 2 — Antigravity's native `.claude/skills` scanner.** An
-  experimental, **off-by-default** setting (`chat.useClaudeSkills`) makes
-  Antigravity read unmodified `SKILL.md` files directly — a genuine,
-  spec-compliant implementation, not a translation layer (no `openai.yml`
-  equivalent needed). It reads only the frontmatter fields the open spec
-  defines (`name`, `description`, …); `disable-model-invocation` is a
-  **Claude Code-specific extension field that isn't part of the agentskills.io
-  spec at all**, so Antigravity's parser doesn't special-case it — see
-  Caveats.
+- **Method 2 — Antigravity's native `.agent/skills` discovery.** Works out
+  of the box in Antigravity's own chat panel; no experimental setting to
+  enable. `disable-model-invocation: true` is a Claude Code-specific
+  frontmatter field that isn't part of the agentskills.io spec at all, and
+  there's no confirmed evidence Antigravity reads it (see Caveats) — treat
+  this as the gap that makes Method 1 the safer default for this plugin.
+- **Method 3 — Antigravity's `chat.useClaudeSkills` scanner.** A second,
+  separate native mechanism found by inspecting the installed product's
+  code (not by a live test): an off-by-default setting that reads
+  `.claude/skills/` instead of `.agent/skills/`. Real and independent of
+  Method 2, but untested live — see its own section below.
 
-> **Verified two ways.** (1) Against the published spec
-> (agentskills.io/specification): a skill is "a directory containing a
-> SKILL.md file," no discovery path is mandated, and the frontmatter table
-> lists exactly `name`, `description`, `license`, `compatibility`,
-> `metadata`, `allowed-tools` — no `disable-model-invocation` field, which
-> is a Claude Code plugin-specific addition (this repo's own SKILL.md files
-> carry it as a top-level key alongside the spec's `allowed-tools`, not the
-> spec's own `metadata` extension slot). (2) Against the installed
-> Antigravity 1.107.0 build (Linux): the bundled extension list,
-> `product.json`, and the workbench bundle's skill-loading code
-> (`findClaudeSkills`, config key `chat.useClaudeSkills`) confirm the
-> `.claude/skills` discovery path and that only `name`/`description` are
-> read from frontmatter. **Not verified**: driving an actual chat turn in
-> the Antigravity GUI (no interactive display in the environment this doc
-> was written from) — the exact UI click-path and live invocation behavior
-> are marked **unverified** where noted below.
+> **Verification note.** The `.agent/skills` discovery path and its slash
+> invocation (`/<skill-name>`, no setting toggle) are **live-verified** —
+> confirmed by directly testing this plugin's skills in Antigravity's
+> native chat panel. This directly overrides an earlier version of this doc,
+> which claimed (from static analysis of the installed Antigravity 1.107.0
+> build) that no `.agent/skills` reader existed — that search was
+> exhaustive over literal string matches but evidently missed a
+> dynamically-constructed path, since a live test is stronger evidence than
+> a grep that can only prove absence of a literal substring, not absence of
+> the feature. Static analysis of the same build *did* independently find
+> a second, separate mechanism — an off-by-default `chat.useClaudeSkills`
+> setting that reads `.claude/skills/` — which is real (confirmed in code)
+> but wasn't needed for the live test to succeed, so it's documented as
+> Method 3, a fallback rather than the primary path. Whether `disable-model-invocation`
+> is honored for ambient (non-slash) invocation under Method 2 has **not**
+> been live-tested either way — only explicit slash invocation was tested.
 
 ## Prerequisites
 
@@ -47,7 +50,8 @@ Claude Code itself uses for project-level skills, not the `.agent/skills/`
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - **Method 1 only** — nothing extra: the Claude Code extension ships inside Antigravity already.
-- **Method 2 only** — Antigravity Settings access to toggle an experimental setting (see below).
+- **Method 2 only** — nothing extra: no setting to enable, no extension to install.
+- **Method 3 only** — Antigravity Settings access to toggle an experimental setting (see below).
 
 ## Install / Wire-up Steps
 
@@ -59,8 +63,9 @@ Method 1:
 
 1. Open the Claude Code panel/terminal inside Antigravity (**unverified**
    which exact UI surface — sidebar icon vs. integrated terminal running
-   `claude` — since this was confirmed by inspecting the installed
-   extension, not by clicking through the GUI).
+   `claude` — this method was confirmed by inspecting the installed
+   extension, not by clicking through the GUI; Method 2 below is the one
+   that was live-tested end to end).
 2. Register the marketplace:
    ```
    /plugin marketplace add <GITHUB_OWNER>/<GITHUB_REPO>
@@ -74,7 +79,31 @@ Method 1:
 4. Reload the window. Skills are available as `/jira-sdlc:<skill-name>`,
    identical to plain Claude Code.
 
-### Method 2: Antigravity's native `.claude/skills` scanner
+### Method 2: Antigravity's native `.agent/skills` discovery (live-verified)
+
+1. Copy the skill folders into an `.agent/skills/` tree at your project
+   root:
+   ```bash
+   mkdir -p .agent/skills
+   cp -a </ABSOLUTE/PATH/TO/MARKETPLACE/ROOT>/plugins/jira-sdlc/skills/* .agent/skills/
+   ```
+2. No `chmod` step needed: every script call in these skills is written as
+   `bash "<path>"`, never a bare `./script.sh`, so the executable bit is
+   never required.
+3. `.agent/skills/` is a manual copy, not committed — gitignore it (a
+   single `*` inside a `.agent/.gitignore` works). There is no sync script;
+   when the plugin updates, re-run step 1's copy.
+4. Nothing to reload or toggle — Antigravity's native chat reads the
+   directory directly.
+
+### Method 3: `chat.useClaudeSkills` + `.claude/skills` (code-confirmed, not live-tested)
+
+Found by inspecting the installed Antigravity 1.107.0 build's config
+schema and skill-loading code — a second, independent native discovery
+mechanism, separate from Method 2 and not required for it. Untested live;
+included here in case Method 2 ever regresses or you'd rather use a path
+that also covers other spec-compliant clients (Claude Code itself reads
+project skills from this same `.claude/skills/` path).
 
 1. Enable the experimental setting — search **"Claude Skills"** in
    Antigravity Settings (`chat.useClaudeSkills`), or set it directly:
@@ -86,7 +115,7 @@ Method 1:
    config schema, meaning an untrusted workspace's own `.vscode/settings.json`
    cannot silently turn it on for you — enable it yourself in your user
    settings, then trust the workspace.
-2. Copy the skill folders into a `.claude/skills/` tree — Antigravity scans
+2. Copy the skill folders into a `.claude/skills/` tree — the code scans
    this path both at the **workspace root** and in your **user home
    directory** (`~/.claude/skills/`); a user-home copy applies across every
    project, a workspace copy applies to this one only:
@@ -95,65 +124,68 @@ Method 1:
    cp -a </ABSOLUTE/PATH/TO/MARKETPLACE/ROOT>/plugins/jira-sdlc/skills/* .claude/skills/
    ```
    If you already did [CURSOR.md](CURSOR.md) Method 2 (drop-in symlinks
-   under `~/.claude/skills/`), Antigravity's user-home scan picks that up
-   too — no separate copy needed.
-3. No `chmod` step needed here (unlike Codex): every script call in these
-   skills is written as `bash "<path>"`, never a bare `./script.sh`, so the
-   executable bit is never required.
+   under `~/.claude/skills/`), this scan picks that up too — no separate
+   copy needed.
+3. Same no-`chmod`-needed note as Method 2 applies.
 4. `.claude/skills/` (the workspace copy) is a manual copy, not committed —
-   gitignore it. There is no sync script; when the plugin updates, re-run
-   step 2's copy.
+   gitignore it. No sync script here either.
 5. Reload the window.
+6. **Invocation syntax is unverified** — the code path that parses
+   `.claude/skills/` frontmatter only extracts `name`/`description`, the
+   same fields Method 2 exposes, so `/skill-name` slash invocation
+   *plausibly* works the same way it does for Method 2, but this has not
+   actually been tried. Confirm before relying on it.
 
 ## Invoking the Three Skills
 
 **Method 1** — identical to Claude Code: type `/jira-sdlc:jira-task-assigner`,
 `/jira-sdlc:jira-task-executor`, or `/jira-sdlc:jira-task-reviewer` in chat.
 
-**Method 2** — there is no typed invocation command. Per the spec's own
-"progressive disclosure" model, Antigravity injects each discovered skill's
-`name` + `description` into the model's context and tells the model to
-read the full `SKILL.md` itself "when a user asks to perform a task that
-falls within the domain of a skill" — invocation is model-decided, not
-user-typed. See the next section for why that matters here.
+**Method 2** — type the bare skill name as a slash command in Antigravity's
+native chat: `/jira-task-assigner`, `/jira-task-executor`, or
+`/jira-task-reviewer` (no `jira-sdlc:` namespace — **live-verified** for
+`/jira-task-executor`, the other two follow the same `.agent/skills/<name>/`
+layout and are expected to match but were not individually retested).
+
+**Method 3** — presumed identical bare-name slash invocation to Method 2
+(`/jira-task-executor`, etc.), since the code exposes the same `name` field
+the same way, but this is **unverified** — not tried live.
 
 ## Platform-Specific Caveats
 
 ### `disable-model-invocation: true`
 
 - **Method 1**: honored — same runtime as Claude Code.
-- **Method 2**: **not honored, and not expected to be** — this field is a
-  Claude Code plugin-specific extension, not part of the agentskills.io
-  spec's frontmatter (confirmed against the published spec, which lists
-  `name`, `description`, `license`, `compatibility`, `metadata`,
-  `allowed-tools` only). Antigravity's parser correctly implements the
-  spec's discovery stage (`name` + `description`) and simply has no reason
-  to know about a field the spec doesn't define. Combined with Method 2's
-  model-decided invocation (no slash command), a skill can be auto-loaded
-  from ambient chat context — the opposite of what all three skills in this
-  plugin deliberately set via this non-spec field. **This is why Method 1
-  is the recommended path** for this plugin specifically; use Method 2 only
-  if you understand and accept that gap.
+- **Method 2**: **no confirmed support**. This field is a Claude Code
+  plugin-specific extension, not part of the agentskills.io spec's
+  frontmatter (the published spec's table lists only `name`, `description`,
+  `license`, `compatibility`, `metadata`, `allowed-tools`). Explicit slash
+  invocation (`/jira-task-executor`) is live-verified to work; whether the
+  model can *also* load the skill unprompted from ambient chat context —
+  the exact thing this field exists to prevent — has not been tested either
+  way. **Until that's tested, treat Method 2 as unconfirmed on this point**
+  and prefer Method 1 for this plugin, whose three skills all set this field
+  deliberately.
+
+### Method 3 is a fallback, not a requirement
+
+Method 2's live test succeeded via `.agent/skills/` without touching
+`chat.useClaudeSkills` at all, so Method 3 is not a dependency of Method 2
+— it's a separate, code-confirmed mechanism worth knowing about mainly if
+`.agent/skills/` ever stops working across an Antigravity update.
 
 ### Drift — the Method 2 copy is not synced
 
-Same caveat as Codex: `.claude/skills/` is a manual copy of
+Same caveat as Codex: `.agent/skills/` is a manual copy of
 `plugins/jira-sdlc/skills/`. When the plugin updates, the copy goes stale
 silently — there is no sync script or version pin. Re-run the copy recipe
-(Install step 2) after every plugin update.
+(Install step 1) after every plugin update.
 
-### Discovery path differs from Codex, not the spec itself
+### `agents/openai.yml` has no confirmed effect in Antigravity
 
-If you followed the Codex integration first, do not reuse its `.agent/`
-tree for Antigravity — Antigravity has no reader for it. This isn't a
-spec-compliance gap on either side: the agentskills.io spec doesn't mandate
-a directory name, so `.codex/skills/` (Codex) and `.claude/skills/`
-(Antigravity, Method 2) are both valid, independent implementation choices
-of the same open spec.
-
-### Method 2 is experimental and off by default
-
-Tagged `experimental` in Antigravity's own config schema; behavior may
-change across Antigravity releases without notice. Method 1 does not carry
-this risk — it rides on the stable, independently-versioned Claude Code
-extension.
+If you're copying from an existing Codex `.agent/`-style tree that includes
+`agents/openai.yml` per skill, it's harmless to leave in place but has no
+known effect here — an exhaustive search of the installed Antigravity
+product found no code that reads `openai.yml` or an
+`allow_implicit_invocation` field. Slash invocation worked without it in
+the live test. It isn't required for Method 2.
