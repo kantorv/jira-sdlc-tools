@@ -148,8 +148,8 @@ fi
 
 # --- platform (single source of truth for "am I on Windows") --------------
 # Reports the OS and, on Windows, verifies the runtime the Windows dispatch
-# path needs: pwsh 7 (NOT Windows PowerShell 5.1, which is `powershell`, never
-# `pwsh`), acli/gh, and the win/*.ps1 ports. Each SKILL.md's dispatch
+# path needs: PowerShell 5.1+ (`pwsh` OR `powershell`), acli/gh, and the
+# win/*.ps1 ports. Each SKILL.md's dispatch
 # convention keys off this row — POSIX runs the bash scripts here, windows runs
 # scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
 # detection so the Windows branch can be exercised on Linux/CI (statuscheck.ps1
@@ -171,14 +171,21 @@ esac
 if [ "$OS" = "windows" ]; then
   WIN_DIR="$PLAT_SCRIPT_DIR/win"
   MISSING=""
+  PS_RUNTIME="" PS_VER=""
   if command -v pwsh >/dev/null 2>&1; then
-    PWSH_MAJOR=$(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
-    case "$PWSH_MAJOR" in
-      ''|*[!0-9]*) MISSING="$MISSING pwsh(version?)" ;;
-      *) [ "$PWSH_MAJOR" -ge 7 ] || MISSING="$MISSING pwsh(v$PWSH_MAJOR<7)" ;;
-    esac
+    PS_RUNTIME="pwsh"
+    PS_VER=$(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
+  elif command -v powershell >/dev/null 2>&1; then
+    PS_RUNTIME="powershell"
+    PS_VER=$(powershell -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
+  fi
+  if [ -z "$PS_RUNTIME" ]; then
+    MISSING="$MISSING PowerShell"
   else
-    MISSING="$MISSING pwsh"
+    case "$PS_VER" in
+      ''|*[!0-9]*) MISSING="$MISSING PowerShell(version?)" ;;
+      *) [ "$PS_VER" -ge 5 ] || MISSING="$MISSING PowerShell(v$PS_VER<5)" ;;
+    esac
   fi
   command -v acli >/dev/null 2>&1 || MISSING="$MISSING acli"
   command -v gh   >/dev/null 2>&1 || MISSING="$MISSING gh"
@@ -187,9 +194,9 @@ if [ "$OS" = "windows" ]; then
   done
   if [ -n "$MISSING" ]; then
     row platform FAIL "os=windows$OS_FORCED — missing:$MISSING" \
-      "on Windows the skills dispatch to pwsh scripts/win/*.ps1 — install PowerShell 7 + acli + gh and ensure the win/ ports are present, then $RERUN."
+      "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $RERUN."
   else
-    row platform OK "os=windows$OS_FORCED — pwsh 7 + acli + gh + win/ ports present (Windows dispatch path ready)"
+    row platform OK "os=windows$OS_FORCED — PowerShell $PS_VER ($PS_RUNTIME) + acli + gh + win/ ports present (Windows dispatch path ready)"
   fi
 else
   row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/"

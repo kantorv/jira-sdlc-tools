@@ -1,5 +1,4 @@
-#!/usr/bin/env pwsh
-# ensure_local_env.ps1 — Windows (PowerShell 7) port of ensure_local_env.sh.
+# ensure_local_env.ps1 — Windows (PowerShell 5.1+) port of ensure_local_env.sh.
 # Mirrors the bash contract exactly: same messages, same exit codes. See the
 # bash original for the full rationale; kept minimal on purpose.
 #
@@ -7,7 +6,7 @@
 # reads it. A linked worktree shares only tracked files with its main checkout,
 # so it is born WITHOUT this gitignored file; copy it in from the main checkout.
 #
-# Usage: pwsh ensure_local_env.ps1
+# Usage: powershell -File ensure_local_env.ps1
 # Exit 0 — a linked worktree now has the file (just copied, or already had it),
 #          OR this is the main checkout (nothing to copy).
 # Exit 1 — a linked worktree has no local.env and the main checkout doesn't

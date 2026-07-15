@@ -1,9 +1,8 @@
-#!/usr/bin/env pwsh
-# check_assignee.ps1 — Windows (PowerShell 7) port of check_assignee.sh.
+# check_assignee.ps1 — Windows (PowerShell 5.1+) port of check_assignee.sh.
 # Is this issue assigned to the account acli is logged in as? Mirrors the bash
 # contract exactly: same messages, same exit codes.
 #
-# Usage: pwsh check_assignee.ps1 [ISSUE-KEY]
+# Usage: powershell -File check_assignee.ps1 [ISSUE-KEY]
 #        ISSUE-KEY defaults to the key derived from the current branch
 #        (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>).
 #

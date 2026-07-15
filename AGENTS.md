@@ -185,11 +185,11 @@ an error; the semicolon is the one that bites, and the checker will point at it.
 
 The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
 `jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
-bash original in `_shared/scripts/` (the POSIX path) and a PowerShell 7 port in
+bash original in `_shared/scripts/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
-skills need only one dispatch rule (`bash …/X.sh` on POSIX, `pwsh
-…/win/X.ps1` on Windows, keyed off statuscheck's `platform` row). Edit one and
+skills need only one dispatch rule (`bash …/X.sh` on POSIX,
+`pwsh`/`powershell …/win/X.ps1` on Windows, keyed off statuscheck's `platform` row). Edit one and
 you must edit the other, or Windows silently drifts. `statuscheck`'s `platform`
 row (OS detection + Windows runtime/ports check) is the single source of truth
 for "am I on Windows" and honors `STATUSCHECK_FORCE_OS` so the Windows branch is

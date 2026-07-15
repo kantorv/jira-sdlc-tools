@@ -1,5 +1,4 @@
-#!/usr/bin/env pwsh
-# get_assignee_email.ps1 — Windows (PowerShell 7) port of get_assignee_email.sh.
+# get_assignee_email.ps1 — Windows (PowerShell 5.1+) port of get_assignee_email.sh.
 # Mirrors the bash contract exactly: one line on stdout, same exit codes.
 #
 # Prints the email every issue should be assigned to: JIRA_EXECUTOR_EMAIL,

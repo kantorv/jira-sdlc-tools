@@ -1,11 +1,10 @@
-#!/usr/bin/env pwsh
-# statuscheck.ps1 — Windows (PowerShell 7) port of statuscheck.sh.
+# statuscheck.ps1 — Windows (PowerShell 5.1+) port of statuscheck.sh.
 # Same pre-flight healthcheck: gathers every environment fact a skill needs
 # (worktree, branch, issue key, platform, CLI auth, project config) in ONE run
 # and prints the SAME markdown table + exit code as the bash original. Mirror
 # the bash logic; keep them in sync.
 #
-# Usage: pwsh statuscheck.ps1 [ISSUE-KEY]
+# Usage: powershell -File statuscheck.ps1 [ISSUE-KEY]
 #   The issue key is normally derived from the branch and reported in the
 #   `issue_key` row; passing ISSUE-KEY makes the script compare it itself.
 #
@@ -71,7 +70,7 @@ if (-not $Key) { $Key = $BrKey }   # best known key, for the title/remedies
 
 # --- mandatory jira-sdlc-tools.local.env gate (runs before any other check) --
 # A linked worktree is born without the gitignored local.env; the copy logic
-# lives only in ensure_local_env.ps1, so delegate to it (run as a child pwsh so
+# lives only in ensure_local_env.ps1, so delegate to it (run as a child PowerShell so
 # its `exit` can't terminate us) rather than duplicating the copy.
 $WtRoot = Get-GitTop
 $IsWt   = ($WtRoot -and (Test-Path -LiteralPath (Join-Path $WtRoot '.git') -PathType Leaf))
@@ -79,7 +78,8 @@ $EnvLocalCopied     = $false
 $EnvLocalCopiedFrom = ''
 if ($WtRoot) {
     $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot 'jira-sdlc-tools.local.env')
-    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') *> $null
+    $selfExe = if (Test-Path "$PSHOME\pwsh.exe" -PathType Leaf) { "$PSHOME\pwsh.exe" } else { "$PSHOME\powershell.exe" }
+    & $selfExe -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') *> $null
     if ($LASTEXITCODE -ne 0) {
         Add-Row env_local FAIL "mandatory jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" `
             "create jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
@@ -113,6 +113,10 @@ if (-not $WtRoot) {
 # Mirrors statuscheck.sh's platform block; the win/*.ps1 ports live in this
 # script's own directory ($PSScriptRoot).
 function Get-DetectedOS {
+    # $IsWindows/$IsMacOS/$IsLinux are PS6+ automatic vars; undefined on
+    # Windows PowerShell 5.1. $env:OS is 'Windows_NT' on Windows, unset on
+    # Linux/macOS — a reliable 5.1+7 cross-version signal.
+    if ($null -eq $IsWindows) { return $(if ($env:OS -eq 'Windows_NT') { 'windows' } else { 'linux' }) }
     if ($IsWindows) { return 'windows' }
     if ($IsMacOS)   { return 'darwin' }
     if ($IsLinux)   { return 'linux' }
@@ -127,8 +131,7 @@ switch ($forced) {
 if ($OS -eq 'windows') {
     $winDir = $PSScriptRoot
     $missing = ''
-    $major = $PSVersionTable.PSVersion.Major   # we are running under pwsh; version is known
-    if ($major -lt 7) { $missing += " pwsh(v$major<7)" }
+    $major = $PSVersionTable.PSVersion.Major   # 5.1+ acceptable — scripts are compatible with both
     if (-not (Get-Command acli -ErrorAction SilentlyContinue)) { $missing += ' acli' }
     if (-not (Get-Command gh   -ErrorAction SilentlyContinue)) { $missing += ' gh' }
     foreach ($s in 'statuscheck', 'ensure_local_env', 'jira_acli_login', 'get_assignee_email', 'check_assignee') {
@@ -136,9 +139,9 @@ if ($OS -eq 'windows') {
     }
     if ($missing) {
         Add-Row platform FAIL "os=windows$OsForced — missing:$missing" `
-            "on Windows the skills dispatch to pwsh scripts/win/*.ps1 — install PowerShell 7 + acli + gh and ensure the win/ ports are present, then $Rerun."
+            "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $Rerun."
     } else {
-        Add-Row platform OK "os=windows$OsForced — pwsh 7 + acli + gh + win/ ports present (Windows dispatch path ready)"
+        Add-Row platform OK "os=windows$OsForced — PowerShell $major + acli + gh + win/ ports present (Windows dispatch path ready)"
     }
 } else {
     Add-Row platform INFO "os=$OS$OsForced — POSIX path: skills run the bash scripts in _shared/scripts/"
