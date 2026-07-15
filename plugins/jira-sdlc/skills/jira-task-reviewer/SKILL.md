@@ -49,6 +49,13 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
 `../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
+
+**Windows:** run every `bash …/scripts/X.sh` shown in this skill as `pwsh`
+or `powershell` (`…/scripts/win/X.ps1`) with the same arguments — the `.ps1`
+ports (PowerShell 5.1+) mirror the bash contract (args, table, exit codes),
+and statuscheck's `platform` row is the single source of truth for whether
+you're on Windows.
+
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero

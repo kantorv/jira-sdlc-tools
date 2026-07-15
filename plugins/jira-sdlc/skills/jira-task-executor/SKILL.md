@@ -85,7 +85,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
 plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
-relative to this skill's directory.) The script resolves
+relative to this skill's directory.)
+
+**Windows:** run every `bash …/scripts/X.sh` shown in this skill as `pwsh`
+or `powershell` (`…/scripts/win/X.ps1`) with the same arguments — the `.ps1`
+ports (PowerShell 5.1+) mirror the bash contract (args, table, exit codes),
+and statuscheck's `platform` row is the single source of truth for whether
+you're on Windows.
+
+The script resolves
 `<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
 `jira-sdlc-tools.local.env` itself; you don't need to pre-resolve tokens
 for this section. It prints one markdown table (`check | status |

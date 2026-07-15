@@ -181,6 +181,35 @@ unmatched parens, and participants used without being declared (mermaid
 auto-creates those). All confirmed against the parser. Don't rewrite them chasing
 an error; the semicolon is the one that bites, and the checker will point at it.
 
+### Touched a `_shared/scripts/*.sh`? Its `win/*.ps1` twin must stay in sync
+
+The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
+bash original in `_shared/scripts/` (the POSIX path) and a PowerShell 5.1+ port in
+`_shared/scripts/win/` (the Windows path). They're a contract pair — same
+arguments, same markdown-table / stdout, same exit codes and stderr — so the
+skills need only one dispatch rule (`bash …/X.sh` on POSIX,
+`pwsh`/`powershell …/win/X.ps1` on Windows, keyed off statuscheck's `platform` row). Edit one and
+you must edit the other, or Windows silently drifts. `statuscheck`'s `platform`
+row (OS detection + Windows runtime/ports check) is the single source of truth
+for "am I on Windows" and honors `STATUSCHECK_FORCE_OS` so the Windows branch is
+testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
+diff each port against its bash twin with the OS forced:
+
+```bash
+export STATUSCHECK_FORCE_OS=windows
+for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+  diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/$s.sh") \
+       <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
+    && echo "✓ $s identical"
+done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee
+```
+
+Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
+diff's reach): real backslash paths / drive letters, CRLF, and acli's config
+location — confirm those on a real Windows 11 box, but the port logic and
+dispatch are verified here.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core
