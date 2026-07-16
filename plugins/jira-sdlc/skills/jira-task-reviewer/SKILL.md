@@ -38,9 +38,10 @@ chose, and can't be what you consult to dispatch statuscheck itself.
 both FIRST, before the healthcheck.** Every Jira write this skill makes
 (verdict comments, reject-path transitions) should come from the
 reviewer's account, not from whoever was last logged in. Both calls are
-idempotent (a no-op when the file/identity are already right), so run
-them unconditionally. On non-zero from either, relay its stderr and
-**stop**.
+safe to run every time (`ensure_local_env` no-ops when the file already
+exists; `jira_acli_login` always logs out then back in as the role, so a
+stale token can't survive), so run them unconditionally. On non-zero from
+either, relay its stderr and **stop**.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1

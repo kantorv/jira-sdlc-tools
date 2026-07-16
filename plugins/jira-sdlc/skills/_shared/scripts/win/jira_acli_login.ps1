@@ -8,11 +8,20 @@
 # default one (JIRA_ACCOUNT_EMAIL / JIRA_TOKEN). Email and token fall back
 # INDEPENDENTLY. See the bash original for the full rationale.
 #
-# IDEMPOTENT: acli records the active account in ~/.config/acli/jira_config.yaml;
-# if it already matches the role's site+email this is a no-op returning 0
-# without touching the network. Otherwise it runs `acli jira auth logout` and
-# then logs in — the logout is mandatory (a second login does NOT overwrite an
-# existing stored credential).
+# ALWAYS LOGOUT, THEN LOGIN — no idempotency no-op. This script used to peek at
+# ~/.config/acli/jira_config.yaml and skip logout+login when the active
+# site+email already matched the role. That was unsafe: a revoked or rotated
+# token silently survived, because a config-peek compares identity, not
+# validity — and `acli jira auth status` keeps reporting authenticated from
+# cache while real calls fail. So we now run `acli jira auth logout` then
+# `auth login` on every call, unconditionally. The logout is mandatory: a second
+# `auth login` does NOT overwrite an existing stored credential, so without it a
+# stale credential would never be replaced.
+#
+# TIMEOUTS: login is capped at 180s and logout at 60s (aligned with the bash
+# twin). Login gets the longer cap because `acli jira auth login` can take 2-3
+# minutes against a real Jira instance; now that login is always-on it must not
+# be capped at the shorter logout value.
 #
 # ⚠️ acli's credential store is machine-global and single-account: switching
 # roles switches the active account for every other shell on this machine.
@@ -20,7 +29,7 @@
 # transient temp file + Start-Process -RedirectStandardInput (byte-clean on
 # both PS 5.1 and 7; the native `$Token | & acli` pipe CRLF-corrupts on 5.1).
 #
-# Exit 0 — acli is now (or already was) logged in as <role>'s identity.
+# Exit 0 — acli is now logged in as <role>'s identity.
 # Exit 1 — anything else, with the reason on stderr.
 
 param([string]$Role)
@@ -81,27 +90,10 @@ if (-not $Site) {
     exit 1
 }
 
-# --- idempotency: already this identity? then do nothing. --------------------
-# acli writes the active profile here on login and clears it on logout, so a
-# local read answers "who am I?" instantly and without the network.
-$AcliCfg = Join-Path (Join-Path (Join-Path $HOME '.config') 'acli') 'jira_config.yaml'
-function Get-Yaml1 {
-    param([string]$File, [string]$Key)
-    if (-not (Test-Path -LiteralPath $File)) { return $null }
-    foreach ($line in Get-Content -LiteralPath $File) {
-        if ($line -match "^\s*-?\s*${Key}:\s*(.*)$") { return $Matches[1].Trim() }
-    }
-    return $null
-}
-
-$ActiveEmail = Get-Yaml1 $AcliCfg 'email'
-$ActiveSite  = Get-Yaml1 $AcliCfg 'site'
-if ($ActiveEmail -and
-    ($ActiveEmail.ToLower() -eq $Email.ToLower()) -and
-    ($ActiveSite.ToLower()  -eq $Site.ToLower())) {
-    Write-Output "jira_acli_login: already $Role ($Email) — no re-login needed."
-    exit 0
-}
+# No idempotency short-circuit: we ALWAYS logout+login (see header). A
+# config-peek would only confirm identity, never token validity, so a stale or
+# revoked token would survive it — the exact failure this script now prevents by
+# re-logging in unconditionally.
 
 $Token = Get-Cfg "${Prefix}_TOKEN"
 if (-not $Token) { $Token = Get-Cfg 'JIRA_TOKEN' }
@@ -111,7 +103,22 @@ if (-not $Token) {
 }
 
 # logout FIRST — login does not overwrite an existing credential (see header).
-& acli jira auth logout *> $null
+# Capped at 60s (aligned with the bash twin's `timeout 60`) via Start-Process so
+# a stalled logout can't hang the run; a logout failure is non-fatal (the bash
+# twin's `|| true`) — the login below is what the exit code hinges on.
+$logoutOut = [System.IO.Path]::GetTempFileName()
+$logoutErr = [System.IO.Path]::GetTempFileName()
+try {
+    $logoutProc = Start-Process -FilePath acli `
+        -ArgumentList @('jira','auth','logout') `
+        -RedirectStandardOutput $logoutOut -RedirectStandardError $logoutErr `
+        -NoNewWindow -PassThru
+    if (-not $logoutProc.WaitForExit(60000)) {
+        try { $logoutProc.Kill() } catch { }
+    }
+} catch { } finally {
+    Remove-Item -LiteralPath $logoutOut,$logoutErr -Force -ErrorAction SilentlyContinue
+}
 
 # Feed the token to acli on stdin. The token is the raw API-token VALUE, never
 # printed and never on the command line. We CANNOT use PowerShell's native
