@@ -189,11 +189,13 @@ bash original in `_shared/scripts/` (the POSIX path) and a PowerShell 5.1+ port 
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
 skills need only one dispatch rule (`bash …/X.sh` on POSIX,
-`pwsh`/`powershell …/win/X.ps1` on Windows, keyed off statuscheck's `platform` row). Edit one and
+`pwsh`/`powershell …/win/X.ps1` on Windows). Each skill picks the branch up
+front from its own runtime, *before* the first script runs — statuscheck is
+itself one of the dispatched scripts, so it can't be what decides how to run
+it. Edit one port and
 you must edit the other, or Windows silently drifts. `statuscheck`'s `platform`
-row (OS detection + Windows runtime/ports check) is the single source of truth
-for "am I on Windows" and honors `STATUSCHECK_FORCE_OS` so the Windows branch is
-testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
+row then *confirms* the OS and the Windows runtime/ports, and honors
+`STATUSCHECK_FORCE_OS` so the Windows branch is testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
 diff each port against its bash twin with the OS forced:
 
 ```bash

@@ -34,6 +34,18 @@ project. Given a task description from the user ($ARGUMENTS):
 
 ## 1. Discovery and healthcheck
 
+**Script dispatch — settle this before running any script below.** Every
+script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
+Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,
+exit codes). Read your OS from your own runtime *before the first call* —
+you know it without running anything — and dispatch **every** script that
+way, the leading credential block included: `bash …/scripts/X.sh` on
+Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
+below are the POSIX form; on Windows substitute the `.ps1` port each time.
+Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
+the runtime + ports are present) — it verifies the dispatch you already
+chose, and can't be what you consult to dispatch statuscheck itself.
+
 **Make sure local credentials exist, then log in as the assigner — run
 both FIRST, before the healthcheck.** Both are idempotent (a no-op when
 the file/identity are already right), so run them unconditionally. On
@@ -61,12 +73,6 @@ plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
 relative to this skill's directory.) It resolves `<PROJECT-KEY>` and
 `<DEFAULT_BASE_BRANCH>` from the env files itself, so you don't
 pre-resolve tokens for this section.
-
-**Windows:** run every `bash …/scripts/X.sh` shown in this skill as `pwsh`
-or `powershell` (`…/scripts/win/X.ps1`) with the same arguments — the `.ps1`
-ports (PowerShell 5.1+) mirror the bash contract (args, table, exit codes),
-and statuscheck's `platform` row is the single source of truth for whether
-you're on Windows.
 
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`

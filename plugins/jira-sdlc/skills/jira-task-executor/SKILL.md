@@ -52,6 +52,18 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Script dispatch — settle this before running any script below.** Every
+script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
+Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,
+exit codes). Read your OS from your own runtime *before the first call* —
+you know it without running anything — and dispatch **every** script that
+way, the leading credential block included: `bash …/scripts/X.sh` on
+Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
+below are the POSIX form; on Windows substitute the `.ps1` port each time.
+Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
+the runtime + ports are present) — it verifies the dispatch you already
+chose, and can't be what you consult to dispatch statuscheck itself.
+
 **Get local credentials, be the executor, and own the issue — run these
 FIRST, before the healthcheck.** All three are idempotent and take no
 decisions of their own; a non-zero exit from any of them means **STOP** —
@@ -86,12 +98,6 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
 plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
 relative to this skill's directory.)
-
-**Windows:** run every `bash …/scripts/X.sh` shown in this skill as `pwsh`
-or `powershell` (`…/scripts/win/X.ps1`) with the same arguments — the `.ps1`
-ports (PowerShell 5.1+) mirror the bash contract (args, table, exit codes),
-and statuscheck's `platform` row is the single source of truth for whether
-you're on Windows.
 
 The script resolves
 `<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
