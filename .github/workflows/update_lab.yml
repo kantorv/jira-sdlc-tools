@@ -3,7 +3,7 @@ name: Sync Lab with Development
 on:
   push:
     branches:
-      - development # Triggers on direct pushes and merged PRs to development
+      - lab # Triggers on direct pushes and merged PRs to lab
   workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
 
 # Grants the default GITHUB_TOKEN the necessary permissions to push code
