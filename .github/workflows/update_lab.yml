@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - lab # Triggers on direct pushes and merged PRs to lab
-  workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
+      - development # Keeps lab current as mainline moves
+  #workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
 
 # Grants the default GITHUB_TOKEN the necessary permissions to push code
 permissions:
