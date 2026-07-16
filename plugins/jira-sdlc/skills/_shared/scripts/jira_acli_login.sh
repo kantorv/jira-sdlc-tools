@@ -79,14 +79,20 @@ jira_acli_login() {
     return 1; }
 
   # --- idempotency: already this identity? then do nothing. -----------------
-  # acli writes the active profile here on login and clears it on logout, so a
-  # local read answers "who am I?" instantly and without the network.
+  # acli records the active account here as `current_profile`, and on logout it
+  # blanks `current_profile` but LEAVES the profile entry (site/email) behind. So
+  # the profile's email/site is NOT proof of being logged in — only a non-empty
+  # `current_profile` is. Gate on it, or a logged-out stale profile reads as
+  # "already logged in" and the script skips the real login while acli stays
+  # unauthorized.
   if [ -f "$HOME/.config/acli/jira_config.yaml" ]; then
+    active_profile=$(grep -E '^[[:space:]]*current_profile:[[:space:]]*' "$HOME/.config/acli/jira_config.yaml" 2>/dev/null \
+                     | head -1 | sed -e 's/^[^:]*:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//')
     active_email=$(grep -E '^[[:space:]]*email:[[:space:]]*' "$HOME/.config/acli/jira_config.yaml" 2>/dev/null \
                    | head -1 | sed -e 's/^[^:]*:[[:space:]]*//' -e 's/[[:space:]]*$//')
     active_site=$(grep -E '^[[:space:]]*-?[[:space:]]*site:[[:space:]]*' "$HOME/.config/acli/jira_config.yaml" 2>/dev/null \
                   | head -1 | sed -e 's/^[^:]*:[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$active_email" ] \
+    if [ -n "$active_profile" ] && [ -n "$active_email" ] \
        && [ "$(printf '%s' "$active_email" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$email" | tr '[:upper:]' '[:lower:]')" ] \
        && [ "$(printf '%s' "$active_site"  | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$site"  | tr '[:upper:]' '[:lower:]')" ]; then
       printf 'jira_acli_login: already %s (%s) — no re-login needed.\n' "$role" "$email"

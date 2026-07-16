@@ -82,8 +82,12 @@ if (-not $Site) {
 }
 
 # --- idempotency: already this identity? then do nothing. --------------------
-# acli writes the active profile here on login and clears it on logout, so a
-# local read answers "who am I?" instantly and without the network.
+# acli records the active account here as `current_profile`, and on logout it
+# blanks `current_profile` but LEAVES the profile entry (site/email) behind. So
+# the profile's email/site is NOT proof of being logged in — only a non-empty
+# `current_profile` is. Gate on it, or a logged-out stale profile reads as
+# "already logged in" and the script skips the real login while acli stays
+# unauthorized.
 $AcliCfg = Join-Path (Join-Path (Join-Path $HOME '.config') 'acli') 'jira_config.yaml'
 function Get-Yaml1 {
     param([string]$File, [string]$Key)
@@ -94,9 +98,11 @@ function Get-Yaml1 {
     return $null
 }
 
+$ActiveProfile = Get-Yaml1 $AcliCfg 'current_profile'
+if ($ActiveProfile) { $ActiveProfile = $ActiveProfile.Trim('"') }
 $ActiveEmail = Get-Yaml1 $AcliCfg 'email'
 $ActiveSite  = Get-Yaml1 $AcliCfg 'site'
-if ($ActiveEmail -and
+if ($ActiveProfile -and $ActiveEmail -and
     ($ActiveEmail.ToLower() -eq $Email.ToLower()) -and
     ($ActiveSite.ToLower()  -eq $Site.ToLower())) {
     Write-Output "jira_acli_login: already $Role ($Email) — no re-login needed."
@@ -132,6 +138,11 @@ try {
         -ArgumentList @('jira','auth','login','--site',$Site,'--email',$Email,'--token') `
         -RedirectStandardInput $tmp -RedirectStandardOutput $outF -RedirectStandardError $errF `
         -NoNewWindow -PassThru
+    # Cache the native handle NOW: a Start-Process -PassThru object cannot return
+    # its .ExitCode after the process exits unless the handle was touched while it
+    # was still alive — otherwise .ExitCode is $null, and "$null -ne 0" is $true,
+    # so a successful login is misreported as a failure. See WaitForExit below.
+    $null = $proc.Handle
     if (-not $proc.WaitForExit(180000)) {
         try { $proc.Kill() } catch { }
         [Console]::Error.WriteLine("jira_acli_login: 'acli jira auth login' timed out for $Role ($Email) at $Site — check ${Prefix}_TOKEN / JIRA_TOKEN in $CfgDir/jira-sdlc-tools.local.env (raw API token value, not a path). acli is now logged OUT.")
