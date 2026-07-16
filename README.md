@@ -19,40 +19,28 @@ works — architecture, prerequisites, configuration, a full usage
 walkthrough, safety model, and troubleshooting — lives in
 [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
 
-## Channels
+The three skills, one per stage of the lifecycle:
 
-The plugin ships on two channels — same core, different skill set:
+- **`jira-task-assigner`** — turns a feature/task/bug description into
+  Jira issues with matching git branches and worktrees. Investigates the
+  codebase, asks clarifying questions, decides whether the request is one
+  self-contained task or a multistep split into parallel sub-tasks, and
+  gives every leaf issue its own branch and worktree so parallel work can
+  start immediately.
+- **`jira-task-executor`** — implements the issue implied by the current
+  worktree's branch, end to end: status transition, investigation,
+  implementation, tests, commit, push, and PR. No issue-key argument —
+  run it from inside the issue's own worktree.
+- **`jira-task-reviewer`** — run from the parent issue's worktree.
+  Reviews each sub-task PR into the parent branch (approve or request
+  changes), posts findings to Jira, and reviews the parent PR into the
+  base branch once the sub-task PRs are merged. Never merges anything
+  itself.
 
-| Channel | Source | Skills |
-| --- | --- | --- |
-| **main** (default) | the repo's default branch | The three core skills: `jira-task-assigner`, `jira-task-executor`, `jira-task-reviewer`. Reviewed, released, tagged. |
-| **lab** | the [`lab`](https://github.com/kantorv/jira-sdlc-tools/tree/lab) branch | All three of the above, plus two more: `jira-task-helper` and `conversation-debugger`. |
-
-The two lab-only skills:
-
-- **`jira-task-helper`** — the utility knife for the around-the-task
-  plumbing the core three deliberately leave out: a cross-worktree
-  `status` dashboard, `cleanup` of worktrees whose work is already
-  merged, `dump_changes` to fold stray base-branch edits into a proper
-  issue + branch + worktree + PR, `sync_conversations` to attach a run's
-  transcripts to its Jira issue, and `setup` to bootstrap a machine.
-- **`conversation-debugger`** — post-mortems a recorded run of one of
-  the three core skills against its own prose, verdicting each
-  instruction as followed / diverged / skipped / not-reached.
-
-`lab` is kept synced with the default branch, so it's never *behind*
-main — it's main plus the extras. Those extras are the reason to think
-before switching: they're not release-gated, and they reach wider than
-the core three do — into your whole workspace rather than a single
-issue's worktree, with the scripts and permissions to match. Run lab
-where you're comfortable with that.
-
-Choosing the lab channel is a matter of where you source the plugin from
-— see [Lab channel](#lab-channel) under Install.
+There's also a **lab** channel carrying two extra skills — see
+[Lab channel](#lab-channel) at the end of this page.
 
 ## Install
-
-By default, every command in this section installs the **main** channel.
 
 ### Remote — from the marketplace (recommended)
 
@@ -76,21 +64,6 @@ not a `plugin.json`. Useful if you'd rather track updates via `git pull`
 than a marketplace, or if you're testing a change before publishing it.
 If you're planning to actively edit the plugin rather than just run it,
 see [Development](#development) below for the edit-reload loop.
-
-### Lab channel
-
-A marketplace install always tracks the default branch, so the lab
-channel is a clone-and-load: check out [`lab`](https://github.com/kantorv/jira-sdlc-tools/tree/lab)
-instead of the default branch, and point `--plugin-dir` at it as above.
-
-```bash
-git clone -b lab https://github.com/kantorv/jira-sdlc-tools.git jira-sdlc-tools-lab
-claude --plugin-dir ./jira-sdlc-tools-lab/plugins/jira-sdlc
-```
-
-Already have a clone you'd rather reuse? `git switch lab` in it and
-re-run the same `--plugin-dir` command. Either way, read the caution in
-[Channels](#channels) first — lab carries wider permissions than main.
 
 ### Either way
 
@@ -172,6 +145,69 @@ doing the work — it covers the constraints that are easy to break
 without realizing it (the `_shared/` reference-path relationship, what
 else to update if you rename a skill or the plugin, how to validate a
 change with no test suite to run).
+
+## Lab channel
+
+Everything above describes the **main** channel — the repo's default
+branch, which is what every install on this page gives you: the three
+core skills, reviewed, released, and tagged.
+
+The **lab** channel is the same plugin sourced from the
+[`lab`](https://github.com/kantorv/jira-sdlc-tools/tree/lab) branch
+instead. It's kept synced with the default branch, so it's never
+*behind* main — it's main plus work that hasn't landed in `development`
+yet: more advanced scripts, wider permissions and rights, and two extra
+skills.
+
+### The two lab-only skills
+
+- **`jira-task-helper`** — the utility knife for the around-the-task
+  plumbing the core three deliberately leave out: a cross-worktree
+  `status` dashboard, `cleanup` of worktrees whose work is already
+  merged, `dump_changes` to fold stray base-branch edits into a proper
+  issue + branch + worktree + PR, `sync_conversations` to attach a run's
+  transcripts to its Jira issue, and `setup` to bootstrap a machine.
+- **`conversation-debugger`** — post-mortems a recorded run of one of
+  the three core skills against its own prose, verdicting each
+  instruction as followed / diverged / skipped / not-reached.
+
+### Installing the lab channel
+
+Same two routes as the main channel — you just point them at the `lab`
+branch.
+
+#### Remote — from the marketplace
+
+Suffix the repo with `@lab`:
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools@lab
+/plugin install jira-sdlc@jira-sdlc-tools
+```
+
+To switch back to the main channel, re-add the repo without the suffix:
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools
+```
+
+#### Local — clone the `lab` branch
+
+```bash
+git clone -b lab https://github.com/kantorv/jira-sdlc-tools.git jira-sdlc-tools-lab
+claude --plugin-dir ./jira-sdlc-tools-lab/plugins/jira-sdlc
+```
+
+Already have a clone you'd rather reuse? `git switch lab` in it and
+re-run the same `--plugin-dir` command. The two env files work the same
+either way — see [Either way](#either-way) above.
+
+### Before you switch
+
+The extras are the reason to think about it first: they aren't
+release-gated, and they reach wider than the core three do — into your
+whole workspace rather than a single issue's worktree, with the scripts
+and permissions to match. Run lab where you're comfortable with that.
 
 ## Trademarks
 
