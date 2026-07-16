@@ -12,11 +12,14 @@
 #   The current issue key is normally derived from the branch name
 #   (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>) and reported in the
 #   `issue_key` row — the calling agent compares it to the issue it was
-#   asked to run. Passing ISSUE-KEY explicitly makes the script do that
-#   comparison itself instead (`issue_key` FAILs on mismatch). Neither
-#   jira-task-executor nor jira-task-reviewer pass one anymore — both
-#   take no issue-key argument, so the branch is their sole source of
-#   truth for the key.
+#   asked to run. Passing an issue-key-shaped ISSUE-KEY (PROJ-123) explicitly
+#   makes the script do that comparison itself instead (`issue_key` FAILs on
+#   mismatch). A positional argument that is NOT issue-key-shaped — e.g. a role
+#   name like "reviewer" accidentally carried over from jira_acli_login — is
+#   ignored, not compared: the branch-derived key is used exactly as in the
+#   no-arg case. statuscheck takes no role argument. Neither jira-task-executor
+#   nor jira-task-reviewer pass one anymore — both take no issue-key argument,
+#   so the branch is their sole source of truth for the key.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
 # jira-sdlc-tools.env + jira-sdlc-tools.local.env in the repo root
@@ -54,6 +57,16 @@ KEY_ARG="${1:-}"
 BR=$(git branch --show-current 2>/dev/null || true)
 BR_TAIL=${BR#*/}
 BR_KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
+# Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
+# value — most often a role name like "reviewer" carried over by mistake from the
+# preceding `jira_acli_login <role>` call — is NOT an issue key: ignore it and fall
+# back to the branch-derived key, exactly as the no-arg path does, instead of
+# FAILing issue_key against it. statuscheck itself takes no role argument.
+KEY_ARG_IGNORED=""
+if [ -n "$KEY_ARG" ] && ! printf '%s' "$KEY_ARG" | grep -qE '^[A-Za-z][A-Za-z0-9]*-[0-9]+$'; then
+  KEY_ARG_IGNORED="$KEY_ARG"
+  KEY_ARG=""
+fi
 KEY="${KEY_ARG:-$BR_KEY}"   # best known key, for remedy messages
 RERUN="${STATUSCHECK_RERUN:-rerun /jira-sdlc:jira-task-executor}"
 
@@ -304,9 +317,9 @@ if [ -n "$KEY_ARG" ]; then
       "cd into $KEY_ARG's own worktree/branch and $RERUN — or get explicit user confirmation before proceeding here."
   fi
 elif [ -n "$BR_KEY" ]; then
-  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)"
+  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
 else
-  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)"
+  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
 fi
 
 # --- gh auth (needed by 'gh pr create') ----------------------------------
