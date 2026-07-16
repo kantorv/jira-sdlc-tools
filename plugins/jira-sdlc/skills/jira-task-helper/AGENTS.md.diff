@@ -1,0 +1,27 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 34b9eac..f5356ef 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -108,13 +108,16 @@ assuming you're done:
+   `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
+   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
+   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
+-  override, plus steps 4a/4b/4c and 6), and the healthcheck script's
+-  rerun remedies (`skills/_shared/scripts/statuscheck.sh`), which
+-  currently read `/jira-sdlc:...`.
++  override, plus steps 4a/4b/4c and 6), `jira-task-helper` (its dispatch
++  table, its free-form `STATUSCHECK_RERUN` override, the
++  `sync_conversations`/`setup` builtins, and the *Staying in your lane*
++  redirects), and the healthcheck script's rerun remedies
++  (`skills/_shared/scripts/statuscheck.sh`), which currently read
++  `/jira-sdlc:...`.
+ - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
+-  `jira-task-executor` by name; check the other two skills and the
+-  README for any new cross-references before assuming a rename is
+-  isolated to one file.
++  `jira-task-executor` by name, and `jira-task-helper`'s *Staying in your
++  lane* section names all three others; check those and the README for any
++  cross-references before assuming a rename is isolated to one file.
+ 
+ ## Validating a change
+ 
