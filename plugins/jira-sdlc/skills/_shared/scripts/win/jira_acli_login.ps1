@@ -139,6 +139,11 @@ try {
         -ArgumentList @('jira','auth','login','--site',$Site,'--email',$Email,'--token') `
         -RedirectStandardInput $tmp -RedirectStandardOutput $outF -RedirectStandardError $errF `
         -NoNewWindow -PassThru
+    # Cache the native handle NOW: a Start-Process -PassThru object cannot return
+    # its .ExitCode after the process exits unless the handle was touched while it
+    # was still alive — otherwise .ExitCode is $null, and "$null -ne 0" is $true,
+    # so a successful login is misreported as a failure. See WaitForExit below.
+    $null = $proc.Handle
     if (-not $proc.WaitForExit(180000)) {
         try { $proc.Kill() } catch { }
         [Console]::Error.WriteLine("jira_acli_login: 'acli jira auth login' timed out for $Role ($Email) at $Site — check ${Prefix}_TOKEN / JIRA_TOKEN in $CfgDir/jira-sdlc-tools.local.env (raw API token value, not a path). acli is now logged OUT.")

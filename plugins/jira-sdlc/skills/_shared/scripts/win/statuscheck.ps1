@@ -6,7 +6,10 @@
 #
 # Usage: powershell -File statuscheck.ps1 [ISSUE-KEY]
 #   The issue key is normally derived from the branch and reported in the
-#   `issue_key` row; passing ISSUE-KEY makes the script compare it itself.
+#   `issue_key` row; passing an issue-key-shaped ISSUE-KEY (PROJ-123) makes the
+#   script compare it itself. A positional arg that is NOT issue-key-shaped —
+#   e.g. a role name like "reviewer" carried over from jira_acli_login — is
+#   ignored, not compared. statuscheck takes no role argument.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from jira-sdlc-tools.env +
 # jira-sdlc-tools.local.env (local overrides team; `NAME = value` lines, parsed
@@ -66,6 +69,17 @@ $Br = (& git branch --show-current 2>$null)
 $Br = if ($Br) { ([string]$Br).Trim() } else { '' }
 $BrTail = $Br -replace '^[^/]*/', ''
 $BrKey  = if ($BrTail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
+# Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
+# value — most often a role name like "reviewer" carried over by mistake from the
+# preceding `jira_acli_login <role>` call — is NOT an issue key: ignore it and fall
+# back to the branch-derived key, exactly as the no-arg path does, instead of
+# FAILing issue_key against it. statuscheck itself takes no role argument.
+$KeyArgIgnored = ''
+if ($KeyArg -and ($KeyArg -notmatch '^[A-Za-z][A-Za-z0-9]*-[0-9]+$')) {
+    $KeyArgIgnored = $KeyArg
+    $KeyArg = ''
+    $Key    = ''   # don't let the bogus arg leak into the title/remedies
+}
 if (-not $Key) { $Key = $BrKey }   # best known key, for the title/remedies
 
 # --- mandatory jira-sdlc-tools.local.env gate (runs before any other check) --
@@ -236,10 +250,12 @@ if ($KeyArg) {
             "cd into $KeyArg's own worktree/branch and $Rerun — or get explicit user confirmation before proceeding here."
     }
 } elseif ($BrKey) {
-    Add-Row issue_key OK "$BrKey (derived from branch — confirm it matches the issue you were asked to run)"
+    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — statuscheck takes no role/issue-key argument)" } else { '' }
+    Add-Row issue_key OK "$BrKey (derived from branch — confirm it matches the issue you were asked to run)$note"
 } else {
     $brShown = if ($Br) { $Br } else { 'none' }
-    Add-Row issue_key WARN "no issue key derivable from branch '$brShown' (see the branch row)"
+    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — statuscheck takes no role/issue-key argument)" } else { '' }
+    Add-Row issue_key WARN "no issue key derivable from branch '$brShown' (see the branch row)$note"
 }
 
 # --- gh auth (needed by 'gh pr create') --------------------------------------
