@@ -51,9 +51,11 @@ a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
 for an issue key, but don't add one.
 
 **Make sure local credentials exist, then log in as the assigner — run
-both FIRST, before the healthcheck.** Both are idempotent (a no-op when
-the file/identity are already right), so run them unconditionally. On
-non-zero from either, relay its stderr and **stop**.
+both FIRST, before the healthcheck.** Both are safe to run every time
+(`ensure_local_env` no-ops when the file already exists; `jira_acli_login`
+always logs out then back in as the role, so a stale token can't survive),
+so run them unconditionally. On non-zero from either, relay its stderr and
+**stop**.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
