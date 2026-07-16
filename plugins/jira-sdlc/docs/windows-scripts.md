@@ -13,10 +13,13 @@ The five skill-invoked scripts plus one operator helper are shipped **twice**:
 
 The three `SKILL.md` files contain one dispatch rule each — *"run every
 `bash …/scripts/X.sh` shown in this skill as `pwsh` or `powershell`
-(`…/scripts/win/X.ps1`) with the same arguments"* — keyed off
-`statuscheck`'s `platform` row, which is the single source of truth for
-"am I on Windows". So a skill never names a `.ps1` directly; it names the
-`.sh` and the dispatch rule maps it.
+(`…/scripts/win/X.ps1`) with the same arguments"* — and each skill picks
+that branch itself, from its own runtime, before the first script runs.
+`statuscheck`'s `platform` row then *confirms* the OS (and, on Windows,
+that the runtime + ports are present) — it can't be the source the
+dispatch is keyed off, since statuscheck is itself one of the dispatched
+scripts. So a skill never names a `.ps1` directly; it names the `.sh` and
+the dispatch rule maps it.
 
 ## Quick reference
 
@@ -24,7 +27,7 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 
 | Script | Path | Summary | Called by |
 |---|---|---|---|
-| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+acli auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row decides POSIX-bash vs Windows-ps1. | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
+| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+acli auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
 | `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (which is born without it); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
 | `jira_acli_login` | `skills/_shared/scripts/win/jira_acli_login.ps1` `<role>` | Logs `acli` in as the role's Jira identity (`executor`\|`assigner`\|`reviewer`), idempotently — no-op if already that site+email, else `logout` then `login`. Exit 0/1. Token delivered via temp-file + `Start-Process -RedirectStandardInput` (see gotcha). | **assigner**→`assigner`, **executor**→`executor`, **reviewer**→`reviewer` — run after `ensure_local_env` |
 | `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL` → `JIRA_ACCOUNT_EMAIL` fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
