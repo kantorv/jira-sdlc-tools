@@ -76,7 +76,7 @@ It prints `KEY=VALUE` lines; the ones you act on:
 | `INVOCATIONS` | How many times `<skill-name>` was invoked in this session. `0` never files (see `no-invocation`). `>1` = the skill was re-run — step 2 must cover **every** segment, not just the first. |
 | `IS_STUB=yes` | **Stop analyzing.** No assistant lines means the real work happened in another session (resumed elsewhere, or a partial sync). Write the short stub report instead: what the stub does show (invocation time, cwd, branch, args), plus a pointer to find the full session in `~/.claude/projects/` by cwd + timestamp. |
 | `COMPACTED=yes` | The session was summarized mid-run — steps inside the summarized span are **can't-tell**, not skipped (see Caveats). |
-| `REPORT_DIR` | Where step 5 writes the report. Already created. |
+| `REPORT_DIR` | Where step 6 writes the report. Already created. |
 | `ISSUE_KEY` + `KEY_SOURCE` | The key the folder is named for, and the site it came from. |
 
 **`KEY_STATUS=no-invocation` — wrong transcript, or wrong skill named.** The
@@ -248,7 +248,47 @@ environmental surprise the prose never anticipated, or the agent plainly
 ignoring clear text. The "why" is what makes the report actionable — it
 decides whether the fix is a prose edit, a new script, or nothing.
 
-## Step 4 — mine for helper scripts worth keeping
+## Step 4 — code-execution incidents
+
+Step 3 judges *instructions*; this step judges *executions*. Walk the
+Step-2 timeline for every command or script invocation that **ran but
+didn't behave as the skill prose expected** — a non-zero exit, an
+`is_error` tool result, output the next instruction didn't anticipate,
+or any point where the agent had to write an extra script/one-liner or
+rewrite logic it had already committed to in order to get unblocked.
+This is narrower than a compliance `diverged`/`skipped` row: it is about
+something that *ran* and *misbehaved*, not an instruction the agent never
+reached — keep the two in their own steps.
+
+For each incident, answer:
+
+- **What failed** — the command/script and its error or unexpected
+  output, quoted, with the entry uuid.
+- **Root cause** — internal (the skill's own prose or a shared script: a
+  wrong path, a script bug, an instruction assuming something untrue on
+  this run or machine) or external (missing dependency, OS/env quirk,
+  network, stale Jira/git state, something specific to that machine)?
+  Say which, and why.
+- **How the agent reacted** — did it find the cause in one or two tries,
+  or thrash through unrelated attempts first? Quote the turns that show it.
+- **What unblocked it** — an ad-hoc script/one-liner, a change of course,
+  a question to the user, or did it give up and leave it broken?
+- **Outcome** — did the workaround actually unblock the run, or leave
+  residue (a skipped step, a wrong downstream result)?
+- **Suggested fix** — a change to the analyzed skill's SKILL.md or a
+  shared script that would have prevented this or surfaced it sooner. If
+  the workaround is itself worth promoting into a script, don't repeat the
+  write-up here — cross-reference its row in Step 5 (helper scripts worth
+  keeping).
+
+Add further questions where they make an incident clearer — this list is
+a floor, not a ceiling. A dispatch mismatch already flagged in Step 3 (a
+failed `.sh` then a `.ps1` retry) is also an incident: record it here for
+the execution view but cross-reference the Step 3 row rather than
+re-arguing blame. A run where every command behaved as expected has no
+incidents — say so and move on.
+
+## Step 5 — mine for helper scripts worth keeping
 
 Scan the timeline for tooling the agent had to invent mid-run — the
 point is that the *next* run shouldn't reinvent it:
@@ -268,7 +308,7 @@ skill's prose. It's equally valid to conclude a candidate is
 run-specific noise not worth keeping — say that too, so the next
 debugging pass doesn't re-evaluate it.
 
-## Step 5 — write the report
+## Step 6 — write the report
 
 Write `<skill-name>-<conversation-uuid>.md` into step 0's `REPORT_DIR`
 (`conversations/<ISSUE-KEY>/`), where it lands beside the copy of the
@@ -323,6 +363,14 @@ Evidence: entry uuid + short quote, or "—" for not-reached.
 One subsection per diverged/skipped row that matters:
 what the prose says → what happened (quoted, with uuid) → consequence →
 likely why → suggested fix (prose edit / script / no action).
+
+## Incidents
+
+### Code executions
+| What failed (uuid) | Root cause | Agent's reaction | Workaround / fix | Suggested prose fix |
+|---|---|---|---|---|
+One row per incident found in Step 4, or "none — every command behaved as
+expected" if the run had none.
 
 ## Helper scripts worth keeping
 | What the agent built | Born at (uuid) | Worked? | Suggested home |
