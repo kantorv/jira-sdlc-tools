@@ -60,6 +60,24 @@ re-run the same `--plugin-dir` command.
 Identical to the main channel — the same two env files, unchanged. See
 [README.md → Either way](README.md#either-way).
 
+**One lab-only runtime detail — `sync_conversations`' transcript-folder
+vars.** The `jira-task-helper` `sync_conversations` builtin reads two
+environment variables to locate an issue's Claude Code transcript folders
+under `~/.claude/projects`:
+
+- `CONVERSATIONS_MAINREPO_PATH` — the main checkout's transcript folder
+- `CONVERSATIONS_WORKTREE_PATH` — the issue worktree's transcript folder
+
+These are **not** something you add to the env files or set once at
+install time. They're per-issue — the worktree path changes with every
+`<KEY>` — and the builtin resolves and exports both for you immediately
+before it runs the detector. You only set them yourself if you invoke
+`conversation-debugger/scripts/{posix,win}/sync_conversations.*`
+**directly**, outside the helper: both are then mandatory, and the script
+exits 1 if either is unset or not an existing directory. See
+[`sync-conversation.md`](plugins/jira-sdlc/skills/conversation-debugger/scripts/sync-conversation.md)
+for the folder-naming the helper reproduces.
+
 ## Before you switch
 
 The extras are the reason to think about it first: they aren't
