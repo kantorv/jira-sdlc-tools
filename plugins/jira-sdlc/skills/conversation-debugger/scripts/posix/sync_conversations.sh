@@ -243,6 +243,6 @@ if [ -n "$ATTACH" ]; then
   if [ "${#PATHS[@]}" -eq 0 ]; then
     echo "sync_conversations: nothing to attach."
   else
-    bash "$SCRIPT_DIR/jira_attach.sh" ${DRYRUN:+--dry-run} "$KEY" "${PATHS[@]}"
+    bash "$SCRIPT_DIR/../../../_shared/scripts/jira_attach.sh" ${DRYRUN:+--dry-run} "$KEY" "${PATHS[@]}"
   fi
 fi
