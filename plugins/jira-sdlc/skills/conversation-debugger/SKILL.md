@@ -57,16 +57,28 @@ recovering, creating, and copying; you never `mkdir` or `cp` by hand.
 
 Run this first. It validates the transcript, profiles it, recovers the
 issue key, and — only if that key is trustworthy — creates
-`conversations/<ISSUE-KEY>/` and copies the transcript in:
+`conversations/<ISSUE-KEY>/` and copies the transcript in.
+
+**Script dispatch.** This script ships twice, like the shared scripts do:
+the POSIX `scripts/posix/collect_run.sh` (shells out to `jq`) and the
+Windows twin `scripts/win/collect_run.ps1` (PowerShell 5.1+, native JSON
+parsing — no `jq`, no bash). Read your OS from your own runtime before
+this first call and dispatch accordingly; both take identical arguments
+and print the identical `KEY=VALUE` block.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/collect_run.sh" <skill-name> <conversation-path> [issue-key]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/collect_run.sh" <skill-name> <conversation-path> [issue-key]
 ```
 
-(Outside a plugin session it lives at `scripts/collect_run.sh` relative
-to this skill's directory.) Exit `1` → hard error: relay its stderr and
-stop. Exit `2` → nothing was filed and a human has to decide; see
-`KEY_STATUS` below. Never `mkdir`/`cp` by hand to work around either.
+```powershell
+pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_run.ps1" <skill-name> <conversation-path> [issue-key]
+```
+
+(Outside a plugin session it lives at `scripts/posix/collect_run.sh` /
+`scripts/win/collect_run.ps1` relative to this skill's directory.) Exit
+`1` → hard error: relay its stderr and stop. Exit `2` → nothing was filed
+and a human has to decide; see `KEY_STATUS` below. Never `mkdir`/`cp` by
+hand to work around either.
 
 It prints `KEY=VALUE` lines; the ones you act on:
 
