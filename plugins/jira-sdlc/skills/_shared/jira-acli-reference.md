@@ -538,7 +538,7 @@ The `scripts/` directory next to this file bundles two human-run helpers
 (not invoked by any skill) —
 [`../../docs/JIRA-ACLI.md` §10](../../docs/JIRA-ACLI.md#10-helper-scripts)
 documents `acli-create-parent-and-subtasks.sh` (seed a parent + sub-tasks
-from a `manifest.tsv`) and `acli-list-subtasks.py` (list a parent's
+from a `manifest.tsv`) and `acli-list-subtasks.sh` (list a parent's
 sub-tasks by parsing `view <PARENT> --json --fields 'subtasks,issuetype'`).
 
 ---
