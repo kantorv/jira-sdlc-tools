@@ -3,13 +3,19 @@ name: Sync Lab with Development
 on:
   push:
     branches:
-      - lab # Triggers on direct pushes and merged PRs to lab
-      - development # Keeps lab current as mainline moves
-  #workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
+      - lab          # direct pushes and merged PRs to lab
+      - development  # keeps lab current as mainline moves
+  # workflow_dispatch:   # uncomment to trigger manually from the GitHub UI
 
-# Grants the default GITHUB_TOKEN the necessary permissions to push code
+# Grant the default GITHUB_TOKEN permission to push the branch and tags.
 permissions:
-  contents: write 
+  contents: write
+
+# Serialize runs so the sequential -lab.<N> suffix can't collide when a lab
+# push and a development push land close together.
+concurrency:
+  group: update-lab
+  cancel-in-progress: false
 
 jobs:
   update-lab:
@@ -18,36 +24,84 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Required to fetch all branches, not just development
+          fetch-depth: 0   # full history of all branches + tags (merge + version math)
 
       - name: Configure Git Identity
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync Lab Branch
+      - name: Sync lab with development, then tag the build
         run: |
-          # Fetch all remote branches to ensure we have the latest state
-          git fetch origin
-          
-          # Check if the 'lab' branch already exists on the remote
-          if git ls-remote --exit-code --heads origin lab; then
-            echo "Branch 'lab' exists. Merging development into lab."
-            
-            # Switch to the lab branch tracking the remote
-            git checkout lab
-            
-            # Merge development into lab. 
-            # Note: If there are merge conflicts, this step will intentionally fail.
-            git merge origin/development --no-edit
-            
-            # Push the updated lab branch back to GitHub
-            git push origin lab
-            
+          set -euo pipefail
+
+          # Make sure every branch and tag is local (checkout narrows the refspec).
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --tags --force
+
+          MANIFESTS="plugins/jira-sdlc/.claude-plugin/plugin.json .claude-plugin/marketplace.json"
+
+          # --- 1. Sync lab with development ------------------------------------
+          if git ls-remote --exit-code --heads origin lab >/dev/null 2>&1; then
+            echo "Branch 'lab' exists — merging development into it."
+            git checkout -B lab origin/lab
+            if ! git merge origin/development --no-edit; then
+              # The one expected conflict is the manifest version line, which
+              # diverges by design (lab carries a -lab.<N> suffix; a release bumps
+              # development's base). We re-stamp that version below regardless, so
+              # auto-resolve by taking development's copy — but ONLY when the
+              # conflict is confined to the two manifests. Anything else is a real
+              # conflict a human must resolve.
+              unresolved="$(git diff --name-only --diff-filter=U | sort -u)"
+              expected="$(printf '%s\n' $MANIFESTS | sort -u)"
+              if [ -n "$unresolved" ] && [ -z "$(comm -23 <(printf '%s\n' "$unresolved") <(printf '%s\n' "$expected"))" ]; then
+                echo "Merge conflict confined to the plugin manifests — auto-resolving (version is re-stamped below)."
+                git checkout --theirs -- $MANIFESTS
+                git add -- $MANIFESTS
+                git commit --no-edit
+              else
+                echo "::error::Merge conflict outside the plugin manifests — a human must resolve."
+                git merge --abort
+                exit 1
+              fi
+            fi
           else
-            echo "Branch 'lab' does not exist. Creating it from development."
-            
-            # Create lab locally based on development and push it
+            echo "Branch 'lab' does not exist — creating it from development."
             git checkout -b lab origin/development
-            git push -u origin lab
           fi
+
+          # --- 2. Nothing new? Push the sync (if any) and stop, no new tag. ----
+          if git describe --exact-match --match 'v*-lab.*' HEAD >/dev/null 2>&1; then
+            echo "HEAD is already a tagged lab build — sync only, no new tag."
+            git push origin lab
+            exit 0
+          fi
+
+          # --- 3. Compute the lab version: <latest main tag>-lab.<N> ----------
+          # Base = latest PLAIN SemVer tag from main/production (prerelease tags,
+          # which contain a '-', are excluded). Suffix = highest existing
+          # v<base>-lab.<N> + 1, so it increments within a base and resets to 1
+          # when a release bumps the base.
+          BASE_TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -vE '-' | sort -V | tail -n1 || true)"
+          BASE="${BASE_TAG#v}"; BASE="${BASE:-0.0.0}"
+          LAST_N="$(git tag -l "v${BASE}-lab.*" | sed -E 's/.*-lab\.//' | sort -n | tail -n1 || true)"
+          N=$(( ${LAST_N:-0} + 1 ))
+          LAB_VERSION="${BASE}-lab.${N}"
+          TAG="v${LAB_VERSION}"
+          echo "Lab build: $TAG  (base ${BASE_TAG:-<none>}, suffix $N)"
+
+          # --- 4. Stamp the manifests so an @lab install reports this version --
+          # (and so `git show $TAG:.../SKILL.md` matches exactly what ran).
+          jq --arg v "$LAB_VERSION" '.version = $v' \
+            plugins/jira-sdlc/.claude-plugin/plugin.json > plugin.json.tmp \
+            && mv plugin.json.tmp plugins/jira-sdlc/.claude-plugin/plugin.json
+          jq --arg v "$LAB_VERSION" '(.plugins[] | select(.name == "jira-sdlc") | .version) = $v' \
+            .claude-plugin/marketplace.json > marketplace.json.tmp \
+            && mv marketplace.json.tmp .claude-plugin/marketplace.json
+          git add -- $MANIFESTS
+          git commit -m "chore(lab): $LAB_VERSION [skip ci]"
+
+          # --- 5. One push (merge + bump), then the tag on that commit ---------
+          # [skip ci] on HEAD keeps this push from re-triggering the workflow.
+          git push origin lab
+          git tag -a "$TAG" -m "Lab build $LAB_VERSION"
+          git push origin "$TAG"
