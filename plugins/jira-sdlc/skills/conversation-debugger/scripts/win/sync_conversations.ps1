@@ -23,11 +23,10 @@
 # only POSIX cwds, replaces just '/' and '.'. We reproduce the Windows mapping to
 # locate the two folders precisely instead of guessing.
 #
-# --attach delegates to the shared uploader _shared/scripts/jira_attach.sh (kept
-# in one place, no win twin), so --attach needs bash — found on PATH, or derived
-# from the installed Git for Windows (Resolve-BashPath). The read-only detection
-# path above needs neither bash nor python3. (jira_attach.sh itself still needs
-# python3 + curl to reach Jira's REST API, exactly as on POSIX.)
+# --attach delegates to the sibling uploader jira_attach.ps1 (in this same win/
+# folder), so this path is fully native — no bash, no python3, just the same
+# PowerShell runtime already running us. (jira_attach.ps1 does its own Jira REST
+# calls via Invoke-WebRequest, the win twin of jira_attach.sh's curl.)
 #
 # NOTE on the offline overrides: pass --title/--created as SPACE-separated quoted
 # tokens (--created "2026-01-01T00:00:00Z"). Under `pwsh -File`, the glued
@@ -210,26 +209,6 @@ function Get-Scan([string]$path) {
     return @{ title = $hasTitle; first = $first; last = $last }
 }
 
-function Resolve-BashPath {
-    # --attach delegates to the bash uploader, so find a bash. Prefer one on
-    # PATH; otherwise derive it from git (git.exe in Git\cmd or Git\bin → the
-    # sibling Git\bin\bash.exe), then fall back to the standard install roots.
-    $cmd = Get-Command bash -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if ($git) {
-        $root = Split-Path -Parent (Split-Path -Parent $git.Source)
-        if ($root) { $cand = Join-Path $root 'bin\bash.exe'; if (Test-Path -LiteralPath $cand) { return $cand } }
-    }
-    foreach ($cand in @(
-            (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
-            (Join-Path ${env:ProgramFiles(x86)} 'Git\bin\bash.exe'),
-            (Join-Path $env:LOCALAPPDATA 'Programs\Git\bin\bash.exe'))) {
-        if ($cand -and (Test-Path -LiteralPath $cand)) { return $cand }
-    }
-    return $null
-}
-
 function Format-Row([string]$path) {
     # Returns @{ text=<two-line string>; mtime=<DateTime> } or $null on stat error.
     try { $item = Get-Item -LiteralPath $path -ErrorAction Stop } catch { return $null }
@@ -301,25 +280,20 @@ if ($attach.Count -eq 0) { $out.Add('(none)') }
 # Always show the grouped detection + path list.
 foreach ($line in $out) { Write-Output $line }
 
-# ---- --attach: hand the computed paths to the shared idempotent uploader ----
-# The uploader has no win twin (see header), so this leg needs bash on PATH.
+# ---- --attach: hand the computed paths to the sibling idempotent uploader ---
+# jira_attach.ps1 lives beside this script (win/), so this leg is fully native —
+# no bash, same PowerShell runtime that is already running us.
 if ($DoAttach) {
     Write-Output ''
     if ($attach.Count -eq 0) {
         Write-Output 'sync_conversations: nothing to attach.'
     } else {
-        $bashExe = Resolve-BashPath
-        if (-not $bashExe) {
-            [Console]::Error.WriteLine("sync_conversations: --attach needs bash (Git for Windows) to run the shared uploader jira_attach.sh, which has no PowerShell port. Install Git for Windows, or attach the paths above by hand.")
-            exit 1
-        }
-        $attachScript = Join-Path $PSScriptRoot '..\..\..\_shared\scripts\jira_attach.sh'
-        $attachScript = (Resolve-Path -LiteralPath $attachScript).Path -replace '\\', '/'
-        $bargs = @($attachScript)
-        if ($DryRun) { $bargs += '--dry-run' }
-        $bargs += $Key
-        foreach ($p in $attach) { $bargs += $p }
-        & $bashExe @bargs
+        $attachScript = Join-Path $PSScriptRoot 'jira_attach.ps1'
+        $pargs = @()
+        if ($DryRun) { $pargs += '--dry-run' }
+        $pargs += $Key
+        foreach ($p in $attach) { $pargs += $p }
+        & $attachScript @pargs
         exit $LASTEXITCODE
     }
 }

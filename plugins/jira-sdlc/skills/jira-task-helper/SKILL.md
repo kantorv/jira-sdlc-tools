@@ -228,9 +228,9 @@ Windows twin `skills/conversation-debugger/scripts/win/sync_conversations.ps1` (
 codes). Pick the branch from your own runtime before running it: `bash …/posix/
 sync_conversations.sh` on Linux/macOS, `pwsh`/`powershell …/win/
 sync_conversations.ps1` on Windows. The blocks below show the POSIX form; on
-Windows substitute the `.ps1` port. (Its `--attach` leg still shells out to the
-shared `_shared/scripts/jira_attach.sh`, which has no win port, so `--attach` on
-Windows needs bash on PATH — the read-only preview does not.)
+Windows substitute the `.ps1` port. (Its `--attach` leg calls the sibling
+uploader `jira_attach`, itself a posix/win contract pair — so `--attach` on
+Windows is fully native, no bash required.)
 
 1. **Auth + healthcheck.** The user wants full Jira access here, so run the
    executor login and the pre-flight exactly as **Free-form tasks → Identity
