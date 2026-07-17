@@ -17,11 +17,13 @@
 #     /jira-sdlc:jira-task-assigner, the issue TITLE appears in it, and the Jira
 #     `created` instant falls inside the session's first..last timestamp window.
 #
-# Claude Code names each project folder after the session's cwd with every path
-# separator replaced by '-'. On Windows that means '/', '.', ':' and '\' all map
-# to '-' (verified: C:\Users\u\proj -> C--Users-u-proj); the bash twin, seeing
-# only POSIX cwds, replaces just '/' and '.'. We reproduce the Windows mapping to
-# locate the two folders precisely instead of guessing.
+# The two ~/.claude/projects transcript folders (main checkout + issue worktree)
+# are resolved by the caller and passed in as CONVERSATIONS_MAINREPO_PATH and
+# CONVERSATIONS_WORKTREE_PATH — both mandatory, both validated below. This port no
+# longer infers them from git / the cwd->folder-name encoding; the caller owns
+# Claude Code's naming (session cwd with every path separator replaced by '-';
+# on Windows '/', '.', ':' and '\' all map to '-', e.g. C:\Users\u\proj ->
+# C--Users-u-proj).
 #
 # --attach delegates to the sibling uploader jira_attach.ps1 (in this same win/
 # folder), so this path is fully native — no bash, no python3, just the same
@@ -62,13 +64,22 @@ if ($Key -notmatch '^[A-Za-z]*-[0-9]*$' -or $Key -eq '-') {
     exit 1
 }
 
-# ---- transcript store ------------------------------------------------------
-# Claude Code-specific by nature: it reads Claude Code's own transcript store.
-# Other harnesses keep session logs elsewhere or not at all, so degrade honestly.
-$Projects = $env:CLAUDE_PROJECTS_DIR
-if (-not $Projects) { $Projects = Join-Path $HOME '.claude/projects' }
-if (-not (Test-Path -LiteralPath $Projects -PathType Container)) {
-    [Console]::Error.WriteLine("sync_conversations: no transcript store at $Projects — this builtin is specific to Claude Code (it attaches Claude Code conversation logs). Nothing to sync on this agent.")
+# ---- transcript folders: supplied by the caller, both mandatory ------------
+# The caller resolves each issue's two ~/.claude/projects folders — the main
+# checkout's and the issue worktree's — and passes them in already encoded; we
+# only validate them here. Both must be existing directories: there is no
+# "no worktree, that's fine" path anymore (the caller decides what to do when an
+# issue has no worktree folder).
+$MainFolder = $env:CONVERSATIONS_MAINREPO_PATH
+$WtFolder   = $env:CONVERSATIONS_WORKTREE_PATH
+if (-not $MainFolder -or -not (Test-Path -LiteralPath $MainFolder -PathType Container)) {
+    $got = if ($MainFolder) { $MainFolder } else { '<unset>' }
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_MAINREPO_PATH must be an existing directory (the main checkout's ~/.claude/projects transcript folder); got '$got'")
+    exit 1
+}
+if (-not $WtFolder -or -not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
+    $got = if ($WtFolder) { $WtFolder } else { '<unset>' }
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREE_PATH must be an existing directory (the issue worktree's ~/.claude/projects transcript folder); got '$got'")
     exit 1
 }
 
@@ -92,57 +103,25 @@ if ((-not $Title -or -not $Created) -and (Get-Command acli -ErrorAction Silently
     } catch { }
 }
 
-# ---- locate the two project folders ----------------------------------------
-# Main checkout root: the first entry of `git worktree list` is always the main
-# checkout, even when this runs from inside a linked worktree.
-$MainRoot = $null
-try {
-    $wl = & git worktree list --porcelain 2>$null
-    foreach ($line in $wl) { if ($line -match '^worktree (.+)$') { $MainRoot = $Matches[1].Trim(); break } }
-} catch { }
-if (-not $MainRoot) {
-    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $MainRoot = ([string]$t).Trim() } } catch { }
-}
-if (-not $MainRoot) {
-    [Console]::Error.WriteLine("sync_conversations: not inside a git repository (cwd: $($PWD.Path))")
-    exit 1
-}
-
-# cwd -> project-folder name: replace every path separator with '-'. On Windows
-# that is '/', '.', ':' and '\' (git prints C:/... forward-slash + drive colon).
-function Convert-ToFolderName([string]$s) { return ($s -replace '[/.:\\]', '-') }
-
-$MainFolder = Join-Path $Projects (Convert-ToFolderName $MainRoot)
-
-# Worktree folder: a project folder whose name ends in exactly 'worktree-<KEY>'.
-# The trailing anchor is boundary-safe (*worktree-JST-9 can't match ...worktree-JST-93).
-$WtFolder = $null
-$wtMatch = Get-ChildItem -LiteralPath $Projects -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like "*worktree-$Key" } | Select-Object -First 1
-if ($wtMatch) { $WtFolder = $wtMatch.FullName }
-
 # ---- gather candidate files ------------------------------------------------
 # W = worktree (all sessions); M = main-checkout assigner-command session that
-# also names the key. Selection among M happens below.
+# also names the key. Selection among M happens below. Both folders were
+# validated as existing directories above.
 $wfiles = New-Object System.Collections.Generic.List[string]
-if ($WtFolder) {
-    Get-ChildItem -LiteralPath $WtFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue |
-        ForEach-Object { $wfiles.Add($_.FullName) }
-}
+Get-ChildItem -LiteralPath $WtFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue |
+    ForEach-Object { $wfiles.Add($_.FullName) }
 
 $mfiles = New-Object System.Collections.Generic.List[string]
-if (Test-Path -LiteralPath $MainFolder -PathType Container) {
-    # word-boundary key match, mirroring `grep -wF` (word chars = [A-Za-z0-9_]).
-    # -cmatch (case-sensitive) to mirror grep -E / -wF, not the case-insensitive -match.
-    $keyRe = '(?<![A-Za-z0-9_])' + [regex]::Escape($Key) + '(?![A-Za-z0-9_])'
-    Get-ChildItem -LiteralPath $MainFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $content = $null
-        try { $content = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction Stop } catch { }
-        if ($content -and
-            $content -cmatch 'command-name>/?jira-sdlc:jira-task-assigner' -and
-            $content -cmatch $keyRe) {
-            $mfiles.Add($_.FullName)
-        }
+# word-boundary key match, mirroring `grep -wF` (word chars = [A-Za-z0-9_]).
+# -cmatch (case-sensitive) to mirror grep -E / -wF, not the case-insensitive -match.
+$keyRe = '(?<![A-Za-z0-9_])' + [regex]::Escape($Key) + '(?![A-Za-z0-9_])'
+Get-ChildItem -LiteralPath $MainFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $content = $null
+    try { $content = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction Stop } catch { }
+    if ($content -and
+        $content -cmatch 'command-name>/?jira-sdlc:jira-task-assigner' -and
+        $content -cmatch $keyRe) {
+        $mfiles.Add($_.FullName)
     }
 }
 

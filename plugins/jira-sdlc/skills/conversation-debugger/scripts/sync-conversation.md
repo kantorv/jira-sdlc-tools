@@ -19,8 +19,7 @@ named after that session's cwd:
 - **WORKTREE (certain, take ALL)** — the executor and reviewer run
   inside `<WORKTREES_DIR>/worktree-<KEY>`; every session filed under that
   project folder belongs to this issue. The folder persists in
-  `~/.claude/projects` even after the worktree itself is deleted, so both
-  ports read the folder directly rather than asking `git worktree list`.
+  `~/.claude/projects` even after the worktree itself is deleted.
 - **MAIN checkout (take exactly ONE — the session that created the
   issue)** — the assigner runs here, interleaved with unrelated
   sessions. Out of "any session that ever mentioned `<KEY>`," the single
@@ -39,11 +38,19 @@ named after that session's cwd:
   signals 2 and 3. Without them the script still runs but can only list
   candidates, not pick one.
 
-Both ports reproduce Claude Code's own project-folder naming (cwd with
-path separators replaced by `-`) to locate the two folders precisely
-instead of guessing — POSIX cwds only ever contain `/` and `.` to
-replace; Windows cwds also need `:` and `\` mapped (verified:
-`C:\Users\u\proj` → `C--Users-u-proj`).
+Both ports take the two `~/.claude/projects` transcript folders — the
+main checkout's and the issue worktree's — **from the caller**, via the
+mandatory `CONVERSATIONS_MAINREPO_PATH` and `CONVERSATIONS_WORKTREE_PATH`
+environment variables (each already the resolved encoded folder path, not
+a repo/worktree root). The script validates both up front and **exits 1**
+with a clear stderr message if either is unset or not an existing
+directory — there is no "no worktree, that's fine" path anymore, so an
+issue with no worktree folder is the caller's call, not the script's. The
+script no longer infers these from `git worktree list` / a cwd→folder-name
+encoding: resolving them (reproducing Claude Code's folder naming — cwd
+with path separators replaced by `-`; POSIX cwds contain only `/` and `.`
+to replace, Windows cwds also need `:` and `\`, e.g. `C:\Users\u\proj` →
+`C--Users-u-proj`) is now the caller's job.
 
 The script is read-only unless `--attach` is passed, in which case it
 hands the computed path list straight to the sibling uploader

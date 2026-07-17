@@ -202,7 +202,8 @@ This one builtin is **Claude Code–specific** — it reads Claude Code's own
 conversation transcripts. That coupling lives here and nowhere else: the three
 core skills stay harness-neutral (they run on Codex, Cursor, Kilo, OpenCode
 too), so nothing about session ids or transcript paths leaks into them. On
-another agent the detector degrades with a plain "nothing to sync" message.
+another agent (no `~/.claude/projects` store) the transcript folders you resolve
+below won't exist, so this builtin reports nothing to sync and stops.
 
 Why the transcripts are scattered, and how the definitive set is pinned: a
 session's log is filed under its *cwd*, so an issue's history spans two places.
@@ -232,6 +233,42 @@ Windows substitute the `.ps1` port. (Its `--attach` leg calls the sibling
 uploader `jira_attach`, itself a posix/win contract pair — so `--attach` on
 Windows is fully native, no bash required.)
 
+**Resolve + export the two transcript folders — both mandatory.** The detector no
+longer infers its folders; it reads `CONVERSATIONS_MAINREPO_PATH` (the main
+checkout's `~/.claude/projects` folder) and `CONVERSATIONS_WORKTREE_PATH` (the
+issue worktree's), and exits 1 if either is unset or not a real directory. So
+*you* resolve and export both, in the **same shell** as each detector run below
+(the exports don't survive a separate invocation). Reproduce Claude Code's folder
+naming — the session cwd with every path separator replaced by `-`:
+
+```bash
+# POSIX
+PROJECTS="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
+enc() { printf '%s' "$1" | sed 's#[/.:\\]#-#g'; }   # cwd -> project-folder name
+MAIN_ROOT=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
+export CONVERSATIONS_MAINREPO_PATH="$PROJECTS/$(enc "$MAIN_ROOT")"
+export CONVERSATIONS_WORKTREE_PATH="$PROJECTS/$(enc "<WORKTREES_DIR>/worktree-<KEY>")"
+```
+```powershell
+# Windows (PowerShell)
+$Projects = if ($env:CLAUDE_PROJECTS_DIR) { $env:CLAUDE_PROJECTS_DIR } else { Join-Path $HOME '.claude/projects' }
+function enc($s) { $s -replace '[/.:\\]', '-' }     # cwd -> project-folder name
+$MainRoot = ((git worktree list --porcelain) | Select-String '^worktree (.+)$').Matches[0].Groups[1].Value.Trim()
+$env:CONVERSATIONS_MAINREPO_PATH = Join-Path $Projects (enc $MainRoot)
+$env:CONVERSATIONS_WORKTREE_PATH = Join-Path $Projects (enc "<WORKTREES_DIR>\worktree-<KEY>")
+```
+
+**No worktree? Decide before running.** Resolve `CONVERSATIONS_WORKTREE_PATH` from
+the *path string* `<WORKTREES_DIR>/worktree-<KEY>` regardless of whether the
+worktree still exists on disk — its transcript folder persists in
+`~/.claude/projects` even after `git worktree remove`, so a cleaned-up worktree
+still syncs. But if that folder is genuinely **not present** (an ad-hoc issue that
+never had a worktree, or one whose sessions were never recorded), there are no
+worktree transcripts to sync — and since the detector now hard-requires that
+folder, **don't invoke it**: report "no worktree transcripts for `<KEY>`" and
+stop. Never point `CONVERSATIONS_WORKTREE_PATH` at a substitute directory just to
+satisfy the check — that would attach the wrong sessions.
+
 1. **Auth + healthcheck.** The user wants full Jira access here, so run the
    executor login and the pre-flight exactly as **Free-form tasks → Identity
    and healthcheck** below (`git_repo`, `acli_auth`, and the env rows are what
@@ -239,7 +276,8 @@ Windows is fully native, no bash required.)
    checkout). The detector self-fetches the title + creation date via `acli`,
    and the upload reads the executor's Jira credentials from the env files, so
    both rely on this login.
-2. **Preview (read-only).** Run the detector — it fetches the issue's title +
+2. **Preview (read-only).** With both env vars exported in this shell (the
+   resolve+export block above), run the detector — it fetches the issue's title +
    `created`, prints the transcripts grouped by origin, marks the selected
    creating session, and ends with the attach list (all worktree files + the one
    main file):
@@ -257,7 +295,8 @@ Windows is fully native, no bash required.)
    large and sensitive content into Jira, so confirm the plan first (per
    *Confirm before you can't undo* — attachments are removable, but outward-
    facing). Then attach — same command with `--attach`, which uploads the paths
-   it just computed:
+   it just computed (re-run the resolve+export block first if you're in a fresh
+   shell — the env vars don't persist):
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY> --attach
    # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY> --attach
