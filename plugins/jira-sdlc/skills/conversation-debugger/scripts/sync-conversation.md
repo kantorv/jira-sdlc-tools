@@ -79,7 +79,13 @@ matter only to this builtin, so a project that doesn't run
 Each holds an *encoded* folder path — Claude Code names a project folder
 after the session's cwd with every path separator replaced by `-` (e.g.
 `C:\Users\u\proj` → `C--Users-u-proj`), so append `worktree-<KEY>` to the
-prefix and you get exactly that issue's folder name. The script **exits 1**
+prefix and you get exactly that issue's folder name. For example
+`CONVERSATIONS_WORKTREES_PREFIX=/home/you/.claude/projects/-home-you-src-JST-worktrees-`
+resolves `JST-70` to
+`/home/you/.claude/projects/-home-you-src-JST-worktrees-worktree-JST-70`.
+**The prefix ends at the encoded worktrees *directory* (`…-JST-worktrees-`),
+not at `…-worktree-`** — ending it a level deeper would double to
+`…-worktree-worktree-JST-70` and never match. The script **exits 1**
 if `CONVERSATIONS_MAINREPO_PATH` is not an existing directory, if
 `CONVERSATIONS_WORKTREES_PREFIX` is unset, or if the resolved
 `<prefix>worktree-<KEY>` folder does not exist (the issue never had a
