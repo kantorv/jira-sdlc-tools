@@ -166,8 +166,10 @@ under (offering the `KEY_RANKING` candidates and what the run appears to
 have actually done), then re-run with the key as the third argument. Same
 if the answer is "none — this run has no issue": say so and stop.
 
-Then read `../<skill-name>/SKILL.md` (the working-copy version) end to
-end. You cannot judge divergence from prose you skimmed.
+Then read the exact prose that ran, end to end — pull it from its tag (the
+`/<version>/` segment of the transcript's Base-directory line is a SemVer
+release): `git show v<version>:plugins/jira-sdlc/skills/<skill-name>/SKILL.md`.
+You cannot judge divergence from prose you skimmed.
 
 The transcript format — line types, content shapes, and the jq recipes
 used below — is documented in [references/transcript-format.md](references/transcript-format.md).
@@ -186,25 +188,15 @@ The transcript embeds its own ground truth; prefer it over assumptions:
   the session — treat each as a separate run segment and cover all of them
   (re-runs are a designed scenario for these skills, and the second run's
   behavior is often the interesting part).
-- **The skill text that ran**: the first `text` block after the
-  invocation starts with `Base directory for this skill: …/cache/…/<version>/skills/<skill-name>`
-  and then contains the **full skill prompt as the agent saw it** —
-  installed-cache version, `$ARGUMENTS` already substituted (so this is
-  where you recover what arguments the run actually got).
-  **Judge compliance against this embedded text, not the working copy**:
-  the run can only be guilty of ignoring the prose it was given.
-  - The run executed an installed **marketplace** version from the cache;
-    the `/<version>/` segment of the Base-directory path (e.g.
-    `…/jira-sdlc/0.4.5/skills/…`) is what ran. Record it as
-    `plugin_version:` in the report frontmatter and the Run snapshot.
-  - Releases are SemVer git tags, so **drift is a tag-to-tag diff** — the
-    version that ran against the one you're comparing to — never a local
-    working copy, which isn't what runs:
-    ```bash
-    git diff v<version> v<compare> -- plugins/jira-sdlc/skills/<skill-name>/SKILL.md
-    ```
-    Put real differences in the report's drift section, labeled as version
-    drift, never blamed on the agent.
+- **The version that ran, and its arguments**: the first `text` block after
+  the invocation starts with `Base directory for this skill: …/cache/…/<version>/skills/<skill-name>`
+  and contains the full skill prompt as the agent saw it, with `$ARGUMENTS`
+  substituted — recover the run's arguments here. The `/<version>/` segment is
+  the marketplace release that ran (e.g. `…/jira-sdlc/0.4.5/skills/…`); record
+  it as `plugin_version:` in the report frontmatter and the Run snapshot. You
+  judge compliance against that version's prose — the tagged copy you pulled in
+  Step 0 is exactly it — so the run can only be guilty of ignoring the prose it
+  was given.
 - **Run context**: `cwd`, `gitBranch`, `timestamp`, `version` sit on the
   envelope of the first `user` line.
 
@@ -224,8 +216,8 @@ which shift when files are re-synced.
 
 ## Step 3 — the compliance walk
 
-Now hold the embedded skill text in one hand and the timeline in the
-other. Go through the skill prose **in its own order** — every numbered
+Now hold the version's prose (the tagged copy you pulled) in one hand and
+the timeline in the other. Go through the skill prose **in its own order** — every numbered
 step, every load-bearing rule in the conventions block — and assign each
 one a verdict:
 
@@ -398,11 +390,6 @@ expected" if the run had none.
 ## Helper scripts worth keeping
 | What the agent built | Born at (uuid) | Worked? | Suggested home |
 (or "none — nothing reinvented this run".)
-
-## Skill-text drift
-The version that ran vs. the release tag you compared it to (`git diff
-v<version> v<compare>`): "identical", or a summary of the diff and which
-divergences above it explains.
 
 ## Verdict
 2–4 sentences: overall compliance, the one finding to act on first, and

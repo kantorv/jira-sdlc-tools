@@ -66,10 +66,12 @@ jq -r 'select(.type=="user") | .message.content
   | awk '/^Base directory for this skill:/{found=1} found' > /tmp/embedded-skill.md
 ```
 
-The `Base directory` line's `/<version>/` path segment is the installed
-plugin version — diff `/tmp/embedded-skill.md` against the working-copy
-`SKILL.md` for the drift section (expect noise: the embedded copy has
-`$ARGUMENTS` substituted and no frontmatter).
+The `Base directory` line's `/<version>/` path segment is the marketplace
+release that ran — pull that version's pristine prose with
+`git show v<version>:plugins/jira-sdlc/skills/<skill-name>/SKILL.md` and judge
+against it. (The extracted copy above is the same prose the agent saw, but
+with `$ARGUMENTS` substituted and no frontmatter — use it to recover the run's
+arguments.)
 
 Timeline of tool calls (main thread only):
 
