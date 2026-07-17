@@ -182,7 +182,7 @@ case "${STATUSCHECK_FORCE_OS:-}" in
   *)                    OS_FORCED=" (STATUSCHECK_FORCE_OS='${STATUSCHECK_FORCE_OS}' invalid — ignored)"; _detect_os ;;
 esac
 if [ "$OS" = "windows" ]; then
-  WIN_DIR="$PLAT_SCRIPT_DIR/win"
+  WIN_DIR="$PLAT_SCRIPT_DIR/../win"
   MISSING=""
   PS_RUNTIME="" PS_VER=""
   if command -v pwsh >/dev/null 2>&1; then
@@ -212,7 +212,7 @@ if [ "$OS" = "windows" ]; then
     row platform OK "os=windows$OS_FORCED — PowerShell $PS_VER ($PS_RUNTIME) + acli + gh + win/ ports present (Windows dispatch path ready)"
   fi
 else
-  row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/"
+  row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
 fi
 
 # --- project config ------------------------------------------------------

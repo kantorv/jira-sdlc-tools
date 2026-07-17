@@ -51,13 +51,15 @@ a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
 for an issue key, but don't add one.
 
 **Make sure local credentials exist, then log in as the assigner — run
-both FIRST, before the healthcheck.** Both are idempotent (a no-op when
-the file/identity are already right), so run them unconditionally. On
-non-zero from either, relay its stderr and **stop**.
+both FIRST, before the healthcheck.** Both are safe to run every time
+(`ensure_local_env` no-ops when the file already exists; `jira_acli_login`
+always logs out then back in as the role, so a stale token can't survive),
+so run them unconditionally. On non-zero from either, relay its stderr and
+**stop**.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" assigner || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" assigner || exit 1
 ```
 
 Then run the shared pre-flight healthcheck. It
@@ -69,11 +71,11 @@ remedies name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
-plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
+plugin session — the script lives at `../_shared/scripts/posix/statuscheck.sh`
 relative to this skill's directory.) It resolves `<PROJECT-KEY>` and
 `<DEFAULT_BASE_BRANCH>` from the env files itself, so you don't
 pre-resolve tokens for this section.
@@ -192,10 +194,10 @@ git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forwar
 creates (top-level AND every sub-task) is assigned to it. On non-zero, relay
 the script's stderr and **stop**.
 ```bash
-ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/get_assignee_email.sh") || exit 1
+ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_assignee_email.sh") || exit 1
 ```
 (If `CLAUDE_PLUGIN_ROOT` isn't set, it lives at
-`../_shared/scripts/get_assignee_email.sh` relative to this skill.)
+`../_shared/scripts/posix/get_assignee_email.sh` relative to this skill.)
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
    - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the

@@ -1,0 +1,53 @@
+name: Sync Lab with Development
+
+on:
+  push:
+    branches:
+      - lab # Triggers on direct pushes and merged PRs to lab
+      - development # Keeps lab current as mainline moves
+  #workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
+
+# Grants the default GITHUB_TOKEN the necessary permissions to push code
+permissions:
+  contents: write 
+
+jobs:
+  update-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Required to fetch all branches, not just development
+
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync Lab Branch
+        run: |
+          # Fetch all remote branches to ensure we have the latest state
+          git fetch origin
+          
+          # Check if the 'lab' branch already exists on the remote
+          if git ls-remote --exit-code --heads origin lab; then
+            echo "Branch 'lab' exists. Merging development into lab."
+            
+            # Switch to the lab branch tracking the remote
+            git checkout lab
+            
+            # Merge development into lab. 
+            # Note: If there are merge conflicts, this step will intentionally fail.
+            git merge origin/development --no-edit
+            
+            # Push the updated lab branch back to GitHub
+            git push origin lab
+            
+          else
+            echo "Branch 'lab' does not exist. Creating it from development."
+            
+            # Create lab locally based on development and push it
+            git checkout -b lab origin/development
+            git push -u origin lab
+          fi

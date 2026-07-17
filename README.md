@@ -19,6 +19,24 @@ works — architecture, prerequisites, configuration, a full usage
 walkthrough, safety model, and troubleshooting — lives in
 [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
 
+The three skills, one per stage of the lifecycle:
+
+- **`jira-task-assigner`** — turns a feature/task/bug description into
+  Jira issues with matching git branches and worktrees. Investigates the
+  codebase, asks clarifying questions, decides whether the request is one
+  self-contained task or a multistep split into parallel sub-tasks, and
+  gives every leaf issue its own branch and worktree so parallel work can
+  start immediately.
+- **`jira-task-executor`** — implements the issue implied by the current
+  worktree's branch, end to end: status transition, investigation,
+  implementation, tests, commit, push, and PR. No issue-key argument —
+  run it from inside the issue's own worktree.
+- **`jira-task-reviewer`** — run from the parent issue's worktree.
+  Reviews each sub-task PR into the parent branch (approve or request
+  changes), posts findings to Jira, and reviews the parent PR into the
+  base branch once the sub-task PRs are merged. Never merges anything
+  itself.
+
 ## Install
 
 ### Remote — from the marketplace (recommended)

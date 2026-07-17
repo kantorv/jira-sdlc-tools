@@ -75,7 +75,7 @@ relay its stderr verbatim and do not transition status, branch, commit,
 comment, or work the issue.
 
 ```bash
-S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts"
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"
 bash "$S/ensure_local_env.sh"          || exit 1   # 1. worktree gets local.env if it's missing
 bash "$S/jira_acli_login.sh" executor  || exit 1   # 2. become the executor
 bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned to it
@@ -83,7 +83,7 @@ bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned t
 
 (`check_assignee.sh` takes the key from the branch, as the healthcheck does;
 pass one explicitly only when running outside the issue's worktree. If
-`CLAUDE_PLUGIN_ROOT` isn't set, all three live in `../_shared/scripts/`
+`CLAUDE_PLUGIN_ROOT` isn't set, all three live in `../_shared/scripts/posix/`
 relative to this skill.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
@@ -96,11 +96,11 @@ All the checks are bundled into one script, so this is a single Bash
 call rather than a sequence of separate probes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
-plugin session — the script lives at `../_shared/scripts/statuscheck.sh`
+plugin session — the script lives at `../_shared/scripts/posix/statuscheck.sh`
 relative to this skill's directory.)
 
 The script resolves
