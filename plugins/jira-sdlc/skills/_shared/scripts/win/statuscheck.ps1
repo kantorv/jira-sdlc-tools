@@ -158,7 +158,7 @@ if ($OS -eq 'windows') {
         Add-Row platform OK "os=windows$OsForced — PowerShell $major + acli + gh + win/ ports present (Windows dispatch path ready)"
     }
 } else {
-    Add-Row platform INFO "os=$OS$OsForced — POSIX path: skills run the bash scripts in _shared/scripts/"
+    Add-Row platform INFO "os=$OS$OsForced — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
 }
 
 # --- project config ----------------------------------------------------------

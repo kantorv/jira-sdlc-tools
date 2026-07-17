@@ -3,12 +3,12 @@
 > Audience: anyone maintaining the Windows dispatch path. This is an
 > inventory + the load-bearing compatibility notes; the **edit-one-edit-both
 > parity rule and the diff loop live in the repo-root `AGENTS.md`** ("Touched
-> a `_shared/scripts/*.sh`? Its `win/*.ps1` twin must stay in sync"). Re-verify
+> a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync"). Re-verify
 > parity there after changing any twin.
 
 The five skill-invoked scripts plus one operator helper are shipped **twice**:
 
-- **POSIX path:** `skills/_shared/scripts/<name>.sh` (bash originals)
+- **POSIX path:** `skills/_shared/scripts/posix/<name>.sh` (bash originals)
 - **Windows path:** `skills/_shared/scripts/win/<name>.ps1` (PowerShell ports)
 
 The three `SKILL.md` files contain one dispatch rule each — *"run every
@@ -35,7 +35,7 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 | `acli-list-subtasks` | `skills/_shared/scripts/win/acli-list-subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `acli workitem view --json` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<acli code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-acli-reference.md` §10 |
 
 > **Note on `acli-list-subtasks`:** unlike the five above, its sibling is
-> `skills/_shared/scripts/acli-list-subtasks.py` (**python**, not a bash
+> `skills/_shared/scripts/posix/acli-list-subtasks.py` (**python**, not a bash
 > original), so it is the one `win/` port with **no `.sh` counterpart** and is
 > outside the bash↔ps1 parity loop. It is also the port that *most* benefits
 > from existing: on default Windows 11 `python3` is a Store stub (see "No
@@ -119,7 +119,7 @@ side-step it.
 
 ## See also
 
-- **Repo-root `AGENTS.md`** → "Touched a `_shared/scripts/*.sh`? Its `win/*.ps1`
+- **Repo-root `AGENTS.md`** → "Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1`
   twin must stay in sync" — the parity contract, the `STATUSCHECK_FORCE_OS`-forced
   bash↔pwsh diff loop, and the residual Windows-only surface a Linux+pwsh diff
   can't reproduce.

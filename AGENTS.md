@@ -37,7 +37,7 @@ reasoning, caveats, and how we plan to test them live in
   redundancy and hedging, keep the "why" on load-bearing rules. If a
   rule won't compress, it's probably not crisp yet; fix the rule first.
 - **If it can be scripted, consider scripting it.** Deterministic
-  sequences belong in `skills/_shared/scripts/`, with the SKILL.md
+  sequences belong in `skills/_shared/scripts/posix/`, with the SKILL.md
   reduced to "run X, act on its output" — a script collapses N model
   round trips into one bash call and runs identically every time,
   where prose re-derivation is slower and each run is a fresh chance
@@ -109,7 +109,7 @@ assuming you're done:
   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
   override, plus steps 4a/4b/4c and 6), and the healthcheck script's
-  rerun remedies (`skills/_shared/scripts/statuscheck.sh`), which
+  rerun remedies (`skills/_shared/scripts/posix/statuscheck.sh`), which
   currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
@@ -181,11 +181,11 @@ unmatched parens, and participants used without being declared (mermaid
 auto-creates those). All confirmed against the parser. Don't rewrite them chasing
 an error; the semicolon is the one that bites, and the checker will point at it.
 
-### Touched a `_shared/scripts/*.sh`? Its `win/*.ps1` twin must stay in sync
+### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
 The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
 `jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
-bash original in `_shared/scripts/` (the POSIX path) and a PowerShell 5.1+ port in
+bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
 skills need only one dispatch rule (`bash …/X.sh` on POSIX,
@@ -201,7 +201,7 @@ diff each port against its bash twin with the OS forced:
 ```bash
 export STATUSCHECK_FORCE_OS=windows
 for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
-  diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/$s.sh") \
+  diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
 done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee
