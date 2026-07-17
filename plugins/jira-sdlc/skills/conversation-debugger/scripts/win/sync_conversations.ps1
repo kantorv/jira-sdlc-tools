@@ -17,11 +17,14 @@
 #     /jira-sdlc:jira-task-assigner, the issue TITLE appears in it, and the Jira
 #     `created` instant falls inside the session's first..last timestamp window.
 #
-# Claude Code names each project folder after the session's cwd with every path
-# separator replaced by '-'. On Windows that means '/', '.', ':' and '\' all map
-# to '-' (verified: C:\Users\u\proj -> C--Users-u-proj); the bash twin, seeing
-# only POSIX cwds, replaces just '/' and '.'. We reproduce the Windows mapping to
-# locate the two folders precisely instead of guessing.
+# The two ~/.claude/projects transcript folders are pinned by config, not inferred
+# from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
+# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# letting this port / the agent compute arbitrary paths) is deliberate: it scopes
+# this read-only builtin to the configured trees and nothing else under
+# ~/.claude/projects.
 #
 # --attach delegates to the sibling uploader jira_attach.ps1 (in this same win/
 # folder), so this path is fully native — no bash, no python3, just the same
@@ -62,13 +65,48 @@ if ($Key -notmatch '^[A-Za-z]*-[0-9]*$' -or $Key -eq '-') {
     exit 1
 }
 
-# ---- transcript store ------------------------------------------------------
-# Claude Code-specific by nature: it reads Claude Code's own transcript store.
-# Other harnesses keep session logs elsewhere or not at all, so degrade honestly.
-$Projects = $env:CLAUDE_PROJECTS_DIR
-if (-not $Projects) { $Projects = Join-Path $HOME '.claude/projects' }
-if (-not (Test-Path -LiteralPath $Projects -PathType Container)) {
-    [Console]::Error.WriteLine("sync_conversations: no transcript store at $Projects — this builtin is specific to Claude Code (it attaches Claude Code conversation logs). Nothing to sync on this agent.")
+# ---- transcript folders: pinned by config, both mandatory ------------------
+# Resolve from jira-sdlc-tools(.local).env, not the process environment: the
+# Get-Cfg parser mirrors statuscheck.ps1 / get_assignee_email.ps1 (same NAME =
+# value match, local-overrides-team, last match in a file wins). Reading config
+# files rather than $env is what keeps the scoping trustworthy — the agent can't
+# widen it by setting a variable.
+function Get-GitTop {
+    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() } } catch { }
+    return $null
+}
+$CfgDir = Get-GitTop
+if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+function Get-Cfg {
+    param([string]$Pattern)
+    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
+        $path = Join-Path $CfgDir $f
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $val = $null
+        foreach ($line in Get-Content -LiteralPath $path) {
+            if ($line -match "^\s*($Pattern)\s*=(.*)$") { $val = $Matches[2].Trim() }
+        }
+        if ($val) { return $val }
+    }
+    return $null
+}
+
+$MainFolder = Get-Cfg 'CONVERSATIONS_MAINREPO_PATH'
+$WtPrefix   = Get-Cfg 'CONVERSATIONS_WORKTREES_PREFFIX'
+if (-not $MainFolder -or -not (Test-Path -LiteralPath $MainFolder -PathType Container)) {
+    $got = if ($MainFolder) { $MainFolder } else { '<unset>' }
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CfgDir/jira-sdlc-tools.local.env. Got '$got'")
+    exit 1
+}
+if (-not $WtPrefix) {
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CfgDir/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>).")
+    exit 1
+}
+# This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
+# means the issue never had a worktree (nothing to sync) — stop rather than guess.
+$WtFolder = "${WtPrefix}worktree-$Key"
+if (-not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
+    [Console]::Error.WriteLine("sync_conversations: no worktree transcript folder for $Key at '$WtFolder' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$Key) — if $Key never had a worktree there is nothing to sync.")
     exit 1
 }
 
@@ -92,57 +130,25 @@ if ((-not $Title -or -not $Created) -and (Get-Command acli -ErrorAction Silently
     } catch { }
 }
 
-# ---- locate the two project folders ----------------------------------------
-# Main checkout root: the first entry of `git worktree list` is always the main
-# checkout, even when this runs from inside a linked worktree.
-$MainRoot = $null
-try {
-    $wl = & git worktree list --porcelain 2>$null
-    foreach ($line in $wl) { if ($line -match '^worktree (.+)$') { $MainRoot = $Matches[1].Trim(); break } }
-} catch { }
-if (-not $MainRoot) {
-    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $MainRoot = ([string]$t).Trim() } } catch { }
-}
-if (-not $MainRoot) {
-    [Console]::Error.WriteLine("sync_conversations: not inside a git repository (cwd: $($PWD.Path))")
-    exit 1
-}
-
-# cwd -> project-folder name: replace every path separator with '-'. On Windows
-# that is '/', '.', ':' and '\' (git prints C:/... forward-slash + drive colon).
-function Convert-ToFolderName([string]$s) { return ($s -replace '[/.:\\]', '-') }
-
-$MainFolder = Join-Path $Projects (Convert-ToFolderName $MainRoot)
-
-# Worktree folder: a project folder whose name ends in exactly 'worktree-<KEY>'.
-# The trailing anchor is boundary-safe (*worktree-JST-9 can't match ...worktree-JST-93).
-$WtFolder = $null
-$wtMatch = Get-ChildItem -LiteralPath $Projects -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like "*worktree-$Key" } | Select-Object -First 1
-if ($wtMatch) { $WtFolder = $wtMatch.FullName }
-
 # ---- gather candidate files ------------------------------------------------
 # W = worktree (all sessions); M = main-checkout assigner-command session that
-# also names the key. Selection among M happens below.
+# also names the key. Selection among M happens below. Both folders were
+# validated as existing directories above.
 $wfiles = New-Object System.Collections.Generic.List[string]
-if ($WtFolder) {
-    Get-ChildItem -LiteralPath $WtFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue |
-        ForEach-Object { $wfiles.Add($_.FullName) }
-}
+Get-ChildItem -LiteralPath $WtFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue |
+    ForEach-Object { $wfiles.Add($_.FullName) }
 
 $mfiles = New-Object System.Collections.Generic.List[string]
-if (Test-Path -LiteralPath $MainFolder -PathType Container) {
-    # word-boundary key match, mirroring `grep -wF` (word chars = [A-Za-z0-9_]).
-    # -cmatch (case-sensitive) to mirror grep -E / -wF, not the case-insensitive -match.
-    $keyRe = '(?<![A-Za-z0-9_])' + [regex]::Escape($Key) + '(?![A-Za-z0-9_])'
-    Get-ChildItem -LiteralPath $MainFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $content = $null
-        try { $content = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction Stop } catch { }
-        if ($content -and
-            $content -cmatch 'command-name>/?jira-sdlc:jira-task-assigner' -and
-            $content -cmatch $keyRe) {
-            $mfiles.Add($_.FullName)
-        }
+# word-boundary key match, mirroring `grep -wF` (word chars = [A-Za-z0-9_]).
+# -cmatch (case-sensitive) to mirror grep -E / -wF, not the case-insensitive -match.
+$keyRe = '(?<![A-Za-z0-9_])' + [regex]::Escape($Key) + '(?![A-Za-z0-9_])'
+Get-ChildItem -LiteralPath $MainFolder -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $content = $null
+    try { $content = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction Stop } catch { }
+    if ($content -and
+        $content -cmatch 'command-name>/?jira-sdlc:jira-task-assigner' -and
+        $content -cmatch $keyRe) {
+        $mfiles.Add($_.FullName)
     }
 }
 

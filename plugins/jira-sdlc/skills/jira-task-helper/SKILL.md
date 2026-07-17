@@ -202,7 +202,9 @@ This one builtin is **Claude Code–specific** — it reads Claude Code's own
 conversation transcripts. That coupling lives here and nowhere else: the three
 core skills stay harness-neutral (they run on Codex, Cursor, Kilo, OpenCode
 too), so nothing about session ids or transcript paths leaks into them. On
-another agent the detector degrades with a plain "nothing to sync" message.
+another agent (no `~/.claude/projects` store) — or before the two config paths
+below are set — the configured folders won't exist and the script exits 1 rather
+than attaching anything.
 
 Why the transcripts are scattered, and how the definitive set is pinned: a
 session's log is filed under its *cwd*, so an issue's history spans two places.
@@ -232,6 +234,20 @@ Windows substitute the `.ps1` port. (Its `--attach` leg calls the sibling
 uploader `jira_attach`, itself a posix/win contract pair — so `--attach` on
 Windows is fully native, no bash required.)
 
+**One-time config — the two transcript-folder paths.** The detector resolves its
+folders from `jira-sdlc-tools.local.env`, not from git or the cwd, so there's
+nothing for you to compute or pass here. It needs two values set once per machine:
+`CONVERSATIONS_MAINREPO_PATH` (the main checkout's `~/.claude/projects` folder) and
+`CONVERSATIONS_WORKTREES_PREFFIX` (the prefix of the worktrees' folders — the
+script appends `worktree-<KEY>` per issue); see
+[`../_shared/project-config.md`](../_shared/project-config.md). The script reads
+them itself and **exits 1** if `CONVERSATIONS_MAINREPO_PATH` isn't a real
+directory, if `CONVERSATIONS_WORKTREES_PREFFIX` is unset, or if the issue's
+resolved `<prefix>worktree-<KEY>` doesn't exist (it never had a worktree — nothing
+to sync). Pinning these in config, rather than computing paths at call time, is
+what keeps the builtin scoped to your own trees; if the script exits 1 on a config
+error, relay it and stop rather than working around it.
+
 1. **Auth + healthcheck.** The user wants full Jira access here, so run the
    executor login and the pre-flight exactly as **Free-form tasks → Identity
    and healthcheck** below (`git_repo`, `acli_auth`, and the env rows are what
@@ -239,10 +255,10 @@ Windows is fully native, no bash required.)
    checkout). The detector self-fetches the title + creation date via `acli`,
    and the upload reads the executor's Jira credentials from the env files, so
    both rely on this login.
-2. **Preview (read-only).** Run the detector — it fetches the issue's title +
-   `created`, prints the transcripts grouped by origin, marks the selected
-   creating session, and ends with the attach list (all worktree files + the one
-   main file):
+2. **Preview (read-only).** Run the detector — it reads the two config paths,
+   fetches the issue's title + `created`, prints the transcripts grouped by origin,
+   marks the selected creating session, and ends with the attach list (all worktree
+   files + the one main file):
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY>
    # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY>

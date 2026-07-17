@@ -10,7 +10,7 @@
 #   • WORKTREE (certain, take ALL) — the executor and reviewer run inside
 #     <WORKTREES_DIR>/worktree-<KEY>; every session in that folder is this
 #     issue's. The folder persists in ~/.claude/projects even after the worktree
-#     is removed, so we read the folder directly, not `git worktree list`.
+#     itself is removed.
 #   • MAIN checkout (take exactly ONE — the session that CREATED the issue) — the
 #     assigner runs here, interleaved with unrelated sessions. To pin the one
 #     creating session out of "any session that ever mentioned <KEY>", layer three
@@ -24,9 +24,14 @@
 #     --title / --created come from the caller's Jira fetch; without them the
 #     script still runs but can only offer candidates, not pick the one.
 #
-# Claude Code names each project folder after the session's cwd with every '/'
-# replaced by '-' (verified: /home/u/proj -> -home-u-proj). We reproduce that
-# mapping to locate the two folders precisely instead of guessing.
+# The two ~/.claude/projects transcript folders are pinned by config, not inferred
+# from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
+# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# letting this script / the agent compute arbitrary paths) is deliberate: it scopes
+# this read-only builtin to the configured trees and nothing else under
+# ~/.claude/projects.
 #
 # Read-only: never writes, transitions, or uploads. Exit 1 only on a usage /
 # environment error.
@@ -51,14 +56,38 @@ case "$KEY" in
   *) echo "sync_conversations: need an issue key, e.g. sync_conversations.sh JST-93 [--attach] [--dry-run] [--title ...] [--created ...] (got '${KEY:-<none>}')" >&2; exit 1 ;;
 esac
 
-# Claude Code–specific by nature: it reads Claude Code's own transcript store.
-# Other harnesses (Codex, Cursor, Kilo, OpenCode, …) keep session logs elsewhere
-# or not at all, so degrade honestly instead of erroring cryptically — the three
-# core skills stay harness-neutral; only this builtin knows about transcripts.
-PROJECTS="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
-[ -d "$PROJECTS" ] || {
-  echo "sync_conversations: no transcript store at $PROJECTS — this builtin is specific to Claude Code (it attaches Claude Code conversation logs). Nothing to sync on this agent." >&2
-  exit 1; }
+# Resolve the two transcript folders from config. The env-file parser (cfg) is the
+# same NAME = value grep / local-overrides-team precedence as statuscheck.sh and
+# get_assignee_email.sh — keep them in sync. Reading these from the committed/local
+# env files (not the process environment) is what makes the scoping trustworthy:
+# the agent can't widen it by exporting a variable.
+CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
+CFG_DIR="${CFG_DIR:-$PWD}"
+cfg() {
+  local f v
+  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
+    [ -f "$CFG_DIR/$f" ] || continue
+    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
+        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
+    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
+  done
+  return 1
+}
+
+MAIN_FOLDER=$(cfg CONVERSATIONS_MAINREPO_PATH || true)
+WT_PREFIX=$(cfg CONVERSATIONS_WORKTREES_PREFFIX || true)
+if [ -z "$MAIN_FOLDER" ] || [ ! -d "$MAIN_FOLDER" ]; then
+  echo "sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CFG_DIR/jira-sdlc-tools.local.env. Got '${MAIN_FOLDER:-<unset>}'" >&2
+  exit 1; fi
+if [ -z "$WT_PREFIX" ]; then
+  echo "sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CFG_DIR/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>)." >&2
+  exit 1; fi
+# This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
+# means the issue never had a worktree (nothing to sync) — stop rather than guess.
+WT_FOLDER="${WT_PREFIX}worktree-${KEY}"
+if [ ! -d "$WT_FOLDER" ]; then
+  echo "sync_conversations: no worktree transcript folder for $KEY at '$WT_FOLDER' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$KEY) — if $KEY never had a worktree there is nothing to sync." >&2
+  exit 1; fi
 
 # The two signals that pin the creating session (title + creation date) come
 # from Jira. Self-fetch them so the caller doesn't have to — acli is already
@@ -73,33 +102,13 @@ if { [ -z "$TITLE" ] || [ -z "$CREATED" ]; } && command -v acli >/dev/null 2>&1;
   fi
 fi
 
-# Main checkout root: the first entry of `git worktree list` is always the main
-# checkout, even when this runs from inside a linked worktree.
-MAIN_ROOT=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10); exit}')
-[ -n "$MAIN_ROOT" ] || MAIN_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-[ -n "$MAIN_ROOT" ] || { echo "sync_conversations: not inside a git repository (cwd: $PWD)" >&2; exit 1; }
-
-enc() { printf '%s' "$1" | sed 's#[/.]#-#g'; }   # cwd -> project-folder name
-MAIN_FOLDER="$PROJECTS/$(enc "$MAIN_ROOT")"
-
-# Worktree folder: a project folder ending in exactly 'worktree-<KEY>'. The
-# trailing-anchored glob is boundary-safe (`*worktree-JST-9` can't match
-# `…worktree-JST-93`). May legitimately be absent.
-WT_FOLDER=""
-for d in "$PROJECTS"/*"worktree-$KEY"; do
-  [ -d "$d" ] && { WT_FOLDER="$d"; break; }
-done
-
 # Emit the candidate files, tagged W (worktree, all) or M (main assigner-command
 # session that also mentions the key). Selection among M happens in python.
+# Both folders were validated as existing directories above.
 gather() {
-  if [ -n "$WT_FOLDER" ]; then
-    for f in "$WT_FOLDER"/*.jsonl; do [ -f "$f" ] && printf 'W\t%s\n' "$f"; done
-  fi
-  if [ -d "$MAIN_FOLDER" ]; then
-    grep -rlE 'command-name>/?jira-sdlc:jira-task-assigner' "$MAIN_FOLDER"/*.jsonl 2>/dev/null \
-      | while IFS= read -r f; do grep -qwF "$KEY" "$f" && printf 'M\t%s\n' "$f"; done
-  fi
+  for f in "$WT_FOLDER"/*.jsonl; do [ -f "$f" ] && printf 'W\t%s\n' "$f"; done
+  grep -rlE 'command-name>/?jira-sdlc:jira-task-assigner' "$MAIN_FOLDER"/*.jsonl 2>/dev/null \
+    | while IFS= read -r f; do grep -qwF "$KEY" "$f" && printf 'M\t%s\n' "$f"; done
 }
 
 OUT="$(gather | SC_KEY="$KEY" SC_TITLE="$TITLE" SC_CREATED="$CREATED" \

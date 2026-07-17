@@ -60,6 +60,23 @@ re-run the same `--plugin-dir` command.
 Identical to the main channel — the same two env files, unchanged. See
 [README.md → Either way](README.md#either-way).
 
+**One lab-only setup step — `sync_conversations`' transcript-folder paths.**
+The `jira-task-helper` `sync_conversations` builtin attaches an issue's Claude
+Code transcripts (`.jsonl` under `~/.claude/projects`) to its Jira issue. It reads
+two values from `jira-sdlc-tools.local.env`, set once per machine:
+
+- `CONVERSATIONS_MAINREPO_PATH` — the main checkout's transcript folder, used as-is
+- `CONVERSATIONS_WORKTREES_PREFFIX` — the prefix shared by every worktree's
+  transcript folder; the script appends `worktree-<KEY>` to it per issue
+
+Setting a fixed prefix — rather than letting the tool compute paths — is what
+scopes the builtin to your own main checkout + worktrees tree, and nothing else
+under `~/.claude/projects`. Both are described in
+[project-config.md](plugins/jira-sdlc/skills/_shared/project-config.md); the
+builtin exits 1 if either is missing or the issue's resolved
+`<prefix>worktree-<KEY>` folder doesn't exist. Only needed if you use
+`sync_conversations`.
+
 ## Before you switch
 
 The extras are the reason to think about it first: they aren't

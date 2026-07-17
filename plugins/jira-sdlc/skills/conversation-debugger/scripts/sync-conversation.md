@@ -19,8 +19,7 @@ named after that session's cwd:
 - **WORKTREE (certain, take ALL)** — the executor and reviewer run
   inside `<WORKTREES_DIR>/worktree-<KEY>`; every session filed under that
   project folder belongs to this issue. The folder persists in
-  `~/.claude/projects` even after the worktree itself is deleted, so both
-  ports read the folder directly rather than asking `git worktree list`.
+  `~/.claude/projects` even after the worktree itself is deleted.
 - **MAIN checkout (take exactly ONE — the session that created the
   issue)** — the assigner runs here, interleaved with unrelated
   sessions. Out of "any session that ever mentioned `<KEY>`," the single
@@ -39,11 +38,25 @@ named after that session's cwd:
   signals 2 and 3. Without them the script still runs but can only list
   candidates, not pick one.
 
-Both ports reproduce Claude Code's own project-folder naming (cwd with
-path separators replaced by `-`) to locate the two folders precisely
-instead of guessing — POSIX cwds only ever contain `/` and `.` to
-replace; Windows cwds also need `:` and `\` mapped (verified:
-`C:\Users\u\proj` → `C--Users-u-proj`).
+Both ports resolve the two `~/.claude/projects` transcript folders from
+**config**, not from git / a cwd-encoding step. Two
+`jira-sdlc-tools(.local).env` values pin them:
+`CONVERSATIONS_MAINREPO_PATH` is the main checkout's folder (used as-is),
+and `CONVERSATIONS_WORKTREES_PREFFIX` is the prefix shared by every
+worktree's folder — this issue's is `<prefix>worktree-<KEY>`. Each holds
+the resolved encoded folder path (Claude Code names a folder after the
+session's cwd with every path separator replaced by `-`, e.g.
+`C:\Users\u\proj` → `C--Users-u-proj`), and you set them once per machine.
+The script reads them from the env files (not the process environment, so
+the agent can't widen the scope by exporting a variable) and **exits 1**
+with a clear stderr message if `CONVERSATIONS_MAINREPO_PATH` isn't an
+existing directory, if `CONVERSATIONS_WORKTREES_PREFFIX` is unset, or if
+the resolved `<prefix>worktree-<KEY>` doesn't exist (the issue never had a
+worktree — nothing to sync). Pinning a prefix in config, rather than
+letting the script compute arbitrary paths, is deliberate: it scopes this
+read-only builtin to the configured main checkout and worktrees tree, and
+nothing else under `~/.claude/projects`. Both variables are described in
+[`../../_shared/project-config.md`](../../_shared/project-config.md).
 
 The script is read-only unless `--attach` is passed, in which case it
 hands the computed path list straight to the sibling uploader
