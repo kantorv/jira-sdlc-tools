@@ -238,11 +238,11 @@ Windows is fully native, no bash required.)
 folders from `jira-sdlc-tools.local.env`, not from git or the cwd, so there's
 nothing for you to compute or pass here. It needs two values set once per machine:
 `CONVERSATIONS_MAINREPO_PATH` (the main checkout's `~/.claude/projects` folder) and
-`CONVERSATIONS_WORKTREES_PREFFIX` (the prefix of the worktrees' folders — the
+`CONVERSATIONS_WORKTREES_PREFIX` (the prefix of the worktrees' folders — the
 script appends `worktree-<KEY>` per issue); see
 [`../_shared/project-config.md`](../_shared/project-config.md). The script reads
 them itself and **exits 1** if `CONVERSATIONS_MAINREPO_PATH` isn't a real
-directory, if `CONVERSATIONS_WORKTREES_PREFFIX` is unset, or if the issue's
+directory, if `CONVERSATIONS_WORKTREES_PREFIX` is unset, or if the issue's
 resolved `<prefix>worktree-<KEY>` doesn't exist (it never had a worktree — nothing
 to sync). Pinning these in config, rather than computing paths at call time, is
 what keeps the builtin scoped to your own trees; if the script exits 1 on a config

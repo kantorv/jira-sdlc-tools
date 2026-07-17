@@ -26,7 +26,7 @@
 #
 # The two ~/.claude/projects transcript folders are pinned by config, not inferred
 # from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
-# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFIX is the prefix of the
 # worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
 # jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
 # letting this script / the agent compute arbitrary paths) is deliberate: it scopes
@@ -75,18 +75,18 @@ cfg() {
 }
 
 MAIN_FOLDER=$(cfg CONVERSATIONS_MAINREPO_PATH || true)
-WT_PREFIX=$(cfg CONVERSATIONS_WORKTREES_PREFFIX || true)
+WT_PREFIX=$(cfg CONVERSATIONS_WORKTREES_PREFIX || true)
 if [ -z "$MAIN_FOLDER" ] || [ ! -d "$MAIN_FOLDER" ]; then
   echo "sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CFG_DIR/jira-sdlc-tools.local.env. Got '${MAIN_FOLDER:-<unset>}'" >&2
   exit 1; fi
 if [ -z "$WT_PREFIX" ]; then
-  echo "sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CFG_DIR/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>)." >&2
+  echo "sync_conversations: CONVERSATIONS_WORKTREES_PREFIX is unset — set it in $CFG_DIR/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>)." >&2
   exit 1; fi
 # This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
 # means the issue never had a worktree (nothing to sync) — stop rather than guess.
 WT_FOLDER="${WT_PREFIX}worktree-${KEY}"
 if [ ! -d "$WT_FOLDER" ]; then
-  echo "sync_conversations: no worktree transcript folder for $KEY at '$WT_FOLDER' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$KEY) — if $KEY never had a worktree there is nothing to sync." >&2
+  echo "sync_conversations: no worktree transcript folder for $KEY at '$WT_FOLDER' (CONVERSATIONS_WORKTREES_PREFIX + worktree-$KEY) — if $KEY never had a worktree there is nothing to sync." >&2
   exit 1; fi
 
 # The two signals that pin the creating session (title + creation date) come

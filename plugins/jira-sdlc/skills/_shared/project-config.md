@@ -153,12 +153,12 @@ never read them, so a project that doesn't use the lab channel can omit both.
 | Token | What it is | Example |
 |---|---|---|
 | `CONVERSATIONS_MAINREPO_PATH` | The main checkout's transcript folder, used as-is — where the assigner's issue-creating session lives. | `~/.claude/projects/-home-you-src-myapp` |
-| `CONVERSATIONS_WORKTREES_PREFFIX` | The **prefix** shared by every worktree's transcript folder; the script appends `worktree-<KEY>` to it to locate one issue's folder. Pinning a prefix (not per-issue paths) is what scopes the builtin to your worktrees tree and nothing else under `~/.claude/projects`. | `~/.claude/projects/-home-you-src-myapp-worktrees-` |
+| `CONVERSATIONS_WORKTREES_PREFIX` | The **prefix** shared by every worktree's transcript folder; the script appends `worktree-<KEY>` to it to locate one issue's folder. Pinning a prefix (not per-issue paths) is what scopes the builtin to your worktrees tree and nothing else under `~/.claude/projects`. | `~/.claude/projects/-home-you-src-myapp-worktrees-` |
 
 The builtin reads both from these files (not the process environment — so the
 agent can't widen the scope by exporting a variable) and exits 1 if
 `CONVERSATIONS_MAINREPO_PATH` isn't an existing directory, if
-`CONVERSATIONS_WORKTREES_PREFFIX` is unset, or if the resolved
+`CONVERSATIONS_WORKTREES_PREFIX` is unset, or if the resolved
 `<prefix>worktree-<KEY>` doesn't exist (the issue had no worktree). See
 [`../conversation-debugger/scripts/sync-conversation.md`](../conversation-debugger/scripts/sync-conversation.md).
 
@@ -193,5 +193,5 @@ JIRA_TOKEN            = ATATT3xFfGF0…
 #JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
 # Optional — lab-only conversation sync (see "Optional — conversation sync" above):
 #CONVERSATIONS_MAINREPO_PATH      = ~/.claude/projects/-home-you-src-myapp
-#CONVERSATIONS_WORKTREES_PREFFIX  = ~/.claude/projects/-home-you-src-myapp-worktrees-
+#CONVERSATIONS_WORKTREES_PREFIX  = ~/.claude/projects/-home-you-src-myapp-worktrees-
 ```
