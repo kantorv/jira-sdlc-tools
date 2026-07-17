@@ -57,9 +57,12 @@ Callers decide POSIX vs. Windows from their own runtime before invoking
 either port — never by trying to infer it from a script's output:
 
 ```bash
-bash  .../scripts/posix/sync_conversations.sh <ISSUE-KEY> [--attach] [--dry-run]
-pwsh  .../scripts/win/sync_conversations.ps1   <ISSUE-KEY> [--attach] [--dry-run]
+bash  posix/sync_conversations.sh <ISSUE-KEY> [--attach] [--dry-run]
+pwsh  win/sync_conversations.ps1   <ISSUE-KEY> [--attach] [--dry-run]
 ```
+
+(paths above are relative to this file's own directory,
+`conversation-debugger/scripts/`)
 
 ## Execution nuances
 
