@@ -224,7 +224,7 @@ to upload.
 
 **Script dispatch.** The detector ships twice — POSIX
 `skills/conversation-debugger/scripts/posix/sync_conversations.sh` and its
-Windows twin `.../scripts/win/sync_conversations.ps1` (same args, output, exit
+Windows twin `skills/conversation-debugger/scripts/win/sync_conversations.ps1` (same args, output, exit
 codes). Pick the branch from your own runtime before running it: `bash …/posix/
 sync_conversations.sh` on Linux/macOS, `pwsh`/`powershell …/win/
 sync_conversations.ps1` on Windows. The blocks below show the POSIX form; on
