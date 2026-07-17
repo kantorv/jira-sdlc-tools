@@ -193,29 +193,18 @@ The transcript embeds its own ground truth; prefer it over assumptions:
   where you recover what arguments the run actually got).
   **Judge compliance against this embedded text, not the working copy**:
   the run can only be guilty of ignoring the prose it was given.
-  - **The run almost always executed an *installed cache* version, not
-    your working copy — and the two can drift.** The `/<version>/` segment
-    of the Base-directory path (e.g. `…/jira-sdlc/0.4.5/skills/…`) is the
-    plugin version that actually ran; record it in the report frontmatter
-    (`plugin_version:`) and the Run snapshot. If it predates edits you've
-    since made to the working copy, an instruction you expect to see may
-    simply not have existed yet in what the agent was given — which is a
-    drift finding, never an agent divergence.
-  - **Diff the executed version against the working copy** and put real
-    differences in the report's drift section. Prefer the on-disk cache
-    file when that version is still installed — it's the raw source with
-    no `$ARGUMENTS`/`$CLAUDE_PLUGIN_ROOT` substitution noise; `$BASE` is the
-    Base-directory path you just read (`git diff --no-index` runs the same
-    on POSIX and Windows and reads files outside the repo fine):
+  - The run executed an installed **marketplace** version from the cache;
+    the `/<version>/` segment of the Base-directory path (e.g.
+    `…/jira-sdlc/0.4.5/skills/…`) is what ran. Record it as
+    `plugin_version:` in the report frontmatter and the Run snapshot.
+  - Releases are SemVer git tags, so **drift is a tag-to-tag diff** — the
+    version that ran against the one you're comparing to — never a local
+    working copy, which isn't what runs:
     ```bash
-    git diff --no-index "$BASE/SKILL.md" "../<skill-name>/SKILL.md"
+    git diff v<version> v<compare> -- plugins/jira-sdlc/skills/<skill-name>/SKILL.md
     ```
-    If that cache dir is gone (the version was upgraded or uninstalled),
-    fall back to diffing the **embedded** skill text you extracted above
-    against the working copy — expect substitution noise (`$ARGUMENTS`→its
-    value, `${CLAUDE_PLUGIN_ROOT}`→the absolute cache path) and discount it.
-    Any divergence explained by version drift is labeled as such, not
-    blamed on the agent.
+    Put real differences in the report's drift section, labeled as version
+    drift, never blamed on the agent.
 - **Run context**: `cwd`, `gitBranch`, `timestamp`, `version` sit on the
   envelope of the first `user` line.
 
@@ -371,11 +360,10 @@ plugin_version: <version that ran, from the Base-directory line — e.g. 0.4.5>
 # Run report: <skill-name> — <conversation-uuid>
 
 ## Run snapshot
-When, cwd, branch, plugin version that ran (from the Base-directory
-line — the same value as the `plugin_version:` frontmatter key, since the
-run executed that installed cache version and it may drift from the
-working copy), the arguments the run received, number of invocations in
-the session, and a one-line outcome (finished / stopped at step N / stub).
+When, cwd, branch, plugin version that ran (from the Base-directory line —
+the same value as the `plugin_version:` frontmatter key), the arguments the
+run received, number of invocations in the session, and a one-line outcome
+(finished / stopped at step N / stub).
 
 ## Run metrics
 | metric | value |
@@ -412,8 +400,9 @@ expected" if the run had none.
 (or "none — nothing reinvented this run".)
 
 ## Skill-text drift
-Installed version vs. working copy: "identical", or a summary of the
-diff and which divergences above it explains.
+The version that ran vs. the release tag you compared it to (`git diff
+v<version> v<compare>`): "identical", or a summary of the diff and which
+divergences above it explains.
 
 ## Verdict
 2–4 sentences: overall compliance, the one finding to act on first, and
