@@ -222,6 +222,16 @@ needs, selects the creating session, and (with `--attach`) drives the idempotent
 uploader — so your job is to run it, show the plan, confirm, and run it once more
 to upload.
 
+**Script dispatch.** The detector ships twice — POSIX
+`skills/conversation-debugger/scripts/posix/sync_conversations.sh` and its
+Windows twin `skills/conversation-debugger/scripts/win/sync_conversations.ps1` (same args, output, exit
+codes). Pick the branch from your own runtime before running it: `bash …/posix/
+sync_conversations.sh` on Linux/macOS, `pwsh`/`powershell …/win/
+sync_conversations.ps1` on Windows. The blocks below show the POSIX form; on
+Windows substitute the `.ps1` port. (Its `--attach` leg still shells out to the
+shared `_shared/scripts/jira_attach.sh`, which has no win port, so `--attach` on
+Windows needs bash on PATH — the read-only preview does not.)
+
 1. **Auth + healthcheck.** The user wants full Jira access here, so run the
    executor login and the pre-flight exactly as **Free-form tasks → Identity
    and healthcheck** below (`git_repo`, `acli_auth`, and the env rows are what
@@ -234,9 +244,11 @@ to upload.
    creating session, and ends with the attach list (all worktree files + the one
    main file):
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/sync_conversations.sh" <KEY>
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY>
+   # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY>
    ```
-   (At `../_shared/scripts/` if `CLAUDE_PLUGIN_ROOT` is unset.) Show the output.
+   (At `../conversation-debugger/scripts/{posix,win}/` if `CLAUDE_PLUGIN_ROOT`
+   is unset.) Show the output.
    If it reports it **couldn't pin a single creating session** (an ad-hoc issue
    made without the assigner, or an ambiguous match), fall back to letting the
    user pick from the candidates it lists — don't guess. No worktree + no
@@ -247,7 +259,8 @@ to upload.
    facing). Then attach — same command with `--attach`, which uploads the paths
    it just computed:
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/sync_conversations.sh" <KEY> --attach
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY> --attach
+   # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY> --attach
    ```
    It's **idempotent by filename**: it lists the issue's current attachments and
    skips any transcript already there, so a re-run only uploads what's new (Jira
