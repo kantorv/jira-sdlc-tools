@@ -202,7 +202,9 @@ This one builtin is **Claude Code–specific** — it reads Claude Code's own
 conversation transcripts. That coupling lives here and nowhere else: the three
 core skills stay harness-neutral (they run on Codex, Cursor, Kilo, OpenCode
 too), so nothing about session ids or transcript paths leaks into them. On
-another agent the detector degrades with a plain "nothing to sync" message.
+another agent (no `~/.claude/projects` store) — or before the two config paths
+below are set — the configured folders won't exist and the script exits 1 rather
+than attaching anything.
 
 Why the transcripts are scattered, and how the definitive set is pinned: a
 session's log is filed under its *cwd*, so an issue's history spans two places.
@@ -222,6 +224,30 @@ needs, selects the creating session, and (with `--attach`) drives the idempotent
 uploader — so your job is to run it, show the plan, confirm, and run it once more
 to upload.
 
+**Script dispatch.** The detector ships twice — POSIX
+`skills/conversation-debugger/scripts/posix/sync_conversations.sh` and its
+Windows twin `skills/conversation-debugger/scripts/win/sync_conversations.ps1` (same args, output, exit
+codes). Pick the branch from your own runtime before running it: `bash …/posix/
+sync_conversations.sh` on Linux/macOS, `pwsh`/`powershell …/win/
+sync_conversations.ps1` on Windows. The blocks below show the POSIX form; on
+Windows substitute the `.ps1` port. (Its `--attach` leg calls the sibling
+uploader `jira_attach`, itself a posix/win contract pair — so `--attach` on
+Windows is fully native, no bash required.)
+
+**One-time config — the two transcript-folder paths.** The detector resolves its
+folders from `jira-sdlc-tools.local.env`, not from git or the cwd, so there's
+nothing for you to compute or pass here. It needs two values set once per machine:
+`CONVERSATIONS_MAINREPO_PATH` (the main checkout's `~/.claude/projects` folder) and
+`CONVERSATIONS_WORKTREES_PREFIX` (the prefix of the worktrees' folders — the
+script appends `worktree-<KEY>` per issue); see
+[`../_shared/project-config.md`](../_shared/project-config.md). The script reads
+them itself and **exits 1** if `CONVERSATIONS_MAINREPO_PATH` isn't a real
+directory, if `CONVERSATIONS_WORKTREES_PREFIX` is unset, or if the issue's
+resolved `<prefix>worktree-<KEY>` doesn't exist (it never had a worktree — nothing
+to sync). Pinning these in config, rather than computing paths at call time, is
+what keeps the builtin scoped to your own trees; if the script exits 1 on a config
+error, relay it and stop rather than working around it.
+
 1. **Auth + healthcheck.** The user wants full Jira access here, so run the
    executor login and the pre-flight exactly as **Free-form tasks → Identity
    and healthcheck** below (`git_repo`, `acli_auth`, and the env rows are what
@@ -229,14 +255,16 @@ to upload.
    checkout). The detector self-fetches the title + creation date via `acli`,
    and the upload reads the executor's Jira credentials from the env files, so
    both rely on this login.
-2. **Preview (read-only).** Run the detector — it fetches the issue's title +
-   `created`, prints the transcripts grouped by origin, marks the selected
-   creating session, and ends with the attach list (all worktree files + the one
-   main file):
+2. **Preview (read-only).** Run the detector — it reads the two config paths,
+   fetches the issue's title + `created`, prints the transcripts grouped by origin,
+   marks the selected creating session, and ends with the attach list (all worktree
+   files + the one main file):
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/sync_conversations.sh" <KEY>
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY>
+   # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY>
    ```
-   (At `../_shared/scripts/` if `CLAUDE_PLUGIN_ROOT` is unset.) Show the output.
+   (At `../conversation-debugger/scripts/{posix,win}/` if `CLAUDE_PLUGIN_ROOT`
+   is unset.) Show the output.
    If it reports it **couldn't pin a single creating session** (an ad-hoc issue
    made without the assigner, or an ambiguous match), fall back to letting the
    user pick from the candidates it lists — don't guess. No worktree + no
@@ -247,7 +275,8 @@ to upload.
    facing). Then attach — same command with `--attach`, which uploads the paths
    it just computed:
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/sync_conversations.sh" <KEY> --attach
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/sync_conversations.sh" <KEY> --attach
+   # Windows: powershell "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/sync_conversations.ps1" <KEY> --attach
    ```
    It's **idempotent by filename**: it lists the issue's current attachments and
    skips any transcript already there, so a re-run only uploads what's new (Jira
