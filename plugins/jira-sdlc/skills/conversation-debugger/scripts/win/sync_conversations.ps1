@@ -19,7 +19,7 @@
 #
 # The two ~/.claude/projects transcript folders are pinned by config, not inferred
 # from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
-# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFIX is the prefix of the
 # worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
 # jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
 # letting this port / the agent compute arbitrary paths) is deliberate: it scopes
@@ -92,21 +92,21 @@ function Get-Cfg {
 }
 
 $MainFolder = Get-Cfg 'CONVERSATIONS_MAINREPO_PATH'
-$WtPrefix   = Get-Cfg 'CONVERSATIONS_WORKTREES_PREFFIX'
+$WtPrefix   = Get-Cfg 'CONVERSATIONS_WORKTREES_PREFIX'
 if (-not $MainFolder -or -not (Test-Path -LiteralPath $MainFolder -PathType Container)) {
     $got = if ($MainFolder) { $MainFolder } else { '<unset>' }
     [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CfgDir/jira-sdlc-tools.local.env. Got '$got'")
     exit 1
 }
 if (-not $WtPrefix) {
-    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CfgDir/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>).")
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREES_PREFIX is unset — set it in $CfgDir/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>).")
     exit 1
 }
 # This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
 # means the issue never had a worktree (nothing to sync) — stop rather than guess.
 $WtFolder = "${WtPrefix}worktree-$Key"
 if (-not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
-    [Console]::Error.WriteLine("sync_conversations: no worktree transcript folder for $Key at '$WtFolder' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$Key) — if $Key never had a worktree there is nothing to sync.")
+    [Console]::Error.WriteLine("sync_conversations: no worktree transcript folder for $Key at '$WtFolder' (CONVERSATIONS_WORKTREES_PREFIX + worktree-$Key) — if $Key never had a worktree there is nothing to sync.")
     exit 1
 }
 

@@ -66,7 +66,7 @@ Code transcripts (`.jsonl` under `~/.claude/projects`) to its Jira issue. It rea
 two values from `jira-sdlc-tools.local.env`, set once per machine:
 
 - `CONVERSATIONS_MAINREPO_PATH` — the main checkout's transcript folder, used as-is
-- `CONVERSATIONS_WORKTREES_PREFFIX` — the prefix shared by every worktree's
+- `CONVERSATIONS_WORKTREES_PREFIX` — the prefix shared by every worktree's
   transcript folder; the script appends `worktree-<KEY>` to it per issue
 
 Setting a fixed prefix — rather than letting the tool compute paths — is what

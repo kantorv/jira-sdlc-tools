@@ -42,7 +42,7 @@ Both ports resolve the two `~/.claude/projects` transcript folders from
 **config**, not from git / a cwd-encoding step. Two
 `jira-sdlc-tools(.local).env` values pin them:
 `CONVERSATIONS_MAINREPO_PATH` is the main checkout's folder (used as-is),
-and `CONVERSATIONS_WORKTREES_PREFFIX` is the prefix shared by every
+and `CONVERSATIONS_WORKTREES_PREFIX` is the prefix shared by every
 worktree's folder — this issue's is `<prefix>worktree-<KEY>`. Each holds
 the resolved encoded folder path (Claude Code names a folder after the
 session's cwd with every path separator replaced by `-`, e.g.
@@ -50,7 +50,7 @@ session's cwd with every path separator replaced by `-`, e.g.
 The script reads them from the env files (not the process environment, so
 the agent can't widen the scope by exporting a variable) and **exits 1**
 with a clear stderr message if `CONVERSATIONS_MAINREPO_PATH` isn't an
-existing directory, if `CONVERSATIONS_WORKTREES_PREFFIX` is unset, or if
+existing directory, if `CONVERSATIONS_WORKTREES_PREFIX` is unset, or if
 the resolved `<prefix>worktree-<KEY>` doesn't exist (the issue never had a
 worktree — nothing to sync). Pinning a prefix in config, rather than
 letting the script compute arbitrary paths, is deliberate: it scopes this
@@ -63,6 +63,34 @@ hands the computed path list straight to the sibling uploader
 `scripts/posix/jira_attach.sh` — which itself ships as a contract pair,
 so the `.ps1` port calls its own `scripts/win/jira_attach.ps1` twin
 natively (no bash). Exit 1 only on a usage/environment error.
+
+## Configuration — the two transcript-folder variables
+
+Both folders come from `jira-sdlc-tools.local.env` (machine-specific; set
+once, read by the script itself — never passed on the command line). They
+matter only to this builtin, so a project that doesn't run
+`sync_conversations` can leave both unset.
+
+| Variable | What it is | Example |
+|---|---|---|
+| `CONVERSATIONS_MAINREPO_PATH` | The main checkout's `~/.claude/projects` transcript folder, used as-is (where the assigner's issue-creating session lives). | `~/.claude/projects/-home-you-src-myapp` |
+| `CONVERSATIONS_WORKTREES_PREFIX` | The prefix shared by every worktree's transcript folder; the script appends `worktree-<KEY>` to locate one issue's folder. A fixed prefix (not per-issue paths) is what scopes the builtin to your worktrees tree and nothing else under `~/.claude/projects`. | `~/.claude/projects/-home-you-src-myapp-worktrees-` |
+
+Each holds an *encoded* folder path — Claude Code names a project folder
+after the session's cwd with every path separator replaced by `-` (e.g.
+`C:\Users\u\proj` → `C--Users-u-proj`), so append `worktree-<KEY>` to the
+prefix and you get exactly that issue's folder name. For example
+`CONVERSATIONS_WORKTREES_PREFIX=/home/you/.claude/projects/-home-you-src-JST-worktrees-`
+resolves `JST-70` to
+`/home/you/.claude/projects/-home-you-src-JST-worktrees-worktree-JST-70`.
+**The prefix ends at the encoded worktrees *directory* (`…-JST-worktrees-`),
+not at `…-worktree-`** — ending it a level deeper would double to
+`…-worktree-worktree-JST-70` and never match. The script **exits 1**
+if `CONVERSATIONS_MAINREPO_PATH` is not an existing directory, if
+`CONVERSATIONS_WORKTREES_PREFIX` is unset, or if the resolved
+`<prefix>worktree-<KEY>` folder does not exist (the issue never had a
+worktree — nothing to sync). Full descriptions live in
+[`../../_shared/project-config.md`](../../_shared/project-config.md).
 
 ## Script dispatch
 
