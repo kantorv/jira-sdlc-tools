@@ -175,6 +175,22 @@ function Get-Clean([string]$text) {
     return $v.Substring(0, [Math]::Min(52, $v.Length))
 }
 
+function Get-InvokedSkills([string]$path) {
+    # Which of the 3 jira-sdlc skills were invoked in this session, in first-seen
+    # order — so a worktree row tells you which conversation to hand back to
+    # conversation-debugger. Matches the structured <command-name> the same way
+    # the main-candidate filter above does.
+    $content = $null
+    try { $content = Get-Content -LiteralPath $path -Raw -ErrorAction Stop } catch { return '' }
+    if (-not $content) { return '' }
+    $seen = New-Object System.Collections.Generic.List[string]
+    foreach ($m in [regex]::Matches($content, 'command-name>/?jira-sdlc:(jira-task-(?:assigner|executor|reviewer))')) {
+        $name = $m.Groups[1].Value
+        if (-not $seen.Contains($name)) { $seen.Add($name) }
+    }
+    return ($seen -join ', ')
+}
+
 function Get-Summary([string]$path) {
     try {
         foreach ($line in [System.IO.File]::ReadLines($path)) {
@@ -252,7 +268,14 @@ if ($wfiles.Count -gt 0) {
     $out.Add('')
     $out.Add("### Worktree (worktree-$Key) — all sessions, attached")
     $rows = @()
-    foreach ($p in $wfiles) { $r = Format-Row $p; if ($r) { $rows += $r } }
+    foreach ($p in $wfiles) {
+        $r = Format-Row $p
+        if ($r) {
+            $sk = Get-InvokedSkills $p
+            if ($sk) { $r.text = $r.text + "`n    ↳ skill(s): $sk" }
+            $rows += $r
+        }
+    }
     foreach ($r in ($rows | Sort-Object { $_.mtime } -Descending)) { $out.Add($r.text) }
     foreach ($p in $wfiles) { $attach.Add($p) }
 }

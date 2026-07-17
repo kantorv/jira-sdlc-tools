@@ -139,6 +139,23 @@ def clean(text):
     if m: return m.group(1)[:52]
     return " ".join(re.sub(r"<[^>]+>", " ", text).split())[:52]
 
+SKILL_RE = re.compile(r"command-name>/?jira-sdlc:(jira-task-(?:assigner|executor|reviewer))")
+
+def skills(path):
+    """Which of the 3 jira-sdlc skills were invoked in this session, first-seen
+    order — so a worktree row tells you which conversation to hand back to
+    conversation-debugger. Matches the structured <command-name> like the
+    main-candidate filter does."""
+    seen = []
+    try:
+        with open(path, errors="replace") as fh:
+            for line in fh:
+                for m in SKILL_RE.finditer(line):
+                    n = m.group(1)
+                    if n not in seen: seen.append(n)
+    except OSError: pass
+    return ", ".join(seen)
+
 def summary(path):
     try:
         with open(path, errors="replace") as fh:
@@ -207,8 +224,16 @@ attach = []
 
 if wfiles:
     print(f"\n### Worktree (worktree-{KEY}) — all sessions, attached")
-    for line, _ in sorted((r for r in (fmt(p) for p in wfiles) if r), key=lambda r: r[1], reverse=True):
-        print(line)
+    rows = []
+    for p in wfiles:
+        r = fmt(p)
+        if not r: continue
+        text, mt = r
+        sk = skills(p)
+        if sk: text += f"\n    ↳ skill(s): {sk}"
+        rows.append((text, mt))
+    for text, _ in sorted(rows, key=lambda r: r[1], reverse=True):
+        print(text)
     attach += wfiles
 
 print(f"\n### Main checkout — the assigner session that created {KEY}")

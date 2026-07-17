@@ -43,7 +43,13 @@ named after that session's cwd:
 - **WORKTREE (certain, take ALL)** — the executor and reviewer run
   inside `<WORKTREES_DIR>/worktree-<KEY>`; every session filed under that
   project folder belongs to this issue. The folder persists in
-  `~/.claude/projects` even after the worktree itself is deleted.
+  `~/.claude/projects` even after the worktree itself is deleted. Each
+  worktree row is annotated with a `↳ skill(s):` line naming which of the
+  three jira-sdlc skills (`jira-task-assigner` / `jira-task-executor` /
+  `jira-task-reviewer`) that session invoked, in first-seen order —
+  detected from the same structured `<command-name>` tag used to pin the
+  main-checkout session. It tells you which transcript to hand back to
+  `conversation-debugger`; a session that invoked none gets no such line.
 - **MAIN checkout (take exactly ONE — the session that created the
   issue)** — the assigner runs here, interleaved with unrelated
   sessions. Out of "any session that ever mentioned `<KEY>`," the single
