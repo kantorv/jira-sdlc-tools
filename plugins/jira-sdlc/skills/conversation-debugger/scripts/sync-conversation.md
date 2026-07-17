@@ -46,10 +46,10 @@ replace; Windows cwds also need `:` and `\` mapped (verified:
 `C:\Users\u\proj` → `C--Users-u-proj`).
 
 The script is read-only unless `--attach` is passed, in which case it
-hands the computed path list straight to the shared uploader
-`_shared/scripts/jira_attach.sh` — one uploader, no Windows twin; the
-`.ps1` port shells out to `bash` for it (found on `PATH`, or derived from
-an installed Git for Windows). Exit 1 only on a usage/environment error.
+hands the computed path list straight to the sibling uploader
+`scripts/posix/jira_attach.sh` — which itself ships as a contract pair,
+so the `.ps1` port calls its own `scripts/win/jira_attach.ps1` twin
+natively (no bash). Exit 1 only on a usage/environment error.
 
 ## Script dispatch
 
