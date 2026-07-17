@@ -48,8 +48,8 @@ stale token can't survive), so run them unconditionally. On non-zero from
 either, relay its stderr and **stop**.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" reviewer || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" reviewer || exit 1
 ```
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
@@ -61,11 +61,11 @@ of the executor default:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
-`../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
+`../_shared/scripts/posix/statuscheck.sh` relative to this skill's directory.)
 
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`

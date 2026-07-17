@@ -376,16 +376,16 @@ acli jira filter --help                       # saved filters
 ## 10. Helper scripts
 
 The `scripts/` directory next to the lean reference
-(`skills/_shared/scripts/`) bundles two reusable patterns used while
+(`skills/_shared/scripts/posix/`) bundles two reusable patterns used while
 seeding issues from a review. These are **human-run helpers, not
 invoked by any skill.**
 
-- [`scripts/acli-create-parent-and-subtasks.sh`](../skills/_shared/scripts/acli-create-parent-and-subtasks.sh)
+- [`scripts/posix/acli-create-parent-and-subtasks.sh`](../skills/_shared/scripts/posix/acli-create-parent-and-subtasks.sh)
   — create a parent work item plus N sub-tasks from a directory of body
   files, driven by a `manifest.tsv`. This is the "turn a review into
   tracked sub-tasks" helper: write one `.md` per finding, list them in
   the manifest, run the script.
-- [`scripts/acli-list-subtasks.py`](../skills/_shared/scripts/acli-list-subtasks.py)
+- [`scripts/posix/acli-list-subtasks.py`](../skills/_shared/scripts/posix/acli-list-subtasks.py)
   — given a parent key, print every sub-task's key + summary by parsing
   `acli jira workitem view <PARENT> --json --fields 'subtasks,issuetype'`
   (the only fields it parses — narrower than the §3 canonical lists; the
