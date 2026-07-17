@@ -11,6 +11,30 @@ detection logic once (so it isn't duplicated across two script headers)
 and the execution nuances that only show up when you actually run the
 port on real machines.
 
+## Arguments
+
+Both ports take the identical argument set — one positional, four flags:
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `<ISSUE-KEY>` | yes | The Jira issue key, e.g. `JST-93`. Positional — matched against `[A-Za-z]*-[0-9]*`; anything else (missing, malformed, bare `-`) prints usage to stderr and exits 1. |
+| `--title "<summary>"` | no | Overrides the issue's Jira summary used for signal 2 of the main-checkout pin (see Detection logic below). Self-fetched via `acli jira workitem view <KEY>` when omitted and `acli` is available, so callers normally don't pass it — it exists to keep the detector runnable offline or against a Jira instance `acli` can't reach. |
+| `--created "<iso8601>"` | no | Overrides the issue's Jira `created` instant used for signal 3 (the decisive tie-breaker). Same self-fetch/offline rationale as `--title`. Accepts both the transcript `…Z` form and Jira's `…+0300` offset form. |
+| `--attach` | no | Switches the script from read-only detection to actually uploading: hands the computed attachment-path list to the sibling `jira_attach` script (bash: `posix/jira_attach.sh`; Windows: `win/jira_attach.ps1`). Without it, the script only prints the grouped listing and the `=== attachment paths ===` block — nothing is written, transitioned, or uploaded. |
+| `--dry-run` | no | Only meaningful combined with `--attach` — passed straight through to `jira_attach`, which previews the upload without performing it. Ignored (has no effect) when `--attach` is absent. |
+
+`--title`/`--created` each accept either a glued `=` form or a
+space-separated form on the bash port (`--title=foo` or `--title foo`);
+the `.ps1` port also parses both, but under `pwsh -File` the glued form
+gets mis-split at the value's colon, so pass these two as separate
+space-separated tokens on Windows (see Execution nuances below).
+
+Beyond the CLI arguments, both ports read two machine-config values —
+`CONVERSATIONS_MAINREPO_PATH` and `CONVERSATIONS_WORKTREES_PREFIX` — from
+`jira-sdlc-tools.local.env` to locate the two transcript folders (see
+**Configuration** below). These are not script arguments and are never
+passed on the command line.
+
 ## Detection logic
 
 Transcripts split by provenance, because a session's project folder is
@@ -104,6 +128,55 @@ pwsh  win/sync_conversations.ps1   <ISSUE-KEY> [--attach] [--dry-run]
 
 (paths above are relative to this file's own directory,
 `conversation-debugger/scripts/`)
+
+### Execution examples
+
+POSIX (bash):
+
+```bash
+# Detect & list candidate transcripts, read-only
+bash posix/sync_conversations.sh JST-93
+
+# Detect and actually attach them to the issue
+bash posix/sync_conversations.sh JST-93 --attach
+
+# Preview what would be attached without uploading
+bash posix/sync_conversations.sh JST-93 --attach --dry-run
+
+# Offline, with manual title/created overrides (skips the acli self-fetch)
+bash posix/sync_conversations.sh JST-93 --title="Fix login bug" --created="2026-07-01T12:00:00Z"
+```
+
+Windows — `pwsh` (PowerShell 7+):
+
+```powershell
+# Detect & list candidate transcripts, read-only
+pwsh -File win/sync_conversations.ps1 JST-93
+
+# Detect and actually attach them to the issue
+pwsh -File win/sync_conversations.ps1 JST-93 --attach
+
+# Preview what would be attached without uploading
+pwsh -File win/sync_conversations.ps1 JST-93 --attach --dry-run
+
+# Offline, with manual title/created overrides — space-separated tokens, NOT --created=...
+# (pwsh -File splits the glued `=` form at the value's colon before the script sees it)
+pwsh -File win/sync_conversations.ps1 JST-93 --title "Fix login bug" --created "2026-07-01T12:00:00Z"
+```
+
+Windows — `powershell.exe` (5.1, ships with Windows): same invocations, plus
+`-ExecutionPolicy Bypass` for that one call unless the machine's policy is
+already `RemoteSigned`/`Unrestricted` (see execution-policy note below):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File win/sync_conversations.ps1 JST-93
+powershell -ExecutionPolicy Bypass -File win/sync_conversations.ps1 JST-93 --attach
+powershell -ExecutionPolicy Bypass -File win/sync_conversations.ps1 JST-93 --attach --dry-run
+powershell -ExecutionPolicy Bypass -File win/sync_conversations.ps1 JST-93 --title "Fix login bug" --created "2026-07-01T12:00:00Z"
+```
+
+Every example above only reads Jira and the transcript store; nothing is
+uploaded unless `--attach` is present.
 
 ## Execution nuances
 
