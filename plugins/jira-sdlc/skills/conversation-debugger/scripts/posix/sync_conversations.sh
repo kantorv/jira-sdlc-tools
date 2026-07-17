@@ -24,11 +24,14 @@
 #     --title / --created come from the caller's Jira fetch; without them the
 #     script still runs but can only offer candidates, not pick the one.
 #
-# The two ~/.claude/projects transcript folders (main checkout + issue worktree)
-# are resolved by the caller and passed in as CONVERSATIONS_MAINREPO_PATH and
-# CONVERSATIONS_WORKTREE_PATH — both mandatory, both validated below. This script
-# no longer infers them from git / the cwd->folder-name encoding; the caller owns
-# Claude Code's naming (session cwd with every path separator replaced by '-').
+# The two ~/.claude/projects transcript folders are pinned by config, not inferred
+# from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
+# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# letting this script / the agent compute arbitrary paths) is deliberate: it scopes
+# this read-only builtin to the configured trees and nothing else under
+# ~/.claude/projects.
 #
 # Read-only: never writes, transitions, or uploads. Exit 1 only on a usage /
 # environment error.
@@ -53,18 +56,37 @@ case "$KEY" in
   *) echo "sync_conversations: need an issue key, e.g. sync_conversations.sh JST-93 [--attach] [--dry-run] [--title ...] [--created ...] (got '${KEY:-<none>}')" >&2; exit 1 ;;
 esac
 
-# Transcript folders come from the caller, both mandatory. The caller resolves
-# each issue's two ~/.claude/projects folders — the main checkout's and the issue
-# worktree's — and passes them in already encoded; we only validate them here.
-# Both must be existing directories: there is no "no worktree, that's fine" path
-# anymore (the caller decides what to do when an issue has no worktree folder).
-MAIN_FOLDER="${CONVERSATIONS_MAINREPO_PATH:-}"
-WT_FOLDER="${CONVERSATIONS_WORKTREE_PATH:-}"
+# Resolve the two transcript folders from config. The env-file parser (cfg) is the
+# same NAME = value grep / local-overrides-team precedence as statuscheck.sh and
+# get_assignee_email.sh — keep them in sync. Reading these from the committed/local
+# env files (not the process environment) is what makes the scoping trustworthy:
+# the agent can't widen it by exporting a variable.
+CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
+CFG_DIR="${CFG_DIR:-$PWD}"
+cfg() {
+  local f v
+  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
+    [ -f "$CFG_DIR/$f" ] || continue
+    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
+        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
+    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
+  done
+  return 1
+}
+
+MAIN_FOLDER=$(cfg CONVERSATIONS_MAINREPO_PATH || true)
+WT_PREFIX=$(cfg CONVERSATIONS_WORKTREES_PREFFIX || true)
 if [ -z "$MAIN_FOLDER" ] || [ ! -d "$MAIN_FOLDER" ]; then
-  echo "sync_conversations: CONVERSATIONS_MAINREPO_PATH must be an existing directory (the main checkout's ~/.claude/projects transcript folder); got '${MAIN_FOLDER:-<unset>}'" >&2
+  echo "sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CFG_DIR/jira-sdlc-tools.local.env. Got '${MAIN_FOLDER:-<unset>}'" >&2
   exit 1; fi
-if [ -z "$WT_FOLDER" ] || [ ! -d "$WT_FOLDER" ]; then
-  echo "sync_conversations: CONVERSATIONS_WORKTREE_PATH must be an existing directory (the issue worktree's ~/.claude/projects transcript folder); got '${WT_FOLDER:-<unset>}'" >&2
+if [ -z "$WT_PREFIX" ]; then
+  echo "sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CFG_DIR/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>)." >&2
+  exit 1; fi
+# This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
+# means the issue never had a worktree (nothing to sync) — stop rather than guess.
+WT_FOLDER="${WT_PREFIX}worktree-${KEY}"
+if [ ! -d "$WT_FOLDER" ]; then
+  echo "sync_conversations: no worktree transcript folder for $KEY at '$WT_FOLDER' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$KEY) — if $KEY never had a worktree there is nothing to sync." >&2
   exit 1; fi
 
 # The two signals that pin the creating session (title + creation date) come

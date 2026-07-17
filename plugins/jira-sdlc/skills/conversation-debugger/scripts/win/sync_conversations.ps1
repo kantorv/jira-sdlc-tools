@@ -17,13 +17,14 @@
 #     /jira-sdlc:jira-task-assigner, the issue TITLE appears in it, and the Jira
 #     `created` instant falls inside the session's first..last timestamp window.
 #
-# The two ~/.claude/projects transcript folders (main checkout + issue worktree)
-# are resolved by the caller and passed in as CONVERSATIONS_MAINREPO_PATH and
-# CONVERSATIONS_WORKTREE_PATH — both mandatory, both validated below. This port no
-# longer infers them from git / the cwd->folder-name encoding; the caller owns
-# Claude Code's naming (session cwd with every path separator replaced by '-';
-# on Windows '/', '.', ':' and '\' all map to '-', e.g. C:\Users\u\proj ->
-# C--Users-u-proj).
+# The two ~/.claude/projects transcript folders are pinned by config, not inferred
+# from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
+# folder (used as-is), and CONVERSATIONS_WORKTREES_PREFFIX is the prefix of the
+# worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
+# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# letting this port / the agent compute arbitrary paths) is deliberate: it scopes
+# this read-only builtin to the configured trees and nothing else under
+# ~/.claude/projects.
 #
 # --attach delegates to the sibling uploader jira_attach.ps1 (in this same win/
 # folder), so this path is fully native — no bash, no python3, just the same
@@ -64,22 +65,48 @@ if ($Key -notmatch '^[A-Za-z]*-[0-9]*$' -or $Key -eq '-') {
     exit 1
 }
 
-# ---- transcript folders: supplied by the caller, both mandatory ------------
-# The caller resolves each issue's two ~/.claude/projects folders — the main
-# checkout's and the issue worktree's — and passes them in already encoded; we
-# only validate them here. Both must be existing directories: there is no
-# "no worktree, that's fine" path anymore (the caller decides what to do when an
-# issue has no worktree folder).
-$MainFolder = $env:CONVERSATIONS_MAINREPO_PATH
-$WtFolder   = $env:CONVERSATIONS_WORKTREE_PATH
+# ---- transcript folders: pinned by config, both mandatory ------------------
+# Resolve from jira-sdlc-tools(.local).env, not the process environment: the
+# Get-Cfg parser mirrors statuscheck.ps1 / get_assignee_email.ps1 (same NAME =
+# value match, local-overrides-team, last match in a file wins). Reading config
+# files rather than $env is what keeps the scoping trustworthy — the agent can't
+# widen it by setting a variable.
+function Get-GitTop {
+    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() } } catch { }
+    return $null
+}
+$CfgDir = Get-GitTop
+if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+function Get-Cfg {
+    param([string]$Pattern)
+    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
+        $path = Join-Path $CfgDir $f
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $val = $null
+        foreach ($line in Get-Content -LiteralPath $path) {
+            if ($line -match "^\s*($Pattern)\s*=(.*)$") { $val = $Matches[2].Trim() }
+        }
+        if ($val) { return $val }
+    }
+    return $null
+}
+
+$MainFolder = Get-Cfg 'CONVERSATIONS_MAINREPO_PATH'
+$WtPrefix   = Get-Cfg 'CONVERSATIONS_WORKTREES_PREFFIX'
 if (-not $MainFolder -or -not (Test-Path -LiteralPath $MainFolder -PathType Container)) {
     $got = if ($MainFolder) { $MainFolder } else { '<unset>' }
-    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_MAINREPO_PATH must be an existing directory (the main checkout's ~/.claude/projects transcript folder); got '$got'")
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_MAINREPO_PATH must name an existing directory (the main checkout's ~/.claude/projects transcript folder); set it in $CfgDir/jira-sdlc-tools.local.env. Got '$got'")
     exit 1
 }
-if (-not $WtFolder -or -not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
-    $got = if ($WtFolder) { $WtFolder } else { '<unset>' }
-    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREE_PATH must be an existing directory (the issue worktree's ~/.claude/projects transcript folder); got '$got'")
+if (-not $WtPrefix) {
+    [Console]::Error.WriteLine("sync_conversations: CONVERSATIONS_WORKTREES_PREFFIX is unset — set it in $CfgDir/jira-sdlc-tools.local.env (the ~/.claude/projects prefix of the worktrees' transcript folders; this issue's is <prefix>worktree-<KEY>).")
+    exit 1
+}
+# This issue's worktree folder is the prefix + worktree-<KEY>. A missing folder
+# means the issue never had a worktree (nothing to sync) — stop rather than guess.
+$WtFolder = "${WtPrefix}worktree-$Key"
+if (-not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
+    [Console]::Error.WriteLine("sync_conversations: no worktree transcript folder for $Key at '$WtFolder' (CONVERSATIONS_WORKTREES_PREFFIX + worktree-$Key) — if $Key never had a worktree there is nothing to sync.")
     exit 1
 }
 
