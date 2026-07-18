@@ -53,9 +53,13 @@ jobs:
             *) echo "::error::bump must be one of patch/minor/major (got '${BUMP}')"; exit 1 ;;
           esac
           # Query origin for the latest v* tag (checkout may not have fetched
-          # every tag). Use --refs to suppress peeled-ref duplicates.
+          # every tag). Use --refs to suppress peeled-ref duplicates. Strip to
+          # the bare tag name and keep ONLY strict stable SemVer (vX.Y.Z, no
+          # suffix), so lab / pre-release tags like vX.Y.Z-lab-N are never
+          # picked as "latest" and can't crash the parse below.
           prev="$(git ls-remote --refs --tags origin 'v[0-9]*' \
-            | sed -E 's#.*refs/tags/(v[0-9.]+)$#\1#' \
+            | sed -E 's#.*refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V | tail -1 || true)"
           if [ -z "${prev}" ]; then
             # No tags yet -> first release is 0.1.0 (matches release.yml logic).

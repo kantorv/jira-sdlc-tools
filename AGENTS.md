@@ -226,8 +226,11 @@ SemVer git tag plus the GitHub Release that the marketplace install command
 consumes. The version lives only in git tags (no `package.json`/`VERSION` file
 to bump), which is what makes the workflow generic enough to lift into any
 repo, not just the JS app these skills came from. The branching and release
-policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
-automate it:
+policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md), and
+[docs/CI.md](plugins/jira-sdlc/docs/CI.md) is the workflow-by-workflow CI
+reference — including the tagging mechanics and the continuous `lab`
+pre-release channel (`update_lab.yml`), which this section doesn't cover. Two
+workflows automate the stable release:
 
 - **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump level
   (`patch` / `minor` / `major`, default `minor`), computes the next SemVer

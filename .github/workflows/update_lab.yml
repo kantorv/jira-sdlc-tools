@@ -9,7 +9,12 @@ on:
 
 # Grants the default GITHUB_TOKEN the necessary permissions to push code
 permissions:
-  contents: write 
+  contents: write
+
+# Serialize runs so two development pushes can't race on the lab counter/tag.
+concurrency:
+  group: update-lab
+  cancel-in-progress: false
 
 jobs:
   update-lab:
@@ -26,28 +31,93 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Sync Lab Branch
+        id: sync
         run: |
+          set -euo pipefail
           # Fetch all remote branches to ensure we have the latest state
           git fetch origin
-          
+
           # Check if the 'lab' branch already exists on the remote
           if git ls-remote --exit-code --heads origin lab; then
             echo "Branch 'lab' exists. Merging development into lab."
-            
+
             # Switch to the lab branch tracking the remote
             git checkout lab
-            
-            # Merge development into lab. 
+            before="$(git rev-parse HEAD)"
+
+            # Merge development into lab.
             # Note: If there are merge conflicts, this step will intentionally fail.
             git merge origin/development --no-edit
-            
+            after="$(git rev-parse HEAD)"
+
             # Push the updated lab branch back to GitHub
             git push origin lab
-            
+
+            # Did lab actually move? Gates the tag step below.
+            if [ "${before}" != "${after}" ]; then
+              echo "advanced=true"  >> "$GITHUB_OUTPUT"
+            else
+              echo "advanced=false" >> "$GITHUB_OUTPUT"
+              echo "lab already up to date with development — nothing new to tag."
+            fi
           else
             echo "Branch 'lab' does not exist. Creating it from development."
-            
+
             # Create lab locally based on development and push it
             git checkout -b lab origin/development
             git push -u origin lab
+            echo "advanced=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Tag lab build
+        # A lab build tag encodes provenance + a monotonic counter:
+        #   vX.Y.Z-lab-N  — vX.Y.Z is the latest STABLE release this lab build
+        #   sits on top of, N increments across all lab builds and never resets.
+        # Gated to the development-triggered run (the lab push this workflow
+        # makes re-triggers the workflow on `lab`, which must NOT tag again) and
+        # to an actual lab advance.
+        #
+        # The tag points at a DETACHED commit that bumps the plugin manifests to
+        # 0.X.Y-lab-N, so install-by-tag carries the right version WITHOUT
+        # committing it onto the lab branch — the branch stays byte-identical to
+        # development, so future dev->lab merges never conflict on the version
+        # line (which a stable release bumps on development too).
+        #
+        # The leading-v, hyphenated name is deliberately IGNORED by release.yml
+        # (git describe --exclude '*-*') and cut-release.yml (strict vX.Y.Z
+        # grep), so a lab tag can never poison stable version resolution.
+        if: github.ref_name == 'development' && steps.sync.outputs.advanced == 'true'
+        run: |
+          set -euo pipefail
+          git fetch origin --tags --force
+
+          # Base = latest strict-SemVer stable tag (vX.Y.Z, no suffix).
+          base="$(git tag -l 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+          [ -n "${base}" ] || base="v0.0.0"   # pre-first-release fallback
+
+          # N = highest existing lab counter + 1 (global, never resets).
+          n="$(git tag -l '*-lab-*' | sed -nE 's/.*-lab-([0-9]+)$/\1/p' | sort -n | tail -1 || true)"
+          n=$(( ${n:-0} + 1 ))
+
+          tag="${base}-lab-${n}"
+          ver="${base#v}-lab-${n}"   # manifest version (strip leading v)
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::error::Tag ${tag} already exists; not overwriting. Resolve before re-running."
+            exit 1
+          fi
+
+          # Bump both manifests on a detached commit (lab branch ref stays put).
+          jq --arg v "${ver}" '.version = $v' \
+            plugins/jira-sdlc/.claude-plugin/plugin.json > plugin.json.tmp \
+            && mv plugin.json.tmp plugins/jira-sdlc/.claude-plugin/plugin.json
+          jq --arg v "${ver}" '(.plugins[] | select(.name == "jira-sdlc") | .version) = $v' \
+            .claude-plugin/marketplace.json > marketplace.json.tmp \
+            && mv marketplace.json.tmp .claude-plugin/marketplace.json
+
+          git add plugins/jira-sdlc/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git commit -m "chore: lab build ${tag}"
+
+          git tag -a "${tag}" -m "Lab build ${tag}"
+          git push origin "${tag}"
+          echo "::notice::Tagged lab build ${tag} (base ${base}); lab branch left at development's tree."
