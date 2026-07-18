@@ -400,6 +400,31 @@ End your own turn by telling the user the report path and the two or
 three findings they'd act on — don't make them open the file to learn
 whether anything was wrong.
 
+## Feature-level roll-up (`collect_feature` + `feature_report`)
+
+Everything above analyzes **one** transcript. To profile a whole **feature**
+instead — every conversation of one Jira issue at once, with per-conversation
+metrics *and* per-feature token/model totals — use the two roll-up scripts.
+They're Windows-only this round; their `posix/*.sh` twins are stubs that exit
+non-zero, so dispatch is `pwsh …/win/*.ps1` (outside a plugin session the
+scripts live under `scripts/win/` relative to this skill):
+
+```powershell
+# JSON (machine) on stdout, human metrics view on stderr; pipe to the report-builder for markdown
+pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> \
+  | pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/feature_report.ps1" > <ISSUE-KEY>-feature-report.md
+```
+
+`collect_feature` resolves the feature's conversations by reusing
+`sync_conversations`' list and runs `collect_run` over each — so its numbers are
+the same measured metrics this skill already trusts, never re-estimated. The
+collector owns the JSON schema; `feature_report` only renders it. Read
+[scripts/collect_feature.md](scripts/collect_feature.md),
+[scripts/feature_report.md](scripts/feature_report.md), and
+[references/feature-report-schema.md](references/feature-report-schema.md)
+before running or changing either script — the per-transcript flow above (steps
+0–6) is unaffected by this adjunct.
+
 ## Caveats that will bite
 
 - **Long sessions get compacted**: a `summary`-type line (or an
