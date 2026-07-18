@@ -14,6 +14,19 @@ the collector already measured; the report-builder computes nothing and
 re-measures nothing. The schema is documented in
 [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
 
+It renders **both feature types** the collector emits, detected from the JSON:
+
+- **single-step** (`feature-report@2`, flat) → the original template, unchanged.
+- **multistep** (`feature-report@3`, nested) → a parent summary, a "token share
+  by feature part" table + pie, then one section per **child feature** with that
+  child's conversations **in place**, and finally the feature-wide totals /
+  by-skill / by-provenance / timeframe roll-ups and pies across the whole
+  feature.
+
+Detection is the presence of a `children` array (equivalently a `@3` schema
+tag); `@1`/`@2` JSON has no `children` and renders through the **untouched**
+single-step path, so there is **no regression** on existing single-step reports.
+
 **This round it ships Windows-only** (`win/feature_report.ps1`). The POSIX twin
 (`posix/feature_report.sh`) is a deliberate **stub** that exits non-zero — an
 explicit parity gap, matching `collect_feature`.
@@ -33,18 +46,24 @@ blocking on the console. Empty or non-JSON input, or JSON missing the
 # 1. One-shot pipe (from stdin) — collector JSON straight in
 pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
 
-# 2. Two steps — from a saved JSON file
-pwsh win/collect_feature.ps1 JST-93 > JST-93.json
+# 2. From a saved JSON file (produced by `collect_feature … > JST-93.json`)
 pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
+
+# 3. Same saved JSON on Windows PowerShell 5.1 (powershell.exe)
+powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 JST-93.json > JST-93-report.md
 ```
 
 The report is written on PowerShell's success stream, so `>` captures it in
-every form — as its own `pwsh` process, or as a stage inside an existing
-session (`… | .\feature_report.ps1 > out.md`).
+every form — its own `pwsh`/`powershell` process, a cross-process pipe
+(`pwsh collect_feature.ps1 … | pwsh feature_report.ps1`), or a stage inside an
+existing PowerShell session (`… | .\feature_report.ps1 > out.md`). The stdin
+and file-path inputs render identically, on both PowerShell 7+ and 5.1.
 
 ## What it renders
 
-Markdown on stdout, nothing else (read-only — no files written, no Jira/git):
+Markdown on stdout, nothing else (read-only — no files written, no Jira/git).
+
+### Single-step (`@2`)
 
 - **Summary** table — feature key, conversation count (and how many carried
   metrics), the feature's **total token consumption** broken into
@@ -73,6 +92,34 @@ real zero is never confused with "not measured". Sections backed by `@2`-only
 aggregate fields (by-skill, by-provenance, timeframe) are omitted when given
 older `@1` JSON, which still renders.
 
+### Multistep (`@3`)
+
+- **Feature summary** — the same metrics as above but computed **feature-wide**
+  (parent + all children): the child-feature count, feature-wide conversation
+  count, total token consumption, and the union of models / skills / issue keys.
+- **Token share by feature part** — a table (parent-own + each child, with
+  per-part conversation count and total tokens) and a **pie** of that share
+  (parent + each child), skipping any zero-token part.
+- **Parent feature** section — the parent's own conversations rendered **in
+  place** with the same per-conversation *tokens* and *performance* tables (as
+  `###` sub-sections), plus the by-conversation pie. If the parent has no own
+  conversations (e.g. the assigner session wasn't resolved), a short note says so
+  instead.
+- **One `## Child feature — <KEY>` section per sub-task**, each with that child's
+  conversations in place (same two tables + pie). A sub-task with no worktree yet
+  renders a "no conversations resolved yet" note rather than empty tables.
+- **Feature-wide roll-ups** — **Tokens by skill** (+ pie), **Tokens by
+  provenance**, **Feature totals**, and **Activity timeframe**, all across the
+  whole feature.
+
+The per-conversation *tokens* / *performance* tables and the by-skill /
+by-provenance / totals / timeframe renderers are **shared functions** used by
+both paths, so a child's table is identical in form to a single-step feature's —
+the single-step output is byte-for-byte the pre-`@3` template.
+
+All pies follow the same rule as single-step: emitted only with **≥ 2** non-zero
+slices, `;` → `,` sanitized.
+
 The markdown structure is inline in the script (no external template to drift);
 the one shared artifact is the JSON schema doc, which both halves point at.
 
@@ -86,7 +133,8 @@ the one shared artifact is the JSON schema doc, which both halves point at.
 ## Script dispatch
 
 ```powershell
-pwsh  win/feature_report.ps1   [<json-path>]
+pwsh  win/feature_report.ps1   [<json-path>]                                   # PowerShell 7+
+powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 [<json-path>]  # Windows PowerShell 5.1
 ```
 
 ```bash
@@ -98,7 +146,11 @@ bash  posix/feature_report.sh  [<json-path>]   # STUB — prints a notice and ex
 Windows PowerShell 5.1 (`powershell.exe`) needs `-ExecutionPolicy Bypass` for
 an unsigned `.ps1` unless the machine policy already allows it — same
 prerequisite as every `win/` script; `pwsh` (7+) was not observed to require
-it.
+it. The rendered report is identical on both hosts save one cosmetic detail:
+timestamps show as a compact `YYYY-MM-DD HH:MM:SSZ` under 5.1 (whose
+`ConvertFrom-Json` parses ISO-Z strings to `DateTime`) and as the raw
+ISO-8601 string under 7 (which keeps them as text) — the `Ts` helper renders
+either, and no measured number changes.
 
 ## Platform parity
 

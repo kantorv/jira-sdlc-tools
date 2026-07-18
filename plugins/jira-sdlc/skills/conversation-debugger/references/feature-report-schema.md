@@ -6,14 +6,40 @@ collector is the single owner of the schema — the report-builder never
 re-measures anything, it only renders what is here. If a field needs to
 change, change it in `collect_feature` first; the report-builder follows.
 
-The `schema` field carries a version tag
-(`jira-sdlc/conversation-debugger/feature-report@2`) so a future breaking
-change is detectable rather than silent. `@2` **added** aggregate fields
-(`skill_turns`, `sidechain_turns`, `tool_calls`, `tool_errors`, `timeframe`,
-`by_skill`, `by_provenance`) — a superset of `@1`, so a report-builder that
-guards for their absence renders `@1` JSON unchanged.
+## Two feature types, two shapes
 
-## Shape
+`collect_feature` detects the feature **type** from Jira (one `acli jira
+workitem view <KEY> --json --fields 'summary,subtasks'` — `subtasks` must be
+named explicitly, the default `--json` omits it) and emits one of two shapes:
+
+- **single-step** — the issue has **no** sub-tasks: one cohesive feature with
+  its conversations. Emits the **flat `@2`** shape below (unchanged).
+- **multistep** — the issue **is a parent** with sub-tasks: a parent story
+  whose child features (sub-tasks) each have their own conversations. Emits the
+  **nested `@3`** shape ([below](#multistep-3-shape-nested)) — the parent's own
+  conversations, a `children[]` array (each child carrying its own
+  `conversations[]` + a per-child roll-up of the *same shape as `aggregate`*),
+  and a feature-wide `aggregate` rolled up across the parent **and** all
+  children.
+
+The `schema` field carries a version tag
+(`jira-sdlc/conversation-debugger/feature-report@2` or `@3`) so the shape is
+detectable rather than guessed. The layering is backward-compatible and
+**version-detectable**, following the `@1 → @2` convention:
+
+- `@2` **added** aggregate fields (`skill_turns`, `sidechain_turns`,
+  `tool_calls`, `tool_errors`, `timeframe`, `by_skill`, `by_provenance`) — a
+  superset of `@1`, so a report-builder that guards for their absence renders
+  `@1` JSON unchanged.
+- `@3` is a **new nested container** for multistep features; it does **not**
+  change `@2`. A single-step feature still emits `@2` byte-for-byte, so there
+  is no regression on existing single-step reports. The report-builder detects
+  a multistep report by the presence of `children` (equivalently, a `@3` schema
+  tag) and otherwise takes the untouched single-step path. Every `aggregate`
+  inside `@3` — the parent's, each child's, and the feature-wide one — reuses
+  the `@2` aggregate shape verbatim.
+
+## Single-step (`@2`) shape
 
 ```jsonc
 {
@@ -78,6 +104,75 @@ guards for their absence renders `@1` JSON unchanged.
   }
 }
 ```
+
+## Multistep (`@3`) shape (nested)
+
+Emitted only when `<KEY>` is a parent with sub-tasks. The `conversations` /
+`aggregate` **record shapes are identical to `@2`** — `@3` only adds a nesting
+layer around them: a `parent` object, a `children[]` array, and a top-level
+feature-wide `aggregate`.
+
+```jsonc
+{
+  "schema": "jira-sdlc/conversation-debugger/feature-report@3",
+  "feature": "JST-122",             // the parent key this roll-up is for
+  "feature_type": "multistep",      // explicit marker ("multistep"); absent on @2 single-step
+  "parent": {                       // the PARENT's own conversations + roll-up
+    "key": "JST-122",
+    "summary": "conversation-debugger: feature-level token/cost + model report",
+    "conversation_count": 4,
+    "conversations": [ /* @2 records — same shape */ ],
+    "aggregate": { /* @2 aggregate — same shape, over the parent's own records */ }
+  },
+  "children": [                     // one entry per sub-task
+    {
+      "key": "JST-125",
+      "summary": "conversation-debugger: multistep feature report — nested child roll-up",
+      "conversation_count": 1,
+      "conversations": [ /* @2 records — same shape */ ],
+      "aggregate": { /* @2 aggregate — same shape, over THIS child's records */ }
+      // …a child with no worktree yet has conversation_count 0, conversations [],
+      //   and an all-zero aggregate — it still appears, so coverage stays honest.
+    }
+    // …one per sub-task
+  ],
+  "conversation_count": 5,          // feature-wide: parent's own + every child's
+  "aggregate": { /* @2 aggregate — same shape, over parent + ALL children */ }
+}
+```
+
+### `@3` field notes
+
+- **Every `aggregate` is a `@2` aggregate.** `parent.aggregate`,
+  `children[].aggregate`, and the top-level feature-wide `aggregate` all use the
+  identical shape documented above. The report-builder and any consumer reuse
+  one code path for all of them.
+
+- **The feature-wide `aggregate` spans parent + all children.** It is the roll-up
+  over the union of the parent's own records and every child's records — the
+  feature's total token consumption, the union of models/skills/keys, and the
+  by-skill / by-provenance / timeframe roll-ups across the whole feature.
+  `aggregate.issue_keys` therefore lists the parent key **and** the sub-task
+  keys.
+
+- **The creating assigner session belongs to the parent — counted once.** A
+  multistep assigner session (in the main checkout) mentions the parent key
+  **and** every sub-task key, so the per-key resolution finds it for the parent
+  *and* each child. `collect_feature` de-duplicates by transcript path with
+  **parent-priority**: the session is attributed to `parent`, dropped from every
+  child, and its tokens counted exactly once feature-wide. (Worktree sessions are
+  folder-scoped per key and never overlap; only the assigner session does.)
+
+- **A child may be empty.** A sub-task with no worktree yet (or no sessions in
+  it) contributes `conversation_count: 0`, `conversations: []`, and an all-zero
+  `aggregate`. It is still listed so the report shows the sub-task exists and is
+  not yet started.
+
+- **Detection is Jira-driven, with a safe fallback.** The single/multistep split
+  comes from the `subtasks` lookup, wrapped in a long timeout (the API can take
+  minutes). If the `acli` fetch fails or times out, `collect_feature` falls back
+  to **single-step (`@2`)** with a loud stderr WARN rather than aborting the
+  read-only roll-up.
 
 ## Field notes that matter
 
