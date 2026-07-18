@@ -64,9 +64,16 @@ from inside the project checkout.
   both the listing and the metrics "along" it (as the issue asked) while stdout
   stays pipe-safe.
 
-```
-collect_feature.ps1 JST-93 | feature_report.ps1 > JST-93-report.md
-collect_feature.ps1 JST-93 > JST-93.json        # JSON only; human view still on stderr
+Two equivalent ways to get the markdown (both dispatch each script as its own
+`pwsh` process; the human view still prints to the console via stderr):
+
+```powershell
+# 1. One-shot pipe: collector JSON straight into the report-builder
+pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
+
+# 2. Two steps: save the JSON first (keep/inspect it), then render markdown from it
+pwsh win/collect_feature.ps1 JST-93 > JST-93.json          # JSON only; human view still on stderr
+pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
 ```
 
 **Records-per-conversation, not one-per-conversation.** A session that invoked

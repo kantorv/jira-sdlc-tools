@@ -23,16 +23,24 @@ explicit parity gap, matching `collect_feature`.
 | Input | Description |
 | --- | --- |
 | `[<json-path>]` (positional) | Path to a `collect_feature` JSON file. A missing file exits 1. |
-| stdin | If no path is given (or the path is `-`), the JSON is read from stdin — so `collect_feature … \| feature_report` works. |
+| stdin | If no path is given (or the path is `-`), the JSON is read from the pipe — both the PowerShell object pipeline (`… \| .\feature_report.ps1`) and a process's redirected stdin (`pwsh … \| pwsh feature_report.ps1`) work. |
 
 With **no path and no piped input** it prints usage and exits 1 rather than
 blocking on the console. Empty or non-JSON input, or JSON missing the
 `feature`/`conversations`/`aggregate` keys, exits 1 with a clear message.
 
 ```powershell
-feature_report.ps1 JST-93.json > JST-93-report.md          # from a file
-collect_feature.ps1 JST-93 | feature_report.ps1 > out.md   # from stdin
+# 1. One-shot pipe (from stdin) — collector JSON straight in
+pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
+
+# 2. Two steps — from a saved JSON file
+pwsh win/collect_feature.ps1 JST-93 > JST-93.json
+pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
 ```
+
+The report is written on PowerShell's success stream, so `>` captures it in
+every form — as its own `pwsh` process, or as a stage inside an existing
+session (`… | .\feature_report.ps1 > out.md`).
 
 ## What it renders
 

@@ -409,11 +409,26 @@ They're Windows-only this round; their `posix/*.sh` twins are stubs that exit
 non-zero, so dispatch is `pwsh …/win/*.ps1` (outside a plugin session the
 scripts live under `scripts/win/` relative to this skill):
 
+`collect_feature` puts the machine-readable JSON on **stdout** and the human
+metrics view on **stderr**, so either form below prints the listing to the
+console while the JSON flows onward cleanly. Two equivalent ways to run it:
+
 ```powershell
-# JSON (machine) on stdout, human metrics view on stderr; pipe to the report-builder for markdown
-pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> \
+# 1. One-shot pipe — collector JSON straight into the report-builder → markdown
+pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> `
   | pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/feature_report.ps1" > <ISSUE-KEY>-feature-report.md
 ```
+
+```powershell
+# 2. Two steps — save the JSON first (keep/inspect it), then render markdown from it
+pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> > <ISSUE-KEY>.json
+pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/feature_report.ps1" <ISSUE-KEY>.json > <ISSUE-KEY>-feature-report.md
+```
+
+Both dispatch each script as its own `pwsh` process. `feature_report` also
+accepts input as a stage inside an existing session
+(`… | .\feature_report.ps1 > out.md`) and from a `-`/stdin path — all forms
+write the markdown to `>` correctly.
 
 `collect_feature` resolves the feature's conversations by reusing
 `sync_conversations`' list and runs `collect_run` over each — so its numbers are
