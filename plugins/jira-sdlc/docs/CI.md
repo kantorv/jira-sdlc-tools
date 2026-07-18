@@ -3,8 +3,11 @@
 > plugin) — they automate the release policy in [SDLC.md](SDLC.md) and the
 > Jira issue transitions the `jira-sdlc` skills assume. It complements
 > [AGENTS.md → Releasing](../../../AGENTS.md); this file is the CI-side
-> reference, AGENTS.md is the authoring-side one. Everything project-specific
-> is a secret or a `<TOKEN>` from `jira-sdlc-tools.env`, never a literal.
+> reference, AGENTS.md is the authoring-side one. For the **user-facing** lab
+> channel (how to install it, what extra skills it carries), see
+> [LAB-CHANNEL.md](https://github.com/kantorv/jira-sdlc-tools/blob/lab/LAB-CHANNEL.md)
+> — that doc lives on the `lab` branch. Everything project-specific is a
+> secret or a `<TOKEN>` from `jira-sdlc-tools.env`, never a literal.
 
 # CI / GitHub Actions
 
@@ -20,7 +23,7 @@ syncing**.
 | `validator.yml` | push / PR to `development`, `main` | Runs `claude plugin validate .` and checks both manifests are well-formed JSON. The only gate on structural correctness. |
 | `cut-release.yml` | manual `workflow_dispatch` (bump: patch/minor/major, default minor) | Computes the next SemVer from the latest **stable** tag + bump, cuts `release/sprint-<X.Y.Z>` off `development`, opens a **draft** PR into `main`. SDLC Phase 2. |
 | `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch. SDLC Phase 4 / §4. |
-| `update_lab.yml` | push to `development` or `lab` | Merges `development`→`lab` to keep the lab channel current, and (on the `development`-triggered run) mints an incrementing **lab tag** `vX.Y.Z-lab-N`. See [Tagging Mechanics](#tagging-mechanics). |
+| `update_lab.yml` | push to `development` or `lab` | Merges `development`→`lab` to keep the lab channel current, stamps the plugin manifests with a `X.Y.Z-lab.N` version **on the branch**, and tags the build `vX.Y.Z-lab.N`. See [Tagging Mechanics](#tagging-mechanics). |
 | `jira_issue_transition_on_branch.yml` | `create` (a `feature/*` or `hotfix/*` branch) | Advances the issue **To Do → In Progress**. |
 | `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from `feature/*` / `hotfix/*` | Advances the issue **→ In Review**. |
 | `jira_issue_transition_on_merge.yml` | PR closed (merged) on an issue branch | Advances the issue **→ Done**. |
@@ -34,8 +37,8 @@ syncing**.
   [SDLC.md](SDLC.md); order-of-operations in
   [AGENTS.md → Releasing](../../../AGENTS.md).
 - **Lab path (continuous):** every push to `development` cascades into `lab`
-  and produces a lab tag, giving an always-current pre-release channel that
-  runs **independently** of the stable release path.
+  and produces a `vX.Y.Z-lab.N` build, giving an always-current pre-release
+  channel that runs **independently** of the stable release path.
 - **Jira transitions** derive the issue key from the branch name and drive
   status changes to mirror `STATUS_TODO` / `STATUS_IN_PROGRESS` /
   `STATUS_IN_REVIEW` / `STATUS_DONE` from `jira-sdlc-tools.env`. They call the
@@ -73,54 +76,61 @@ Created **only** by `release.yml` on a `release/*` or `hotfix/*` merge into
 - `cut-release.yml` computes the *next* stable version = latest stable tag +
   bump level (default `minor`) and bakes it into the release branch name.
 
-> **Manifest-vs-tag off-by-one (by design).** `release.yml` tags the merge
-> commit *first*, then bumps `plugin.json` / `marketplace.json` in a *separate*
-> later commit on `main`. So `git checkout vX.Y.Z` shows the manifest still at
-> the previous version. The tag marks the release point; the "bump" commit
-> records the new number. (The lab path below deliberately does the opposite —
-> see the detached-commit note.)
+> **Manifest-vs-tag off-by-one on the stable path (by design).** `release.yml`
+> tags the merge commit *first*, then bumps `plugin.json` / `marketplace.json`
+> in a *separate* later commit on `main`. So `git checkout vX.Y.Z` shows the
+> manifest still at the previous version. (The lab path below does the
+> opposite — it stamps the manifest *before* tagging, so an `@lab` install
+> reports the exact build.)
 
-### Lab tags — `vX.Y.Z-lab-N`
+### Lab tags — `vX.Y.Z-lab.N`
 
-An incrementing pre-release channel, minted by `update_lab.yml`. Format:
+A continuously-updated pre-release channel, minted by `update_lab.yml`. For
+the user-facing side (install commands, the two lab-only skills), see
+[LAB-CHANNEL.md](https://github.com/kantorv/jira-sdlc-tools/blob/lab/LAB-CHANNEL.md).
+Format:
 
 ```
-v0.5.0-lab-7
-│  │  │   └── N: monotonic build counter, global, never resets
+v0.5.0-lab.3
+│  │  │   └── N: build counter WITHIN this base — resets to 1 when the base bumps
 │  └──┴────── vX.Y.Z: the latest STABLE release this build sits on top of
 └──────────── same leading v as stable tags
 ```
 
-- **Base `vX.Y.Z`** = the latest strict-SemVer stable tag = provenance. It
-  answers "what release is this lab build built on?" When a new stable ships,
-  the base rolls forward on the next lab tag.
-- **Counter `N`** = highest existing `-lab-N` counter across all lab tags,
-  plus one. Global and monotonic — it never resets, so `v0.5.0-lab-7`
-  followed by a `v0.6.0` release yields `v0.6.0-lab-8` next.
-- **When it mints:** only on the `development`-triggered `update_lab` run, and
-  only when the `development`→`lab` merge actually advanced `lab`. The push to
-  `lab` that this same workflow makes re-triggers the workflow on the `lab`
-  branch; that run is gated **out** of tagging, so a dev update produces
-  exactly one lab tag — no double-tag, no loop.
+- **Base `vX.Y.Z`** = the latest *plain* SemVer tag (prereleases — anything
+  with a `-` — are excluded). It answers "what release is this lab build built
+  on?"
+- **Counter `N`** = highest existing `v<base>-lab.N` + 1. It is scoped to the
+  **current base**, so it increments within a base (`…-lab.1`, `…-lab.2`, …)
+  and **resets to 1** when a stable release bumps the base
+  (`v0.5.0-lab.7` → release `v0.6.0` → next is `v0.6.0-lab.1`).
 
-> **The tag points at a detached commit — the `lab` branch stays clean.**
-> The lab tag is created on a commit that bumps the manifests to
-> `0.X.Y-lab-N`, but that commit is **not** pushed onto the `lab` branch. The
-> branch is left byte-identical to `development`. This is deliberate: if the
-> `0.X.Y-lab-N` version were committed onto `lab`, then every stable release
-> (which bumps `development`'s manifest version too) would collide on the
-> `version` line and break the next `development`→`lab` merge. Keeping the
-> branch clean means the merge can never conflict on that line.
->
-> **Consequence for installing:** install a lab build **by its tag**
-> (`vX.Y.Z-lab-N`) — the tag's tree carries the correct `0.X.Y-lab-N` manifest
-> version. Installing off the `lab` *branch* gives `development`'s version
-> instead. Lab tags are **not** published as GitHub Releases; they are git
-> tags only.
+What one `update_lab.yml` run does, in order:
+
+1. **Sync** — merge `development` into `lab`. If the merge conflicts *only* in
+   the two manifest files (`plugin.json` + `marketplace.json`) — the expected
+   case, since their version lines diverge by design — it **auto-resolves**
+   by taking `development`'s copy (the version is re-stamped in step 3
+   anyway). A conflict touching **anything else** stops the run for a human.
+2. **Skip-if-already-tagged** — if `HEAD` is already an exact `v*-lab.*` tag
+   (nothing new merged in), it pushes the sync and stops without a new tag.
+3. **Stamp + commit** — write `X.Y.Z-lab.N` into both manifests and commit it
+   **onto the `lab` branch** as `chore(lab): X.Y.Z-lab.N [skip ci]`.
+4. **Push + tag** — push `lab`, then create and push the annotated tag
+   `vX.Y.Z-lab.N` on that commit.
+
+> **The version lives on the branch, not just the tag.** Because step 3
+> commits the stamped manifest onto `lab`, **both** an `@lab` *branch* install
+> and a `vX.Y.Z-lab.N` *tag* install report the correct build version. The
+> `[skip ci]` marker on that commit stops the resulting push from
+> re-triggering the workflow, so a dev update yields exactly one tag — no
+> double-tag, no loop. A `concurrency` group serialises runs so two pushes
+> can't collide on the counter. Lab builds are git tags only — **no GitHub
+> Release** is published.
 
 ### Namespace isolation — why lab tags can't corrupt the stable version math
 
-Both stable pickers scan for `v[0-9]*`, which *also* matches `vX.Y.Z-lab-N`.
+Both stable pickers scan for `v[0-9]*`, which *also* matches `vX.Y.Z-lab.N`.
 Left unfiltered, a lab tag would be mistaken for the latest stable and crash
 version resolution. Each picker is therefore hardened to accept only strict
 `vX.Y.Z`:
@@ -135,13 +145,14 @@ only input to version bumps.
 
 ### The ordering caveat (intentional)
 
-Whether `vX.Y.Z-lab-N` is "greater than" `vX.Y.Z` depends on who's asking:
+Whether `vX.Y.Z-lab.N` is "greater than" `vX.Y.Z` depends on who's asking:
 
-- **Git `sort -V`** ranks `v0.5.0-lab-7` **above** `v0.5.0` — matching the
+- **Git `sort -V`** ranks `v0.5.0-lab.3` **above** `v0.5.0` — matching the
   intuition that a lab build is "v0.5.0 plus more."
 - **Strict SemVer** treats the `-` suffix as a **pre-release**, ranking
-  `v0.5.0-lab-7` **below** `v0.5.0`.
+  `v0.5.0-lab.3` **below** `v0.5.0`.
 
 This mismatch is harmless — in fact useful. A strict-SemVer "pick the latest
 stable" will **never** select a lab build, which is exactly what you want from
-a pre-release channel: lab tags are opt-in by exact tag, never auto-promoted.
+a pre-release channel: lab tags are opt-in by exact tag (or the `@lab`
+branch), never auto-promoted.
