@@ -39,12 +39,32 @@ The three skills, one per stage of the lifecycle:
 
 ## Task lifecycle preview
 
-The three skills map to three phases of a task's life. Each phase has a
-sequence diagram with a full walkthrough; the thumbnails below preview
-them side by side and link to the full doc. They're *previews* — not
-meant to be readable at this size (GitHub won't render mermaid inside a
-table cell, so these are pre-rendered SVGs); click through for the
-legible diagram and notes.
+The three skills map to three phases of a task's life:
+
+1. **Phase 1 · Plan**  
+   skill: `jira-task-assigner`  
+   Jira state: **To Do**
+   - investigates the codebase
+   - asks clarifying questions
+   - settles the scope (one issue, or a parent split into sub-tasks)
+   - files the Jira issues
+   - provisions a git branch and worktree for each
+   - records the PR target branch the later phases build on
+2. **Phase 2 · Implement**  
+   skill: `jira-task-executor`  
+   Jira state: **In Progress**
+   - runs once per worktree, in parallel
+   - confirms it owns the worktree and brings the branch up to date
+   - implements the issue, runs the tests, commits, pushes, and opens a PR
+   - moves the issue to *In Review*
+3. **Phase 3 · Review & aggregate approval**  
+   skill: `jira-task-reviewer`  
+   Jira state: **In Review**
+   - reviews each PR across six dimensions (correctness, patterns, scope, regressions, tests, hygiene)
+   - posts its verdict to GitHub and Jira
+   - sends rejected issues back to *In Progress*
+   - never merges — that stays a human call
+---
 
 <table>
 <tr>
@@ -52,22 +72,19 @@ legible diagram and notes.
 <strong>Phase 1 · Plan</strong><br>
 <code>jira-task-assigner</code><br>
 <a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a><br><br>
-<em>Investigates the codebase, asks clarifying questions, decides scope (single-step vs multistep split), creates every Jira issue, provisions git branches and worktrees, and records the PR target branch for downstream phases.</em>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
 </td>
 <td align="center" valign="top" width="33%">
 <strong>Phase 2 · Implement</strong><br>
 <code>jira-task-executor</code><br>
 <a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a><br><br>
-<em>Validates worktree ownership, brings the branch current, implements the issue, runs tests, commits and pushes, opens a PR, and transitions the issue to In Review. Multiple executors run in parallel — one per worktree.</em>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
 </td>
 <td align="center" valign="top" width="33%">
 <strong>Phase 3 · Review &amp; aggregate approval</strong><br>
 <code>jira-task-reviewer</code><br>
 <a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a><br><br>
-<em>Reviews each PR against six dimensions — correctness, patterns, scope, regressions, tests, hygiene — posts verdicts to GitHub and Jira, and transitions rejected issues back to In Progress. Never merges; that stays manual.</em>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
 </td>
 </tr>
 </table>
