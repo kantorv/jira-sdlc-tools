@@ -183,8 +183,8 @@ an error; the semicolon is the one that bites, and the checker will point at it.
 
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
-The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
+The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`jira_acli_login`, `get_assignee_email`, `check_assignee`, `github_pat_auth`) ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
@@ -200,11 +200,17 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee github_pat_auth; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
-done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee
+done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee;
+       # github_pat_auth is deterministic — diff `remote-url` (the `verify`/`fetch`
+       # subcommands hit the network). Note: statuscheck's diff still shows one
+       # pre-existing Windows-only residual (its nested `ensure_local_env` invoke
+       # uses the `$PSHOME\*.exe` form, which doesn't resolve under Linux+pwsh) —
+       # unrelated to `github_pat_auth`, which uses `(Get-Process -Id $PID).Path`
+       # and ports cleanly (diff `github_pat_auth.sh remote-url` vs the `.ps1` twin).
 ```
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the

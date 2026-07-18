@@ -41,6 +41,7 @@ define the same variable (though they define disjoint sets by convention).
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). Used for the one-time `acli jira auth login` and for constructing issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
 | `<JIRA_ACCOUNT_EMAIL>` | The email address of the Jira account that owns the API token. Used for the one-time `acli jira auth login`. | `you@example.com` |
 | `<JIRA_TOKEN>` | The Jira API token **value** itself — not a path to a file containing it. `acli jira auth login --token` reads from stdin: `printf '%s' "<JIRA_TOKEN>" \| acli jira auth login … --token`. | `ATATT3xFfGF0…` |
+| `<GITHUB_PAT_TOKEN>` | A fine-grained GitHub PAT scoped to **this one repo** (`Contents: Read and write`, `Metadata: Read-only`, `Pull requests: Read and write` — no `Account` perms, no other repos). The skills' git push/fetch and `gh` calls authenticate as this token **without** touching the human's SSH `origin` or `gh` keyring login. Raw token value, never a file path; one surrounding `"`/`'` pair is stripped on read so the env file may quote it. Required: statuscheck's `gh_auth` row FAILs without it, and every `$AUTH git`/`$AUTH gh` call the skills make presumes it. See `../docs/github/GITHUB-AUTH-STRATEGY.md` for the full design. | `github_pat_…` |
 
 ### acli auth (one-time setup)
 
@@ -65,6 +66,21 @@ The `jira-task-executor` skill re-runs this login as the optional
 logout` first, so the new credential actually takes effect — the §0
 gotcha above) — see the **Optional** section below for the executor
 variables and the machine-global side effect of that re-login.
+
+## GitHub PAT auth (per-command, no stored login)
+
+Unlike acli, the skills' GitHub calls do **not** run `gh auth login`
+or otherwise touch the human's `gh` keyring (`~/.config/gh/hosts.yml`)
+or SSH `origin`. Every git push/fetch and every `gh` call authenticates
+inline as the repo-scoped PAT in `<GITHUB_PAT_TOKEN>`, via the shared
+helper `skills/_shared/scripts/posix/github_pat_auth.sh` (Windows:
+`.../win/github_pat_auth.ps1`) — a per-command git credential helper
+(Basic `x-access-token:<PAT>`) for git, and a `GH_TOKEN=` prefix for
+`gh`. The human's own SSH `origin` and `gh` login stay exactly as they
+are; the two identities share one OS user and one `.git/config` without
+collision. statuscheck's `gh_auth` row verifies the PAT (not the
+keyring) at the start of every run. Full design + the per-call
+translation table: `../docs/github/GITHUB-AUTH-STRATEGY.md`.
 
 ## Optional — per-role Jira accounts (in `jira-sdlc-tools.local.env`)
 
@@ -163,6 +179,7 @@ WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 JIRA_ACCOUNT_EMAIL    = you@example.com
 JIRA_TOKEN            = ATATT3xFfGF0…
+GITHUB_PAT_TOKEN      = github_pat_…
 # Optional per-role accounts (each defaults to JIRA_ACCOUNT_EMAIL/JIRA_TOKEN above) —
 # uncomment + fill to have each skill act as its own Jira user:
 #JIRA_ASSIGNER_EMAIL   = assigner@example.com

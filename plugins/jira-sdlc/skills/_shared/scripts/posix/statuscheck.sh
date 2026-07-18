@@ -202,7 +202,7 @@ if [ "$OS" = "windows" ]; then
   fi
   command -v acli >/dev/null 2>&1 || MISSING="$MISSING acli"
   command -v gh   >/dev/null 2>&1 || MISSING="$MISSING gh"
-  for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+  for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee github_pat_auth; do
     [ -f "$WIN_DIR/$s.ps1" ] || MISSING="$MISSING win/$s.ps1"
   done
   if [ -n "$MISSING" ]; then
@@ -322,18 +322,25 @@ else
   row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
 fi
 
-# --- gh auth (needed by 'gh pr create') ----------------------------------
-if ! command -v gh >/dev/null 2>&1; then
-  row gh_auth FAIL "gh (GitHub CLI) is not installed" \
-    "install it (https://cli.github.com) and run 'gh auth login', then $RERUN."
+# --- gh auth (PAT-scoped; needed by every 'gh pr …') ---------------------
+# AC#5: verify the agent's repo-scoped fine-grained PAT (from
+# jira-sdlc-tools.local.env) authenticates against THIS repo — NOT the human's
+# `gh auth status` keyring login, which the PAT model deliberately leaves
+# untouched (the agent never 'logs in'; the human's gh session stays as-is).
+# See ../../docs/github/GITHUB-AUTH-STRATEGY.md. The helper is the same choke
+# point the skills call, so a healthcheck pass means the skills' gh will work.
+GHA_HELPER="$PLAT_SCRIPT_DIR/github_pat_auth.sh"
+GHA_OUT=$($TMOUT_CMD bash "$GHA_HELPER" verify 2>&1 || true)
+if printf '%s' "$GHA_OUT" | grep -q 'github_pat_auth: OK'; then
+  GHA_OK=$(printf '%s' "$GHA_OUT" | grep -m1 'github_pat_auth: OK')
+  row gh_auth OK "$GHA_OK"
 else
-  GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
-  if [ -n "$GH_LINE" ]; then
-    row gh_auth OK "$GH_LINE"
-  else
-    row gh_auth FAIL "gh is installed but not authenticated" \
-      "run 'gh auth login', then $RERUN."
-  fi
+  # The helper's stderr already names the specific cause (PAT missing / origin
+  # not github.com / gh not installed / GitHub 401-403). Surface its last line
+  # as the detail; the remedy points at the strategy doc.
+  GHA_DETAIL=$(printf '%s' "$GHA_OUT" | grep -v '^[[:space:]]*$' | tail -1)
+  row gh_auth FAIL "${GHA_DETAIL:-gh auth via GITHUB_PAT_TOKEN failed}" \
+    "set GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env to the fine-grained PAT scoped to this repo (Contents:RW, Metadata:RO, Pull requests:RW) — and install gh if missing; see ../../docs/github/GITHUB-AUTH-STRATEGY.md, then $RERUN."
 fi
 
 # --- acli auth (needed by every 'acli jira ...' call) ---------------------

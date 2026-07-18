@@ -18,7 +18,27 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
 - Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `<STATUS_IN_PROGRESS>`) are silently ignored — the executor will transition them when ready.
 - Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores credentials after a one-time `acli jira auth login`, so no per-command `JIRA_API_TOKEN` prefix; run commands bare.
-- **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
+- **GitHub auth (PAT)** — every git/gh call against GitHub routes through
+  the repo-scoped PAT helper `$AUTH` (defined in the credential block
+  below; `.ps1` twin on Windows) so `origin` stays the human's SSH and the
+  agent never touches their `gh` keyring or `.git/config`. Never run bare
+  `git fetch origin` or `gh …` against GitHub — those hit the human's
+  credentials. Use `bash "$AUTH" fetch` and `bash "$AUTH" gh …` instead
+  (all `gh pr list`/`view`/`diff`/`review`/`create`/`api` calls), and the
+  local-only `git branch -a` / `git config` bare. The full translation
+  map and the *why* ("exactly one identity lives in persistent config, the
+  human's") are in `../docs/github/GITHUB-AUTH-STRATEGY.md` §7.
+  **Set `AUTH` at the top of every Bash call that uses it** — each Bash
+  call is a fresh shell, so the assignment in the credential block does
+  not carry forward; if `$AUTH` ever expands empty, `bash "" gh …` fails
+  and you must **not** "fix" it by falling back to bare `gh …` (that hits
+  the human's keyring — the exact violation this setup prevents). Re-set
+  it first:
+  ```bash
+  AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+  ```
+  (`.ps1` twin on Windows), then the `bash "$AUTH" …` call.
+- **Your GitHub identity** = `bash "$AUTH" gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(bash "$AUTH" gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
@@ -48,6 +68,7 @@ stale token can't survive), so run them unconditionally. On non-zero from
 either, relay its stderr and **stop**.
 
 ```bash
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" reviewer || exit 1
 ```
@@ -117,7 +138,7 @@ climbing from a sub-task to its parent if needed).
 
 ## 1. Resolve the parent, sub-tasks, and pick a track
 
-- `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
+- `bash "$AUTH" fetch` first (PAT HTTPS fetch + `--prune`, origin stays SSH). Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
 - Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (source of truth for this review-fetch field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
   - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → per the rule at the top, review **this sub-task's own PR only**. Do *not* re-fetch the parent as an acting issue and do *not* read its `fields.subtasks` — that sweep belongs to a run from the parent's worktree. `<PARENT-BRANCH>` (this PR's base) = §12's resolver with `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report (step 6) that only `<RUN-KEY>` was reviewed.
@@ -151,8 +172,9 @@ climbing from a sub-task to its parent if needed).
 
 For a single-step issue (no sub-tasks), check if a PR already exists targeting `<BASE_BRANCH>`:
 
-```
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
+```bash
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
 ```
 
 - **No PR exists yet** → The executor hasn't opened one. Report: "Single-step issue `<PARENT-KEY>` has no open PR yet. The reviewer will run once the PR is created." Exit.
@@ -161,8 +183,9 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 
 ### Multistep phase check (only for the multistep track)
 
-```
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
+```bash
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
 ```
 
 - **No parent PR exists yet** → Sub-tasks aren't all merged. Continue to step 2 for a full review pass.
@@ -176,7 +199,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 For each `<SUBTASK-KEY>` that passed the status filter:
 
 - Find its branch: `git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <SUBTASK-KEY>` (dedupes the local + `remotes/origin/` pair so a branch present in both counts once). If no branch exists yet, that sub-task hasn't been implemented — flag it in the report and skip it.
-- Find the open PR: `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --json number,title,state,url`. If no PR exists, flag and skip. If more than one open PR, ask the user which one to review.
+- Find the open PR: `bash "$AUTH" gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --json number,title,state,url`. If no PR exists, flag and skip. If more than one open PR, ask the user which one to review.
 - Record: `{ key, branch, prNumber, prUrl }`.
 
 If **zero** sub-tasks have open PRs, report and exit.
@@ -267,14 +290,15 @@ side-effects.
 
 Iterate through **the PR set** (defined in step 1 — the one parent PR on the single-step track, each in-review sub-task PR on the multistep track) in ascending key order. Treat each PR individually — do not hold results for a batch. The loop body below is the same for every PR in the set regardless of track.
 
-Resolve this skill's GitHub identity **once here, before the loop** — `SELF=$(gh api user --jq .login)` — and reuse it for every iteration (3a keys on it). If `gh api user` errors, gh isn't installed or authenticated: see the edge case in step 7.
+Resolve this skill's GitHub identity **once here, before the loop** — `SELF=$(bash "$AUTH" gh api user --jq .login)` — and reuse it for every iteration (3a keys on it). If `bash "$AUTH" gh api user` errors, gh isn't installed or the PAT is missing/invalid (statuscheck's `gh_auth` row should have caught this): see the edge case in step 7.
 
 ### 3a. Check idempotency — already reviewed by me?
 
 Before reviewing a PR, check whether **this skill's GitHub identity** (`SELF`, resolved once before the loop above) has already left a verdict comment on it:
 
 ```bash
-gh pr view <prNumber> --json reviews --jq \
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" gh pr view <prNumber> --json reviews --jq \
   '.reviews[] | select(.author.login == "'"$SELF"'") | .body'
 ```
 
@@ -288,11 +312,12 @@ Matching by author **and body prefix** — not by review `state` — is what mak
 
 ### 3b. Fetch the diff
 
-```
-gh pr diff <prNumber>
+```bash
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" gh pr diff <prNumber>
 ```
 
-Read the full diff. If it's very large (>1000 lines), list changed files via `gh pr diff <prNumber> --name-only` and `Read` relevant files for context. Do not skip any file in the diff.
+Read the full diff. If it's very large (>1000 lines), list changed files via `bash "$AUTH" gh pr diff <prNumber> --name-only` and `Read` relevant files for context. Do not skip any file in the diff.
 
 ### 3c. Review criteria
 
@@ -313,24 +338,26 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
 * **If APPROVE (all dimensions pass):** fill the canonical template with the per-PR approve outcome **for this track** — **S-APPROVED** when this is the single-step parent PR, **M-SUBTASK-APPROVED** when this is a multistep sub-task PR (a sub-task PR merges into `<PARENT-BRANCH>`, not `<BASE_BRANCH>`, and a reviewer re-run *is* required afterwards to pick up the parent PR, so its title and `### Next step` differ from the single-step "final update" wording). Set `### Verdict recorded` → GitHub: APPROVED comment on PR #<n>, Jira: note posted, status not moved; verdict-header line `APPROVED — <one-line summary>`:
   ```bash
+  AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
   cat > /tmp/<KEY>-report.md <<'EOF'
   APPROVED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, scoped to this PR
   EOF
-  gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
+  bash "$AUTH" gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
   (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Do NOT move the Jira status — let the GitHub-for-Jira automation handle it when the PR is merged.
 
 * **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
   ```bash
+  AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
   cat > /tmp/<KEY>-report.md <<'EOF'
   CHANGES REQUESTED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
   EOF
-  gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
+  bash "$AUTH" gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   acli jira workitem transition --key <SUBTASK-KEY-or-PARENT-KEY> --status "<STATUS_IN_PROGRESS>" --yes
   ```
@@ -356,7 +383,7 @@ The post-loop outcome is mutually exclusive and **track-dependent** — pick the
 
 ### 4a. *(Multistep)* All approved — merge and re-run
 
-1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> --json state` for each).
+1. Check if **all** of those PRs are already merged (`bash "$AUTH" gh pr view <prNumber> --json state` for each).
 2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`, then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's worktree) to pick up the parent PR." (Step 6 posts the written report to Jira.)
 3. **If all are merged** → proceed to step 5 (parent PR handling).
 
@@ -379,12 +406,14 @@ For a single-step issue (no sub-tasks), after the PR is reviewed in step 3:
 
 ### 5a. Find or create the parent PR
 
-```
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state,url
+```bash
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state,url
 ```
 
 - **No PR exists** → create one (write the body to a temp file — see the GitHub-body mechanics in the preamble):
   ```bash
+  AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
   cat > /tmp/<PARENT-KEY>-pr-body.md <<'EOF'
   Aggregate PR for <PARENT-KEY>.
 
@@ -392,7 +421,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state
   - <SUBTASK-KEY>: <PR URL>
   - ...
   EOF
-  gh pr create --base <BASE_BRANCH> --head <PARENT-BRANCH> \
+  bash "$AUTH" gh pr create --base <BASE_BRANCH> --head <PARENT-BRANCH> \
     --title "<PARENT-KEY>: <summary>" \
     --body-file /tmp/<PARENT-KEY>-pr-body.md
   ```
@@ -402,11 +431,11 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state
 
 ### 5b. Review the parent PR (apply the 3a idempotency check first)
 
-Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the step-1 phase check jumps straight here and skips step 3, where `SELF` is normally set; if it's unset, resolve it now (`SELF=$(gh api user --jq .login)`; if `gh api user` errors, see step 7). Then apply the **3a body-prefix idempotency check** before reviewing: a prior self-review whose body starts `APPROVED —` → report "Parent PR already reviewed — waiting for manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the fresh aggregate code. Otherwise:
+Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the step-1 phase check jumps straight here and skips step 3, where `SELF` is normally set; if it's unset, resolve it now (`SELF=$(bash "$AUTH" gh api user --jq .login)`; if `bash "$AUTH" gh api user` errors, see step 7). Then apply the **3a body-prefix idempotency check** before reviewing: a prior self-review whose body starts `APPROVED —` → report "Parent PR already reviewed — waiting for manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the fresh aggregate code. Otherwise:
 
 1. Review the aggregate diff: same criteria as 3c, but lighter. The sub-tasks were already reviewed individually — focus on integration issues, conflicts, and anything that only surfaces when the pieces combine.
-2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 6 posts the run-level report.
-3. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
+2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `bash "$AUTH" gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 6 posts the run-level report.
+3. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `bash "$AUTH" gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
 
 *Do not merge here.* Report that the parent PR is reviewed/approved and waiting for the user to merge it manually.
 
@@ -482,7 +511,7 @@ outcomes above.
 - **Sub-task with no branch / no PR**: flag in the report. The skill can only review what has been pushed and has a PR open. Don't attempt to create branches or PRs — that's the executor's job.
 - **A review (or approval) from someone else**: the skill always does its own review — an existing review by another account doesn't skip the code-review step. The 3a idempotency check only looks at *this skill's own* prior comments, keyed on `<SELF>`'s login + body prefix.
 - **Already reviewed by this skill (idempotency)**: see 3a — a prior self-review whose body starts `APPROVED —` skips re-review (waiting for manual merge); one starting `CHANGES REQUESTED —` triggers a re-review of the fresh code. For a forced re-review, flag it manually.
-- **`gh` not installed or not authenticated**: the step-3 `SELF=$(gh api user --jq .login)` resolution fails, so 3a's idempotency check has no identity to key on — report the error and give the user the PR URLs so they can review/merge manually.
+- **`gh` not installed or the PAT missing/invalid**: the step-3 `SELF=$(bash "$AUTH" gh api user --jq .login)` resolution fails (statuscheck's `gh_auth` row should have caught this at preflight — if it passed and this still fails, the PAT or `gh` install changed mid-run), so 3a's idempotency check has no identity to key on — report the error and give the user the PR URLs so they can review/merge manually.
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and reports the merged state via step 6 (S-MERGED), then exits — no wrap-up; GitHub-for-Jira already handled the `<STATUS_DONE>` transition.
 

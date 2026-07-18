@@ -192,7 +192,13 @@ relying on opaque GitHub-for-Jira transition rules:
   [Configuration](#configuration)). `acli` stores the credentials, so no
   per-command token prefix.
 
-- **GitHub CLI (`gh`)**, authenticated.
+- **GitHub CLI (`gh`)**, authenticated for your *own* interactive use
+  (browsing PRs, etc.). The skills themselves do **not** use that
+  login — they push/fetch and call `gh` as a **repo-scoped fine-grained
+  PAT** (`GITHUB_PAT_TOKEN` in `jira-sdlc-tools.local.env`), leaving
+  your SSH `origin` and `gh` keyring login untouched. See
+  [`docs/github/GITHUB-AUTH-STRATEGY.md`](docs/github/GITHUB-AUTH-STRATEGY.md)
+  for the design and the per-call translation.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
   connected between your Jira project and GitHub repo — automatic
   branch-to-issue linking depends on it.
@@ -319,6 +325,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
 - The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one; see the one-time `acli jira auth login` in the config reference)
+- The GitHub PAT (`GITHUB_PAT_TOKEN` — a fine-grained PAT scoped to **only** your feature repo, with `Contents: Read and write`, `Metadata: Read-only`, and `Pull requests: Read and write`; the skills push/fetch and call `gh` as this token without touching your own SSH or `gh` login. See [`docs/github/GITHUB-AUTH-STRATEGY.md`](docs/github/GITHUB-AUTH-STRATEGY.md) for the design and the exact scopes.)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 

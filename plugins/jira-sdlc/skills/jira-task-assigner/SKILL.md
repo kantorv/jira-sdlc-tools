@@ -31,6 +31,17 @@ project. Given a task description from the user ($ARGUMENTS):
   Branch naming is always `feature/<KEY>-<slug>` whether `<KEY>` is the
   top-level issue or a Sub-task — this keeps the branch-parsing regex in
   step 2 working no matter which branch someone checks out later.
+- **GitHub auth (PAT)** — every git/gh call against GitHub routes through
+  the repo-scoped PAT helper `$AUTH` (`${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh`
+  on POSIX, the `.ps1` twin on Windows — set it fresh in each bash block
+  that uses it, since a new Bash call is a new shell) so `origin` stays the
+  human's SSH and the agent never touches their `gh` keyring or
+  `.git/config`. Never run bare `git push -u origin <branch>`, `git fetch
+  origin`, or `git pull` against GitHub — those hit the human's
+  credentials. Use `$AUTH`'s `fetch` and `git push <explicit-HTTPS-URL>`
+  instead, and local-only `git merge` / `git config` bare. The full
+  translation map and the *why* ("exactly one identity lives in persistent
+  config, the human's") are in `../docs/github/GITHUB-AUTH-STRATEGY.md` §7.
 
 ## 1. Discovery and healthcheck
 
@@ -184,8 +195,9 @@ Before any branch creation, make sure the local base branch actually
 matches the remote — a bare `git fetch` moves only the remote-tracking
 ref, not the branch you're about to branch from:
 ```bash
-git fetch origin
-git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forward, stop and ask
+AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+bash "$AUTH" fetch                       # PAT HTTPS fetch into refs/remotes/origin/* (origin stays SSH)
+git merge --ff-only origin/<BASE_BRANCH> # local; if this can't fast-forward, stop and ask
 ```
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
@@ -203,7 +215,13 @@ ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_as
    - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
      `acli jira workitem create` call. One flag does it (no separate
      `workitem assign`).
-2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
+2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then push it over the PAT to the explicit HTTPS URL and point its upstream at `origin` by name (so the human's bare `git push`/`git pull` still default to SSH):
+   ```bash
+   AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+   bash "$AUTH" git push "$(bash "$AUTH" remote-url)" "feature/<PARENT-KEY>-<slug>:refs/heads/feature/<PARENT-KEY>-<slug>"
+   git config branch.feature/<PARENT-KEY>-<slug>.remote origin
+   ```
+   This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
    `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> feature/<PARENT-KEY>-<slug>`

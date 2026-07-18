@@ -22,6 +22,23 @@ the issue key is derived from the current branch (see Discovery below).
 - Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores
   credentials after a one-time `acli jira auth login`, so no per-command
   token prefix; run commands bare.
+- **GitHub auth (PAT)** — every git/gh call against GitHub routes through
+  the repo-scoped PAT helper `$AUTH` (defined in the credential block
+  below; `.ps1` twin on Windows) so `origin` stays the human's SSH and the
+  agent never touches their `gh` keyring or `.git/config`. Never run bare
+  `git push -u origin <branch>`, `git fetch origin`, `git pull`, or `gh …`
+  against GitHub — those hit the human's credentials. Use `$AUTH`'s
+  subcommands instead (`fetch`, `git push <explicit-HTTPS-URL>`, `gh`, and
+  `remote-url` for a compare-link URL), and the local-only `git merge` /
+  `git config` bare. The full translation map and the *why* ("exactly one
+  identity lives in persistent config, the human's") are in
+  `../docs/github/GITHUB-AUTH-STRATEGY.md` §7; the routing at each step
+  below follows it. **Each Bash call is a fresh shell — set `AUTH` at the
+  top of any Bash call that uses it** (the credential block's assignment
+  doesn't carry forward); the fenced `bash "$AUTH" …` blocks below each
+  set it themselves as the first line. If `$AUTH` ever expands empty, do
+  **not** fall back to bare `git`/`gh` (that hits the human's keyring) —
+  re-set `AUTH` first.
 - **Jira comment mechanics**: multi-line / markdown comments are written to
   a temp file and posted with `acli jira workitem comment create --key <KEY>
   --body-file <file>`. Never wrap markdown in an inline `--body` string
@@ -76,6 +93,7 @@ comment, or work the issue.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"
+AUTH="$S/github_pat_auth.sh"
 bash "$S/ensure_local_env.sh"          || exit 1   # 1. worktree gets local.env if it's missing
 bash "$S/jira_acli_login.sh" executor  || exit 1   # 2. become the executor
 bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned to it
@@ -190,8 +208,9 @@ stale-branch merge and step 10's PR-base resolution).
      would silently miss anything that landed on origin after this
      worktree was created:
      ```bash
-     git fetch origin
-     git merge origin/<parent-branch> --no-edit   # the local ref only if it was never pushed
+     AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+     bash "$AUTH" fetch
+     git merge origin/<parent-branch> --no-edit   # local ref only if it was never pushed
      ```
      If the merge conflicts, stop and ask the user to resolve — don't
      attempt to resolve merge conflicts automatically.
@@ -292,7 +311,17 @@ stale-branch merge and step 10's PR-base resolution).
    if the change has logically separate pieces; one is fine for a small
    change.
 
-9. **Push** — `git push -u origin <branch-name>`.
+9. **Push** — push the branch over the PAT to the explicit HTTPS URL
+   (origin stays the human's SSH), then point the branch's upstream back at
+   `origin` by name so the human's bare `git push`/`git pull` still default
+   to SSH:
+   ```bash
+   AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
+   bash "$AUTH" git push "$(bash "$AUTH" remote-url)" "HEAD:refs/heads/<branch-name>"
+   git config branch.<branch-name>.remote origin
+   ```
+   (Pushing the explicit URL doesn't set a named upstream cleanly — the
+   `git config ...remote origin` line does. See §7.)
 
 10. **Open a PR:**
     - Resolve the PR base per `../_shared/jira-acli-reference.md` §12
@@ -342,10 +371,11 @@ stale-branch merge and step 10's PR-base resolution).
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
       ```bash
+      AUTH="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/github_pat_auth.sh"
       cat > /tmp/<KEY>-pr-body.md <<'EOF'
       <what changed + link to the issue>
       EOF
-      gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
+      bash "$AUTH" gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
         --body-file /tmp/<KEY>-pr-body.md
       ```
     - The discovery checks above already confirmed `gh` is installed and
@@ -354,7 +384,7 @@ stale-branch merge and step 10's PR-base resolution).
       Don't fail silently — report the `gh` error and still hand back the
       compare URL so the user can open the PR by hand:
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
-      (get `<org>/<repo>` from `git remote get-url origin`).
+      (get `<org>/<repo>` from `bash "$AUTH" remote-url`, the HTTPS form — origin's URL is SSH and stays that way).
 
 11. **Update Jira — status transition, no comment yet:**
     You just opened a PR (step 10), so the work is now under review —
