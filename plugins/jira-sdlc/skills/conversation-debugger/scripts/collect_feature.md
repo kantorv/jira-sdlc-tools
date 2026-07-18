@@ -134,6 +134,19 @@ pwsh win/collect_feature.ps1 JST-93 > JST-93.json          # JSON only; human vi
 pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
 ```
 
+On **Windows PowerShell 5.1** (`powershell.exe`) swap each `pwsh X` for
+`powershell -ExecutionPolicy Bypass -File X` — every form above works
+unchanged, e.g. the one-shot pipe:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File win/collect_feature.ps1 JST-93 |
+  powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 > JST-93-report.md
+```
+
+Both hosts produce the **same metrics and the same report**; the JSON differs
+only cosmetically (5.1 serializes a whole-number `span_s` as `3685.0`, 7 as
+`3685` — same value, and the report-builder reads either).
+
 **Records-per-conversation, not one-per-conversation.** A session that invoked
 two skills produces two records (same `uuid`, different `skill`) because
 `collect_run` scopes metrics to one skill's turns. See the schema doc's field
@@ -163,7 +176,8 @@ Callers decide POSIX vs. Windows from their own runtime before invoking — the
 POSIX path is a stub this round:
 
 ```powershell
-pwsh  win/collect_feature.ps1   <ISSUE-KEY>
+pwsh  win/collect_feature.ps1   <ISSUE-KEY>                                    # PowerShell 7+
+powershell -ExecutionPolicy Bypass -File win/collect_feature.ps1 <ISSUE-KEY>   # Windows PowerShell 5.1
 ```
 
 ```bash
