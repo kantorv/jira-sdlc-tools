@@ -37,6 +37,38 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
+## Task lifecycle preview
+
+The three skills map to three phases of a task's life. Each phase has a
+sequence diagram with a full walkthrough; the thumbnails below preview
+them side by side and link to the full doc. They're *previews* — not
+meant to be readable at this size (GitHub won't render mermaid inside a
+table cell, so these are pre-rendered SVGs); click through for the
+legible diagram and notes.
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%">
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a><br>
+<strong>Phase 1 · Plan</strong><br>
+<code>jira-task-assigner</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a>
+</td>
+<td align="center" valign="top" width="33%">
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a><br>
+<strong>Phase 2 · Implement</strong><br>
+<code>jira-task-executor</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a>
+</td>
+<td align="center" valign="top" width="33%">
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review &amp; aggregate approval) sequence diagram" width="260"></a><br>
+<strong>Phase 3 · Review &amp; aggregate approval</strong><br>
+<code>jira-task-reviewer</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a>
+</td>
+</tr>
+</table>
+
 ## Install
 
 ### Remote — from the marketplace (recommended)
