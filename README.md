@@ -49,22 +49,25 @@ legible diagram and notes.
 <table>
 <tr>
 <td align="center" valign="top" width="33%">
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a><br>
 <strong>Phase 1 · Plan</strong><br>
 <code>jira-task-assigner</code><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a><br><br>
+<em>Investigates the codebase, asks clarifying questions, decides scope (single-step vs multistep split), creates every Jira issue, provisions git branches and worktrees, and records the PR target branch for downstream phases.</em>
 </td>
 <td align="center" valign="top" width="33%">
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a><br>
 <strong>Phase 2 · Implement</strong><br>
 <code>jira-task-executor</code><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a><br><br>
+<em>Validates worktree ownership, brings the branch current, implements the issue, runs tests, commits and pushes, opens a PR, and transitions the issue to In Review. Multiple executors run in parallel — one per worktree.</em>
 </td>
 <td align="center" valign="top" width="33%">
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review &amp; aggregate approval) sequence diagram" width="260"></a><br>
 <strong>Phase 3 · Review &amp; aggregate approval</strong><br>
 <code>jira-task-reviewer</code><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a><br><br>
+<em>Reviews each PR against six dimensions — correctness, patterns, scope, regressions, tests, hygiene — posts verdicts to GitHub and Jira, and transitions rejected issues back to In Progress. Never merges; that stays manual.</em>
 </td>
 </tr>
 </table>
