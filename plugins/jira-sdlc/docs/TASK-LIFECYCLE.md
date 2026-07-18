@@ -7,11 +7,11 @@ workflow's status names.
 
 ```mermaid
 flowchart LR
-    Kickoff([Phase 0 · Kickoff<br/>Human<br/>invokes /jira-task-assigner]) -->|feature · task · bug| Plan
-    Plan([Phase 1 · Plan<br/>jira-task-assigner<br/>To Do]) -->|create issues<br/>branches<br/>worktrees| Execute([Phase 2 · Implement<br/>jira-task-executor<br/>In Progress])
-    Execute -->|implement<br/>run tests<br/>open PRs| Review([Phase 3 · Review<br/>jira-task-reviewer<br/>In Review])
+    Kickoff([👤<br/>Phase 0 · Kickoff<br/>Human<br/>invokes /jira-task-assigner]) -->|feature · task · bug| Plan
+    Plan([🤖<br/>Phase 1 · Plan<br/>jira-task-assigner<br/>To Do]) -->|create issues<br/>branches<br/>worktrees| Execute([🤖<br/>Phase 2 · Implement<br/>jira-task-executor<br/>In Progress])
+    Execute -->|implement<br/>run tests<br/>open PRs| Review([🤖<br/>Phase 3 · Review<br/>jira-task-reviewer<br/>In Review])
     Review -->|changes requested<br/>back to In Progress| Execute
-    Review -->|approved<br/>verdicts posted| Merge([Phase 4 · Merge<br/>Human<br/>Done])
+    Review -->|approved<br/>verdicts posted| Merge([👤<br/>Phase 4 · Merge<br/>Human<br/>Done])
 ```
 
 0. **Phase 0 · Kickoff (done by Human)**  
