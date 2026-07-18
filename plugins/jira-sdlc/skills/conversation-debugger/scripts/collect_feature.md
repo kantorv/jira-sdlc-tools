@@ -10,6 +10,20 @@ of executing models across it. It emits JSON on stdout (consumed by
 [`feature_report`](feature_report.md)) and a human-readable metrics view on
 stderr.
 
+**It handles two feature types**, auto-detected from Jira:
+
+- **single-step** — `<KEY>` has **no** sub-tasks: one cohesive feature with its
+  conversations. Emits the flat **`feature-report@2`** JSON (unchanged behavior).
+- **multistep** — `<KEY>` **is a parent** with sub-tasks: a parent story whose
+  child features (sub-tasks) each have their own conversations. Emits the nested
+  **`feature-report@3`** JSON — the parent's own conversations, a `children[]`
+  array (each child with its own conversations + per-child roll-up), and a
+  feature-wide aggregate across the parent **and** all children.
+
+Detection is a single Jira fetch (see [Feature-type detection](#feature-type-detection)
+below); the schema for both shapes is owned here and documented in
+[`../references/feature-report-schema.md`](../references/feature-report-schema.md).
+
 **This round it ships Windows-only** (`win/collect_feature.ps1`). The POSIX
 twin (`posix/collect_feature.sh`) is a deliberate **stub** that announces
 itself and exits non-zero — an explicit parity gap, not a silent one (see
@@ -27,7 +41,35 @@ No flags. Like the other scripts it reads `PROJECT_KEY` and the two
 `jira-sdlc-tools(.local).env` (via `git rev-parse --show-toplevel`), so run it
 from inside the project checkout.
 
+## Feature-type detection
+
+Before resolving any conversations, `collect_feature` asks Jira whether `<KEY>`
+is a multistep parent:
+
+```
+acli jira workitem view <KEY> --json --fields 'summary,subtasks'
+```
+
+The key is **positional**, and `subtasks` **must be named explicitly** — the
+default `--json` omits it, so a naive fetch would report every parent as
+single-step (the same gotcha [`../../docs/examples/acli-list-subtasks.py`](../../docs/examples/acli-list-subtasks.py)
+documents). **Non-empty `subtasks` → multistep; empty → single-step.**
+
+The call is wrapped in a **long timeout** (run in a background job; the API can
+legitimately take minutes). If `acli` is missing, errors, or times out,
+`collect_feature` falls back to **single-step** with a loud stderr WARN rather
+than aborting — the roll-up is read-only, so the safe default is the historical
+flat report.
+
 ## What it does
+
+For a **multistep** parent, steps 1–2 below run once for the parent's own key
+and once per sub-task key; the parent's own conversations and each child's are
+kept separate, and step 3 produces a per-child roll-up plus a feature-wide one.
+A single-step feature runs steps 1–3 once over its own key. In multistep mode a
+missing worktree for one part (parent or a child) is a stderr NOTE + zero
+conversations for that part, not a fatal error — only a single-step feature's
+own `sync_conversations` failure is fatal.
 
 1. **Resolve the feature's conversations by reusing `sync_conversations`.** It
    runs `sync_conversations.ps1 <KEY>` (read-only, no `--attach`) and reads its
@@ -35,7 +77,10 @@ from inside the project checkout.
    the same "all worktree sessions + the single creating assigner session" set
    `sync_conversations` already computes. Nothing about transcript-path
    derivation is re-implemented here; if `sync_conversations` exits non-zero
-   (bad config, no worktree folder), `collect_feature` relays that and stops.
+   (bad config, no worktree folder), `collect_feature` relays that and stops
+   **for a single-step feature** — in multistep mode the same non-zero exit for
+   one part (parent or a child) is a NOTE + zero conversations for that part, so
+   an unstarted sub-task never sinks the whole roll-up.
    Provenance (`worktree` vs `main-checkout`) is classified from the same two
    `CONVERSATIONS_*` config folders, not by scraping the human listing.
 
@@ -58,6 +103,12 @@ from inside the project checkout.
    sum / union / min-max of `collect_run`'s own measured numbers (`span_s` the
    one subtraction); the schema is in
    [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
+   For a **multistep** parent this aggregate is computed three ways from the
+   *same* function: once per child (its per-child roll-up), once over the
+   parent's own records, and once feature-wide over the parent **plus every
+   child**. The creating assigner session — which mentions the parent and every
+   sub-task key, so it resolves for each — is de-duplicated by transcript path
+   with **parent-priority** and counted once feature-wide.
 
 ## Output — two streams, split on purpose
 

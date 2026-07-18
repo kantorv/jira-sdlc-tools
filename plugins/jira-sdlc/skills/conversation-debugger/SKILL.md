@@ -432,8 +432,13 @@ write the markdown to `>` correctly.
 
 `collect_feature` resolves the feature's conversations by reusing
 `sync_conversations`' list and runs `collect_run` over each — so its numbers are
-the same measured metrics this skill already trusts, never re-estimated. The
-collector owns the JSON schema; `feature_report` only renders it. Read
+the same measured metrics this skill already trusts, never re-estimated. It
+auto-detects the feature **type** from Jira (a `subtasks` lookup): a plain issue
+emits the flat `feature-report@2` JSON, while a parent with sub-tasks emits the
+nested `feature-report@3` — the parent plus each **child feature** with its own
+conversations in place, and a feature-wide roll-up across all of them.
+`feature_report` renders whichever it's given (single-step output is unchanged).
+The collector owns the JSON schema; `feature_report` only renders it. Read
 [scripts/collect_feature.md](scripts/collect_feature.md),
 [scripts/feature_report.md](scripts/feature_report.md), and
 [references/feature-report-schema.md](references/feature-report-schema.md)

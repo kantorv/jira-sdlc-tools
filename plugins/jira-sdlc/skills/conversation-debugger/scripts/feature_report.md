@@ -14,6 +14,19 @@ the collector already measured; the report-builder computes nothing and
 re-measures nothing. The schema is documented in
 [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
 
+It renders **both feature types** the collector emits, detected from the JSON:
+
+- **single-step** (`feature-report@2`, flat) → the original template, unchanged.
+- **multistep** (`feature-report@3`, nested) → a parent summary, a "token share
+  by feature part" table + pie, then one section per **child feature** with that
+  child's conversations **in place**, and finally the feature-wide totals /
+  by-skill / by-provenance / timeframe roll-ups and pies across the whole
+  feature.
+
+Detection is the presence of a `children` array (equivalently a `@3` schema
+tag); `@1`/`@2` JSON has no `children` and renders through the **untouched**
+single-step path, so there is **no regression** on existing single-step reports.
+
 **This round it ships Windows-only** (`win/feature_report.ps1`). The POSIX twin
 (`posix/feature_report.sh`) is a deliberate **stub** that exits non-zero — an
 explicit parity gap, matching `collect_feature`.
@@ -44,7 +57,9 @@ session (`… | .\feature_report.ps1 > out.md`).
 
 ## What it renders
 
-Markdown on stdout, nothing else (read-only — no files written, no Jira/git):
+Markdown on stdout, nothing else (read-only — no files written, no Jira/git).
+
+### Single-step (`@2`)
 
 - **Summary** table — feature key, conversation count (and how many carried
   metrics), the feature's **total token consumption** broken into
@@ -72,6 +87,34 @@ A genuine measured **0** renders as `0`; a record without metrics
 real zero is never confused with "not measured". Sections backed by `@2`-only
 aggregate fields (by-skill, by-provenance, timeframe) are omitted when given
 older `@1` JSON, which still renders.
+
+### Multistep (`@3`)
+
+- **Feature summary** — the same metrics as above but computed **feature-wide**
+  (parent + all children): the child-feature count, feature-wide conversation
+  count, total token consumption, and the union of models / skills / issue keys.
+- **Token share by feature part** — a table (parent-own + each child, with
+  per-part conversation count and total tokens) and a **pie** of that share
+  (parent + each child), skipping any zero-token part.
+- **Parent feature** section — the parent's own conversations rendered **in
+  place** with the same per-conversation *tokens* and *performance* tables (as
+  `###` sub-sections), plus the by-conversation pie. If the parent has no own
+  conversations (e.g. the assigner session wasn't resolved), a short note says so
+  instead.
+- **One `## Child feature — <KEY>` section per sub-task**, each with that child's
+  conversations in place (same two tables + pie). A sub-task with no worktree yet
+  renders a "no conversations resolved yet" note rather than empty tables.
+- **Feature-wide roll-ups** — **Tokens by skill** (+ pie), **Tokens by
+  provenance**, **Feature totals**, and **Activity timeframe**, all across the
+  whole feature.
+
+The per-conversation *tokens* / *performance* tables and the by-skill /
+by-provenance / totals / timeframe renderers are **shared functions** used by
+both paths, so a child's table is identical in form to a single-step feature's —
+the single-step output is byte-for-byte the pre-`@3` template.
+
+All pies follow the same rule as single-step: emitted only with **≥ 2** non-zero
+slices, `;` → `,` sanitized.
 
 The markdown structure is inline in the script (no external template to drift);
 the one shared artifact is the JSON schema doc, which both halves point at.
