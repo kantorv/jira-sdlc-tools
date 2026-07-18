@@ -148,7 +148,7 @@ if ($OS -eq 'windows') {
     $major = $PSVersionTable.PSVersion.Major   # 5.1+ acceptable — scripts are compatible with both
     if (-not (Get-Command acli -ErrorAction SilentlyContinue)) { $missing += ' acli' }
     if (-not (Get-Command gh   -ErrorAction SilentlyContinue)) { $missing += ' gh' }
-    foreach ($s in 'statuscheck', 'ensure_local_env', 'jira_acli_login', 'get_assignee_email', 'check_assignee') {
+    foreach ($s in 'statuscheck', 'ensure_local_env', 'jira_acli_login', 'get_assignee_email', 'check_assignee', 'github_pat_auth') {
         if (-not (Test-Path -LiteralPath (Join-Path $winDir "$s.ps1"))) { $missing += " win/$s.ps1" }
     }
     if ($missing) {
@@ -258,19 +258,26 @@ if ($KeyArg) {
     Add-Row issue_key WARN "no issue key derivable from branch '$brShown' (see the branch row)$note"
 }
 
-# --- gh auth (needed by 'gh pr create') --------------------------------------
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
-        "install it (https://cli.github.com) and run 'gh auth login', then $Rerun."
+# --- gh auth (PAT-scoped; needed by every 'gh pr …') -------------------------
+# AC#5: verify the agent's repo-scoped fine-grained PAT (from
+# jira-sdlc-tools.local.env) authenticates against THIS repo — NOT the human's
+# `gh auth status` keyring login, which the PAT model deliberately leaves
+# untouched (the agent never 'logs in'; the human's gh session stays as-is).
+# See ../../docs/github/GITHUB-AUTH-STRATEGY.md. Runs the helper as a child
+# process (its `exit` must not terminate us). Resolving the current pwsh exe via
+# (Get-Process -Id $PID).Path is cross-platform — works on Linux+pwsh (forced
+# Windows testing) and on real Windows — so the check actually runs, rather than
+# the $PSHOME\*.exe form which only resolves on Windows.
+$ghaHelper = Join-Path $PSScriptRoot 'github_pat_auth.ps1'
+$selfExe   = (Get-Process -Id $PID).Path
+$ghaOut    = ((& $selfExe -NoProfile -File $ghaHelper verify 2>&1) -join "`n")
+if ($ghaOut -match 'github_pat_auth: OK') {
+    Add-Row gh_auth OK ($ghaOut)
 } else {
-    $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
-        Select-Object -First 1) -replace '^[^L]*', ''
-    if ($ghLine) {
-        Add-Row gh_auth OK "$ghLine"
-    } else {
-        Add-Row gh_auth FAIL "gh is installed but not authenticated" `
-            "run 'gh auth login', then $Rerun."
-    }
+    $detail = (($ghaOut -split "`n") | Where-Object { $_ -match '\S' } | Select-Object -Last 1)
+    if (-not $detail) { $detail = 'gh auth via GITHUB_PAT_TOKEN failed' }
+    Add-Row gh_auth FAIL $detail `
+        "set GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env to the fine-grained PAT scoped to this repo (Contents:RW, Metadata:RO, Pull requests:RW) — and install gh if missing; see ../../docs/github/GITHUB-AUTH-STRATEGY.md, then $Rerun."
 }
 
 # --- acli auth (needed by every 'acli jira ...' call) ------------------------

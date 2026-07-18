@@ -99,7 +99,7 @@ see [Development](#development) below for the edit-reload loop.
 Create two files in the root of the repo you're building features in:
 
 1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
-2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
+2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path, **GitHub PAT**). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template. The `GITHUB_PAT_TOKEN` it asks for is a fine-grained PAT scoped only to your feature repo — the skills push/fetch and call `gh` as that token instead of touching your own SSH or `gh` login; see [`plugins/jira-sdlc/docs/github/GITHUB-AUTH-STRATEGY.md`](plugins/jira-sdlc/docs/github/GITHUB-AUTH-STRATEGY.md) for the design.
 
 The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
 

@@ -435,6 +435,14 @@ git checkout -b feature/<ISSUE-KEY>-<slugified-summary>
 git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
 ```
 
+> The bare `git push` above shows the *intent*; the skills never run it
+> literally. Every git push/fetch and `gh` call the three skills make
+> authenticates as the repo-scoped PAT in `<GITHUB_PAT_TOKEN>` via the
+> shared helper `github_pat_auth.sh` (POSIX) / `github_pat_auth.ps1`
+> (Windows), leaving the human's SSH `origin` and `gh` keyring login
+> untouched. See [`../../docs/github/GITHUB-AUTH-STRATEGY.md`](../../docs/github/GITHUB-AUTH-STRATEGY.md)
+> for the design and the per-call translation table.
+
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 `"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
 
