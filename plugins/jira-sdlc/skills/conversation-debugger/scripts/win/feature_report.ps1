@@ -27,12 +27,21 @@ $ErrorActionPreference = 'Stop'
 function Fail([string]$msg) { [Console]::Error.WriteLine("feature_report: $msg"); exit 1 }
 
 # ---- read the JSON (path arg, or stdin) -------------------------------------
+$PipedInput = @($input)   # capture the PS object pipeline before it's consumed
 $PathArg = if ($args.Count -ge 1) { [string]$args[0] } else { '' }
 $raw = $null
 if ($PathArg -and $PathArg -ne '-') {
     if (-not (Test-Path -LiteralPath $PathArg -PathType Leaf)) { Fail "no such JSON file: $PathArg" }
     $raw = [System.IO.File]::ReadAllText($PathArg)
+} elseif ($PipedInput.Count -gt 0) {
+    # Invoked as a stage in a PowerShell pipeline (… | .\feature_report.ps1): the
+    # JSON arrives as objects on the PS object pipeline, not the process's console
+    # stdin, so [Console]::In is empty here. -join (not Out-String) rebuilds the
+    # text without width-wrapping long JSON lines.
+    $raw = ($PipedInput -join "`n")
 } elseif ($PathArg -eq '-' -or [Console]::IsInputRedirected) {
+    # Entry point of its own process with redirected stdin: pwsh -File … piped
+    # from another process, or an explicit '-' path.
     $raw = [Console]::In.ReadToEnd()
 } else {
     Fail 'need collect_feature JSON: pass a path, or pipe it in (collect_feature.ps1 <KEY> | feature_report.ps1).'
