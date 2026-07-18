@@ -79,6 +79,25 @@ $nl = "`n"
 $out = New-Object System.Collections.Generic.List[string]
 function W([string]$s) { $out.Add($s) }
 
+# Emit a GitHub-native mermaid pie of the (label,value) pairs whose value > 0.
+# Rendered from measured totals — no computation here. Skipped for < 2 slices (a
+# single slice is always 100%, so it adds noise, not insight). Labels are
+# sanitized: quotes stripped and ';' -> ',' because a ';' silently truncates a
+# mermaid line and breaks the whole diagram (see AGENTS.md).
+function Emit-Pie([string]$title, $pairs) {
+    $rows = @($pairs | Where-Object { $null -ne $_.value -and [double]$_.value -gt 0 })
+    if ($rows.Count -lt 2) { return }
+    W '```mermaid'
+    W 'pie showData'
+    W ("    title {0}" -f ($title -replace ';', ','))
+    foreach ($r in $rows) {
+        $lbl = ([string]$r.label) -replace '"', '' -replace ';', ','
+        W ('    "{0}" : {1}' -f $lbl, [long]$r.value)
+    }
+    W '```'
+    W ''
+}
+
 $agg = $data.aggregate
 $conv = @($data.conversations)
 
@@ -135,6 +154,15 @@ foreach ($c in $conv) {
     }
 }
 W ''
+# pie: total-token share per conversation (analyzed rows carrying tokens)
+$convPie = foreach ($c in $conv) {
+    if ($null -ne $c.skill_turns -and $null -ne $c.tokens -and [double]$c.tokens.total -gt 0) {
+        $sk = if ($c.skill) { $c.skill } else { '(no skill)' }
+        $short = if ($c.uuid -and ([string]$c.uuid).Length -ge 8) { ([string]$c.uuid).Substring(0, 8) } else { [string]$c.uuid }
+        [pscustomobject]@{ label = "$sk · $short"; value = [long]$c.tokens.total }
+    }
+}
+Emit-Pie 'Token consumption by conversation (total tokens)' @($convPie)
 
 # ---- per-conversation performance table -------------------------------------
 W '## Per-conversation — performance'
@@ -167,6 +195,13 @@ if ($null -ne $agg.by_skill -and @($agg.by_skill).Count -gt 0) {
             (Num $t.cache_read), (Num $t.cache_write), (Num $t.total))
     }
     W ''
+    # pie: total-token share per skill
+    $skillPie = foreach ($s in @($agg.by_skill)) {
+        if ($null -ne $s.tokens -and [double]$s.tokens.total -gt 0) {
+            [pscustomobject]@{ label = [string]$s.skill; value = [long]$s.tokens.total }
+        }
+    }
+    Emit-Pie 'Token consumption by skill (total tokens)' @($skillPie)
 }
 
 # ---- tokens by provenance ---------------------------------------------------

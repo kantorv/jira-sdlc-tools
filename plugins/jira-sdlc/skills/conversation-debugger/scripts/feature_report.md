@@ -58,6 +58,10 @@ Markdown on stdout, nothing else (read-only — no files written, no Jira/git):
   calls, tool errors, elapsed, and first/last activity per record.
 - **Tokens by skill** and **Tokens by provenance** — the collector's
   `by_skill` / `by_provenance` roll-ups (analyzed records only).
+- **Pie charts** (GitHub-native ```mermaid``` `pie` blocks) of total-token share
+  **by conversation** and **by skill**, rendered from those same totals. A pie is
+  emitted only when it has **≥ 2** non-zero slices (a single slice is always
+  100%); labels sanitize `;` → `,` since a semicolon breaks a mermaid line.
 - **Feature totals** — the summed token buckets and the grand total, plus the
   models across the feature.
 - **Activity timeframe** — first activity, last activity, and the span
