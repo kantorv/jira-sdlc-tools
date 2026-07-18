@@ -60,7 +60,7 @@ located mid-file in the long version.
 
 **Suggestion:** deterministic sequences (queries, status transitions,
 environment checks, multi-step setup) belong in
-`skills/_shared/scripts/` as bash/python, with the `SKILL.md` reduced
+`skills/_shared/scripts/posix/` as bash/python, with the `SKILL.md` reduced
 to "run X, act on its output". `statuscheck.sh` is the in-repo pattern
 to copy. If eval transcripts show runs repeatedly improvising the same
 command sequence, that's the signal to extract a script.

@@ -19,6 +19,66 @@ works — architecture, prerequisites, configuration, a full usage
 walkthrough, safety model, and troubleshooting — lives in
 [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
 
+The three skills, one per stage of the lifecycle:
+
+- **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** — turns a feature/task/bug description into
+  Jira issues with matching git branches and worktrees. Investigates the
+  codebase, asks clarifying questions, decides whether the request is one
+  self-contained task or a multistep split into parallel sub-tasks, and
+  gives every leaf issue its own branch and worktree so parallel work can
+  start immediately.
+- **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** — implements the issue implied by the current
+  worktree's branch, end to end: status transition, investigation,
+  implementation, tests, commit, push, and PR. No issue-key argument —
+  run it from inside the issue's own worktree.
+- **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** — run from the parent issue's worktree.
+  Reviews each sub-task PR into the parent branch (approve or request
+  changes), posts findings to Jira, and reviews the parent PR into the
+  base branch once the sub-task PRs are merged. Never merges anything
+  itself.
+
+## Task lifecycle preview
+
+The three skills map to three phases of a task's life. The Jira states
+below use the default Kanban board names (To Do / In Progress / In
+Review) — these are configurable per project, so map them to your own
+workflow's status names.
+
+```mermaid
+flowchart LR
+    Kickoff([👤<br/>Phase 0 · Kickoff<br/>Human<br/>invokes /jira-task-assigner]) -->|feature · task · bug| Plan
+    Plan([🤖<br/>Phase 1 · Plan<br/>jira-task-assigner<br/>To Do]) -->|create issues<br/>branches<br/>worktrees| Execute([🤖<br/>Phase 2 · Implement<br/>jira-task-executor<br/>In Progress])
+    Execute -->|implement<br/>run tests<br/>open PRs| Review([🤖<br/>Phase 3 · Review<br/>jira-task-reviewer<br/>In Review])
+    Review -->|changes requested<br/>back to In Progress| Execute
+    Review -->|approved<br/>verdicts posted| Merge([👤<br/>Phase 4 · Merge<br/>Human<br/>Done])
+```
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%">
+<strong>Phase 1 · Plan</strong><br>
+<code>jira-task-assigner</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
+</td>
+<td align="center" valign="top" width="33%">
+<strong>Phase 2 · Implement</strong><br>
+<code>jira-task-executor</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
+</td>
+<td align="center" valign="top" width="33%">
+<strong>Phase 3 · Review &amp; aggregate approval</strong><br>
+<code>jira-task-reviewer</code><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3-single-step.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
+</td>
+</tr>
+</table>
+
+See **[Task lifecycle](plugins/jira-sdlc/docs/TASK-LIFECYCLE.md)** for the
+full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
+
 ## Install
 
 ### Remote — from the marketplace (recommended)
