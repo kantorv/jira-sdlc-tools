@@ -128,5 +128,12 @@ W "Models across the feature: **$(Join-List $agg.models)**"
 W ''
 
 # ---- emit -------------------------------------------------------------------
-[Console]::Out.Write(($out -join $nl) + $nl)
+# Emit on PowerShell's success stream (not [Console]::Out.Write), so `> file.md`
+# captures the markdown whether this runs as its own process (pwsh -File …) or as
+# a stage inside an existing session (… | .\feature_report.ps1). A direct console
+# write bypasses the success stream, so in the pipeline-stage form `>` would
+# redirect nothing and the markdown would land on the console with an empty file.
+# One joined string keeps the LF line breaks intact (matches collect_feature,
+# which emits its JSON the same way via ConvertTo-Json).
+Write-Output ($out -join $nl)
 exit 0
