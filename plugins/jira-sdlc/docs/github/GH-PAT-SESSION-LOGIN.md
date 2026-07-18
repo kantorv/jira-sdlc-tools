@@ -25,6 +25,30 @@ gitignored `jira-sdlc-tools.local.env` — never in the tracked, team-shared
 exists; you replace the placeholder with your own token in your local, untracked
 `jira-sdlc-tools.local.env`.
 
+## Generating the token
+
+On GitHub, navigate to the fine-grained token creation view:
+
+1. Click your **profile picture** (top right) → **Settings**.
+2. In the left sidebar, **Developer settings** → **Personal access tokens** →
+   **Fine-grained tokens**.
+3. Click **Generate new token** (top right).
+
+Then, on the token creation form:
+
+- **Repository access** → **Only select repositories** → pick *this* repo.
+- **Permissions** → **Repository permissions**:
+  - **Contents** → **Read and write**
+  - **Pull requests** → **Read and write**
+  - **Metadata** → **Read-only** — GitHub adds this automatically (it's marked
+    *Required*); leave it as-is.
+
+Those two write scopes are what let `gh pr create` push the branch and open the
+PR. Copy the generated token and paste it as `GITHUB_PAT_TOKEN` in your local,
+untracked `jira-sdlc-tools.local.env`.
+
+![Fine-grained PAT creation view with Only-select-repositories and the Contents + Pull requests read/write permissions selected](../assets/github.com_settings_personal-access-tokens_new.png)
+
 ## What the healthcheck does
 
 At the start of the run, the `gh_auth` check resolves `GITHUB_PAT_TOKEN` from
