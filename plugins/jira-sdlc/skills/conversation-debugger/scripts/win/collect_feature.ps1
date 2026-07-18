@@ -216,25 +216,75 @@ foreach ($path in $Paths) {
 }
 
 # ---- aggregate: sum measured tokens, union models / skills / keys ------------
+# Token/turn/tool sums and the per-skill / per-provenance roll-ups are all over
+# ANALYZED records only (key_status expected/given) — the same records
+# aggregate.tokens has always summed; a metric-less record contributes nothing to
+# a total but still appears in the per-conversation listings for coverage. Every
+# number here is a plain sum / min / max of collect_run's own measured values; the
+# report-builder renders these, it never recomputes them (span_s is the one
+# derived value — a subtraction of two measured timestamps, kept here so the
+# report stays a pure renderer).
 $agIn = 0L; $agOut = 0L; $agCr = 0L; $agCw = 0L
+$agTurns = 0L; $agSide = 0L; $agCalls = 0L; $agErrs = 0L
 $mdlSet = New-Object System.Collections.Generic.List[string]
 $sklSet = New-Object System.Collections.Generic.List[string]
 $keySet = New-Object System.Collections.Generic.List[string]
+$bySkill = [ordered]@{}   # skill -> token accumulator
+$byProv  = [ordered]@{}   # provenance -> token accumulator
+$minFirst = $null; $maxLast = $null; $minFirstStr = $null; $maxLastStr = $null
 $analyzed = 0
+
+function New-TokenAcc { return [ordered]@{ conversations = 0; in = 0L; out = 0L; cache_read = 0L; cache_write = 0L; total = 0L } }
+function Add-ToTokenAcc($acc, $r) {
+    $acc.conversations++
+    $acc.in += [long]$r.tokens.in; $acc.out += [long]$r.tokens.out
+    $acc.cache_read += [long]$r.tokens.cache_read; $acc.cache_write += [long]$r.tokens.cache_write
+    $acc.total += [long]$r.tokens.total
+}
+
 foreach ($r in $Records) {
-    if ($r.key_status -eq 'expected' -or $r.key_status -eq 'given') {
-        $analyzed++
-        $agIn += [long]$r.tokens.in; $agOut += [long]$r.tokens.out
-        $agCr += [long]$r.tokens.cache_read; $agCw += [long]$r.tokens.cache_write
-    }
     foreach ($m in $r.models) { if ($m -and -not $mdlSet.Contains($m)) { $mdlSet.Add($m) } }
     if ($r.skill -and -not $sklSet.Contains($r.skill)) { $sklSet.Add($r.skill) }
     if ($r.issue_key -and -not $keySet.Contains($r.issue_key)) { $keySet.Add($r.issue_key) }
+
+    if ($r.key_status -ne 'expected' -and $r.key_status -ne 'given') { continue }
+    $analyzed++
+    $agIn += [long]$r.tokens.in; $agOut += [long]$r.tokens.out
+    $agCr += [long]$r.tokens.cache_read; $agCw += [long]$r.tokens.cache_write
+    $agTurns += [long]$r.skill_turns; $agSide += [long]$r.sidechain_turns
+    $agCalls += [long]$r.tool_calls;  $agErrs += [long]$r.tool_errors
+
+    $sk = if ($r.skill) { $r.skill } else { '(no skill)' }
+    if (-not $bySkill.Contains($sk)) { $bySkill[$sk] = New-TokenAcc }
+    Add-ToTokenAcc $bySkill[$sk] $r
+
+    $pv = if ($r.provenance) { $r.provenance } else { 'unknown' }
+    if (-not $byProv.Contains($pv)) { $byProv[$pv] = New-TokenAcc }
+    Add-ToTokenAcc $byProv[$pv] $r
+
+    # timeframe: earliest first_ts, latest last_ts across the feature (UTC ISO-8601)
+    if ($r.first_ts) { try { $f = [datetimeoffset]::Parse($r.first_ts, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $minFirst -or $f -lt $minFirst) { $minFirst = $f; $minFirstStr = $r.first_ts } } catch { } }
+    if ($r.last_ts)  { try { $l = [datetimeoffset]::Parse($r.last_ts,  [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $maxLast  -or $l -gt $maxLast)  { $maxLast  = $l; $maxLastStr  = $r.last_ts } } catch { } }
 }
 $agTot = $agIn + $agOut + $agCr + $agCw
+$spanS = $null
+if ($null -ne $minFirst -and $null -ne $maxLast) { $spanS = [math]::Round(($maxLast - $minFirst).TotalSeconds, 1) }
+
+# ordered-dict roll-ups -> arrays of records for the JSON (@() so 0/1 entries still
+# serialize as an array, not null / a bare object)
+$bySkillArr = @(foreach ($k in $bySkill.Keys) {
+    $a = $bySkill[$k]
+    [ordered]@{ skill = $k; conversations = $a.conversations
+        tokens = [ordered]@{ in = $a.in; out = $a.out; cache_read = $a.cache_read; cache_write = $a.cache_write; total = $a.total } }
+})
+$byProvArr = @(foreach ($k in $byProv.Keys) {
+    $b = $byProv[$k]
+    [ordered]@{ provenance = $k; conversations = $b.conversations
+        tokens = [ordered]@{ in = $b.in; out = $b.out; cache_read = $b.cache_read; cache_write = $b.cache_write; total = $b.total } }
+})
 
 $Root = [ordered]@{
-    schema            = 'jira-sdlc/conversation-debugger/feature-report@1'
+    schema            = 'jira-sdlc/conversation-debugger/feature-report@2'
     feature           = $Key
     conversation_count = $Records.Count
     # [object[]] cast (not @(...)): a List[object] of OrderedDictionary trips an
@@ -245,9 +295,16 @@ $Root = [ordered]@{
         conversation_count = $Records.Count
         analyzed_count     = $analyzed
         tokens  = [ordered]@{ in = $agIn; out = $agOut; cache_read = $agCr; cache_write = $agCw; total = $agTot }
+        skill_turns     = $agTurns
+        sidechain_turns = $agSide
+        tool_calls      = $agCalls
+        tool_errors     = $agErrs
+        timeframe = [ordered]@{ first_ts = $minFirstStr; last_ts = $maxLastStr; span_s = $spanS }
         models  = [string[]]($mdlSet | Sort-Object)
         skills  = [string[]]$sklSet
         issue_keys = [string[]]($keySet | Sort-Object)
+        by_skill      = [object[]]$bySkillArr
+        by_provenance = [object[]]$byProvArr
     }
 }
 
@@ -264,11 +321,14 @@ foreach ($r in $Records) {
     Note ("  * {0}  [{1}]  {2}  key={3} ({4})" -f $r.uuid, $r.provenance, $sk, ($(if ($r.issue_key) { $r.issue_key } else { '-' })), $r.key_status)
     Note ("      models: {0}" -f ($(if ($r.models.Count) { $r.models -join ', ' } else { '-' })))
     Note ("      tokens  in={0}  out={1}  cache-read={2}  cache-write={3}  total={4}" -f (Fmt $r.tokens.in), (Fmt $r.tokens.out), (Fmt $r.tokens.cache_read), (Fmt $r.tokens.cache_write), (Fmt $r.tokens.total))
+    Note ("      perf    turns={0}  sidechain={1}  tool-calls={2} (errors={3})  elapsed={4}s" -f (Fmt $r.skill_turns), (Fmt $r.sidechain_turns), (Fmt $r.tool_calls), (Fmt $r.tool_errors), ($(if ($null -ne $r.wall_clock_s) { '{0:N1}' -f [double]$r.wall_clock_s } else { '-' })))
 }
 Note ''
 Note "  === feature totals ==="
 Note ("  tokens  in={0}  out={1}  cache-read={2}  cache-write={3}" -f (Fmt $agIn), (Fmt $agOut), (Fmt $agCr), (Fmt $agCw))
 Note ("  TOTAL feature token consumption: {0}" -f (Fmt $agTot))
+Note ("  perf    skill-turns={0}  sidechain-turns={1}  tool-calls={2}  tool-errors={3}" -f (Fmt $agTurns), (Fmt $agSide), (Fmt $agCalls), (Fmt $agErrs))
+Note ("  activity: {0} -> {1}{2}" -f ($(if ($minFirstStr) { $minFirstStr } else { '-' })), ($(if ($maxLastStr) { $maxLastStr } else { '-' })), ($(if ($null -ne $spanS) { "  (span {0}s)" -f (Fmt $spanS) } else { '' })))
 Note ("  models used across feature: {0}" -f ($(if ($mdlSet.Count) { ($mdlSet | Sort-Object) -join ', ' } else { '-' })))
 Note ("  skills exercised: {0}" -f ($(if ($sklSet.Count) { $sklSet -join ', ' } else { '-' })))
 

@@ -54,9 +54,27 @@ if ($null -eq $data.feature -or $null -eq $data.conversations -or $null -eq $dat
 }
 
 # ---- formatting helpers -----------------------------------------------------
-function Num([object]$n)  { if ($null -eq $n -or $n -eq '') { return '-' }; return ('{0:N0}' -f [long]$n) }
-function Sec([object]$n)  { if ($null -eq $n -or $n -eq '') { return '-' }; return ('{0:N1}' -f [double]$n) }
+# Only $null / '' render as '-'; a measured 0 must render as 0. (Guard against
+# PowerShell coercing '' to numeric 0 in `-eq`, which would hide real zeros.)
+function Num([object]$n)  { if ($null -eq $n -or ($n -is [string] -and $n -eq '')) { return '-' }; return ('{0:N0}' -f [long]$n) }
+function Sec([object]$n)  { if ($null -eq $n -or ($n -is [string] -and $n -eq '')) { return '-' }; return ('{0:N1}' -f [double]$n) }
 function Join-List($xs)   { if ($null -eq $xs) { return '-' }; $a = @($xs); if ($a.Count -eq 0) { return '-' }; return ($a -join ', ') }
+# Timestamps arrive as DateTime (ConvertFrom-Json auto-parses the ISO-Z strings)
+# or, on older hosts, as the raw string — render either as compact UTC.
+function Ts([object]$v)  {
+    if ($null -eq $v -or $v -eq '') { return '-' }
+    if ($v -is [datetime])       { return $v.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss'Z'") }
+    if ($v -is [datetimeoffset]) { return $v.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss'Z'") }
+    return [string]$v
+}
+# Seconds -> human span (collector-provided number, formatted only — not computed here).
+function Dur([object]$sec) {
+    if ($null -eq $sec -or $sec -eq '') { return '-' }
+    $t = [timespan]::FromSeconds([double]$sec)
+    if ($t.TotalHours   -ge 1) { return ('{0}h {1}m {2}s' -f [int]$t.TotalHours, $t.Minutes, $t.Seconds) }
+    if ($t.TotalMinutes -ge 1) { return ('{0}m {1}s' -f [int]$t.TotalMinutes, $t.Seconds) }
+    return ('{0:N1}s' -f [double]$sec)
+}
 $nl = "`n"
 $out = New-Object System.Collections.Generic.List[string]
 function W([string]$s) { $out.Add($s) }
@@ -84,10 +102,15 @@ W "| — cache write | $(Num $agg.tokens.cache_write) |"
 W "| Models used | $(Join-List $agg.models) |"
 W "| Skills exercised | $(Join-List $agg.skills) |"
 W "| Issue keys touched | $(Join-List $agg.issue_keys) |"
+if ($null -ne $agg.skill_turns)  { W "| Total skill turns | $(Num $agg.skill_turns) |" }
+if ($null -ne $agg.tool_calls)   { W "| Total tool calls | $(Num $agg.tool_calls) (errors: $(Num $agg.tool_errors)) |" }
+if ($agg.timeframe -and $null -ne $agg.timeframe.span_s) {
+    W "| Activity span | $(Dur $agg.timeframe.span_s) ($(Ts $agg.timeframe.first_ts) → $(Ts $agg.timeframe.last_ts)) |"
+}
 W ''
 
-# ---- per-conversation table -------------------------------------------------
-W '## Per-conversation'
+# ---- per-conversation tokens table ------------------------------------------
+W '## Per-conversation — tokens'
 W ''
 W '| conversation | provenance | skill | issue | model(s) | in | out | cache-read | cache-write | total | tool calls | elapsed (s) |'
 W '|---|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|'
@@ -113,6 +136,54 @@ foreach ($c in $conv) {
 }
 W ''
 
+# ---- per-conversation performance table -------------------------------------
+W '## Per-conversation — performance'
+W ''
+W '| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | elapsed (s) | first activity | last activity |'
+W '|---|---|--:|--:|--:|--:|--:|---|---|'
+foreach ($c in $conv) {
+    $skill = if ($c.skill) { $c.skill } else { '_(no skill)_' }
+    if ($null -ne $c.skill_turns) {
+        W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |" -f `
+            $c.uuid, $skill, (Num $c.skill_turns), (Num $c.sidechain_turns), `
+            (Num $c.tool_calls), (Num $c.tool_errors), (Sec $c.wall_clock_s), `
+            (Ts $c.first_ts), (Ts $c.last_ts))
+    } else {
+        W ("| ``{0}`` | {1} | — | — | — | — | — | — | — |" -f $c.uuid, $skill)
+    }
+}
+W ''
+
+# ---- tokens by skill --------------------------------------------------------
+if ($null -ne $agg.by_skill -and @($agg.by_skill).Count -gt 0) {
+    W '## Tokens by skill'
+    W ''
+    W '| skill | conversations | in | out | cache-read | cache-write | total |'
+    W '|---|--:|--:|--:|--:|--:|--:|'
+    foreach ($s in @($agg.by_skill)) {
+        $t = $s.tokens
+        W ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} |" -f `
+            $s.skill, (Num $s.conversations), (Num $t.in), (Num $t.out), `
+            (Num $t.cache_read), (Num $t.cache_write), (Num $t.total))
+    }
+    W ''
+}
+
+# ---- tokens by provenance ---------------------------------------------------
+if ($null -ne $agg.by_provenance -and @($agg.by_provenance).Count -gt 0) {
+    W '## Tokens by provenance'
+    W ''
+    W '| provenance | conversations | in | out | cache-read | cache-write | total |'
+    W '|---|--:|--:|--:|--:|--:|--:|'
+    foreach ($p in @($agg.by_provenance)) {
+        $t = $p.tokens
+        W ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} |" -f `
+            $p.provenance, (Num $p.conversations), (Num $t.in), (Num $t.out), `
+            (Num $t.cache_read), (Num $t.cache_write), (Num $t.total))
+    }
+    W ''
+}
+
 # ---- feature totals ---------------------------------------------------------
 W '## Feature totals'
 W ''
@@ -126,6 +197,20 @@ W "| **grand total** | **$(Num $agg.tokens.total)** |"
 W ''
 W "Models across the feature: **$(Join-List $agg.models)**"
 W ''
+
+# ---- activity timeframe -----------------------------------------------------
+if ($agg.timeframe -and ($agg.timeframe.first_ts -or $agg.timeframe.last_ts)) {
+    W '## Activity timeframe'
+    W ''
+    W '| metric | value |'
+    W '|---|---|'
+    W "| First activity | $(Ts $agg.timeframe.first_ts) |"
+    W "| Last activity | $(Ts $agg.timeframe.last_ts) |"
+    W "| Span (first → last) | $(Dur $agg.timeframe.span_s) |"
+    W ''
+    W "_Span is wall-clock from the earliest to the latest measured turn across the feature — it includes idle gaps between sessions and human wait time, so it is not compute time and does not equal the sum of per-conversation elapsed._"
+    W ''
+}
 
 # ---- emit -------------------------------------------------------------------
 # Emit on PowerShell's success stream (not [Console]::Out.Write), so `> file.md`

@@ -49,13 +49,25 @@ Markdown on stdout, nothing else (read-only — no files written, no Jira/git):
 - **Summary** table — feature key, conversation count (and how many carried
   metrics), the feature's **total token consumption** broken into
   in/out/cache-read/cache-write, the union of models used, skills exercised,
-  and issue keys touched.
-- **Per-conversation** table — one row per record: uuid, provenance, skill,
-  issue, model(s), the four token buckets + total, tool calls, and elapsed
-  seconds. Records without metrics (stub/unexpected/no-skill) render their
-  numeric cells as `-`.
+  and issue keys touched, plus total skill turns, total tool calls (with
+  errors), and the activity span.
+- **Per-conversation — tokens** table — one row per record: uuid, provenance,
+  skill, issue, model(s), the four token buckets + total, tool calls, and
+  elapsed seconds.
+- **Per-conversation — performance** table — skill turns, sidechain turns, tool
+  calls, tool errors, elapsed, and first/last activity per record.
+- **Tokens by skill** and **Tokens by provenance** — the collector's
+  `by_skill` / `by_provenance` roll-ups (analyzed records only).
 - **Feature totals** — the summed token buckets and the grand total, plus the
   models across the feature.
+- **Activity timeframe** — first activity, last activity, and the span
+  (with the "elapsed span, not compute time" caveat).
+
+A genuine measured **0** renders as `0`; a record without metrics
+(stub/unexpected/no-skill) renders its numeric cells as `—` and says why, so a
+real zero is never confused with "not measured". Sections backed by `@2`-only
+aggregate fields (by-skill, by-provenance, timeframe) are omitted when given
+older `@1` JSON, which still renders.
 
 The markdown structure is inline in the script (no external template to drift);
 the one shared artifact is the JSON schema doc, which both halves point at.

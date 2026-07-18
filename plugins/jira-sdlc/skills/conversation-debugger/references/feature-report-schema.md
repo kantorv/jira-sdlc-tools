@@ -7,14 +7,17 @@ re-measures anything, it only renders what is here. If a field needs to
 change, change it in `collect_feature` first; the report-builder follows.
 
 The `schema` field carries a version tag
-(`jira-sdlc/conversation-debugger/feature-report@1`) so a future breaking
-change is detectable rather than silent.
+(`jira-sdlc/conversation-debugger/feature-report@2`) so a future breaking
+change is detectable rather than silent. `@2` **added** aggregate fields
+(`skill_turns`, `sidechain_turns`, `tool_calls`, `tool_errors`, `timeframe`,
+`by_skill`, `by_provenance`) — a superset of `@1`, so a report-builder that
+guards for their absence renders `@1` JSON unchanged.
 
 ## Shape
 
 ```jsonc
 {
-  "schema": "jira-sdlc/conversation-debugger/feature-report@1",
+  "schema": "jira-sdlc/conversation-debugger/feature-report@2",
   "feature": "JST-122",            // the feature key this roll-up is for (the collector's argument)
   "conversation_count": 2,          // number of per-conversation records below
   "conversations": [                // one record per (conversation, invoked skill)
@@ -50,9 +53,28 @@ change is detectable rather than silent.
       "in": 92, "out": 67030, "cache_read": 4602634, "cache_write": 195871,
       "total": 4865627              // the feature's TOTAL token consumption, at a glance
     },
+    "skill_turns": 102,             // SUMMED skill turns over analyzed records
+    "sidechain_turns": 0,           // SUMMED sidechain turns
+    "tool_calls": 109,              // SUMMED tool calls
+    "tool_errors": 6,               // SUMMED tool errors
+    "timeframe": {                  // wall-clock window across analyzed records
+      "first_ts": "2026-07-18T10:02:11.000Z",  // earliest first_ts
+      "last_ts":  "2026-07-18T14:01:25.783Z",  // latest last_ts
+      "span_s": 14354.2             // (last - first) in seconds — includes idle gaps; null if no timestamps
+    },
     "models": ["claude-opus-4-8"],  // union of executing models across the feature
     "skills": ["jira-task-executor","jira-task-assigner"],  // union of skills exercised
-    "issue_keys": ["JST-122"]       // union of recovered keys (a multistep feature lists sub-task keys too)
+    "issue_keys": ["JST-122"],      // union of recovered keys (a multistep feature lists sub-task keys too)
+    "by_skill": [                   // per-skill token roll-up (analyzed records only)
+      { "skill": "jira-task-executor", "conversations": 1,
+        "tokens": { "in": 114, "out": 77772, "cache_read": 7707927, "cache_write": 158910, "total": 7944723 } }
+      // …one per distinct skill
+    ],
+    "by_provenance": [              // per-provenance token roll-up (analyzed records only)
+      { "provenance": "worktree", "conversations": 2,
+        "tokens": { "in": 168, "out": 104077, "cache_read": 10128429, "cache_write": 249614, "total": 10482288 } }
+      // …one per distinct provenance ("worktree" | "main-checkout" | "unknown")
+    ]
   }
 }
 ```
@@ -77,9 +99,18 @@ change is detectable rather than silent.
   actually contributed.
 
 - **Every number is `collect_run`'s own.** `collect_feature` copies the
-  measured `KEY=VALUE` fields verbatim and only *sums* them for the aggregate —
-  it never re-derives a token count or a duration. `total` is the one computed
-  value (a plain sum of the four buckets). The same caveats as `collect_run`
-  apply: `wall_clock_s` is elapsed span (includes waits on a human), not
-  compute time; cache-read dominates a long run; there is no cost field, so
-  tokens are never converted to money.
+  measured `KEY=VALUE` fields verbatim and only *sums* / *unions* / *min-maxes*
+  them for the aggregate — it never re-derives a token count or a duration.
+  `tokens.total`, the `by_skill`/`by_provenance` sums, and the turn/tool sums
+  are plain additions of measured values; `timeframe.span_s` is the one
+  subtraction (`last_ts − first_ts`). All are computed **in the collector** so
+  the report-builder stays a pure renderer. The same caveats as `collect_run`
+  apply: `wall_clock_s` (and therefore `span_s`) is elapsed span — it includes
+  waits on a human and idle gaps between sessions, not compute time, and does
+  **not** equal the sum of per-conversation elapsed; cache-read dominates a long
+  run; there is no cost field, so tokens are never converted to money.
+
+- **`by_skill` / `by_provenance` cover analyzed records only.** Their token
+  sums match `aggregate.tokens` (metric-less records contribute nothing), so a
+  non-analyzed conversation appears in the per-conversation listing for coverage
+  but not in these roll-ups.

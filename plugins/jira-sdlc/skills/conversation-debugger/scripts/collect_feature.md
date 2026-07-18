@@ -47,10 +47,17 @@ from inside the project checkout.
    record — **every metric is `collect_run`'s own**, copied verbatim; nothing
    is re-measured or re-estimated here.
 
-3. **Aggregate.** Token buckets (in / out / cache-read / cache-write, plus a
-   summed total) are summed across the records that carried metrics; models,
-   skills, and recovered issue keys are unioned. The aggregate `total` is the
-   feature's whole-feature token consumption at a glance.
+3. **Aggregate.** Over the records that carried metrics: token buckets (in /
+   out / cache-read / cache-write, plus a summed total) and the turn/tool counts
+   (`skill_turns`, `sidechain_turns`, `tool_calls`, `tool_errors`) are summed;
+   models, skills, and recovered issue keys are unioned; tokens are also rolled
+   up **per skill** (`by_skill`) and **per provenance** (`by_provenance`); and a
+   feature `timeframe` is derived — earliest `first_ts`, latest `last_ts`, and
+   the `span_s` between them. The aggregate `total` is the feature's
+   whole-feature token consumption at a glance. Every value is a plain
+   sum / union / min-max of `collect_run`'s own measured numbers (`span_s` the
+   one subtraction); the schema is in
+   [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
 
 ## Output — two streams, split on purpose
 
