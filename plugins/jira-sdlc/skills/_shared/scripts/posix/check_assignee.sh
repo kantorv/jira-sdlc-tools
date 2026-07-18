@@ -64,15 +64,37 @@ VIEW=$($TMOUT_CMD acli jira workitem view "$KEY" --json --fields 'assignee' </de
   || die "check_assignee: cannot read $KEY as $ME — $(printf '%s' "$VIEW" | tail -1). The account may lack access to this project, or the Jira API timed out."
 
 # -> "<accountId>|<displayName>", or empty when unassigned.
-ASSIGNEE=$(printf '%s' "$VIEW" | python3 -c '
-import sys, json
-try:
-    a = (json.load(sys.stdin).get("fields") or {}).get("assignee") or {}
-except Exception:
-    print(""); sys.exit(0)
-if a.get("accountId"):
-    print("%s|%s" % (a["accountId"], a.get("displayName") or "unknown"))
-' 2>/dev/null || true)
+# Zero-dependency parse — no python3. On stock Windows 11, `python3` is the
+# Microsoft Store App Execution Alias stub: it prints a "Python was not found"
+# line to stderr and exits non-zero with NO stdout. The old pipeline guarded
+# that with `2>/dev/null || true` and the embedded script's exception branch did
+# `print(""); sys.exit(0)`, so a dead python3 yielded an EMPTY assignee string,
+# which this script reads as UNASSIGNED — a false-negative halt on an issue that
+# is in fact assigned. jq, when present, is the fast path; a grep/sed fallback
+# mirrors statuscheck.sh's zero-dependency stance and covers the common case.
+# With `--fields assignee` the only accountId / displayName in the payload is
+# the assignee's, so extracting either by its literal key name is unambiguous.
+if command -v jq >/dev/null 2>&1; then
+  ASSIGNEE=$(printf '%s' "$VIEW" | jq -r '
+    (.fields.assignee // {})
+    | (if .accountId then "\(.accountId)|\(.displayName // "unknown")" else empty end)
+  ' 2>/dev/null || true)
+else
+  if printf '%s' "$VIEW" | grep -Eq '"assignee"[[:space:]]*:[[:space:]]*null'; then
+    ASSIGNEE=""
+  else
+    THEIR_ID=$(printf '%s' "$VIEW" | grep -oE '"accountId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
+      | sed -E 's/.*"accountId"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    THEIR_NAME=$(printf '%s' "$VIEW" | grep -oE '"displayName"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
+      | sed -E 's/.*"displayName"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    if [ -n "$THEIR_ID" ]; then
+      [ -z "$THEIR_NAME" ] && THEIR_NAME="unknown"
+      ASSIGNEE="$THEIR_ID|$THEIR_NAME"
+    else
+      ASSIGNEE=""
+    fi
+  fi
+fi
 
 FIXUP="Assign it and rerun:
   acli jira workitem assign --key $KEY --assignee \"$ME\" --yes

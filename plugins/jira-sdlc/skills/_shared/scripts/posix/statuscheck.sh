@@ -12,11 +12,14 @@
 #   The current issue key is normally derived from the branch name
 #   (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>) and reported in the
 #   `issue_key` row — the calling agent compares it to the issue it was
-#   asked to run. Passing ISSUE-KEY explicitly makes the script do that
-#   comparison itself instead (`issue_key` FAILs on mismatch). Neither
-#   jira-task-executor nor jira-task-reviewer pass one anymore — both
-#   take no issue-key argument, so the branch is their sole source of
-#   truth for the key.
+#   asked to run. Passing an issue-key-shaped ISSUE-KEY (PROJ-123) explicitly
+#   makes the script do that comparison itself instead (`issue_key` FAILs on
+#   mismatch). A positional argument that is NOT issue-key-shaped — e.g. a role
+#   name like "reviewer" accidentally carried over from jira_acli_login — is
+#   ignored, not compared: the branch-derived key is used exactly as in the
+#   no-arg case. statuscheck takes no role argument. Neither jira-task-executor
+#   nor jira-task-reviewer pass one anymore — both take no issue-key argument,
+#   so the branch is their sole source of truth for the key.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
 # jira-sdlc-tools.env + jira-sdlc-tools.local.env in the repo root
@@ -54,6 +57,16 @@ KEY_ARG="${1:-}"
 BR=$(git branch --show-current 2>/dev/null || true)
 BR_TAIL=${BR#*/}
 BR_KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
+# Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
+# value — most often a role name like "reviewer" carried over by mistake from the
+# preceding `jira_acli_login <role>` call — is NOT an issue key: ignore it and fall
+# back to the branch-derived key, exactly as the no-arg path does, instead of
+# FAILing issue_key against it. statuscheck itself takes no role argument.
+KEY_ARG_IGNORED=""
+if [ -n "$KEY_ARG" ] && ! printf '%s' "$KEY_ARG" | grep -qE '^[A-Za-z][A-Za-z0-9]*-[0-9]+$'; then
+  KEY_ARG_IGNORED="$KEY_ARG"
+  KEY_ARG=""
+fi
 KEY="${KEY_ARG:-$BR_KEY}"   # best known key, for remedy messages
 RERUN="${STATUSCHECK_RERUN:-rerun /jira-sdlc:jira-task-executor}"
 
@@ -144,6 +157,62 @@ else
   else
     row worktree INFO "main repo checkout (.git is a directory)"
   fi
+fi
+
+# --- platform (single source of truth for "am I on Windows") --------------
+# Reports the OS and, on Windows, verifies the runtime the Windows dispatch
+# path needs: PowerShell 5.1+ (`pwsh` OR `powershell`), acli/gh, and the
+# win/*.ps1 ports. Each SKILL.md's dispatch
+# convention keys off this row — POSIX runs the bash scripts here, windows runs
+# scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
+# detection so the Windows branch can be exercised on Linux/CI (statuscheck.ps1
+# honors the same override and emits an identical row).
+PLAT_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+_detect_os() {
+  case "$(uname -s 2>/dev/null)" in
+    Linux)                OS=linux ;;
+    Darwin)               OS=darwin ;;
+    MINGW*|MSYS*|CYGWIN*) OS=windows ;;
+    *)                    OS=unknown ;;
+  esac
+}
+case "${STATUSCHECK_FORCE_OS:-}" in
+  linux|darwin|windows) OS="$STATUSCHECK_FORCE_OS"; OS_FORCED=" (forced via STATUSCHECK_FORCE_OS)" ;;
+  "")                   OS_FORCED=""; _detect_os ;;
+  *)                    OS_FORCED=" (STATUSCHECK_FORCE_OS='${STATUSCHECK_FORCE_OS}' invalid — ignored)"; _detect_os ;;
+esac
+if [ "$OS" = "windows" ]; then
+  WIN_DIR="$PLAT_SCRIPT_DIR/../win"
+  MISSING=""
+  PS_RUNTIME="" PS_VER=""
+  if command -v pwsh >/dev/null 2>&1; then
+    PS_RUNTIME="pwsh"
+    PS_VER=$(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
+  elif command -v powershell >/dev/null 2>&1; then
+    PS_RUNTIME="powershell"
+    PS_VER=$(powershell -NoProfile -Command '$PSVersionTable.PSVersion.Major' 2>/dev/null | tr -d '[:space:]')
+  fi
+  if [ -z "$PS_RUNTIME" ]; then
+    MISSING="$MISSING PowerShell"
+  else
+    case "$PS_VER" in
+      ''|*[!0-9]*) MISSING="$MISSING PowerShell(version?)" ;;
+      *) [ "$PS_VER" -ge 5 ] || MISSING="$MISSING PowerShell(v$PS_VER<5)" ;;
+    esac
+  fi
+  command -v acli >/dev/null 2>&1 || MISSING="$MISSING acli"
+  command -v gh   >/dev/null 2>&1 || MISSING="$MISSING gh"
+  for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+    [ -f "$WIN_DIR/$s.ps1" ] || MISSING="$MISSING win/$s.ps1"
+  done
+  if [ -n "$MISSING" ]; then
+    row platform FAIL "os=windows$OS_FORCED — missing:$MISSING" \
+      "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $RERUN."
+  else
+    row platform OK "os=windows$OS_FORCED — PowerShell $PS_VER ($PS_RUNTIME) + acli + gh + win/ ports present (Windows dispatch path ready)"
+  fi
+else
+  row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
 fi
 
 # --- project config ------------------------------------------------------
@@ -248,22 +317,42 @@ if [ -n "$KEY_ARG" ]; then
       "cd into $KEY_ARG's own worktree/branch and $RERUN — or get explicit user confirmation before proceeding here."
   fi
 elif [ -n "$BR_KEY" ]; then
-  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)"
+  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
 else
-  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)"
+  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
 fi
 
 # --- gh auth (needed by 'gh pr create') ----------------------------------
+# Log gh in from a persistent PAT session at the very start of the run, so the
+# whole conversation holds this session (no per-command token prefix, no
+# logout). GITHUB_PAT_TOKEN is a secret, machine-specific value → it lives only
+# in the gitignored jira-sdlc-tools.local.env (never the tracked
+# jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token → FAIL with
+# a remedy, and the skill stops like any other FAIL row. Accepted tradeoff: this
+# writes ~/.config/gh/hosts.yml, which is global to the OS user, so it overwrites
+# the developer's own gh session and is not logged out afterward — see
+# plugins/jira-sdlc/docs/github/ (JST-126).
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
-    "install it (https://cli.github.com) and run 'gh auth login', then $RERUN."
+    "install it (https://cli.github.com), then $RERUN."
 else
-  GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
-  if [ -n "$GH_LINE" ]; then
-    row gh_auth OK "$GH_LINE"
+  GH_PAT=$(cfg GITHUB_PAT_TOKEN || true)
+  # cfg parses rather than sources the env file, so a quoted value keeps its
+  # quotes — strip one surrounding pair before handing the token to gh.
+  GH_PAT=${GH_PAT#\"}; GH_PAT=${GH_PAT%\"}
+  GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
+  if [ -z "$GH_PAT" ]; then
+    row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
+      "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
   else
-    row gh_auth FAIL "gh is installed but not authenticated" \
-      "run 'gh auth login', then $RERUN."
+    printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token >/dev/null 2>&1 || true
+    GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
+    if [ -n "$GH_LINE" ]; then
+      row gh_auth OK "$GH_LINE (PAT session login)"
+    else
+      row gh_auth FAIL "gh auth login --with-token with GITHUB_PAT_TOKEN did not produce an authenticated session" \
+        "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT, then $RERUN."
+    fi
   fi
 fi
 
