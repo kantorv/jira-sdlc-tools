@@ -78,6 +78,16 @@ if ($isMulti) {
 # PowerShell coercing '' to numeric 0 in `-eq`, which would hide real zeros.)
 function Num([object]$n)  { if ($null -eq $n -or ($n -is [string] -and $n -eq '')) { return '-' }; return ('{0:N0}' -f [long]$n) }
 function Sec([object]$n)  { if ($null -eq $n -or ($n -is [string] -and $n -eq '')) { return '-' }; return ('{0:N1}' -f [double]$n) }
+# Bytes -> human size (KB/MB, one decimal; 1 KB = 1024 B). Absent -> '-', so older
+# JSON without the field renders cleanly. Uses the same '{0:N1}' idiom as Sec
+# (posix: "{:,.1f}") so both hosts round the identical value the same way — the
+# proven one-decimal parity pair. Rendered only; the collector measured it.
+function Size([object]$b) {
+    if ($null -eq $b -or ($b -is [string] -and $b -eq '')) { return '-' }
+    $v = [double]$b
+    if ($v -ge 1048576) { return ('{0:N1} MB' -f ($v / 1048576.0)) }
+    return ('{0:N1} KB' -f ($v / 1024.0))
+}
 function Join-List($xs)   { if ($null -eq $xs) { return '-' }; $a = @($xs); if ($a.Count -eq 0) { return '-' }; return ($a -join ', ') }
 # Timestamps arrive as DateTime (ConvertFrom-Json auto-parses the ISO-Z strings)
 # or, on older hosts, as the raw string — render either as compact UTC.
@@ -127,8 +137,8 @@ function Emit-TokensSection {
     param($conv, [string]$Level = '##')
     W "$Level Per-conversation — tokens"
     W ''
-    W '| conversation | provenance | skill | issue | model(s) | in | out | cache-read | cache-write | total | tool calls | elapsed (s) |'
-    W '|---|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|'
+    W '| conversation | provenance | skill | issue | model(s) | in | out | cache-read | cache-write | total | tool calls | elapsed (s) | size |'
+    W '|---|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|'
     foreach ($c in $conv) {
         $skill = if ($c.skill) { $c.skill } else { '_(no skill)_' }
         $issue = if ($c.issue_key) { $c.issue_key } else { '-' }
@@ -139,13 +149,13 @@ function Emit-TokensSection {
         if ($analyzedRow) {
             $models = Join-List $c.models
             $t = $c.tokens
-            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} |" -f `
+            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} |" -f `
                 $c.uuid, $c.provenance, $skill, $issue, $models, `
                 (Num $t.in), (Num $t.out), (Num $t.cache_read), (Num $t.cache_write), (Num $t.total), `
-                (Num $c.tool_calls), (Sec $c.wall_clock_s))
+                (Num $c.tool_calls), (Sec $c.wall_clock_s), (Size $c.size_bytes))
         } else {
             $why = "_not analyzed: $($c.key_status)_"
-            W ("| ``{0}`` | {1} | {2} | {3} | {4} | — | — | — | — | — | — | — |" -f `
+            W ("| ``{0}`` | {1} | {2} | {3} | {4} | — | — | — | — | — | — | — | — |" -f `
                 $c.uuid, $c.provenance, $skill, $issue, $why)
         }
     }

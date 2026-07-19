@@ -242,6 +242,7 @@ def feature_records(fkey, soft):
                 'tokens': {'in': 0, 'out': 0, 'cache_read': 0, 'cache_write': 0, 'total': 0},
                 'skill_turns': None, 'sidechain_turns': None, 'tool_calls': None,
                 'tool_errors': None, 'wall_clock_s': None, 'first_ts': None, 'last_ts': None,
+                'size_bytes': None,
             })
             continue
 
@@ -276,6 +277,11 @@ def feature_records(fkey, soft):
                 except (ValueError, TypeError):
                     wall = 0.0
 
+            # Threaded straight from collect_run's TRANSCRIPT_BYTES — never
+            # re-measured here (collect_feature owns nothing on disk). Absent
+            # (a metric-less record, or an older collect_run) -> None -> '-'.
+            size_bytes = kv_int(kv, 'TRANSCRIPT_BYTES') if 'TRANSCRIPT_BYTES' in kv else None
+
             records.append({
                 'uuid': uuid,
                 'transcript': path,
@@ -292,6 +298,7 @@ def feature_records(fkey, soft):
                 'wall_clock_s': wall,
                 'first_ts': kv['FIRST_TS'] if (has_metrics and kv.get('FIRST_TS')) else None,
                 'last_ts': kv['LAST_TS'] if (has_metrics and kv.get('LAST_TS')) else None,
+                'size_bytes': size_bytes,
             })
     return records
 
