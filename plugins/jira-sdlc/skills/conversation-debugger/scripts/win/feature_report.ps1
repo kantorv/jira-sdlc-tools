@@ -120,15 +120,63 @@ $nl = "`n"
 $out = New-Object System.Collections.Generic.List[string]
 function W([string]$s) { $out.Add($s) }
 
+# ---- per-group slice colors (conversation pie) ------------------------------
+# One base hue per skill, shades of that hue per conversation: hue identifies
+# the group, lightness the slice (HSL, saturation eased down as lightness rises
+# so adjacent shades stay apart). Hues are FIXED per skill so color follows the
+# entity across reports; a skill outside the map draws from the fallback wheel
+# in group order. Applied only where slices are grouped (the conversation pie).
+$SkillHue = @{ 'jira-task-assigner' = 0; 'jira-task-executor' = 210; 'jira-task-reviewer' = 150 }
+$FallbackHues = @(270, 45, 320, 100)
+
+# HSL -> #rrggbb. Channels are floored at +0.5 (not [math]::Round) so both
+# ports round identically -- Round/round() are half-to-even and have already
+# bitten a port pair once (see the Dur note in the posix twin).
+function Convert-HslToHex([double]$h, [double]$s, [double]$l) {
+    $s = $s / 100.0
+    $l = $l / 100.0
+    $c = (1.0 - [math]::Abs(2.0 * $l - 1.0)) * $s
+    $hp = ($h % 360) / 60.0
+    $mod2 = $hp - 2.0 * [math]::Truncate($hp / 2.0)
+    $x = $c * (1.0 - [math]::Abs($mod2 - 1.0))
+    if     ($hp -lt 1) { $r = $c; $g = $x; $b = 0.0 }
+    elseif ($hp -lt 2) { $r = $x; $g = $c; $b = 0.0 }
+    elseif ($hp -lt 3) { $r = 0.0; $g = $c; $b = $x }
+    elseif ($hp -lt 4) { $r = 0.0; $g = $x; $b = $c }
+    elseif ($hp -lt 5) { $r = $x; $g = 0.0; $b = $c }
+    else               { $r = $c; $g = 0.0; $b = $x }
+    $m = $l - $c / 2.0
+    $R = [int][math]::Floor(($r + $m) * 255.0 + 0.5)
+    $G = [int][math]::Floor(($g + $m) * 255.0 + 0.5)
+    $B = [int][math]::Floor(($b + $m) * 255.0 + 0.5)
+    return ('#{0:x2}{1:x2}{2:x2}' -f $R, $G, $B)
+}
+
+# Shade i of n within a group: lightness 35% -> 80% across the group while
+# saturation eases 80% -> 45%; a single-slice group takes the midpoint.
+function Get-GroupShade([double]$hue, [int]$idx, [int]$count) {
+    $t = if ($count -le 1) { 0.5 } else { $idx / ($count - 1.0) }
+    return (Convert-HslToHex $hue (80.0 - $t * 35.0) (35.0 + $t * 45.0))
+}
+
 # Emit a GitHub-native mermaid pie of the (label,value) pairs whose value > 0.
 # Rendered from measured totals — no computation here. Skipped for < 2 slices (a
 # single slice is always 100%, so it adds noise, not insight). Labels are
 # sanitized: quotes stripped and ';' -> ',' because a ';' silently truncates a
 # mermaid line and breaks the whole diagram (see AGENTS.md).
+# Pairs may carry a 'color': when every slice has one, an init directive maps
+# them to mermaid's pie1..pieN theme variables, which color slices in
+# definition order. Mermaid defines pie1..pie12 only, so a pie past 12 slices
+# falls back to theme colors rather than emitting variables mermaid ignores.
 function Emit-Pie([string]$title, $pairs) {
     $rows = @($pairs | Where-Object { $null -ne $_.value -and [double]$_.value -gt 0 })
     if ($rows.Count -lt 2) { return }
     W '```mermaid'
+    $colors = @($rows | ForEach-Object { $_.color } | Where-Object { $_ })
+    if ($colors.Count -eq $rows.Count -and $rows.Count -le 12) {
+        $vars = (@(0..($colors.Count - 1) | ForEach-Object { '"pie{0}": "{1}"' -f ($_ + 1), $colors[$_] })) -join ', '
+        W ('%%{init: {"theme": "base", "themeVariables": {' + $vars + '}}}%%')
+    }
     W 'pie showData'
     W ("    title {0}" -f ($title -replace ';', ','))
     foreach ($r in $rows) {
@@ -188,7 +236,21 @@ function Emit-TokensSection {
         }
     }
     $convPie = New-Object System.Collections.Generic.List[object]
-    foreach ($sk in $skillOrder) { foreach ($p in $grouped[$sk]) { $convPie.Add($p) } }
+    $fbI = 0
+    foreach ($sk in $skillOrder) {
+        if ($SkillHue.ContainsKey($sk)) {
+            $hue = $SkillHue[$sk]
+        } else {
+            $hue = $FallbackHues[$fbI % $FallbackHues.Count]
+            $fbI++
+        }
+        $n = $grouped[$sk].Count
+        for ($i = 0; $i -lt $n; $i++) {
+            $p = $grouped[$sk][$i]
+            Add-Member -InputObject $p -NotePropertyName color -NotePropertyValue (Get-GroupShade $hue $i $n) -Force
+            $convPie.Add($p)
+        }
+    }
     # [object[]] cast, not @(...): wrapping a List[object] with @() trips
     # "Argument types do not match" on PowerShell 7 (same trap as New-Aggregate).
     Emit-Pie 'Token consumption by conversation (total tokens)' ([object[]]$convPie)

@@ -166,15 +166,65 @@ def dur(s):
 
 out = []
 
+# ---- per-group slice colors (conversation pie) ------------------------------
+# One base hue per skill, shades of that hue per conversation: hue identifies
+# the group, lightness the slice (HSL, saturation eased down as lightness rises
+# so adjacent shades stay apart). Hues are FIXED per skill so color follows the
+# entity across reports; a skill outside the map draws from the fallback wheel
+# in group order. Applied only where slices are grouped (the conversation pie).
+SKILL_HUE = {'jira-task-assigner': 0, 'jira-task-executor': 210, 'jira-task-reviewer': 150}
+FALLBACK_HUES = [270, 45, 320, 100]
+
+# HSL -> #rrggbb. Channels are floored at +0.5 (not round()) so both ports
+# round identically — round()/[math]::Round are half-to-even and have already
+# bitten a port pair once (see the dur() note above).
+def hsl_hex(h, s, l):
+    s = s / 100.0
+    l = l / 100.0
+    c = (1.0 - abs(2.0 * l - 1.0)) * s
+    hp = (h % 360) / 60.0
+    mod2 = hp - 2.0 * int(hp / 2.0)
+    x = c * (1.0 - abs(mod2 - 1.0))
+    if hp < 1:
+        r, g, b = c, x, 0.0
+    elif hp < 2:
+        r, g, b = x, c, 0.0
+    elif hp < 3:
+        r, g, b = 0.0, c, x
+    elif hp < 4:
+        r, g, b = 0.0, x, c
+    elif hp < 5:
+        r, g, b = x, 0.0, c
+    else:
+        r, g, b = c, 0.0, x
+    m = l - c / 2.0
+    def ch(v):
+        return int((v + m) * 255.0 + 0.5)
+    return "#%02x%02x%02x" % (ch(r), ch(g), ch(b))
+
+# Shade i of n within a group: lightness 35% -> 80% across the group while
+# saturation eases 80% -> 45%; a single-slice group takes the midpoint.
+def group_shade(hue, idx, count):
+    t = 0.5 if count <= 1 else idx / (count - 1.0)
+    return hsl_hex(hue, 80.0 - t * 35.0, 35.0 + t * 45.0)
+
 # Emit a GitHub-native mermaid pie of the (label,value) pairs whose value > 0.
 # Skipped for < 2 slices (a single slice is always 100%). Labels are sanitized:
 # quotes stripped and ';' -> ',' because a ';' silently truncates a mermaid line
 # and breaks the whole diagram (see AGENTS.md).
+# Pairs may carry a 'color': when every slice has one, an init directive maps
+# them to mermaid's pie1..pieN theme variables, which color slices in
+# definition order. Mermaid defines pie1..pie12 only, so a pie past 12 slices
+# falls back to theme colors rather than emitting variables mermaid ignores.
 def emit_pie(title, pairs):
     rows = [p for p in pairs if p['value'] is not None and float(p['value']) > 0]
     if len(rows) < 2:
         return
     out.append('```mermaid')
+    colors = [r['color'] for r in rows if r.get('color')]
+    if len(colors) == len(rows) and len(rows) <= 12:
+        vars_ = ', '.join('"pie%d": "%s"' % (i + 1, c) for i, c in enumerate(colors))
+        out.append('%%{init: {"theme": "base", "themeVariables": {' + vars_ + '}}}%%')
     out.append('pie showData')
     out.append('    title ' + title.replace(';', ','))
     for r in rows:
@@ -224,8 +274,17 @@ def emit_tokens_section(conv, level='##'):
             short = uuid[:8] if len(uuid) >= 8 else uuid
             grouped[sk].append({'label': "%s · %s" % (sk, short), 'value': int(c['tokens']['total'])})
     conv_pie = []
+    fb_i = 0
     for sk in order:
-        conv_pie.extend(grouped[sk])
+        if sk in SKILL_HUE:
+            hue = SKILL_HUE[sk]
+        else:
+            hue = FALLBACK_HUES[fb_i % len(FALLBACK_HUES)]
+            fb_i += 1
+        n = len(grouped[sk])
+        for i, p in enumerate(grouped[sk]):
+            p['color'] = group_shade(hue, i, n)
+            conv_pie.append(p)
     emit_pie('Token consumption by conversation (total tokens)', conv_pie)
 
 def emit_perf_section(conv, level='##'):
