@@ -400,6 +400,55 @@ End your own turn by telling the user the report path and the two or
 three findings they'd act on — don't make them open the file to learn
 whether anything was wrong.
 
+## Feature-level roll-up (`collect_feature` + `feature_report`)
+
+Everything above analyzes **one** transcript. To profile a whole **feature**
+instead — every conversation of one Jira issue at once, with per-conversation
+metrics *and* per-feature token/model totals — use the two roll-up scripts. They
+ship as a working **posix+win contract pair**, so dispatch by your own runtime
+just like the per-transcript scripts: `bash …/scripts/posix/*.sh` on
+Linux/macOS, `pwsh …/scripts/win/*.ps1` on Windows (outside a plugin session the
+scripts live under `scripts/posix/` or `scripts/win/` relative to this skill).
+
+`collect_feature` puts the machine-readable JSON on **stdout** and the human
+metrics view on **stderr**, so either form below prints the listing to the
+console while the JSON flows onward cleanly. Two equivalent ways to run it (POSIX
+shown; on Windows swap `bash …/posix/X.sh` for `pwsh …/win/X.ps1`):
+
+```bash
+# 1. One-shot pipe — collector JSON straight into the report-builder → markdown
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/collect_feature.sh" <ISSUE-KEY> \
+  | bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/feature_report.sh" > <ISSUE-KEY>-feature-report.md
+```
+
+```bash
+# 2. Two steps — save the JSON first (keep/inspect it), then render markdown from it
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/collect_feature.sh" <ISSUE-KEY> > <ISSUE-KEY>.json
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/feature_report.sh" <ISSUE-KEY>.json > <ISSUE-KEY>-feature-report.md
+```
+
+`feature_report` also accepts input from a `-`/stdin path (and, on Windows, as a
+stage inside an existing PowerShell session, `… | .\feature_report.ps1 > out.md`)
+— all forms write the markdown to `>` correctly. Every per-conversation number is
+`collect_run`'s own; the only cross-host wrinkle is that the POSIX `collect_run.sh`
+measures `elapsed (s)` at whole-second resolution while the PowerShell one keeps
+the fractional part (see [scripts/collect_feature.md](scripts/collect_feature.md)).
+
+`collect_feature` resolves the feature's conversations by reusing
+`sync_conversations`' list and runs `collect_run` over each — so its numbers are
+the same measured metrics this skill already trusts, never re-estimated. It
+auto-detects the feature **type** from Jira (a `subtasks` lookup): a plain issue
+emits the flat `feature-report@2` JSON, while a parent with sub-tasks emits the
+nested `feature-report@3` — the parent plus each **child feature** with its own
+conversations in place, and a feature-wide roll-up across all of them.
+`feature_report` renders whichever it's given (single-step output is unchanged).
+The collector owns the JSON schema; `feature_report` only renders it. Read
+[scripts/collect_feature.md](scripts/collect_feature.md),
+[scripts/feature_report.md](scripts/feature_report.md), and
+[references/feature-report-schema.md](references/feature-report-schema.md)
+before running or changing either script — the per-transcript flow above (steps
+0–6) is unaffected by this adjunct.
+
 ## Caveats that will bite
 
 - **Long sessions get compacted**: a `summary`-type line (or an
