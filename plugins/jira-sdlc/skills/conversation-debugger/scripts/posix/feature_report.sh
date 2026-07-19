@@ -125,10 +125,15 @@ def ts(v):
 # e.g. 5400s renders "2h 30m 0s" on both hosts ([int]1.5 == round(1.5) == 2).
 # The minute/second components stay truncated (int), mirroring the TimeSpan
 # .Minutes / .Seconds integer components the win/ port reads.
+# A zero span renders '-', matching the win/ port: its guard `$sec -eq ''` also
+# catches a numeric 0 because PowerShell coerces the RHS ('') to the LHS's type,
+# and `[double]0 -eq '' == True` — so Dur(0) returns '-' there, and here.
 def dur(s):
     if s is None or s == '':
         return '-'
     s = float(s)
+    if s == 0:
+        return '-'
     if s / 3600 >= 1:
         return "%dh %dm %ds" % (round(s / 3600), int((s % 3600) // 60), int(s % 60))
     if s / 60 >= 1:
