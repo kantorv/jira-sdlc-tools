@@ -81,6 +81,43 @@ full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
 
 ## Install
 
+### Prerequisites
+
+Three CLIs must be installed and authenticated on your machine first.
+
+**Install tools**
+
+| Tool   | Title           | Uses                       | Install URL                                                              | Auth method | Token link                                                                        | Local docs                                                                          |
+| ------ | --------------- | -------------------------- | ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `git`  | Version control | commit/push                | [git-scm.com/downloads](https://git-scm.com/downloads)                  | global auth | —                                                                                 | —                                                                                   |
+| `gh`   | GitHub CLI      | pr create/update           | [cli.github.com](https://cli.github.com/)                               | token       | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md)     |
+| `acli` | Atlassian CLI   | jira api (issues, comments)| [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) | token       | [Jira API token](https://id.atlassian.com/manage-profile/security/api-tokens)     | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md)                                  |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
+(`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
+[Either way](#either-way) below).
+
+**Helper tools**
+
+The skills run bundled scripts that need a shell runtime plus a JSON parser —
+which ones depend on your OS.
+
+**Windows** — one of:
+
+| Tool         | Uses                                            | Install URL                                                                                              |
+| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `pwsh`       | run skill scripts (`win/*.ps1`), PowerShell 7+  | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
+| `powershell` | run skill scripts (`win/*.ps1`), PowerShell 5.1 | ships with Windows                                                                                       |
+
+**Linux / macOS:** the scripts are bash, which has no native JSON parsing, so
+they shell out to an external tool for it:
+
+| Tool      | Uses                                 | Install URL                                                 |
+| --------- | ------------------------------------ | ---------------------------------------------------------- |
+| `jq`      | parse Jira JSON                      | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) |
+| `python3` | scripting (`jq` fallback for JSON)   | [python.org/downloads](https://www.python.org/downloads/)  |
+
 ### Remote — from the marketplace (recommended)
 
 ```
@@ -176,6 +213,32 @@ LLM agent plus two JSON manifests, not compiled code. See
 change. Note too that this toolkit repo isn't a valid target for its
 own skills — you'll need a separate application repo, with its own
 `jira-sdlc-tools.env`, to actually exercise one against.
+
+### Run your own
+
+For anyone who wants to customize the skills and run their own version
+rather than track this one.
+
+This repo is [MIT-licensed](LICENSE) and is already a ready-to-use Claude
+Code marketplace — it's only a few clicks from being cloned or forked into
+your own copy, then registered as a marketplace in your local Claude Code.
+Fork or clone it, edit the skills to taste, and install from your local
+folder:
+
+1. **Fork it on GitHub** (if you want your own upstream to push to), then
+   clone your copy:
+   ```bash
+   git clone https://github.com/<you>/jira-sdlc-tools.git
+   ```
+2. **Add the local folder as a marketplace**, pointing at the repo root
+   (the directory holding `.claude-plugin/marketplace.json`):
+   ```
+   /plugin marketplace add ./jira-sdlc-tools
+   /plugin install jira-sdlc@jira-sdlc-tools
+   ```
+   From here it behaves like the remote install — your fork is the source.
+   While actively editing, use the `--plugin-dir` edit-reload loop above
+   instead, since a marketplace install copies a snapshot into the cache.
 
 ## Contributing
 
