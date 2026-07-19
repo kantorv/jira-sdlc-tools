@@ -208,15 +208,24 @@ def emit_tokens_section(conv, level='##'):
             out.append("| `%s` | %s | %s | %s | %s | — | — | — | — | — | — | — | — |" % (
                 c['uuid'], c['provenance'], skill, issue, why))
     out.append('')
-    # pie: total-token share per conversation (analyzed rows carrying tokens)
-    conv_pie = []
+    # pie: total-token share per conversation (analyzed rows carrying tokens),
+    # grouped by skill (first-seen order) so same-skill slices sit together in
+    # the pie and its legend — each conversation stays its own slice
+    order = []
+    grouped = {}
     for c in conv:
         if c.get('skill_turns') is not None and c.get('tokens') is not None \
            and float(c['tokens']['total']) > 0:
             sk = c['skill'] if c.get('skill') else '(no skill)'
+            if sk not in grouped:
+                grouped[sk] = []
+                order.append(sk)
             uuid = str(c['uuid'])
             short = uuid[:8] if len(uuid) >= 8 else uuid
-            conv_pie.append({'label': "%s · %s" % (sk, short), 'value': int(c['tokens']['total'])})
+            grouped[sk].append({'label': "%s · %s" % (sk, short), 'value': int(c['tokens']['total'])})
+    conv_pie = []
+    for sk in order:
+        conv_pie.extend(grouped[sk])
     emit_pie('Token consumption by conversation (total tokens)', conv_pie)
 
 def emit_perf_section(conv, level='##'):

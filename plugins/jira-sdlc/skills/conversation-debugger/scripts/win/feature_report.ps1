@@ -171,15 +171,27 @@ function Emit-TokensSection {
         }
     }
     W ''
-    # pie: total-token share per conversation (analyzed rows carrying tokens)
-    $convPie = foreach ($c in $conv) {
+    # pie: total-token share per conversation (analyzed rows carrying tokens),
+    # grouped by skill (first-seen order) so same-skill slices sit together in
+    # the pie and its legend — each conversation stays its own slice
+    $skillOrder = New-Object System.Collections.Generic.List[string]
+    $grouped = @{}
+    foreach ($c in $conv) {
         if ($null -ne $c.skill_turns -and $null -ne $c.tokens -and [double]$c.tokens.total -gt 0) {
             $sk = if ($c.skill) { $c.skill } else { '(no skill)' }
+            if (-not $grouped.ContainsKey($sk)) {
+                $grouped[$sk] = New-Object System.Collections.Generic.List[object]
+                $skillOrder.Add($sk)
+            }
             $short = if ($c.uuid -and ([string]$c.uuid).Length -ge 8) { ([string]$c.uuid).Substring(0, 8) } else { [string]$c.uuid }
-            [pscustomobject]@{ label = "$sk · $short"; value = [long]$c.tokens.total }
+            $grouped[$sk].Add([pscustomobject]@{ label = "$sk · $short"; value = [long]$c.tokens.total })
         }
     }
-    Emit-Pie 'Token consumption by conversation (total tokens)' @($convPie)
+    $convPie = New-Object System.Collections.Generic.List[object]
+    foreach ($sk in $skillOrder) { foreach ($p in $grouped[$sk]) { $convPie.Add($p) } }
+    # [object[]] cast, not @(...): wrapping a List[object] with @() trips
+    # "Argument types do not match" on PowerShell 7 (same trap as New-Aggregate).
+    Emit-Pie 'Token consumption by conversation (total tokens)' ([object[]]$convPie)
 }
 
 function Emit-PerfSection {
