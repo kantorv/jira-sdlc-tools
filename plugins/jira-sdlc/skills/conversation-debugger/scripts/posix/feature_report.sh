@@ -119,14 +119,20 @@ def ts(v):
         return str(v)
 
 # Seconds -> human span (collector-provided number, formatted only).
+# The leading unit is round()ed, NOT truncated, to match the win/ port: its
+# Dur() casts $t.TotalHours / $t.TotalMinutes with PowerShell's [int], which
+# rounds half-to-even — and Python's round() is the same half-to-even rule, so
+# e.g. 5400s renders "2h 30m 0s" on both hosts ([int]1.5 == round(1.5) == 2).
+# The minute/second components stay truncated (int), mirroring the TimeSpan
+# .Minutes / .Seconds integer components the win/ port reads.
 def dur(s):
     if s is None or s == '':
         return '-'
     s = float(s)
     if s / 3600 >= 1:
-        return "%dh %dm %ds" % (int(s / 3600), int((s % 3600) // 60), int(s % 60))
+        return "%dh %dm %ds" % (round(s / 3600), int((s % 3600) // 60), int(s % 60))
     if s / 60 >= 1:
-        return "%dm %ds" % (int(s / 60), int(s % 60))
+        return "%dm %ds" % (round(s / 60), int(s % 60))
     return "{:,.1f}s".format(s)
 
 out = []
