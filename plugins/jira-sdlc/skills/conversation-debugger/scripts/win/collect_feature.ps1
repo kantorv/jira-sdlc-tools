@@ -40,9 +40,9 @@
 #     a per-conversation + totals metrics table, so a bare console run shows both
 #     the listing and the metrics "along" it while stdout stays pipe-safe.
 #
-# Windows (PowerShell 5.1+) only this round. The posix twin ships as a STUB
-# (../posix/collect_feature.sh) that announces itself and exits non-zero — a
-# deliberate, explicit parity gap (see the issue / the doc), not a silent one.
+# This is the Windows (PowerShell 5.1+) half of a posix+win contract pair; the
+# POSIX twin (../posix/collect_feature.sh) is a full bash+jq+python3 port with the
+# same CLI, JSON/stderr split, and exit codes. Callers dispatch by their runtime.
 #
 # Exit: 0 = JSON emitted (even for a feature with zero conversations)
 #       1 = usage / environment error, or sync_conversations failed

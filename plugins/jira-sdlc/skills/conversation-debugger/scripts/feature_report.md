@@ -27,9 +27,10 @@ Detection is the presence of a `children` array (equivalently a `@3` schema
 tag); `@1`/`@2` JSON has no `children` and renders through the **untouched**
 single-step path, so there is **no regression** on existing single-step reports.
 
-**This round it ships Windows-only** (`win/feature_report.ps1`). The POSIX twin
-(`posix/feature_report.sh`) is a deliberate **stub** that exits non-zero — an
-explicit parity gap, matching `collect_feature`.
+**It ships as a working posix+win contract pair** — `posix/feature_report.sh`
+(bash + `python3`) and `win/feature_report.ps1` take the same input, render the
+same markdown on stdout, and use the same exit codes. Callers pick the branch
+from their own runtime, matching `collect_feature`.
 
 ## Arguments and input
 
@@ -42,6 +43,18 @@ With **no path and no piped input** it prints usage and exits 1 rather than
 blocking on the console. Empty or non-JSON input, or JSON missing the
 `feature`/`conversations`/`aggregate` keys, exits 1 with a clear message.
 
+On POSIX:
+
+```bash
+# 1. One-shot pipe (from stdin) — collector JSON straight in
+bash posix/collect_feature.sh JST-93 | bash posix/feature_report.sh > JST-93-report.md
+
+# 2. From a saved JSON file (produced by `collect_feature.sh … > JST-93.json`)
+bash posix/feature_report.sh JST-93.json > JST-93-report.md
+```
+
+On Windows:
+
 ```powershell
 # 1. One-shot pipe (from stdin) — collector JSON straight in
 pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
@@ -53,11 +66,13 @@ pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
 powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 JST-93.json > JST-93-report.md
 ```
 
-The report is written on PowerShell's success stream, so `>` captures it in
-every form — its own `pwsh`/`powershell` process, a cross-process pipe
-(`pwsh collect_feature.ps1 … | pwsh feature_report.ps1`), or a stage inside an
-existing PowerShell session (`… | .\feature_report.ps1 > out.md`). The stdin
-and file-path inputs render identically, on both PowerShell 7+ and 5.1.
+The POSIX port reads the JSON from the path argument or, with no path (or a `-`
+path), from piped stdin, and writes the markdown to stdout — so `>` captures it
+in either form. On Windows the report is written on PowerShell's success stream,
+so `>` captures it in every form — its own `pwsh`/`powershell` process, a
+cross-process pipe (`pwsh collect_feature.ps1 … | pwsh feature_report.ps1`), or a
+stage inside an existing PowerShell session (`… | .\feature_report.ps1 > out.md`).
+The stdin and file-path inputs render identically, on every host.
 
 ## What it renders
 
@@ -132,13 +147,13 @@ the one shared artifact is the JSON schema doc, which both halves point at.
 
 ## Script dispatch
 
+```bash
+bash  posix/feature_report.sh  [<json-path>]   # Linux / macOS
+```
+
 ```powershell
 pwsh  win/feature_report.ps1   [<json-path>]                                   # PowerShell 7+
 powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 [<json-path>]  # Windows PowerShell 5.1
-```
-
-```bash
-bash  posix/feature_report.sh  [<json-path>]   # STUB — prints a notice and exits 3
 ```
 
 (paths relative to this file's directory, `conversation-debugger/scripts/`)
@@ -146,16 +161,24 @@ bash  posix/feature_report.sh  [<json-path>]   # STUB — prints a notice and ex
 Windows PowerShell 5.1 (`powershell.exe`) needs `-ExecutionPolicy Bypass` for
 an unsigned `.ps1` unless the machine policy already allows it — same
 prerequisite as every `win/` script; `pwsh` (7+) was not observed to require
-it. The rendered report is identical on both hosts save one cosmetic detail:
-timestamps show as a compact `YYYY-MM-DD HH:MM:SSZ` under 5.1 (whose
-`ConvertFrom-Json` parses ISO-Z strings to `DateTime`) and as the raw
-ISO-8601 string under 7 (which keeps them as text) — the `Ts` helper renders
-either, and no measured number changes.
+it. The rendered report is identical across hosts. Timestamps render as a
+compact UTC `YYYY-MM-DD HH:MM:SSZ` (seconds precision, no fractional): the POSIX
+port formats them that way explicitly, and PowerShell's `Ts` helper produces the
+same whenever `ConvertFrom-Json` parses the ISO-Z string to a `DateTime` (both
+5.1 and the observed pwsh 7.6.x do); a host that instead kept the raw ISO string
+would show it verbatim. No measured number changes either way.
 
 ## Platform parity
 
-The full implementation is `win/feature_report.ps1`.
-`posix/feature_report.sh` is a **stub**: it prints a "NOT IMPLEMENTED on POSIX"
-notice and exits `3`. A full bash port (bash + `jq`, reading the same collector
-JSON) is future work; until then the usual diff-the-two-ports parity check in
-AGENTS.md does not apply to this pair — by design.
+`feature_report` ships as a working **posix+win contract pair**:
+`posix/feature_report.sh` (a thin bash shim over a `python3` renderer, the same
+"advanced JSON parsing in python" pattern as `sync_conversations.sh`) and
+`win/feature_report.ps1` take the same input and render the same markdown with
+the same exit codes. Because it re-measures nothing — it only formats the
+collector's JSON — the two ports are byte-for-byte identical on the same input
+JSON (verified on single-step and multistep, populated and empty). Confirm with:
+
+```bash
+diff <(bash posix/feature_report.sh some.json) \
+     <(pwsh win/feature_report.ps1 some.json)
+```

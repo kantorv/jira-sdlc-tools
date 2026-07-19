@@ -26,9 +26,9 @@
 # Output: the markdown report on stdout, nothing else. Read-only: it neither
 # writes files nor touches Jira/git.
 #
-# Windows (PowerShell 5.1+) only this round; the posix twin
-# (../posix/feature_report.sh) is a STUB that exits non-zero — a deliberate,
-# explicit parity gap, not a silent one.
+# This is the Windows (PowerShell 5.1+) half of a posix+win contract pair; the
+# POSIX twin (../posix/feature_report.sh) is a full bash+python3 port with the
+# same CLI, stdout, and exit codes. Callers dispatch by their runtime.
 #
 # Exit: 0 = markdown emitted   1 = usage / unreadable-or-invalid JSON
 

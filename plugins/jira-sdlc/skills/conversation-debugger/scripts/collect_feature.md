@@ -24,11 +24,12 @@ Detection is a single Jira fetch (see [Feature-type detection](#feature-type-det
 below); the schema for both shapes is owned here and documented in
 [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
 
-**This round it ships Windows-only** (`win/collect_feature.ps1`). The POSIX
-twin (`posix/collect_feature.sh`) is a deliberate **stub** that announces
-itself and exits non-zero — an explicit parity gap, not a silent one (see
-[Platform parity](#platform-parity) below). This departs, on purpose, from the
-repo's usual "every script ships as a working posix+win contract pair" rule.
+**It ships as a working posix+win contract pair** — the bash port
+(`posix/collect_feature.sh`) and the PowerShell port (`win/collect_feature.ps1`)
+take the same argument, emit the same JSON/stderr split, and use the same exit
+codes (see [Platform parity](#platform-parity) below). Callers pick the branch
+from their own runtime: `bash posix/collect_feature.sh` on Linux/macOS,
+`pwsh`/`powershell win/collect_feature.ps1` on Windows.
 
 ## Arguments
 
@@ -122,30 +123,36 @@ own `sync_conversations` failure is fatal.
   both the listing and the metrics "along" it (as the issue asked) while stdout
   stays pipe-safe.
 
-Two equivalent ways to get the markdown (both dispatch each script as its own
-`pwsh` process; the human view still prints to the console via stderr):
+Two equivalent ways to get the markdown (the human view still prints to the
+console via stderr). On POSIX:
 
-```powershell
+```bash
 # 1. One-shot pipe: collector JSON straight into the report-builder
-pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
+bash posix/collect_feature.sh JST-93 | bash posix/feature_report.sh > JST-93-report.md
 
 # 2. Two steps: save the JSON first (keep/inspect it), then render markdown from it
-pwsh win/collect_feature.ps1 JST-93 > JST-93.json          # JSON only; human view still on stderr
-pwsh win/feature_report.ps1 JST-93.json > JST-93-report.md
+bash posix/collect_feature.sh JST-93 > JST-93.json          # JSON only; human view still on stderr
+bash posix/feature_report.sh JST-93.json > JST-93-report.md
+```
+
+On Windows, dispatch each script as its own `pwsh` process:
+
+```powershell
+pwsh win/collect_feature.ps1 JST-93 | pwsh win/feature_report.ps1 > JST-93-report.md
 ```
 
 On **Windows PowerShell 5.1** (`powershell.exe`) swap each `pwsh X` for
-`powershell -ExecutionPolicy Bypass -File X` — every form above works
-unchanged, e.g. the one-shot pipe:
+`powershell -ExecutionPolicy Bypass -File X`.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File win/collect_feature.ps1 JST-93 |
-  powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 > JST-93-report.md
-```
-
-Both hosts produce the **same metrics and the same report**; the JSON differs
-only cosmetically (5.1 serializes a whole-number `span_s` as `3685.0`, 7 as
-`3685` — same value, and the report-builder reads either).
+Both platforms produce the **same report structure and the same measured
+metrics**. Two cosmetic caveats: (a) PowerShell 5.1 serializes a whole-number
+`span_s` as `3685.0`, 7 as `3685` — same value, and the report-builder reads
+either; (b) every per-conversation number is `collect_run`'s own, and the POSIX
+`collect_run.sh` measures `WALL_CLOCK_S` at **whole-second** resolution while
+`collect_run.ps1` keeps the fractional part — so the `elapsed (s)` column (and
+nothing else) can differ by well under a second between the two hosts. That is a
+`collect_run` port difference, not a `collect_feature` one; the roll-up copies
+whatever its host's `collect_run` reports.
 
 **Records-per-conversation, not one-per-conversation.** A session that invoked
 two skills produces two records (same `uuid`, different `skill`) because
@@ -172,16 +179,15 @@ stays honest).
 
 ## Script dispatch
 
-Callers decide POSIX vs. Windows from their own runtime before invoking — the
-POSIX path is a stub this round:
+Callers decide POSIX vs. Windows from their own runtime before invoking:
+
+```bash
+bash  posix/collect_feature.sh  <ISSUE-KEY>   # Linux / macOS
+```
 
 ```powershell
 pwsh  win/collect_feature.ps1   <ISSUE-KEY>                                    # PowerShell 7+
 powershell -ExecutionPolicy Bypass -File win/collect_feature.ps1 <ISSUE-KEY>   # Windows PowerShell 5.1
-```
-
-```bash
-bash  posix/collect_feature.sh  <ISSUE-KEY>   # STUB — prints a notice and exits 3
 ```
 
 (paths relative to this file's directory, `conversation-debugger/scripts/`)
@@ -194,11 +200,24 @@ an unsigned `.ps1` unless the machine policy is already
 
 ## Platform parity
 
-The full implementation is `win/collect_feature.ps1`.
-`posix/collect_feature.sh` is a **stub**: it prints a "NOT IMPLEMENTED on
-POSIX" notice naming the win/ port and exits `3` (never `0` — nothing is
-produced). This makes the parity gap explicit at the point of use. A full bash
-port (bash + `jq` + `python3`, mirroring `collect_run.sh` /
-`sync_conversations.sh`) is future work; until then the usual
-diff-the-two-ports parity check in AGENTS.md does not apply to this pair —
-by design.
+`collect_feature` ships as a working **posix+win contract pair**:
+`posix/collect_feature.sh` (bash + `jq` via `collect_run` + `python3` for the
+nested roll-up, mirroring `collect_run.sh` / `sync_conversations.sh`) and
+`win/collect_feature.ps1` take the same argument and emit the same JSON/stderr
+split with the same exit codes. Because the JSON's numbers are each host's
+`collect_run` output verbatim, a raw byte-diff of the two collectors' JSON is
+**not** the parity check: the `wall_clock_s` field (and nothing else) traces to
+the `collect_run.sh` vs `collect_run.ps1` precision difference noted above.
+Verify parity on quiescent data by comparing the two collectors' JSON with
+`wall_clock_s` normalized out, e.g.:
+
+```bash
+NORM='walk(if type=="object" and has("wall_clock_s") then .wall_clock_s=null else . end)'
+diff <(jq -S "$NORM" <(bash posix/collect_feature.sh JST-93 2>/dev/null)) \
+     <(jq -S "$NORM" <(pwsh win/collect_feature.ps1 JST-93 2>/dev/null))
+```
+
+(Resolve every conversation of a **live** feature and the numbers move as its
+sessions run — compare a feature whose sessions have finished, or capture both
+within the same quiet window.) The rendered markdown is byte-for-byte identical
+across hosts save that same `elapsed (s)` column.
