@@ -397,10 +397,16 @@ $Dest = Join-Path $ConversationsDir $Key
 if (-not (Test-Path -LiteralPath $Dest)) { New-Item -ItemType Directory -Path $Dest -Force | Out-Null }
 Copy-Item -LiteralPath $Src -Destination (Join-Path $Dest "$Uuid.jsonl") -Force
 
+# Transcript byte size of the profiled source (Length is the byte count, matching
+# the bash twin's `wc -c`). Measured HERE — the only layer that holds $Src — so
+# collect_feature can thread it through and feature_report re-measures nothing.
+$Bytes = (Get-Item -LiteralPath $Src).Length
+
 $Rel = "conversations/$Key"
 Emit $Status $Key $Source
 Write-Output "REPORT_DIR=$Rel"
 Write-Output "TRANSCRIPT_COPY=$Rel/$Uuid.jsonl"
+Write-Output "TRANSCRIPT_BYTES=$Bytes"
 Write-Output "SKILL_TURNS=$($DMain.Count)"
 Write-Output "SKILL_LINES=$($AllList.Count)"
 Write-Output "SIDECHAIN_TURNS=$($DSide.Count)"

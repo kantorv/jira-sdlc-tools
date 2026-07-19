@@ -69,7 +69,12 @@ script must be run from inside the project checkout.
 `SKILL_TURNS` / `TOOL_CALLS` / `TOKENS_*` / `WALL_CLOCK_S` etc. fields,
 scoped to the named skill's own turns via each line's `attributionSkill`
 so pre-skill chatter and other skills in the same session don't pollute
-the numbers. Two traps both ports avoid: (1) one API response is split
+the numbers. One field is deliberately *not* skill-scoped: `TRANSCRIPT_BYTES`
+is the profiled transcript's whole-file on-disk size (`wc -c` on POSIX,
+`.Length` on Windows — both the file's byte count), which `collect_feature`
+threads through to the feature report as each conversation's `size_bytes`.
+`collect_run` is the one layer that holds the transcript path, so the size is
+measured here and nowhere downstream. Two traps both ports avoid: (1) one API response is split
 across several assistant lines that each repeat the *same* usage object —
 summing per line overcounts, so token sums are computed after
 deduplicating by `message.id`; (2) content blocks (tool calls) are *not*

@@ -96,6 +96,18 @@ def sec(n):
         return '-'
     return "{:,.1f}".format(float(n))
 
+# Bytes -> human size (KB/MB, one decimal; 1 KB = 1024 B). Absent -> '-', so
+# older JSON without the field renders cleanly. Uses the same "{:,.1f}" idiom as
+# sec() (win: '{0:N1}') so both hosts round the identical value the same way —
+# the proven one-decimal parity pair. Rendered only; the collector measured it.
+def size(b):
+    if b is None or (isinstance(b, str) and b == ''):
+        return '-'
+    b = float(b)
+    if b >= 1024 * 1024:
+        return "{:,.1f} MB".format(b / (1024 * 1024))
+    return "{:,.1f} KB".format(b / 1024)
+
 def join_list(xs):
     if xs is None:
         return '-'
@@ -163,8 +175,8 @@ def emit_pie(title, pairs):
 def emit_tokens_section(conv, level='##'):
     out.append("%s Per-conversation — tokens" % level)
     out.append('')
-    out.append('| conversation | provenance | skill | issue | model(s) | in | out | cache-read | cache-write | total | tool calls | elapsed (s) |')
-    out.append('|---|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|')
+    out.append('| conversation | provenance | skill | issue | model(s) | in | out | cache-read | cache-write | total | tool calls | elapsed (s) | size |')
+    out.append('|---|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|')
     for c in conv:
         skill = c['skill'] if c.get('skill') else '_(no skill)_'
         issue = c['issue_key'] if c.get('issue_key') else '-'
@@ -174,13 +186,14 @@ def emit_tokens_section(conv, level='##'):
         if c.get('skill_turns') is not None:
             models = join_list(c.get('models'))
             t = c['tokens']
-            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 c['uuid'], c['provenance'], skill, issue, models,
                 num(t['in']), num(t['out']), num(t['cache_read']), num(t['cache_write']),
-                num(t['total']), num(c.get('tool_calls')), sec(c.get('wall_clock_s'))))
+                num(t['total']), num(c.get('tool_calls')), sec(c.get('wall_clock_s')),
+                size(c.get('size_bytes'))))
         else:
             why = "_not analyzed: %s_" % c.get('key_status')
-            out.append("| `%s` | %s | %s | %s | %s | — | — | — | — | — | — | — |" % (
+            out.append("| `%s` | %s | %s | %s | %s | — | — | — | — | — | — | — | — |" % (
                 c['uuid'], c['provenance'], skill, issue, why))
     out.append('')
     # pie: total-token share per conversation (analyzed rows carrying tokens)

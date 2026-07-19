@@ -261,11 +261,17 @@ mkdir -p "$DEST"
 cp "$SRC" "$DEST/$UUID.jsonl"
 chmod 644 "$DEST/$UUID.jsonl"   # source is 0600 in ~/.claude/projects
 
+# Transcript byte size of the profiled source (portable: wc -c, not stat, whose
+# flags differ across GNU/BSD). Measured HERE — the only layer that holds $SRC —
+# so collect_feature can thread it through and feature_report re-measures nothing.
+BYTES=$(wc -c < "$SRC" | tr -d ' ')
+
 REL="conversations/$KEY"
 emit "$STATUS" "$KEY" "$SOURCE"
 cat <<EOF
 REPORT_DIR=$REL
 TRANSCRIPT_COPY=$REL/$UUID.jsonl
+TRANSCRIPT_BYTES=$BYTES
 $METRICS
 EOF
 

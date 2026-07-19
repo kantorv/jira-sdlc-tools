@@ -91,7 +91,9 @@ own `sync_conversations` failure is fatal.
    accepts) and runs `collect_run.ps1 <skill> <path>` once per invoked skill.
    It parses `collect_run`'s `KEY=VALUE` output into one per-conversation
    record — **every metric is `collect_run`'s own**, copied verbatim; nothing
-   is re-measured or re-estimated here.
+   is re-measured or re-estimated here. That includes the transcript's on-disk
+   `size_bytes` (from `collect_run`'s `TRANSCRIPT_BYTES`) — threaded straight
+   through, since only `collect_run` holds the transcript path to stat.
 
 3. **Aggregate.** Over the records that carried metrics: token buckets (in /
    out / cache-read / cache-write, plus a summed total) and the turn/tool counts

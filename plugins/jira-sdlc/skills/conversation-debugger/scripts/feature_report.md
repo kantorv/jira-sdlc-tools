@@ -86,8 +86,12 @@ Markdown on stdout, nothing else (read-only — no files written, no Jira/git).
   and issue keys touched, plus total skill turns, total tool calls (with
   errors), and the activity span.
 - **Per-conversation — tokens** table — one row per record: uuid, provenance,
-  skill, issue, model(s), the four token buckets + total, tool calls, and
-  elapsed seconds.
+  skill, issue, model(s), the four token buckets + total, tool calls, elapsed
+  seconds, and the conversation **size** — the transcript's on-disk size rendered
+  human-readably (KB/MB, one decimal; 1 KB = 1024 B). The value is the collector's
+  `size_bytes` (measured upstream, never re-measured here); it renders `-` when the
+  field is absent — a metric-less record, or JSON from a `collect_run` predating
+  the field.
 - **Per-conversation — performance** table — skill turns, sidechain turns, tool
   calls, tool errors, elapsed, and first/last activity per record.
 - **Tokens by skill** and **Tokens by provenance** — the collector's

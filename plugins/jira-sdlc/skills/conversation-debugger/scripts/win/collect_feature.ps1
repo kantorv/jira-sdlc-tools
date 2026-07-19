@@ -194,6 +194,7 @@ function Get-FeatureRecords {
                 models = @(); tokens = [ordered]@{ in = 0; out = 0; cache_read = 0; cache_write = 0; total = 0 }
                 skill_turns = $null; sidechain_turns = $null; tool_calls = $null; tool_errors = $null
                 wall_clock_s = $null; first_ts = $null; last_ts = $null
+                size_bytes = $null
             })
             continue
         }
@@ -224,6 +225,12 @@ function Get-FeatureRecords {
             $wall = $null
             if ($hasMetrics -and $kv.ContainsKey('WALL_CLOCK_S')) { $w = 0.0; [void][double]::TryParse($kv['WALL_CLOCK_S'], [ref]$w); $wall = $w }
 
+            # Threaded straight from collect_run's TRANSCRIPT_BYTES — never
+            # re-measured here (collect_feature owns nothing on disk). Absent
+            # (a metric-less record, or an older collect_run) -> $null -> '-'.
+            $sizeBytes = $null
+            if ($kv.ContainsKey('TRANSCRIPT_BYTES')) { $sb = 0L; [void][long]::TryParse($kv['TRANSCRIPT_BYTES'], [ref]$sb); $sizeBytes = $sb }
+
             $records.Add([ordered]@{
                 uuid        = $uuid
                 transcript  = $path
@@ -240,6 +247,7 @@ function Get-FeatureRecords {
                 wall_clock_s   = $wall
                 first_ts    = if ($hasMetrics -and $kv['FIRST_TS']) { $kv['FIRST_TS'] } else { $null }
                 last_ts     = if ($hasMetrics -and $kv['LAST_TS'])  { $kv['LAST_TS'] }  else { $null }
+                size_bytes  = $sizeBytes
             })
         }
     }

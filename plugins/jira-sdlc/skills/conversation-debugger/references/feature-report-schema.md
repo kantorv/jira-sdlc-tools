@@ -68,7 +68,8 @@ detectable rather than guessed. The layering is backward-compatible and
       "tool_errors": 2,             // TOOL_ERRORS
       "wall_clock_s": 1754.7,       // WALL_CLOCK_S (elapsed span, not compute time)
       "first_ts": "2026-07-18T10:35:59.356Z",
-      "last_ts":  "2026-07-18T10:59:12.207Z"
+      "last_ts":  "2026-07-18T10:59:12.207Z",
+      "size_bytes": 3874112         // TRANSCRIPT_BYTES — transcript size in bytes; null when absent (metric-less record, or older collect_run)
     }
     // …one per (conversation, skill)
   ],
@@ -209,3 +210,13 @@ feature-wide `aggregate`.
   sums match `aggregate.tokens` (metric-less records contribute nothing), so a
   non-analyzed conversation appears in the per-conversation listing for coverage
   but not in these roll-ups.
+
+- **`size_bytes` is the transcript's on-disk size, measured upstream.** It is
+  `collect_run`'s `TRANSCRIPT_BYTES` (a `wc -c` / `.Length` stat of the profiled
+  `.jsonl`), threaded verbatim through `collect_feature` — the same owner split as
+  every other number: the collector measures, the report-builder only renders it
+  human-readably (KB/MB). It cannot be a `feature_report`-only field: each record's
+  `transcript` is the collector's *machine* path and the JSON is portable, so the
+  report-builder cannot reliably stat it. `null` when absent — a metric-less
+  record (`stub`/`unexpected`/`no-skill`), or JSON from a `collect_run` predating
+  this field — and the report renders `-` there, so it is backward compatible.
