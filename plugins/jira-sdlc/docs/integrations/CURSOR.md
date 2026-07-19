@@ -4,7 +4,7 @@ Uses the native Claude skills specification. Cursor reads plugin and skill confi
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see [jira-sdlc-tools.env template](jira-sdlc-tools.env)
+- `acli` (Atlassian CLI) authenticated — see [project-config.md](../../skills/_shared/project-config.md)
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - **Claude Code CLI** — required for Method 1 only (`/plugin marketplace add`, `/plugin install`). Cursor does not replace this step; it picks up what Claude Code writes under `~/.claude/`.

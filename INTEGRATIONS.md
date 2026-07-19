@@ -14,7 +14,7 @@
 | [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) | Verified | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
 | [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
 | [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
-| Pi (pi.dev) | Native Claude skills | `settings.json` skills path | In progress — doc pending (JST-96) | `plugins/jira-sdlc/docs/integrations/PI.md` (pending) |
+| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
 
 **Status legend:**
 - **First-class** — the reference platform the skills are written for.

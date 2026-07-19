@@ -187,7 +187,7 @@ not confirmed until a second skill invocation shows the gating behaviour.
 time; if you copy with `cp -a` and the plugin source doesn't have it yet,
 the install still works (the skills only call `statuscheck.sh`).
 
-###agentskills.io spec vs Codex runtime path
+### agentskills.io spec vs Codex runtime path
 
 The parent issue describes the mechanism as "the `.agent/` manual copy"
 (agentskills.io). In practice, Codex's discovery path is `.codex/skills/`,

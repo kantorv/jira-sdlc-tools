@@ -4,9 +4,9 @@ Uses the native Claude skills specification — the same family as Kilo Code (an
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see [jira-sdlc-tools.env template](jira-sdlc-tools.env)
+- `acli` (Atlassian CLI) authenticated — see [project-config.md](../../skills/_shared/project-config.md)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` — see jira-sdlc-tools.env reference
+- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` — see [project-config.md](../../skills/_shared/project-config.md)
 - **OpenCode** installed (`opencode` in your PATH). The OpenCode-specific steps below were **not** run in OpenCode in the environment this doc was written in (`opencode` was not installed there); the config keys and behaviours are taken from the OpenCode config JSON schema (`https://opencode.ai/config.json`) and the official skills / commands / permissions docs (opencode.ai/docs). See the Platform-Specific Caveats for what is verified vs. unverified.
 
 ## Install / Wire-up Steps

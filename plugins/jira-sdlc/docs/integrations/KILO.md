@@ -4,9 +4,9 @@ Uses the native Claude skills specification.
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see [jira-sdlc-tools.env template](jira-sdlc-tools.env)
+- `acli` (Atlassian CLI) authenticated — see [project-config.md](../../skills/_shared/project-config.md)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` — see jira-sdlc-tools.env reference
+- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` — see [project-config.md](../../skills/_shared/project-config.md)
 
 ## Install / Wire-up Steps
 
@@ -26,7 +26,7 @@ Kilo Code loads Claude-spec skills natively by pointing at a skills path in `kil
    - Local clone: the absolute path to `plugins/jira-sdlc/skills`
 3. Kilo automatically loads skills from the configured paths.
 
-## Invocating the Three Skills
+## Invoking the Three Skills
 
 Call each skill using the slash-command format:
 
