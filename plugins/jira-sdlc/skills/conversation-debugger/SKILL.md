@@ -404,31 +404,35 @@ whether anything was wrong.
 
 Everything above analyzes **one** transcript. To profile a whole **feature**
 instead — every conversation of one Jira issue at once, with per-conversation
-metrics *and* per-feature token/model totals — use the two roll-up scripts.
-They're Windows-only this round; their `posix/*.sh` twins are stubs that exit
-non-zero, so dispatch is `pwsh …/win/*.ps1` (outside a plugin session the
-scripts live under `scripts/win/` relative to this skill):
+metrics *and* per-feature token/model totals — use the two roll-up scripts. They
+ship as a working **posix+win contract pair**, so dispatch by your own runtime
+just like the per-transcript scripts: `bash …/scripts/posix/*.sh` on
+Linux/macOS, `pwsh …/scripts/win/*.ps1` on Windows (outside a plugin session the
+scripts live under `scripts/posix/` or `scripts/win/` relative to this skill).
 
 `collect_feature` puts the machine-readable JSON on **stdout** and the human
 metrics view on **stderr**, so either form below prints the listing to the
-console while the JSON flows onward cleanly. Two equivalent ways to run it:
+console while the JSON flows onward cleanly. Two equivalent ways to run it (POSIX
+shown; on Windows swap `bash …/posix/X.sh` for `pwsh …/win/X.ps1`):
 
-```powershell
+```bash
 # 1. One-shot pipe — collector JSON straight into the report-builder → markdown
-pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> `
-  | pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/feature_report.ps1" > <ISSUE-KEY>-feature-report.md
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/collect_feature.sh" <ISSUE-KEY> \
+  | bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/feature_report.sh" > <ISSUE-KEY>-feature-report.md
 ```
 
-```powershell
+```bash
 # 2. Two steps — save the JSON first (keep/inspect it), then render markdown from it
-pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/collect_feature.ps1" <ISSUE-KEY> > <ISSUE-KEY>.json
-pwsh "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/win/feature_report.ps1" <ISSUE-KEY>.json > <ISSUE-KEY>-feature-report.md
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/collect_feature.sh" <ISSUE-KEY> > <ISSUE-KEY>.json
+bash "${CLAUDE_PLUGIN_ROOT}/skills/conversation-debugger/scripts/posix/feature_report.sh" <ISSUE-KEY>.json > <ISSUE-KEY>-feature-report.md
 ```
 
-Both dispatch each script as its own `pwsh` process. `feature_report` also
-accepts input as a stage inside an existing session
-(`… | .\feature_report.ps1 > out.md`) and from a `-`/stdin path — all forms
-write the markdown to `>` correctly.
+`feature_report` also accepts input from a `-`/stdin path (and, on Windows, as a
+stage inside an existing PowerShell session, `… | .\feature_report.ps1 > out.md`)
+— all forms write the markdown to `>` correctly. Every per-conversation number is
+`collect_run`'s own; the only cross-host wrinkle is that the POSIX `collect_run.sh`
+measures `elapsed (s)` at whole-second resolution while the PowerShell one keeps
+the fractional part (see [scripts/collect_feature.md](scripts/collect_feature.md)).
 
 `collect_feature` resolves the feature's conversations by reusing
 `sync_conversations`' list and runs `collect_run` over each — so its numbers are
