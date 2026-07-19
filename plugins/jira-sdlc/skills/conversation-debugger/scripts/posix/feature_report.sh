@@ -116,6 +116,18 @@ def join_list(xs):
         return '-'
     return ', '.join(str(x) for x in a)
 
+# Per-record tools list -> one table cell: "Bash:10, Read:7", a tool with
+# errors flagged inline as "Bash:10(!2)". Absent (older JSON, or a record
+# without metrics) -> '-'.
+def tools_cell(tools):
+    if not tools:
+        return '-'
+    parts = []
+    for t in tools:
+        e = int(t.get('errors') or 0)
+        parts.append("%s:%s%s" % (t['name'], t['calls'], ("(!%d)" % e) if e else ''))
+    return ', '.join(parts)
+
 # Timestamps arrive as the raw ISO-8601 string (collect_feature copies them
 # through verbatim). Render them as compact UTC "YYYY-MM-DD HH:MM:SSZ" (seconds
 # precision, no 'T', no fractional) — matching the win/ port, whose ConvertFrom-Json
@@ -154,15 +166,65 @@ def dur(s):
 
 out = []
 
+# ---- per-group slice colors (conversation pie) ------------------------------
+# One base hue per skill, shades of that hue per conversation: hue identifies
+# the group, lightness the slice (HSL, saturation eased down as lightness rises
+# so adjacent shades stay apart). Hues are FIXED per skill so color follows the
+# entity across reports; a skill outside the map draws from the fallback wheel
+# in group order. Applied only where slices are grouped (the conversation pie).
+SKILL_HUE = {'jira-task-assigner': 0, 'jira-task-executor': 210, 'jira-task-reviewer': 150}
+FALLBACK_HUES = [270, 45, 320, 100]
+
+# HSL -> #rrggbb. Channels are floored at +0.5 (not round()) so both ports
+# round identically — round()/[math]::Round are half-to-even and have already
+# bitten a port pair once (see the dur() note above).
+def hsl_hex(h, s, l):
+    s = s / 100.0
+    l = l / 100.0
+    c = (1.0 - abs(2.0 * l - 1.0)) * s
+    hp = (h % 360) / 60.0
+    mod2 = hp - 2.0 * int(hp / 2.0)
+    x = c * (1.0 - abs(mod2 - 1.0))
+    if hp < 1:
+        r, g, b = c, x, 0.0
+    elif hp < 2:
+        r, g, b = x, c, 0.0
+    elif hp < 3:
+        r, g, b = 0.0, c, x
+    elif hp < 4:
+        r, g, b = 0.0, x, c
+    elif hp < 5:
+        r, g, b = x, 0.0, c
+    else:
+        r, g, b = c, 0.0, x
+    m = l - c / 2.0
+    def ch(v):
+        return int((v + m) * 255.0 + 0.5)
+    return "#%02x%02x%02x" % (ch(r), ch(g), ch(b))
+
+# Shade i of n within a group: lightness 35% -> 80% across the group while
+# saturation eases 80% -> 45%; a single-slice group takes the midpoint.
+def group_shade(hue, idx, count):
+    t = 0.5 if count <= 1 else idx / (count - 1.0)
+    return hsl_hex(hue, 80.0 - t * 35.0, 35.0 + t * 45.0)
+
 # Emit a GitHub-native mermaid pie of the (label,value) pairs whose value > 0.
 # Skipped for < 2 slices (a single slice is always 100%). Labels are sanitized:
 # quotes stripped and ';' -> ',' because a ';' silently truncates a mermaid line
 # and breaks the whole diagram (see AGENTS.md).
+# Pairs may carry a 'color': when every slice has one, an init directive maps
+# them to mermaid's pie1..pieN theme variables, which color slices in
+# definition order. Mermaid defines pie1..pie12 only, so a pie past 12 slices
+# falls back to theme colors rather than emitting variables mermaid ignores.
 def emit_pie(title, pairs):
     rows = [p for p in pairs if p['value'] is not None and float(p['value']) > 0]
     if len(rows) < 2:
         return
     out.append('```mermaid')
+    colors = [r['color'] for r in rows if r.get('color')]
+    if len(colors) == len(rows) and len(rows) <= 12:
+        vars_ = ', '.join('"pie%d": "%s"' % (i + 1, c) for i, c in enumerate(colors))
+        out.append('%%{init: {"theme": "base", "themeVariables": {' + vars_ + '}}}%%')
     out.append('pie showData')
     out.append('    title ' + title.replace(';', ','))
     for r in rows:
@@ -196,31 +258,49 @@ def emit_tokens_section(conv, level='##'):
             out.append("| `%s` | %s | %s | %s | %s | — | — | — | — | — | — | — | — |" % (
                 c['uuid'], c['provenance'], skill, issue, why))
     out.append('')
-    # pie: total-token share per conversation (analyzed rows carrying tokens)
-    conv_pie = []
+    # pie: total-token share per conversation (analyzed rows carrying tokens),
+    # grouped by skill (first-seen order) so same-skill slices sit together in
+    # the pie and its legend — each conversation stays its own slice
+    order = []
+    grouped = {}
     for c in conv:
         if c.get('skill_turns') is not None and c.get('tokens') is not None \
            and float(c['tokens']['total']) > 0:
             sk = c['skill'] if c.get('skill') else '(no skill)'
+            if sk not in grouped:
+                grouped[sk] = []
+                order.append(sk)
             uuid = str(c['uuid'])
             short = uuid[:8] if len(uuid) >= 8 else uuid
-            conv_pie.append({'label': "%s · %s" % (sk, short), 'value': int(c['tokens']['total'])})
+            grouped[sk].append({'label': "%s · %s" % (sk, short), 'value': int(c['tokens']['total'])})
+    conv_pie = []
+    fb_i = 0
+    for sk in order:
+        if sk in SKILL_HUE:
+            hue = SKILL_HUE[sk]
+        else:
+            hue = FALLBACK_HUES[fb_i % len(FALLBACK_HUES)]
+            fb_i += 1
+        n = len(grouped[sk])
+        for i, p in enumerate(grouped[sk]):
+            p['color'] = group_shade(hue, i, n)
+            conv_pie.append(p)
     emit_pie('Token consumption by conversation (total tokens)', conv_pie)
 
 def emit_perf_section(conv, level='##'):
     out.append("%s Per-conversation — performance" % level)
     out.append('')
-    out.append('| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | elapsed (s) | first activity | last activity |')
-    out.append('|---|---|--:|--:|--:|--:|--:|---|---|')
+    out.append('| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | tools used (calls) | elapsed (s) | first activity | last activity |')
+    out.append('|---|---|--:|--:|--:|--:|---|--:|---|---|')
     for c in conv:
         skill = c['skill'] if c.get('skill') else '_(no skill)_'
         if c.get('skill_turns') is not None:
-            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 c['uuid'], skill, num(c.get('skill_turns')), num(c.get('sidechain_turns')),
-                num(c.get('tool_calls')), num(c.get('tool_errors')), sec(c.get('wall_clock_s')),
-                ts(c.get('first_ts')), ts(c.get('last_ts'))))
+                num(c.get('tool_calls')), num(c.get('tool_errors')), tools_cell(c.get('tools')),
+                sec(c.get('wall_clock_s')), ts(c.get('first_ts')), ts(c.get('last_ts'))))
         else:
-            out.append("| `%s` | %s | — | — | — | — | — | — | — |" % (c['uuid'], skill))
+            out.append("| `%s` | %s | — | — | — | — | — | — | — | — |" % (c['uuid'], skill))
     out.append('')
 
 def emit_by_skill(agg):
@@ -239,6 +319,21 @@ def emit_by_skill(agg):
         skill_pie = [{'label': str(s['skill']), 'value': int(s['tokens']['total'])}
                      for s in bs if s.get('tokens') is not None and float(s['tokens']['total']) > 0]
         emit_pie('Token consumption by skill (total tokens)', skill_pie)
+
+def emit_by_tool(agg):
+    bt = agg.get('by_tool')
+    if bt is not None and len(bt) > 0:
+        out.append('## Tool usage')
+        out.append('')
+        out.append('| tool | conversations | calls | errors |')
+        out.append('|---|--:|--:|--:|')
+        for t in bt:
+            out.append("| %s | %s | %s | %s |" % (
+                t['tool'], num(t.get('conversations')), num(t.get('calls')), num(t.get('errors'))))
+        out.append('')
+        tool_pie = [{'label': str(t['tool']), 'value': int(t['calls'])}
+                    for t in bt if t.get('calls') is not None and float(t['calls']) > 0]
+        emit_pie('Tool calls by tool', tool_pie)
 
 def emit_by_provenance(agg):
     bp = agg.get('by_provenance')
@@ -313,6 +408,8 @@ if not is_multi:
         out.append("| Total skill turns | %s |" % num(agg['skill_turns']))
     if agg.get('tool_calls') is not None:
         out.append("| Total tool calls | %s (errors: %s) |" % (num(agg['tool_calls']), num(agg.get('tool_errors'))))
+    if agg.get('by_tool'):
+        out.append("| Distinct tools used | %d |" % len(agg['by_tool']))
     tf = agg.get('timeframe')
     if tf and tf.get('span_s') is not None:
         out.append("| Activity span | %s (%s → %s) |" % (dur(tf['span_s']), ts(tf.get('first_ts')), ts(tf.get('last_ts'))))
@@ -322,6 +419,7 @@ if not is_multi:
     emit_perf_section(conv)
     emit_by_skill(agg)
     emit_by_provenance(agg)
+    emit_by_tool(agg)
     emit_feature_totals(agg)
     emit_timeframe(agg)
 else:
@@ -360,6 +458,8 @@ else:
         out.append("| Total skill turns | %s |" % num(fagg['skill_turns']))
     if fagg.get('tool_calls') is not None:
         out.append("| Total tool calls | %s (errors: %s) |" % (num(fagg['tool_calls']), num(fagg.get('tool_errors'))))
+    if fagg.get('by_tool'):
+        out.append("| Distinct tools used | %d |" % len(fagg['by_tool']))
     tf = fagg.get('timeframe')
     if tf and tf.get('span_s') is not None:
         out.append("| Activity span | %s (%s → %s) |" % (dur(tf['span_s']), ts(tf.get('first_ts')), ts(tf.get('last_ts'))))
@@ -414,6 +514,7 @@ else:
     # ---- feature-wide roll-ups ---------------------------------------------
     emit_by_skill(fagg)
     emit_by_provenance(fagg)
+    emit_by_tool(fagg)
     emit_feature_totals(fagg)
     emit_timeframe(fagg)
 

@@ -143,10 +143,14 @@ KEY=""; SOURCE=""; STATUS=""
 if [ -n "$FORCED_KEY" ]; then
   KEY="$FORCED_KEY"; SOURCE="explicit argument"; STATUS=given
 elif [ "$SKILL" = "jira-task-assigner" ]; then
-  # the assigner mints the key: first `workitem create` (not `comment create`)
+  # the assigner mints the key: first `workitem create` (not `comment create`).
+  # Matched by command text, never the tool's name — the shell tool is "Bash" on
+  # POSIX but "PowerShell" on Windows (and may be renamed again), while only
+  # shell-type tools carry .input.command at all. The result parse below then
+  # validates the match, so a false positive cannot file a wrong key.
   CREATE_ID=$(jq -r 'select(.type=="assistant")|.message.content[]?
-        | select(.type=="tool_use" and .name=="Bash")
-        | select((.input.command // "") | test("workitem[[:space:]]+create"))
+        | select(.type=="tool_use")
+        | select((.input.command? // "") | test("workitem[[:space:]]+create"))
         | .id' "$SRC" 2>/dev/null | head -1)
   if [ -n "${CREATE_ID:-}" ]; then
     RES=$(tool_result_for "$CREATE_ID")

@@ -89,6 +89,17 @@ function Size([object]$b) {
     return ('{0:N1} KB' -f ($v / 1024.0))
 }
 function Join-List($xs)   { if ($null -eq $xs) { return '-' }; $a = @($xs); if ($a.Count -eq 0) { return '-' }; return ($a -join ', ') }
+# Per-record tools list -> one table cell: "Bash:10, Read:7", a tool with
+# errors flagged inline as "Bash:10(!2)". Absent (older JSON, or a record
+# without metrics) -> '-'.
+function Get-ToolsCell($tools) {
+    if ($null -eq $tools -or @($tools).Count -eq 0) { return '-' }
+    $parts = foreach ($t in @($tools)) {
+        $e = [long]$t.errors
+        "$($t.name):$($t.calls)$(if ($e) { "(!$e)" })"
+    }
+    return ($parts -join ', ')
+}
 # Timestamps arrive as DateTime (ConvertFrom-Json auto-parses the ISO-Z strings)
 # or, on older hosts, as the raw string — render either as compact UTC.
 function Ts([object]$v)  {
@@ -109,15 +120,63 @@ $nl = "`n"
 $out = New-Object System.Collections.Generic.List[string]
 function W([string]$s) { $out.Add($s) }
 
+# ---- per-group slice colors (conversation pie) ------------------------------
+# One base hue per skill, shades of that hue per conversation: hue identifies
+# the group, lightness the slice (HSL, saturation eased down as lightness rises
+# so adjacent shades stay apart). Hues are FIXED per skill so color follows the
+# entity across reports; a skill outside the map draws from the fallback wheel
+# in group order. Applied only where slices are grouped (the conversation pie).
+$SkillHue = @{ 'jira-task-assigner' = 0; 'jira-task-executor' = 210; 'jira-task-reviewer' = 150 }
+$FallbackHues = @(270, 45, 320, 100)
+
+# HSL -> #rrggbb. Channels are floored at +0.5 (not [math]::Round) so both
+# ports round identically -- Round/round() are half-to-even and have already
+# bitten a port pair once (see the Dur note in the posix twin).
+function Convert-HslToHex([double]$h, [double]$s, [double]$l) {
+    $s = $s / 100.0
+    $l = $l / 100.0
+    $c = (1.0 - [math]::Abs(2.0 * $l - 1.0)) * $s
+    $hp = ($h % 360) / 60.0
+    $mod2 = $hp - 2.0 * [math]::Truncate($hp / 2.0)
+    $x = $c * (1.0 - [math]::Abs($mod2 - 1.0))
+    if     ($hp -lt 1) { $r = $c; $g = $x; $b = 0.0 }
+    elseif ($hp -lt 2) { $r = $x; $g = $c; $b = 0.0 }
+    elseif ($hp -lt 3) { $r = 0.0; $g = $c; $b = $x }
+    elseif ($hp -lt 4) { $r = 0.0; $g = $x; $b = $c }
+    elseif ($hp -lt 5) { $r = $x; $g = 0.0; $b = $c }
+    else               { $r = $c; $g = 0.0; $b = $x }
+    $m = $l - $c / 2.0
+    $R = [int][math]::Floor(($r + $m) * 255.0 + 0.5)
+    $G = [int][math]::Floor(($g + $m) * 255.0 + 0.5)
+    $B = [int][math]::Floor(($b + $m) * 255.0 + 0.5)
+    return ('#{0:x2}{1:x2}{2:x2}' -f $R, $G, $B)
+}
+
+# Shade i of n within a group: lightness 35% -> 80% across the group while
+# saturation eases 80% -> 45%; a single-slice group takes the midpoint.
+function Get-GroupShade([double]$hue, [int]$idx, [int]$count) {
+    $t = if ($count -le 1) { 0.5 } else { $idx / ($count - 1.0) }
+    return (Convert-HslToHex $hue (80.0 - $t * 35.0) (35.0 + $t * 45.0))
+}
+
 # Emit a GitHub-native mermaid pie of the (label,value) pairs whose value > 0.
 # Rendered from measured totals — no computation here. Skipped for < 2 slices (a
 # single slice is always 100%, so it adds noise, not insight). Labels are
 # sanitized: quotes stripped and ';' -> ',' because a ';' silently truncates a
 # mermaid line and breaks the whole diagram (see AGENTS.md).
+# Pairs may carry a 'color': when every slice has one, an init directive maps
+# them to mermaid's pie1..pieN theme variables, which color slices in
+# definition order. Mermaid defines pie1..pie12 only, so a pie past 12 slices
+# falls back to theme colors rather than emitting variables mermaid ignores.
 function Emit-Pie([string]$title, $pairs) {
     $rows = @($pairs | Where-Object { $null -ne $_.value -and [double]$_.value -gt 0 })
     if ($rows.Count -lt 2) { return }
     W '```mermaid'
+    $colors = @($rows | ForEach-Object { $_.color } | Where-Object { $_ })
+    if ($colors.Count -eq $rows.Count -and $rows.Count -le 12) {
+        $vars = (@(0..($colors.Count - 1) | ForEach-Object { '"pie{0}": "{1}"' -f ($_ + 1), $colors[$_] })) -join ', '
+        W ('%%{init: {"theme": "base", "themeVariables": {' + $vars + '}}}%%')
+    }
     W 'pie showData'
     W ("    title {0}" -f ($title -replace ';', ','))
     foreach ($r in $rows) {
@@ -160,32 +219,58 @@ function Emit-TokensSection {
         }
     }
     W ''
-    # pie: total-token share per conversation (analyzed rows carrying tokens)
-    $convPie = foreach ($c in $conv) {
+    # pie: total-token share per conversation (analyzed rows carrying tokens),
+    # grouped by skill (first-seen order) so same-skill slices sit together in
+    # the pie and its legend — each conversation stays its own slice
+    $skillOrder = New-Object System.Collections.Generic.List[string]
+    $grouped = @{}
+    foreach ($c in $conv) {
         if ($null -ne $c.skill_turns -and $null -ne $c.tokens -and [double]$c.tokens.total -gt 0) {
             $sk = if ($c.skill) { $c.skill } else { '(no skill)' }
+            if (-not $grouped.ContainsKey($sk)) {
+                $grouped[$sk] = New-Object System.Collections.Generic.List[object]
+                $skillOrder.Add($sk)
+            }
             $short = if ($c.uuid -and ([string]$c.uuid).Length -ge 8) { ([string]$c.uuid).Substring(0, 8) } else { [string]$c.uuid }
-            [pscustomobject]@{ label = "$sk · $short"; value = [long]$c.tokens.total }
+            $grouped[$sk].Add([pscustomobject]@{ label = "$sk · $short"; value = [long]$c.tokens.total })
         }
     }
-    Emit-Pie 'Token consumption by conversation (total tokens)' @($convPie)
+    $convPie = New-Object System.Collections.Generic.List[object]
+    $fbI = 0
+    foreach ($sk in $skillOrder) {
+        if ($SkillHue.ContainsKey($sk)) {
+            $hue = $SkillHue[$sk]
+        } else {
+            $hue = $FallbackHues[$fbI % $FallbackHues.Count]
+            $fbI++
+        }
+        $n = $grouped[$sk].Count
+        for ($i = 0; $i -lt $n; $i++) {
+            $p = $grouped[$sk][$i]
+            Add-Member -InputObject $p -NotePropertyName color -NotePropertyValue (Get-GroupShade $hue $i $n) -Force
+            $convPie.Add($p)
+        }
+    }
+    # [object[]] cast, not @(...): wrapping a List[object] with @() trips
+    # "Argument types do not match" on PowerShell 7 (same trap as New-Aggregate).
+    Emit-Pie 'Token consumption by conversation (total tokens)' ([object[]]$convPie)
 }
 
 function Emit-PerfSection {
     param($conv, [string]$Level = '##')
     W "$Level Per-conversation — performance"
     W ''
-    W '| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | elapsed (s) | first activity | last activity |'
-    W '|---|---|--:|--:|--:|--:|--:|---|---|'
+    W '| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | tools used (calls) | elapsed (s) | first activity | last activity |'
+    W '|---|---|--:|--:|--:|--:|---|--:|---|---|'
     foreach ($c in $conv) {
         $skill = if ($c.skill) { $c.skill } else { '_(no skill)_' }
         if ($null -ne $c.skill_turns) {
-            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |" -f `
+            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} |" -f `
                 $c.uuid, $skill, (Num $c.skill_turns), (Num $c.sidechain_turns), `
-                (Num $c.tool_calls), (Num $c.tool_errors), (Sec $c.wall_clock_s), `
-                (Ts $c.first_ts), (Ts $c.last_ts))
+                (Num $c.tool_calls), (Num $c.tool_errors), (Get-ToolsCell $c.tools), `
+                (Sec $c.wall_clock_s), (Ts $c.first_ts), (Ts $c.last_ts))
         } else {
-            W ("| ``{0}`` | {1} | — | — | — | — | — | — | — |" -f $c.uuid, $skill)
+            W ("| ``{0}`` | {1} | — | — | — | — | — | — | — | — |" -f $c.uuid, $skill)
         }
     }
     W ''
@@ -212,6 +297,28 @@ function Emit-BySkillSection {
             }
         }
         Emit-Pie 'Token consumption by skill (total tokens)' @($skillPie)
+    }
+}
+
+function Emit-ByToolSection {
+    param($agg)
+    if ($null -ne $agg.by_tool -and @($agg.by_tool).Count -gt 0) {
+        W '## Tool usage'
+        W ''
+        W '| tool | conversations | calls | errors |'
+        W '|---|--:|--:|--:|'
+        foreach ($t in @($agg.by_tool)) {
+            W ("| {0} | {1} | {2} | {3} |" -f `
+                $t.tool, (Num $t.conversations), (Num $t.calls), (Num $t.errors))
+        }
+        W ''
+        # pie: call share per tool
+        $toolPie = foreach ($t in @($agg.by_tool)) {
+            if ($null -ne $t.calls -and [double]$t.calls -gt 0) {
+                [pscustomobject]@{ label = [string]$t.tool; value = [long]$t.calls }
+            }
+        }
+        Emit-Pie 'Tool calls by tool' @($toolPie)
     }
 }
 
@@ -293,6 +400,7 @@ if (-not $isMulti) {
     W "| Issue keys touched | $(Join-List $agg.issue_keys) |"
     if ($null -ne $agg.skill_turns)  { W "| Total skill turns | $(Num $agg.skill_turns) |" }
     if ($null -ne $agg.tool_calls)   { W "| Total tool calls | $(Num $agg.tool_calls) (errors: $(Num $agg.tool_errors)) |" }
+    if ($agg.by_tool -and @($agg.by_tool).Count) { W "| Distinct tools used | $(@($agg.by_tool).Count) |" }
     if ($agg.timeframe -and $null -ne $agg.timeframe.span_s) {
         W "| Activity span | $(Dur $agg.timeframe.span_s) ($(Ts $agg.timeframe.first_ts) → $(Ts $agg.timeframe.last_ts)) |"
     }
@@ -302,6 +410,7 @@ if (-not $isMulti) {
     Emit-PerfSection $conv
     Emit-BySkillSection $agg
     Emit-ByProvenanceSection $agg
+    Emit-ByToolSection $agg
     Emit-FeatureTotals $agg
     Emit-Timeframe $agg
 } else {
@@ -337,6 +446,7 @@ if (-not $isMulti) {
     W "| Issue keys touched | $(Join-List $fagg.issue_keys) |"
     if ($null -ne $fagg.skill_turns) { W "| Total skill turns | $(Num $fagg.skill_turns) |" }
     if ($null -ne $fagg.tool_calls)  { W "| Total tool calls | $(Num $fagg.tool_calls) (errors: $(Num $fagg.tool_errors)) |" }
+    if ($fagg.by_tool -and @($fagg.by_tool).Count) { W "| Distinct tools used | $(@($fagg.by_tool).Count) |" }
     if ($fagg.timeframe -and $null -ne $fagg.timeframe.span_s) {
         W "| Activity span | $(Dur $fagg.timeframe.span_s) ($(Ts $fagg.timeframe.first_ts) → $(Ts $fagg.timeframe.last_ts)) |"
     }
@@ -394,6 +504,7 @@ if (-not $isMulti) {
     # ---- feature-wide roll-ups ---------------------------------------------
     Emit-BySkillSection $fagg
     Emit-ByProvenanceSection $fagg
+    Emit-ByToolSection $fagg
     Emit-FeatureTotals $fagg
     Emit-Timeframe $fagg
 }

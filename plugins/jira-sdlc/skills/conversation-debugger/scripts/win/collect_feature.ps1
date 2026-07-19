@@ -112,6 +112,21 @@ function ConvertFrom-Kv($lines) {
 }
 function Get-KvInt($h, $k) { $v = 0; if ($h.ContainsKey($k)) { [void][int]::TryParse($h[$k], [ref]$v) }; return $v }
 
+# collect_run's tally lines ("Bash:10 Read:7") -> records of name/calls. Split
+# on the LAST ':' so a tool name containing ':' can't shift the count.
+function ConvertFrom-Tally([string]$s) {
+    $items = New-Object System.Collections.Generic.List[object]
+    if (-not $s) { return ,$items }
+    foreach ($part in ($s -split '\s+' | Where-Object { $_ })) {
+        $idx = $part.LastIndexOf(':')
+        if ($idx -le 0) { continue }
+        $n = 0L
+        if (-not [long]::TryParse($part.Substring($idx + 1), [ref]$n)) { continue }
+        $items.Add([pscustomobject]@{ name = $part.Substring(0, $idx); calls = $n })
+    }
+    return ,$items
+}
+
 # Which of the 3 analyzable skills a transcript invoked, in first-seen order.
 # Matches collect_run's own acceptance: namespaced (/jira-sdlc:jira-task-x) or
 # bare (/jira-task-x), so we never claim a skill collect_run would then reject.
@@ -193,7 +208,7 @@ function Get-FeatureRecords {
                 skill = $null; issue_key = $null; key_status = 'no-skill'
                 models = @(); tokens = [ordered]@{ in = 0; out = 0; cache_read = 0; cache_write = 0; total = 0 }
                 skill_turns = $null; sidechain_turns = $null; tool_calls = $null; tool_errors = $null
-                wall_clock_s = $null; first_ts = $null; last_ts = $null
+                tools = $null; wall_clock_s = $null; first_ts = $null; last_ts = $null
                 size_bytes = $null
             })
             continue
@@ -231,6 +246,21 @@ function Get-FeatureRecords {
             $sizeBytes = $null
             if ($kv.ContainsKey('TRANSCRIPT_BYTES')) { $sb = 0L; [void][long]::TryParse($kv['TRANSCRIPT_BYTES'], [ref]$sb); $sizeBytes = $sb }
 
+            # Per-tool breakdown: collect_run's TOOLS_USED merged with its
+            # TOOL_ERRORS_BY_TOOL (errors are a subset of calls, so the merge
+            # never invents a tool). Re-sorted by (-calls, name) so both ports
+            # order ties identically regardless of collect_run's own tie order.
+            $tools = $null
+            if ($hasMetrics) {
+                $errsBy = @{}
+                foreach ($t in (ConvertFrom-Tally $kv['TOOL_ERRORS_BY_TOOL'])) { $errsBy[$t.name] = $t.calls }
+                $toolsList = @(foreach ($t in (ConvertFrom-Tally $kv['TOOLS_USED'])) {
+                    $e = if ($errsBy.ContainsKey($t.name)) { [long]$errsBy[$t.name] } else { 0L }
+                    [ordered]@{ name = $t.name; calls = $t.calls; errors = $e }
+                })
+                $tools = [object[]]@($toolsList | Sort-Object -Property @{Expression = { [long]$_.calls }; Descending = $true }, @{Expression = { [string]$_.name }; Descending = $false })
+            }
+
             $records.Add([ordered]@{
                 uuid        = $uuid
                 transcript  = $path
@@ -244,6 +274,7 @@ function Get-FeatureRecords {
                 sidechain_turns = if ($hasMetrics) { Get-KvInt $kv 'SIDECHAIN_TURNS' } else { $null }
                 tool_calls     = if ($hasMetrics) { Get-KvInt $kv 'TOOL_CALLS' } else { $null }
                 tool_errors    = if ($hasMetrics) { Get-KvInt $kv 'TOOL_ERRORS' } else { $null }
+                tools          = $tools
                 wall_clock_s   = $wall
                 first_ts    = if ($hasMetrics -and $kv['FIRST_TS']) { $kv['FIRST_TS'] } else { $null }
                 last_ts     = if ($hasMetrics -and $kv['LAST_TS'])  { $kv['LAST_TS'] }  else { $null }
@@ -281,6 +312,7 @@ function New-Aggregate {
     $keySet = New-Object System.Collections.Generic.List[string]
     $bySkill = [ordered]@{}   # skill -> token accumulator
     $byProv  = [ordered]@{}   # provenance -> token accumulator
+    $byTool  = [ordered]@{}   # tool name -> conversations/calls/errors accumulator
     $minFirst = $null; $maxLast = $null; $minFirstStr = $null; $maxLastStr = $null
     $analyzed = 0
 
@@ -304,6 +336,15 @@ function New-Aggregate {
         if (-not $byProv.Contains($pv)) { $byProv[$pv] = New-TokenAcc }
         Add-ToTokenAcc $byProv[$pv] $r
 
+        foreach ($t in @($r.tools)) {
+            if ($null -eq $t) { continue }
+            $tn = [string]$t.name
+            if (-not $byTool.Contains($tn)) { $byTool[$tn] = [ordered]@{ conversations = 0; calls = 0L; errors = 0L } }
+            $byTool[$tn].conversations++
+            $byTool[$tn].calls += [long]$t.calls
+            $byTool[$tn].errors += [long]$t.errors
+        }
+
         # timeframe: earliest first_ts, latest last_ts across the feature (UTC ISO-8601)
         if ($r.first_ts) { try { $f = [datetimeoffset]::Parse($r.first_ts, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $minFirst -or $f -lt $minFirst) { $minFirst = $f; $minFirstStr = $r.first_ts } } catch { } }
         if ($r.last_ts)  { try { $l = [datetimeoffset]::Parse($r.last_ts,  [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $maxLast  -or $l -gt $maxLast)  { $maxLast  = $l; $maxLastStr  = $r.last_ts } } catch { } }
@@ -324,6 +365,13 @@ function New-Aggregate {
         [ordered]@{ provenance = $k; conversations = $b.conversations
             tokens = [ordered]@{ in = $b.in; out = $b.out; cache_read = $b.cache_read; cache_write = $b.cache_write; total = $b.total } }
     })
+    # per-tool roll-up over analyzed records, (-calls, name) like the per-record
+    # tools list — a deterministic order both ports produce identically
+    $byToolArr = @(foreach ($k in $byTool.Keys) {
+        $t = $byTool[$k]
+        [ordered]@{ tool = $k; conversations = $t.conversations; calls = $t.calls; errors = $t.errors }
+    })
+    $byToolArr = [object[]]@($byToolArr | Sort-Object -Property @{Expression = { [long]$_.calls }; Descending = $true }, @{Expression = { [string]$_.tool }; Descending = $false })
 
     # NB: $Records.Count, never @($Records).Count — @() on a System.Collections.
     # Generic.List[object] throws "Argument types do not match" on PowerShell 7,
@@ -343,6 +391,7 @@ function New-Aggregate {
         issue_keys = [string[]]($keySet | Sort-Object)
         by_skill      = [object[]]$bySkillArr
         by_provenance = [object[]]$byProvArr
+        by_tool       = [object[]]$byToolArr
     }
 }
 
@@ -362,6 +411,9 @@ function Write-HumanPart {
         Note ("      models: {0}" -f ($(if ($r.models.Count) { $r.models -join ', ' } else { '-' })))
         Note ("      tokens  in={0}  out={1}  cache-read={2}  cache-write={3}  total={4}" -f (Fmt $r.tokens.in), (Fmt $r.tokens.out), (Fmt $r.tokens.cache_read), (Fmt $r.tokens.cache_write), (Fmt $r.tokens.total))
         Note ("      perf    turns={0}  sidechain={1}  tool-calls={2} (errors={3})  elapsed={4}s" -f (Fmt $r.skill_turns), (Fmt $r.sidechain_turns), (Fmt $r.tool_calls), (Fmt $r.tool_errors), ($(if ($null -ne $r.wall_clock_s) { '{0:N1}' -f [double]$r.wall_clock_s } else { '-' })))
+        if ($r.tools -and @($r.tools).Count) {
+            Note ("      tools   {0}" -f ((@($r.tools) | ForEach-Object { "$($_.name):$($_.calls)" }) -join ', '))
+        }
     }
 }
 function Write-HumanTotals {
@@ -374,6 +426,9 @@ function Write-HumanTotals {
     Note ("  activity: {0} -> {1}{2}" -f ($(if ($Agg.timeframe.first_ts) { $Agg.timeframe.first_ts } else { '-' })), ($(if ($Agg.timeframe.last_ts) { $Agg.timeframe.last_ts } else { '-' })), ($(if ($null -ne $Agg.timeframe.span_s) { "  (span {0}s)" -f (Fmt $Agg.timeframe.span_s) } else { '' })))
     Note ("  models: {0}" -f ($(if (@($Agg.models).Count) { @($Agg.models) -join ', ' } else { '-' })))
     Note ("  skills: {0}" -f ($(if (@($Agg.skills).Count) { @($Agg.skills) -join ', ' } else { '-' })))
+    if ($Agg.by_tool -and @($Agg.by_tool).Count) {
+        Note ("  tools:  {0}" -f ((@($Agg.by_tool) | ForEach-Object { "$($_.tool):$($_.calls)" }) -join ', '))
+    }
 }
 
 # ---- detect feature type: does <KEY> have sub-tasks? ------------------------
