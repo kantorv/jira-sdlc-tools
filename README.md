@@ -37,6 +37,16 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
+## Other AI assistants
+
+The skills target the Claude skills spec, so `jira-sdlc` also works —
+natively or through the [Agent Skills](https://agentskills.io)
+adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
+Code, NVIDIA NIM (via fcc), Codex, Antigravity, OpenCode, Grok Build, and
+Pi. See [**Integrations**](INTEGRATIONS.md) for the platform-by-platform
+table — each one's spec, wiring, integration status, and a link to its
+detailed doc.
+
 ## Task lifecycle preview
 
 The three skills map to three phases of a task's life. The Jira states
