@@ -1,0 +1,129 @@
+{
+  "schema": "jira-sdlc/conversation-debugger/feature-report@2",
+  "feature": "JST-122",
+  "conversation_count": 4,
+  "conversations": [
+    {
+      "uuid": "d7bc6cdf-1111-4aaa-8bbb-000000000001",
+      "transcript": "/home/user/.claude/projects/worktree-JST-122/d7bc6cdf-1111-4aaa-8bbb-000000000001.jsonl",
+      "provenance": "worktree",
+      "skill": "jira-task-executor",
+      "issue_key": "JST-122",
+      "key_status": "expected",
+      "models": ["claude-opus-4-8"],
+      "tokens": { "in": 64, "out": 49637, "cache_read": 3535466, "cache_write": 123678, "total": 3708845 },
+      "skill_turns": 26,
+      "sidechain_turns": 0,
+      "tool_calls": 36,
+      "tool_errors": 2,
+      "tools": [
+        { "name": "Bash", "calls": 30, "errors": 2 },
+        { "name": "Read", "calls": 6, "errors": 0 }
+      ],
+      "wall_clock_s": 1392.9,
+      "first_ts": "2026-07-18T10:35:59.356Z",
+      "last_ts": "2026-07-18T10:59:12.207Z",
+      "size_bytes": 3874112
+    },
+    {
+      "uuid": "a2f04c11-2222-4ccc-9ddd-000000000002",
+      "transcript": "/home/user/.claude/projects/main-checkout/a2f04c11-2222-4ccc-9ddd-000000000002.jsonl",
+      "provenance": "main-checkout",
+      "skill": "jira-task-assigner",
+      "issue_key": "JST-122",
+      "key_status": "expected",
+      "models": ["claude-opus-4-8", "claude-haiku-4-5"],
+      "tokens": { "in": 28, "out": 17393, "cache_read": 1067168, "cache_write": 72193, "total": 1156782 },
+      "skill_turns": 14,
+      "sidechain_turns": 2,
+      "tool_calls": 21,
+      "tool_errors": 1,
+      "tools": [
+        { "name": "Bash", "calls": 12, "errors": 1 },
+        { "name": "Read", "calls": 5, "errors": 0 },
+        { "name": "Grep", "calls": 4, "errors": 0 }
+      ],
+      "wall_clock_s": 302.4,
+      "first_ts": "2026-07-18T10:02:11.000Z",
+      "last_ts": "2026-07-18T10:07:13.400Z",
+      "size_bytes": 49459
+    },
+    {
+      "uuid": "b91e77aa-3333-4eee-8fff-000000000003",
+      "transcript": "/home/user/.claude/projects/worktree-JST-122/b91e77aa-3333-4eee-8fff-000000000003.jsonl",
+      "provenance": "worktree",
+      "skill": "conversation-debugger",
+      "issue_key": "JST-122",
+      "key_status": "given",
+      "models": ["claude-opus-4-8"],
+      "tokens": { "in": 12, "out": 8422, "cache_read": 400211, "cache_write": 30100, "total": 438745 },
+      "skill_turns": 9,
+      "sidechain_turns": 0,
+      "tool_calls": 11,
+      "tool_errors": 0,
+      "tools": [
+        { "name": "Read", "calls": 7, "errors": 0 },
+        { "name": "Bash", "calls": 4, "errors": 0 }
+      ],
+      "wall_clock_s": 55.6,
+      "first_ts": "2026-07-18T13:58:00.100Z",
+      "last_ts": "2026-07-18T14:01:25.783Z",
+      "size_bytes": 10240
+    },
+    {
+      "uuid": "c3d5e8f0-4444-4aaa-9bbb-000000000004",
+      "transcript": "/home/user/.claude/projects/worktree-JST-122/c3d5e8f0-4444-4aaa-9bbb-000000000004.jsonl",
+      "provenance": "unknown",
+      "skill": null,
+      "issue_key": null,
+      "key_status": "stub",
+      "models": null,
+      "tokens": null,
+      "skill_turns": null,
+      "sidechain_turns": null,
+      "tool_calls": null,
+      "tool_errors": null,
+      "tools": null,
+      "wall_clock_s": null,
+      "first_ts": null,
+      "last_ts": null,
+      "size_bytes": null
+    }
+  ],
+  "aggregate": {
+    "conversation_count": 4,
+    "analyzed_count": 3,
+    "tokens": { "in": 104, "out": 75452, "cache_read": 5002845, "cache_write": 225971, "total": 5304372 },
+    "skill_turns": 49,
+    "sidechain_turns": 2,
+    "tool_calls": 68,
+    "tool_errors": 3,
+    "timeframe": {
+      "first_ts": "2026-07-18T10:02:11.000Z",
+      "last_ts": "2026-07-18T14:01:25.783Z",
+      "span_s": 14354.8
+    },
+    "models": ["claude-opus-4-8", "claude-haiku-4-5"],
+    "skills": ["jira-task-executor", "jira-task-assigner", "conversation-debugger"],
+    "issue_keys": ["JST-122"],
+    "by_skill": [
+      { "skill": "jira-task-executor", "conversations": 1,
+        "tokens": { "in": 64, "out": 49637, "cache_read": 3535466, "cache_write": 123678, "total": 3708845 } },
+      { "skill": "jira-task-assigner", "conversations": 1,
+        "tokens": { "in": 28, "out": 17393, "cache_read": 1067168, "cache_write": 72193, "total": 1156782 } },
+      { "skill": "conversation-debugger", "conversations": 1,
+        "tokens": { "in": 12, "out": 8422, "cache_read": 400211, "cache_write": 30100, "total": 438745 } }
+    ],
+    "by_provenance": [
+      { "provenance": "worktree", "conversations": 2,
+        "tokens": { "in": 76, "out": 58059, "cache_read": 3935677, "cache_write": 153778, "total": 4147590 } },
+      { "provenance": "main-checkout", "conversations": 1,
+        "tokens": { "in": 28, "out": 17393, "cache_read": 1067168, "cache_write": 72193, "total": 1156782 } }
+    ],
+    "by_tool": [
+      { "tool": "Bash", "conversations": 3, "calls": 46, "errors": 3 },
+      { "tool": "Read", "conversations": 3, "calls": 18, "errors": 0 },
+      { "tool": "Grep", "conversations": 1, "calls": 4, "errors": 0 }
+    ]
+  }
+}

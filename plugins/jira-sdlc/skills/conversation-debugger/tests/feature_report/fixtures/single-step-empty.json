@@ -1,0 +1,22 @@
+{
+  "schema": "jira-sdlc/conversation-debugger/feature-report@2",
+  "feature": "JST-999",
+  "conversation_count": 0,
+  "conversations": [],
+  "aggregate": {
+    "conversation_count": 0,
+    "analyzed_count": 0,
+    "tokens": { "in": 0, "out": 0, "cache_read": 0, "cache_write": 0, "total": 0 },
+    "skill_turns": 0,
+    "sidechain_turns": 0,
+    "tool_calls": 0,
+    "tool_errors": 0,
+    "timeframe": { "first_ts": null, "last_ts": null, "span_s": null },
+    "models": [],
+    "skills": [],
+    "issue_keys": [],
+    "by_skill": [],
+    "by_provenance": [],
+    "by_tool": []
+  }
+}
