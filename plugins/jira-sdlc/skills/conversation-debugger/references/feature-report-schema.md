@@ -66,6 +66,10 @@ detectable rather than guessed. The layering is backward-compatible and
       "sidechain_turns": 0,         // SIDECHAIN_TURNS
       "tool_calls": 36,             // TOOL_CALLS
       "tool_errors": 2,             // TOOL_ERRORS
+      "tools": [                    // TOOLS_USED merged with TOOL_ERRORS_BY_TOOL, ordered by (-calls, name);
+        { "name": "Bash", "calls": 30, "errors": 2 },   //   null when no metrics (or older collect_run)
+        { "name": "Read", "calls": 6, "errors": 0 }
+      ],
       "wall_clock_s": 1754.7,       // WALL_CLOCK_S (elapsed span, not compute time)
       "first_ts": "2026-07-18T10:35:59.356Z",
       "last_ts":  "2026-07-18T10:59:12.207Z",
@@ -101,6 +105,10 @@ detectable rather than guessed. The layering is backward-compatible and
       { "provenance": "worktree", "conversations": 2,
         "tokens": { "in": 168, "out": 104077, "cache_read": 10128429, "cache_write": 249614, "total": 10482288 } }
       // …one per distinct provenance ("worktree" | "main-checkout" | "unknown")
+    ],
+    "by_tool": [                    // per-tool roll-up (analyzed records only), ordered by (-calls, name)
+      { "tool": "Bash", "conversations": 2, "calls": 63, "errors": 4 }
+      // …one per distinct tool; "conversations" = analyzed records that used it
     ]
   }
 }
@@ -206,10 +214,20 @@ feature-wide `aggregate`.
   **not** equal the sum of per-conversation elapsed; cache-read dominates a long
   run; there is no cost field, so tokens are never converted to money.
 
-- **`by_skill` / `by_provenance` cover analyzed records only.** Their token
-  sums match `aggregate.tokens` (metric-less records contribute nothing), so a
-  non-analyzed conversation appears in the per-conversation listing for coverage
-  but not in these roll-ups.
+- **`by_skill` / `by_provenance` / `by_tool` cover analyzed records only.**
+  Their sums match the `aggregate` totals (metric-less records contribute
+  nothing), so a non-analyzed conversation appears in the per-conversation
+  listing for coverage but not in these roll-ups.
+
+- **`tools` / `by_tool` are additive fields (still `@2`/`@3`).** Per record,
+  `tools` is `collect_run`'s `TOOLS_USED` tally merged with
+  `TOOL_ERRORS_BY_TOOL` (errors are always a subset of calls); `by_tool` is the
+  per-tool sum over analyzed records, with `conversations` counting how many
+  analyzed records used the tool at least once. Both are ordered by
+  `(-calls, name)` — re-sorted **in the collector** so the two ports serialize
+  identically regardless of tally tie order. `tools` is `null` on a metric-less
+  record or JSON from an older `collect_run`; a report-builder that guards for
+  absence (ours does) renders older JSON unchanged, so no version bump.
 
 - **`size_bytes` is the transcript's on-disk size, measured upstream.** It is
   `collect_run`'s `TRANSCRIPT_BYTES` (a `wc -c` / `.Length` stat of the profiled

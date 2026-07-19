@@ -89,6 +89,17 @@ function Size([object]$b) {
     return ('{0:N1} KB' -f ($v / 1024.0))
 }
 function Join-List($xs)   { if ($null -eq $xs) { return '-' }; $a = @($xs); if ($a.Count -eq 0) { return '-' }; return ($a -join ', ') }
+# Per-record tools list -> one table cell: "Bash:10, Read:7", a tool with
+# errors flagged inline as "Bash:10(!2)". Absent (older JSON, or a record
+# without metrics) -> '-'.
+function Get-ToolsCell($tools) {
+    if ($null -eq $tools -or @($tools).Count -eq 0) { return '-' }
+    $parts = foreach ($t in @($tools)) {
+        $e = [long]$t.errors
+        "$($t.name):$($t.calls)$(if ($e) { "(!$e)" })"
+    }
+    return ($parts -join ', ')
+}
 # Timestamps arrive as DateTime (ConvertFrom-Json auto-parses the ISO-Z strings)
 # or, on older hosts, as the raw string — render either as compact UTC.
 function Ts([object]$v)  {
@@ -175,17 +186,17 @@ function Emit-PerfSection {
     param($conv, [string]$Level = '##')
     W "$Level Per-conversation — performance"
     W ''
-    W '| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | elapsed (s) | first activity | last activity |'
-    W '|---|---|--:|--:|--:|--:|--:|---|---|'
+    W '| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | tools used (calls) | elapsed (s) | first activity | last activity |'
+    W '|---|---|--:|--:|--:|--:|---|--:|---|---|'
     foreach ($c in $conv) {
         $skill = if ($c.skill) { $c.skill } else { '_(no skill)_' }
         if ($null -ne $c.skill_turns) {
-            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |" -f `
+            W ("| ``{0}`` | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} |" -f `
                 $c.uuid, $skill, (Num $c.skill_turns), (Num $c.sidechain_turns), `
-                (Num $c.tool_calls), (Num $c.tool_errors), (Sec $c.wall_clock_s), `
-                (Ts $c.first_ts), (Ts $c.last_ts))
+                (Num $c.tool_calls), (Num $c.tool_errors), (Get-ToolsCell $c.tools), `
+                (Sec $c.wall_clock_s), (Ts $c.first_ts), (Ts $c.last_ts))
         } else {
-            W ("| ``{0}`` | {1} | — | — | — | — | — | — | — |" -f $c.uuid, $skill)
+            W ("| ``{0}`` | {1} | — | — | — | — | — | — | — | — |" -f $c.uuid, $skill)
         }
     }
     W ''
@@ -212,6 +223,28 @@ function Emit-BySkillSection {
             }
         }
         Emit-Pie 'Token consumption by skill (total tokens)' @($skillPie)
+    }
+}
+
+function Emit-ByToolSection {
+    param($agg)
+    if ($null -ne $agg.by_tool -and @($agg.by_tool).Count -gt 0) {
+        W '## Tool usage'
+        W ''
+        W '| tool | conversations | calls | errors |'
+        W '|---|--:|--:|--:|'
+        foreach ($t in @($agg.by_tool)) {
+            W ("| {0} | {1} | {2} | {3} |" -f `
+                $t.tool, (Num $t.conversations), (Num $t.calls), (Num $t.errors))
+        }
+        W ''
+        # pie: call share per tool
+        $toolPie = foreach ($t in @($agg.by_tool)) {
+            if ($null -ne $t.calls -and [double]$t.calls -gt 0) {
+                [pscustomobject]@{ label = [string]$t.tool; value = [long]$t.calls }
+            }
+        }
+        Emit-Pie 'Tool calls by tool' @($toolPie)
     }
 }
 
@@ -293,6 +326,7 @@ if (-not $isMulti) {
     W "| Issue keys touched | $(Join-List $agg.issue_keys) |"
     if ($null -ne $agg.skill_turns)  { W "| Total skill turns | $(Num $agg.skill_turns) |" }
     if ($null -ne $agg.tool_calls)   { W "| Total tool calls | $(Num $agg.tool_calls) (errors: $(Num $agg.tool_errors)) |" }
+    if ($agg.by_tool -and @($agg.by_tool).Count) { W "| Distinct tools used | $(@($agg.by_tool).Count) |" }
     if ($agg.timeframe -and $null -ne $agg.timeframe.span_s) {
         W "| Activity span | $(Dur $agg.timeframe.span_s) ($(Ts $agg.timeframe.first_ts) → $(Ts $agg.timeframe.last_ts)) |"
     }
@@ -302,6 +336,7 @@ if (-not $isMulti) {
     Emit-PerfSection $conv
     Emit-BySkillSection $agg
     Emit-ByProvenanceSection $agg
+    Emit-ByToolSection $agg
     Emit-FeatureTotals $agg
     Emit-Timeframe $agg
 } else {
@@ -337,6 +372,7 @@ if (-not $isMulti) {
     W "| Issue keys touched | $(Join-List $fagg.issue_keys) |"
     if ($null -ne $fagg.skill_turns) { W "| Total skill turns | $(Num $fagg.skill_turns) |" }
     if ($null -ne $fagg.tool_calls)  { W "| Total tool calls | $(Num $fagg.tool_calls) (errors: $(Num $fagg.tool_errors)) |" }
+    if ($fagg.by_tool -and @($fagg.by_tool).Count) { W "| Distinct tools used | $(@($fagg.by_tool).Count) |" }
     if ($fagg.timeframe -and $null -ne $fagg.timeframe.span_s) {
         W "| Activity span | $(Dur $fagg.timeframe.span_s) ($(Ts $fagg.timeframe.first_ts) → $(Ts $fagg.timeframe.last_ts)) |"
     }
@@ -394,6 +430,7 @@ if (-not $isMulti) {
     # ---- feature-wide roll-ups ---------------------------------------------
     Emit-BySkillSection $fagg
     Emit-ByProvenanceSection $fagg
+    Emit-ByToolSection $fagg
     Emit-FeatureTotals $fagg
     Emit-Timeframe $fagg
 }

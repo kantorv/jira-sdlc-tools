@@ -116,6 +116,18 @@ def join_list(xs):
         return '-'
     return ', '.join(str(x) for x in a)
 
+# Per-record tools list -> one table cell: "Bash:10, Read:7", a tool with
+# errors flagged inline as "Bash:10(!2)". Absent (older JSON, or a record
+# without metrics) -> '-'.
+def tools_cell(tools):
+    if not tools:
+        return '-'
+    parts = []
+    for t in tools:
+        e = int(t.get('errors') or 0)
+        parts.append("%s:%s%s" % (t['name'], t['calls'], ("(!%d)" % e) if e else ''))
+    return ', '.join(parts)
+
 # Timestamps arrive as the raw ISO-8601 string (collect_feature copies them
 # through verbatim). Render them as compact UTC "YYYY-MM-DD HH:MM:SSZ" (seconds
 # precision, no 'T', no fractional) — matching the win/ port, whose ConvertFrom-Json
@@ -210,17 +222,17 @@ def emit_tokens_section(conv, level='##'):
 def emit_perf_section(conv, level='##'):
     out.append("%s Per-conversation — performance" % level)
     out.append('')
-    out.append('| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | elapsed (s) | first activity | last activity |')
-    out.append('|---|---|--:|--:|--:|--:|--:|---|---|')
+    out.append('| conversation | skill | skill turns | sidechain turns | tool calls | tool errors | tools used (calls) | elapsed (s) | first activity | last activity |')
+    out.append('|---|---|--:|--:|--:|--:|---|--:|---|---|')
     for c in conv:
         skill = c['skill'] if c.get('skill') else '_(no skill)_'
         if c.get('skill_turns') is not None:
-            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            out.append("| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 c['uuid'], skill, num(c.get('skill_turns')), num(c.get('sidechain_turns')),
-                num(c.get('tool_calls')), num(c.get('tool_errors')), sec(c.get('wall_clock_s')),
-                ts(c.get('first_ts')), ts(c.get('last_ts'))))
+                num(c.get('tool_calls')), num(c.get('tool_errors')), tools_cell(c.get('tools')),
+                sec(c.get('wall_clock_s')), ts(c.get('first_ts')), ts(c.get('last_ts'))))
         else:
-            out.append("| `%s` | %s | — | — | — | — | — | — | — |" % (c['uuid'], skill))
+            out.append("| `%s` | %s | — | — | — | — | — | — | — | — |" % (c['uuid'], skill))
     out.append('')
 
 def emit_by_skill(agg):
@@ -239,6 +251,21 @@ def emit_by_skill(agg):
         skill_pie = [{'label': str(s['skill']), 'value': int(s['tokens']['total'])}
                      for s in bs if s.get('tokens') is not None and float(s['tokens']['total']) > 0]
         emit_pie('Token consumption by skill (total tokens)', skill_pie)
+
+def emit_by_tool(agg):
+    bt = agg.get('by_tool')
+    if bt is not None and len(bt) > 0:
+        out.append('## Tool usage')
+        out.append('')
+        out.append('| tool | conversations | calls | errors |')
+        out.append('|---|--:|--:|--:|')
+        for t in bt:
+            out.append("| %s | %s | %s | %s |" % (
+                t['tool'], num(t.get('conversations')), num(t.get('calls')), num(t.get('errors'))))
+        out.append('')
+        tool_pie = [{'label': str(t['tool']), 'value': int(t['calls'])}
+                    for t in bt if t.get('calls') is not None and float(t['calls']) > 0]
+        emit_pie('Tool calls by tool', tool_pie)
 
 def emit_by_provenance(agg):
     bp = agg.get('by_provenance')
@@ -313,6 +340,8 @@ if not is_multi:
         out.append("| Total skill turns | %s |" % num(agg['skill_turns']))
     if agg.get('tool_calls') is not None:
         out.append("| Total tool calls | %s (errors: %s) |" % (num(agg['tool_calls']), num(agg.get('tool_errors'))))
+    if agg.get('by_tool'):
+        out.append("| Distinct tools used | %d |" % len(agg['by_tool']))
     tf = agg.get('timeframe')
     if tf and tf.get('span_s') is not None:
         out.append("| Activity span | %s (%s → %s) |" % (dur(tf['span_s']), ts(tf.get('first_ts')), ts(tf.get('last_ts'))))
@@ -322,6 +351,7 @@ if not is_multi:
     emit_perf_section(conv)
     emit_by_skill(agg)
     emit_by_provenance(agg)
+    emit_by_tool(agg)
     emit_feature_totals(agg)
     emit_timeframe(agg)
 else:
@@ -360,6 +390,8 @@ else:
         out.append("| Total skill turns | %s |" % num(fagg['skill_turns']))
     if fagg.get('tool_calls') is not None:
         out.append("| Total tool calls | %s (errors: %s) |" % (num(fagg['tool_calls']), num(fagg.get('tool_errors'))))
+    if fagg.get('by_tool'):
+        out.append("| Distinct tools used | %d |" % len(fagg['by_tool']))
     tf = fagg.get('timeframe')
     if tf and tf.get('span_s') is not None:
         out.append("| Activity span | %s (%s → %s) |" % (dur(tf['span_s']), ts(tf.get('first_ts')), ts(tf.get('last_ts'))))
@@ -414,6 +446,7 @@ else:
     # ---- feature-wide roll-ups ---------------------------------------------
     emit_by_skill(fagg)
     emit_by_provenance(fagg)
+    emit_by_tool(fagg)
     emit_feature_totals(fagg)
     emit_timeframe(fagg)
 

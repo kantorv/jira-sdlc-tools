@@ -228,14 +228,18 @@ $Key = ''; $Source = ''; $Status = ''
 if ($ForcedKey) {
     $Key = $ForcedKey; $Source = 'explicit argument'; $Status = 'given'
 } elseif ($Skill -eq 'jira-task-assigner') {
-    # the assigner mints the key: first `workitem create` (not `comment create`)
+    # the assigner mints the key: first `workitem create` (not `comment create`).
+    # Matched by command text, never the tool's name -- the shell tool is "Bash" on
+    # POSIX but "PowerShell" on Windows (and may be renamed again), while only
+    # shell-type tools carry .input.command at all. The result parse below then
+    # validates the match, so a false positive cannot file a wrong key.
     $CreateId = $null
     foreach ($o in $parsed) {
         if ($o.type -ne 'assistant') { continue }
         $content = $o.message.content
         if ($content -isnot [System.Collections.IEnumerable] -or $content -is [string]) { continue }
         foreach ($b in $content) {
-            if ($b -and $b.type -eq 'tool_use' -and $b.name -eq 'Bash' -and ([string]$b.input.command) -match 'workitem\s+create') {
+            if ($b -and $b.type -eq 'tool_use' -and ([string]$b.input.command) -match 'workitem\s+create') {
                 $CreateId = [string]$b.id
                 break
             }
@@ -319,7 +323,10 @@ function Get-DedupByMessageId($list) {
 }
 function Get-Tally($items) {
     if (-not $items -or $items.Count -eq 0) { return '' }
-    $grouped = $items | Group-Object -Property name | Sort-Object Count -Descending
+    # Ties sort by tool name, matching the bash twin: jq's group_by(.name)
+    # pre-sorts groups alphabetically and its sort_by(-.n) is stable.
+    $grouped = $items | Group-Object -Property name |
+        Sort-Object -Property @{Expression = 'Count'; Descending = $true }, @{Expression = 'Name'; Descending = $false }
     return (($grouped | ForEach-Object { "$($_.Name):$($_.Count)" }) -join ' ')
 }
 function ConvertTo-EpochSeconds([string]$s) {

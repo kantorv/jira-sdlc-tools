@@ -150,6 +150,20 @@ def kv_int(h, k):
     except (ValueError, TypeError):
         return 0
 
+# collect_run's tally lines ("Bash:10 Read:7") -> [{'name','calls'}]. Split on
+# the LAST ':' so a tool name containing ':' can't shift the count.
+def parse_tally(s):
+    items = []
+    for part in (s or '').split():
+        name, sep, n = part.rpartition(':')
+        if not sep or not name:
+            continue
+        try:
+            items.append({'name': name, 'calls': int(n)})
+        except ValueError:
+            continue
+    return items
+
 # Which of the 3 analyzable skills a transcript invoked, in first-seen order.
 # Matches collect_run's own acceptance: namespaced (/jira-sdlc:jira-task-x) or
 # bare (/jira-task-x), so we never claim a skill collect_run would then reject.
@@ -241,7 +255,8 @@ def feature_records(fkey, soft):
                 'models': [],
                 'tokens': {'in': 0, 'out': 0, 'cache_read': 0, 'cache_write': 0, 'total': 0},
                 'skill_turns': None, 'sidechain_turns': None, 'tool_calls': None,
-                'tool_errors': None, 'wall_clock_s': None, 'first_ts': None, 'last_ts': None,
+                'tool_errors': None, 'tools': None, 'wall_clock_s': None,
+                'first_ts': None, 'last_ts': None,
                 'size_bytes': None,
             })
             continue
@@ -282,6 +297,18 @@ def feature_records(fkey, soft):
             # (a metric-less record, or an older collect_run) -> None -> '-'.
             size_bytes = kv_int(kv, 'TRANSCRIPT_BYTES') if 'TRANSCRIPT_BYTES' in kv else None
 
+            # Per-tool breakdown: collect_run's TOOLS_USED merged with its
+            # TOOL_ERRORS_BY_TOOL (errors are a subset of calls, so the merge
+            # never invents a tool). Re-sorted by (-calls, name) so both ports
+            # order ties identically regardless of collect_run's own tie order.
+            tools = None
+            if has_metrics:
+                errs_by = {t['name']: t['calls'] for t in parse_tally(kv.get('TOOL_ERRORS_BY_TOOL'))}
+                tools = [{'name': t['name'], 'calls': t['calls'],
+                          'errors': errs_by.get(t['name'], 0)}
+                         for t in parse_tally(kv.get('TOOLS_USED'))]
+                tools.sort(key=lambda t: (-t['calls'], t['name']))
+
             records.append({
                 'uuid': uuid,
                 'transcript': path,
@@ -295,6 +322,7 @@ def feature_records(fkey, soft):
                 'sidechain_turns': kv_int(kv, 'SIDECHAIN_TURNS') if has_metrics else None,
                 'tool_calls': kv_int(kv, 'TOOL_CALLS') if has_metrics else None,
                 'tool_errors': kv_int(kv, 'TOOL_ERRORS') if has_metrics else None,
+                'tools': tools,
                 'wall_clock_s': wall,
                 'first_ts': kv['FIRST_TS'] if (has_metrics and kv.get('FIRST_TS')) else None,
                 'last_ts': kv['LAST_TS'] if (has_metrics and kv.get('LAST_TS')) else None,
@@ -330,6 +358,7 @@ def new_aggregate(records):
     by_skill_order = []
     by_prov = {}    # provenance -> token acc
     by_prov_order = []
+    by_tool = {}    # tool name -> {'conversations','calls','errors'}
     min_first = None
     max_last = None
     min_first_str = None
@@ -380,6 +409,12 @@ def new_aggregate(records):
             by_prov_order.append(pv)
         add_to(by_prov[pv], r)
 
+        for t in (r.get('tools') or []):
+            e = by_tool.setdefault(t['name'], {'conversations': 0, 'calls': 0, 'errors': 0})
+            e['conversations'] += 1
+            e['calls'] += int(t['calls'])
+            e['errors'] += int(t.get('errors') or 0)
+
         f = parse_iso(r['first_ts'])
         if f is not None and (min_first is None or f < min_first):
             min_first = f
@@ -406,6 +441,12 @@ def new_aggregate(records):
         by_prov_arr.append({'provenance': k, 'conversations': b['conversations'],
                             'tokens': {'in': b['in'], 'out': b['out'], 'cache_read': b['cache_read'],
                                        'cache_write': b['cache_write'], 'total': b['total']}})
+    # per-tool roll-up over analyzed records, (-calls, name) like the per-record
+    # tools list — a deterministic order both ports produce identically
+    by_tool_arr = [{'tool': k, 'conversations': v['conversations'],
+                    'calls': v['calls'], 'errors': v['errors']}
+                   for k, v in by_tool.items()]
+    by_tool_arr.sort(key=lambda t: (-t['calls'], t['tool']))
 
     return {
         'conversation_count': len(records),
@@ -425,6 +466,7 @@ def new_aggregate(records):
         'issue_keys': sorted(key_set) if key_set else None,
         'by_skill': by_skill_arr,
         'by_provenance': by_prov_arr,
+        'by_tool': by_tool_arr,
     }
 
 # ---- human-readable stderr metrics view (per part) --------------------------
@@ -452,6 +494,8 @@ def write_human_part(heading, records, agg):
         note("      perf    turns=%s  sidechain=%s  tool-calls=%s (errors=%s)  elapsed=%ss" % (
             fmt(r['skill_turns']), fmt(r['sidechain_turns']), fmt(r['tool_calls']),
             fmt(r['tool_errors']), wall))
+        if r.get('tools'):
+            note("      tools   %s" % ', '.join("%s:%d" % (t['name'], t['calls']) for t in r['tools']))
 
 def write_human_totals(label, agg):
     note('')
@@ -468,6 +512,8 @@ def write_human_totals(label, agg):
         agg['timeframe']['last_ts'] if agg['timeframe']['last_ts'] else '-', span))
     note("  models: %s" % (', '.join(agg['models']) if agg['models'] else '-'))
     note("  skills: %s" % (', '.join(agg['skills']) if agg['skills'] else '-'))
+    if agg.get('by_tool'):
+        note("  tools:  %s" % ', '.join("%s:%d" % (t['tool'], t['calls']) for t in agg['by_tool']))
 
 # ---- detect feature type: does <KEY> have sub-tasks? ------------------------
 # One Jira fetch, wrapped in a LONG TIMEOUT (the API can legitimately take
