@@ -119,7 +119,7 @@ profiles:
       auth_type: api_token
 ```
 
-This is what lets `skills/_shared/scripts/jira_acli_login.sh` be
+This is what lets `skills/_shared/scripts/posix/jira_acli_login.sh` be
 **idempotent** — already the requested role ⇒ a ~30ms no-op, so every skill
 can call it unconditionally as its first act. A real account switch costs
 ~31s (acli's login round-trip), which is the other reason not to re-login
@@ -301,7 +301,7 @@ your own under `account_id` in `~/.config/acli/jira_config.yaml` (§0), and
 every assignee object carries it. Use `displayName` for the human-readable
 message, never for the comparison.
 
-`skills/_shared/scripts/check_assignee.sh` is the invoked implementation.
+`skills/_shared/scripts/posix/check_assignee.sh` is the invoked implementation.
 
 → Detailed: [`../../docs/JIRA-ACLI.md` §3](../../docs/JIRA-ACLI.md#3-reading--listing-issues)
 for `workitem search --jql` (listing — never invoked by a skill), the
@@ -538,7 +538,7 @@ The `scripts/` directory next to this file bundles two human-run helpers
 (not invoked by any skill) —
 [`../../docs/JIRA-ACLI.md` §10](../../docs/JIRA-ACLI.md#10-helper-scripts)
 documents `acli-create-parent-and-subtasks.sh` (seed a parent + sub-tasks
-from a `manifest.tsv`) and `acli-list-subtasks.py` (list a parent's
+from a `manifest.tsv`) and `acli-list-subtasks.sh` (list a parent's
 sub-tasks by parsing `view <PARENT> --json --fields 'subtasks,issuetype'`).
 
 ---

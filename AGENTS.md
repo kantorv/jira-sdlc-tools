@@ -37,7 +37,7 @@ reasoning, caveats, and how we plan to test them live in
   redundancy and hedging, keep the "why" on load-bearing rules. If a
   rule won't compress, it's probably not crisp yet; fix the rule first.
 - **If it can be scripted, consider scripting it.** Deterministic
-  sequences belong in `skills/_shared/scripts/`, with the SKILL.md
+  sequences belong in `skills/_shared/scripts/posix/`, with the SKILL.md
   reduced to "run X, act on its output" — a script collapses N model
   round trips into one bash call and runs identically every time,
   where prose re-derivation is slower and each run is a fresh chance
@@ -109,7 +109,7 @@ assuming you're done:
   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
   override, plus steps 4a/4b/4c and 6), and the healthcheck script's
-  rerun remedies (`skills/_shared/scripts/statuscheck.sh`), which
+  rerun remedies (`skills/_shared/scripts/posix/statuscheck.sh`), which
   currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
@@ -181,6 +181,37 @@ unmatched parens, and participants used without being declared (mermaid
 auto-creates those). All confirmed against the parser. Don't rewrite them chasing
 an error; the semicolon is the one that bites, and the checker will point at it.
 
+### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
+
+The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
+bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
+`_shared/scripts/win/` (the Windows path). They're a contract pair — same
+arguments, same markdown-table / stdout, same exit codes and stderr — so the
+skills need only one dispatch rule (`bash …/X.sh` on POSIX,
+`pwsh`/`powershell …/win/X.ps1` on Windows). Each skill picks the branch up
+front from its own runtime, *before* the first script runs — statuscheck is
+itself one of the dispatched scripts, so it can't be what decides how to run
+it. Edit one port and
+you must edit the other, or Windows silently drifts. `statuscheck`'s `platform`
+row then *confirms* the OS and the Windows runtime/ports, and honors
+`STATUSCHECK_FORCE_OS` so the Windows branch is testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
+diff each port against its bash twin with the OS forced:
+
+```bash
+export STATUSCHECK_FORCE_OS=windows
+for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+  diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
+       <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
+    && echo "✓ $s identical"
+done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee
+```
+
+Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
+diff's reach): real backslash paths / drive letters, CRLF, and acli's config
+location — confirm those on a real Windows 11 box, but the port logic and
+dispatch are verified here.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core
@@ -195,8 +226,11 @@ SemVer git tag plus the GitHub Release that the marketplace install command
 consumes. The version lives only in git tags (no `package.json`/`VERSION` file
 to bump), which is what makes the workflow generic enough to lift into any
 repo, not just the JS app these skills came from. The branching and release
-policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md); two workflows
-automate it:
+policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md), and
+[docs/CI.md](plugins/jira-sdlc/docs/CI.md) is the workflow-by-workflow CI
+reference — including the tagging mechanics and the continuous `lab`
+pre-release channel (`update_lab.yml`), which this section doesn't cover. Two
+workflows automate the stable release:
 
 - **`cut-release.yml`** — manual `workflow_dispatch`. Takes a bump level
   (`patch` / `minor` / `major`, default `minor`), computes the next SemVer

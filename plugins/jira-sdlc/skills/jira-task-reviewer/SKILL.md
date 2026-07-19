@@ -22,17 +22,34 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
+**Script dispatch — settle this before running any script below.** Every
+script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
+Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,
+exit codes). Read your OS from your own runtime *before the first call* —
+you know it without running anything — and dispatch **every** script that
+way, the leading credential block included: `bash …/scripts/X.sh` on
+Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
+below are the POSIX form; on Windows substitute the `.ps1` port each time.
+Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
+the runtime + ports are present) — it verifies the dispatch you already
+chose, and can't be what you consult to dispatch statuscheck itself. And
+unlike `jira_acli_login`, which takes a role argument, **statuscheck itself
+takes no role or issue-key argument — run it bare** on both POSIX and Windows;
+a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
+for an issue key, but don't add one.
+
 **Make sure local credentials exist, then log in as the reviewer — run
 both FIRST, before the healthcheck.** Every Jira write this skill makes
 (verdict comments, reject-path transitions) should come from the
 reviewer's account, not from whoever was last logged in. Both calls are
-idempotent (a no-op when the file/identity are already right), so run
-them unconditionally. On non-zero from either, relay its stderr and
-**stop**.
+safe to run every time (`ensure_local_env` no-ops when the file already
+exists; `jira_acli_login` always logs out then back in as the role, so a
+stale token can't survive), so run them unconditionally. On non-zero from
+either, relay its stderr and **stop**.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/ensure_local_env.sh" || exit 1
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/jira_acli_login.sh" reviewer || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" reviewer || exit 1
 ```
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
@@ -44,11 +61,12 @@ of the executor default:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
-`../_shared/scripts/statuscheck.sh` relative to this skill's directory.)
+`../_shared/scripts/posix/statuscheck.sh` relative to this skill's directory.)
+
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero

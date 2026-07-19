@@ -279,8 +279,10 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
-        │           └── acli-list-subtasks.py               # list a parent's sub-tasks via acli view --json
+        │           └── acli-list-subtasks.sh               # list a parent's sub-tasks via acli view --json
         ├── docs/
+        │   ├── examples/
+        │   │   └── acli-list-subtasks.py  # original python version, kept for reference
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md

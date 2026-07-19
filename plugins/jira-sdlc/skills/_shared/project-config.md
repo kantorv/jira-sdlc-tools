@@ -99,13 +99,13 @@ with the same `NAME = value` parser and local-overrides-team precedence as
 
 ```bash
 # any skill, first thing — idempotent, so call it unconditionally:
-bash skills/_shared/scripts/jira_acli_login.sh <executor|assigner|reviewer> || exit 1
+bash skills/_shared/scripts/posix/jira_acli_login.sh <executor|assigner|reviewer> || exit 1
 
 # jira-task-assigner — the address to put on --assignee, and nothing else:
-ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/get_assignee_email.sh) || exit 1
+ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/posix/get_assignee_email.sh) || exit 1
 
 # jira-task-executor — the issue must belong to the account just logged in:
-bash skills/_shared/scripts/check_assignee.sh   # 0 = continue, non-zero = stop
+bash skills/_shared/scripts/posix/check_assignee.sh   # 0 = continue, non-zero = stop
 ```
 
 `check_assignee.sh` compares the issue's assignee to whoever `acli` is
