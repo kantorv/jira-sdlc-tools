@@ -1,0 +1,556 @@
+{
+  "aggregate": {
+    "analyzed_count": 4,
+    "by_provenance": [
+      {
+        "conversations": 1,
+        "provenance": "main-checkout",
+        "tokens": {
+          "cache_read": 31000,
+          "cache_write": 5200,
+          "in": 900,
+          "out": 2100,
+          "total": 39200
+        }
+      },
+      {
+        "conversations": 3,
+        "provenance": "worktree",
+        "tokens": {
+          "cache_read": 121500,
+          "cache_write": 16900,
+          "in": 2900,
+          "out": 7800,
+          "total": 149100
+        }
+      }
+    ],
+    "by_skill": [
+      {
+        "conversations": 1,
+        "skill": "jira-task-assigner",
+        "tokens": {
+          "cache_read": 31000,
+          "cache_write": 5200,
+          "in": 900,
+          "out": 2100,
+          "total": 39200
+        }
+      },
+      {
+        "conversations": 2,
+        "skill": "jira-task-executor",
+        "tokens": {
+          "cache_read": 112000,
+          "cache_write": 15700,
+          "in": 2600,
+          "out": 7000,
+          "total": 137300
+        }
+      },
+      {
+        "conversations": 1,
+        "skill": "jira-task-reviewer",
+        "tokens": {
+          "cache_read": 9500,
+          "cache_write": 1200,
+          "in": 300,
+          "out": 800,
+          "total": 11800
+        }
+      }
+    ],
+    "by_tool": [
+      {
+        "calls": 81,
+        "conversations": 4,
+        "errors": 4,
+        "tool": "Bash"
+      },
+      {
+        "calls": 43,
+        "conversations": 4,
+        "errors": 0,
+        "tool": "Read"
+      },
+      {
+        "calls": 28,
+        "conversations": 2,
+        "errors": 0,
+        "tool": "Edit"
+      },
+      {
+        "calls": 4,
+        "conversations": 1,
+        "errors": 0,
+        "tool": "Write"
+      }
+    ],
+    "conversation_count": 4,
+    "issue_keys": [
+      "FTX-10",
+      "FTX-11",
+      "FTX-12"
+    ],
+    "models": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-8",
+      "claude-sonnet-5"
+    ],
+    "sidechain_turns": 16,
+    "skill_turns": 123,
+    "skills": [
+      "jira-task-assigner",
+      "jira-task-executor",
+      "jira-task-reviewer"
+    ],
+    "timeframe": {
+      "first_ts": "2026-07-02T09:00:00Z",
+      "last_ts": "2026-07-02T12:40:00Z",
+      "span_s": 13200
+    },
+    "tokens": {
+      "cache_read": 152500,
+      "cache_write": 22100,
+      "in": 3800,
+      "out": 9900,
+      "total": 188300
+    },
+    "tool_calls": 156,
+    "tool_errors": 4
+  },
+  "children": [
+    {
+      "aggregate": {
+        "analyzed_count": 1,
+        "by_provenance": [
+          {
+            "conversations": 1,
+            "provenance": "worktree",
+            "tokens": {
+              "cache_read": 64000,
+              "cache_write": 9100,
+              "in": 1500,
+              "out": 4200,
+              "total": 78800
+            }
+          }
+        ],
+        "by_skill": [
+          {
+            "conversations": 1,
+            "skill": "jira-task-executor",
+            "tokens": {
+              "cache_read": 64000,
+              "cache_write": 9100,
+              "in": 1500,
+              "out": 4200,
+              "total": 78800
+            }
+          }
+        ],
+        "by_tool": [
+          {
+            "calls": 34,
+            "conversations": 1,
+            "errors": 3,
+            "tool": "Bash"
+          },
+          {
+            "calls": 18,
+            "conversations": 1,
+            "errors": 0,
+            "tool": "Edit"
+          },
+          {
+            "calls": 14,
+            "conversations": 1,
+            "errors": 0,
+            "tool": "Read"
+          }
+        ],
+        "conversation_count": 1,
+        "issue_keys": [
+          "FTX-11"
+        ],
+        "models": [
+          "claude-sonnet-5"
+        ],
+        "sidechain_turns": 8,
+        "skill_turns": 51,
+        "skills": [
+          "jira-task-executor"
+        ],
+        "timeframe": {
+          "first_ts": "2026-07-02T10:00:00Z",
+          "last_ts": "2026-07-02T11:00:00Z",
+          "span_s": 3600
+        },
+        "tokens": {
+          "cache_read": 64000,
+          "cache_write": 9100,
+          "in": 1500,
+          "out": 4200,
+          "total": 78800
+        },
+        "tool_calls": 66,
+        "tool_errors": 3
+      },
+      "conversation_count": 1,
+      "conversations": [
+        {
+          "first_ts": "2026-07-02T10:00:00Z",
+          "issue_key": "FTX-11",
+          "key_status": "expected",
+          "last_ts": "2026-07-02T11:00:00Z",
+          "models": [
+            "claude-sonnet-5"
+          ],
+          "provenance": "worktree",
+          "sidechain_turns": 8,
+          "size_bytes": 262144,
+          "skill": "jira-task-executor",
+          "skill_turns": 51,
+          "tokens": {
+            "cache_read": 64000,
+            "cache_write": 9100,
+            "in": 1500,
+            "out": 4200,
+            "total": 78800
+          },
+          "tool_calls": 66,
+          "tool_errors": 3,
+          "tools": [
+            {
+              "calls": 34,
+              "errors": 3,
+              "name": "Bash"
+            },
+            {
+              "calls": 18,
+              "errors": 0,
+              "name": "Edit"
+            },
+            {
+              "calls": 14,
+              "errors": 0,
+              "name": "Read"
+            }
+          ],
+          "transcript": "@WORK@/wt/FTX-11/ffffffff-0011-4000-8000-000000000011.jsonl",
+          "uuid": "ffffffff-0011-4000-8000-000000000011",
+          "wall_clock_s": null
+        }
+      ],
+      "key": "FTX-11",
+      "summary": "Child one"
+    },
+    {
+      "aggregate": {
+        "analyzed_count": 2,
+        "by_provenance": [
+          {
+            "conversations": 2,
+            "provenance": "worktree",
+            "tokens": {
+              "cache_read": 57500,
+              "cache_write": 7800,
+              "in": 1400,
+              "out": 3600,
+              "total": 70300
+            }
+          }
+        ],
+        "by_skill": [
+          {
+            "conversations": 1,
+            "skill": "jira-task-executor",
+            "tokens": {
+              "cache_read": 48000,
+              "cache_write": 6600,
+              "in": 1100,
+              "out": 2800,
+              "total": 58500
+            }
+          },
+          {
+            "conversations": 1,
+            "skill": "jira-task-reviewer",
+            "tokens": {
+              "cache_read": 9500,
+              "cache_write": 1200,
+              "in": 300,
+              "out": 800,
+              "total": 11800
+            }
+          }
+        ],
+        "by_tool": [
+          {
+            "calls": 29,
+            "conversations": 2,
+            "errors": 0,
+            "tool": "Bash"
+          },
+          {
+            "calls": 20,
+            "conversations": 2,
+            "errors": 0,
+            "tool": "Read"
+          },
+          {
+            "calls": 10,
+            "conversations": 1,
+            "errors": 0,
+            "tool": "Edit"
+          }
+        ],
+        "conversation_count": 2,
+        "issue_keys": [
+          "FTX-12"
+        ],
+        "models": [
+          "claude-haiku-4-5-20251001",
+          "claude-opus-4-8",
+          "claude-sonnet-5"
+        ],
+        "sidechain_turns": 5,
+        "skill_turns": 47,
+        "skills": [
+          "jira-task-executor",
+          "jira-task-reviewer"
+        ],
+        "timeframe": {
+          "first_ts": "2026-07-02T10:30:00Z",
+          "last_ts": "2026-07-02T12:40:00Z",
+          "span_s": 7800
+        },
+        "tokens": {
+          "cache_read": 57500,
+          "cache_write": 7800,
+          "in": 1400,
+          "out": 3600,
+          "total": 70300
+        },
+        "tool_calls": 59,
+        "tool_errors": 0
+      },
+      "conversation_count": 2,
+      "conversations": [
+        {
+          "first_ts": "2026-07-02T10:30:00Z",
+          "issue_key": "FTX-12",
+          "key_status": "expected",
+          "last_ts": "2026-07-02T12:00:00Z",
+          "models": [
+            "claude-opus-4-8",
+            "claude-haiku-4-5-20251001"
+          ],
+          "provenance": "worktree",
+          "sidechain_turns": 5,
+          "size_bytes": 196608,
+          "skill": "jira-task-executor",
+          "skill_turns": 38,
+          "tokens": {
+            "cache_read": 48000,
+            "cache_write": 6600,
+            "in": 1100,
+            "out": 2800,
+            "total": 58500
+          },
+          "tool_calls": 47,
+          "tool_errors": 0,
+          "tools": [
+            {
+              "calls": 25,
+              "errors": 0,
+              "name": "Bash"
+            },
+            {
+              "calls": 12,
+              "errors": 0,
+              "name": "Read"
+            },
+            {
+              "calls": 10,
+              "errors": 0,
+              "name": "Edit"
+            }
+          ],
+          "transcript": "@WORK@/wt/FTX-12/99999999-0012-4000-8000-000000000012.jsonl",
+          "uuid": "99999999-0012-4000-8000-000000000012",
+          "wall_clock_s": null
+        },
+        {
+          "first_ts": "2026-07-02T12:10:00Z",
+          "issue_key": "FTX-12",
+          "key_status": "expected",
+          "last_ts": "2026-07-02T12:40:00Z",
+          "models": [
+            "claude-sonnet-5"
+          ],
+          "provenance": "worktree",
+          "sidechain_turns": 0,
+          "size_bytes": 65536,
+          "skill": "jira-task-reviewer",
+          "skill_turns": 9,
+          "tokens": {
+            "cache_read": 9500,
+            "cache_write": 1200,
+            "in": 300,
+            "out": 800,
+            "total": 11800
+          },
+          "tool_calls": 12,
+          "tool_errors": 0,
+          "tools": [
+            {
+              "calls": 8,
+              "errors": 0,
+              "name": "Read"
+            },
+            {
+              "calls": 4,
+              "errors": 0,
+              "name": "Bash"
+            }
+          ],
+          "transcript": "@WORK@/wt/FTX-12/88888888-0013-4000-8000-000000000013.jsonl",
+          "uuid": "88888888-0013-4000-8000-000000000013",
+          "wall_clock_s": null
+        }
+      ],
+      "key": "FTX-12",
+      "summary": "Child two"
+    }
+  ],
+  "conversation_count": 4,
+  "feature": "FTX-10",
+  "feature_type": "multistep",
+  "parent": {
+    "aggregate": {
+      "analyzed_count": 1,
+      "by_provenance": [
+        {
+          "conversations": 1,
+          "provenance": "main-checkout",
+          "tokens": {
+            "cache_read": 31000,
+            "cache_write": 5200,
+            "in": 900,
+            "out": 2100,
+            "total": 39200
+          }
+        }
+      ],
+      "by_skill": [
+        {
+          "conversations": 1,
+          "skill": "jira-task-assigner",
+          "tokens": {
+            "cache_read": 31000,
+            "cache_write": 5200,
+            "in": 900,
+            "out": 2100,
+            "total": 39200
+          }
+        }
+      ],
+      "by_tool": [
+        {
+          "calls": 18,
+          "conversations": 1,
+          "errors": 1,
+          "tool": "Bash"
+        },
+        {
+          "calls": 9,
+          "conversations": 1,
+          "errors": 0,
+          "tool": "Read"
+        },
+        {
+          "calls": 4,
+          "conversations": 1,
+          "errors": 0,
+          "tool": "Write"
+        }
+      ],
+      "conversation_count": 1,
+      "issue_keys": [
+        "FTX-10"
+      ],
+      "models": [
+        "claude-opus-4-8"
+      ],
+      "sidechain_turns": 3,
+      "skill_turns": 25,
+      "skills": [
+        "jira-task-assigner"
+      ],
+      "timeframe": {
+        "first_ts": "2026-07-02T09:00:00Z",
+        "last_ts": "2026-07-02T09:45:00Z",
+        "span_s": 2700
+      },
+      "tokens": {
+        "cache_read": 31000,
+        "cache_write": 5200,
+        "in": 900,
+        "out": 2100,
+        "total": 39200
+      },
+      "tool_calls": 31,
+      "tool_errors": 1
+    },
+    "conversation_count": 1,
+    "conversations": [
+      {
+        "first_ts": "2026-07-02T09:00:00Z",
+        "issue_key": "FTX-10",
+        "key_status": "given",
+        "last_ts": "2026-07-02T09:45:00Z",
+        "models": [
+          "claude-opus-4-8"
+        ],
+        "provenance": "main-checkout",
+        "sidechain_turns": 3,
+        "size_bytes": 131072,
+        "skill": "jira-task-assigner",
+        "skill_turns": 25,
+        "tokens": {
+          "cache_read": 31000,
+          "cache_write": 5200,
+          "in": 900,
+          "out": 2100,
+          "total": 39200
+        },
+        "tool_calls": 31,
+        "tool_errors": 1,
+        "tools": [
+          {
+            "calls": 18,
+            "errors": 1,
+            "name": "Bash"
+          },
+          {
+            "calls": 9,
+            "errors": 0,
+            "name": "Read"
+          },
+          {
+            "calls": 4,
+            "errors": 0,
+            "name": "Write"
+          }
+        ],
+        "transcript": "@WORK@/main/eeeeeeee-0010-4000-8000-000000000010.jsonl",
+        "uuid": "eeeeeeee-0010-4000-8000-000000000010",
+        "wall_clock_s": null
+      }
+    ],
+    "key": "FTX-10",
+    "summary": "Multistep fixture parent"
+  },
+  "schema": "jira-sdlc/conversation-debugger/feature-report@3"
+}

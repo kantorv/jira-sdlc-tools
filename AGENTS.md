@@ -118,8 +118,10 @@ assuming you're done:
 
 ## Validating a change
 
-There's no build or test suite — this repo is prompt files for an LLM
-agent plus two JSON manifests (one per `.claude-plugin/` directory).
+There's no build, and no test suite for the skills themselves — this repo
+is mostly prompt files for an LLM agent plus two JSON manifests (one per
+`.claude-plugin/` directory). The one exception is the conversation-debugger's
+executable scripts, which do have golden-file harnesses (see below).
 Instead:
 
 ```bash
@@ -131,6 +133,27 @@ claude plugin validate .
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 ```
+
+### Touched a conversation-debugger script? Run its golden harness
+
+The `conversation-debugger` scripts are real programs, not prompts, so they
+get real tests: `plugins/jira-sdlc/skills/conversation-debugger/scripts/tests/`
+holds a golden-file harness per refactored script, each replaying captured
+fixtures through stub siblings and byte-diffing the normalized JSON against a
+committed golden.
+
+```bash
+cd plugins/jira-sdlc/skills/conversation-debugger/scripts
+bash tests/run_collect_feature_golden.sh        # every engine: sh shim, py core, ps1 port
+bash tests/run_collect_feature_golden.sh py     # or one engine
+```
+
+The `ps1` engine needs `pwsh` (7 on Linux is enough) and skips with a loud note
+otherwise — a green run that skipped it has **not** verified the Windows port.
+`--update` re-captures the goldens; use it only when an output change is
+intended, so the golden diff in that commit documents the change.
+`skills/conversation-debugger/scripts/tests/README.md` explains the staging
+model and how to add a scenario or a harness for another script.
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
 

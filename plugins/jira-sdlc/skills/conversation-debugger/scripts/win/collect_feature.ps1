@@ -40,9 +40,12 @@
 #     a per-conversation + totals metrics table, so a bare console run shows both
 #     the listing and the metrics "along" it while stdout stays pipe-safe.
 #
-# This is the Windows (PowerShell 5.1+) half of a posix+win contract pair; the
-# POSIX twin (../posix/collect_feature.sh) is a full bash+jq+python3 port with the
-# same CLI, JSON/stderr split, and exit codes. Callers dispatch by their runtime.
+# This is the Windows (PowerShell 5.1+) half of a posix+win contract pair,
+# kept native (no Python dependency) so no-Python Windows hosts still work. The
+# POSIX twin is ../py/collect_feature.py (the dual-use core) behind the
+# ../posix/collect_feature.sh shim — same CLI, JSON/stderr split, and exit
+# codes. Callers dispatch by their runtime; parity is checked by the golden-file
+# harness in ../tests/run_collect_feature_golden.sh.
 #
 # Exit: 0 = JSON emitted (even for a feature with zero conversations)
 #       1 = usage / environment error, or sync_conversations failed
@@ -110,7 +113,11 @@ function ConvertFrom-Kv($lines) {
     }
     return $h
 }
-function Get-KvInt($h, $k) { $v = 0; if ($h.ContainsKey($k)) { [void][int]::TryParse($h[$k], [ref]$v) }; return $v }
+function Get-KvInt($h, $k) {
+    $v = 0
+    if ($h.ContainsKey($k)) { [void][int]::TryParse($h[$k], [ref]$v) }
+    return $v
+}
 
 # collect_run's tally lines ("Bash:10 Read:7") -> records of name/calls. Split
 # on the LAST ':' so a tool name containing ':' can't shift the count.
@@ -303,6 +310,14 @@ function Add-ToTokenAcc($acc, $r) {
     $acc.cache_read += [long]$r.tokens.cache_read; $acc.cache_write += [long]$r.tokens.cache_write
     $acc.total += [long]$r.tokens.total
 }
+function ConvertTo-UtcOffset([string]$s) {
+    # ISO-8601 -> [datetimeoffset] for min/max comparison; $null on anything
+    # unparseable (that record simply doesn't move the timeframe).
+    try {
+        return [datetimeoffset]::Parse($s, [Globalization.CultureInfo]::InvariantCulture,
+                                       [Globalization.DateTimeStyles]::AssumeUniversal)
+    } catch { return $null }
+}
 function New-Aggregate {
     param($Records)
     $agIn = 0L; $agOut = 0L; $agCr = 0L; $agCw = 0L
@@ -346,8 +361,14 @@ function New-Aggregate {
         }
 
         # timeframe: earliest first_ts, latest last_ts across the feature (UTC ISO-8601)
-        if ($r.first_ts) { try { $f = [datetimeoffset]::Parse($r.first_ts, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $minFirst -or $f -lt $minFirst) { $minFirst = $f; $minFirstStr = $r.first_ts } } catch { } }
-        if ($r.last_ts)  { try { $l = [datetimeoffset]::Parse($r.last_ts,  [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal); if ($null -eq $maxLast  -or $l -gt $maxLast)  { $maxLast  = $l; $maxLastStr  = $r.last_ts } } catch { } }
+        if ($r.first_ts) {
+            $f = ConvertTo-UtcOffset $r.first_ts
+            if ($null -ne $f -and ($null -eq $minFirst -or $f -lt $minFirst)) { $minFirst = $f; $minFirstStr = $r.first_ts }
+        }
+        if ($r.last_ts) {
+            $l = ConvertTo-UtcOffset $r.last_ts
+            if ($null -ne $l -and ($null -eq $maxLast -or $l -gt $maxLast)) { $maxLast = $l; $maxLastStr = $r.last_ts }
+        }
     }
     $agTot = $agIn + $agOut + $agCr + $agCw
     $spanS = $null

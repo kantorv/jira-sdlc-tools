@@ -1,0 +1,7 @@
+Conversations for FTX-10
+
+  main-checkout sessions (1):
+    eeeeeeee-0010-4000-8000-000000000010  assigner session (creates the whole feature)
+
+=== attachment paths ===
+@WORK@/main/eeeeeeee-0010-4000-8000-000000000010.jsonl
