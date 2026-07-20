@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Harness stub — replays the one Jira call collect_feature makes (the sub-task
+# lookup) from $CF_FIXTURE_WORK/acli.json. Put this dir first on PATH.
+cat "$CF_FIXTURE_WORK/acli.json"

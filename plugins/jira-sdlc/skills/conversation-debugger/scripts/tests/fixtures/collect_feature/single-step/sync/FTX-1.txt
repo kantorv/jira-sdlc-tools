@@ -1,0 +1,17 @@
+Conversations for FTX-1
+
+  worktree sessions (2):
+    aaaaaaaa-0001-4000-8000-000000000001  executor + reviewer session
+    dddddddd-0004-4000-8000-000000000004  executor session (unexpected key)
+
+  main-checkout sessions (1):
+    bbbbbbbb-0002-4000-8000-000000000002  assigner session
+
+  unattributed (1):
+    cccccccc-0003-4000-8000-000000000003  no analyzable skill
+
+=== attachment paths ===
+@WORK@/wt/FTX-1/aaaaaaaa-0001-4000-8000-000000000001.jsonl
+@WORK@/wt/FTX-1/dddddddd-0004-4000-8000-000000000004.jsonl
+@WORK@/main/bbbbbbbb-0002-4000-8000-000000000002.jsonl
+@WORK@/other/cccccccc-0003-4000-8000-000000000003.jsonl

@@ -1,0 +1,98 @@
+{
+  "aggregate": {
+    "analyzed_count": 0,
+    "by_provenance": [],
+    "by_skill": [],
+    "by_tool": [],
+    "conversation_count": 0,
+    "issue_keys": null,
+    "models": null,
+    "sidechain_turns": 0,
+    "skill_turns": 0,
+    "skills": [],
+    "timeframe": {
+      "first_ts": null,
+      "last_ts": null,
+      "span_s": null
+    },
+    "tokens": {
+      "cache_read": 0,
+      "cache_write": 0,
+      "in": 0,
+      "out": 0,
+      "total": 0
+    },
+    "tool_calls": 0,
+    "tool_errors": 0
+  },
+  "children": [
+    {
+      "aggregate": {
+        "analyzed_count": 0,
+        "by_provenance": [],
+        "by_skill": [],
+        "by_tool": [],
+        "conversation_count": 0,
+        "issue_keys": null,
+        "models": null,
+        "sidechain_turns": 0,
+        "skill_turns": 0,
+        "skills": [],
+        "timeframe": {
+          "first_ts": null,
+          "last_ts": null,
+          "span_s": null
+        },
+        "tokens": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "in": 0,
+          "out": 0,
+          "total": 0
+        },
+        "tool_calls": 0,
+        "tool_errors": 0
+      },
+      "conversation_count": 0,
+      "conversations": [],
+      "key": "FTX-21",
+      "summary": "Unstarted child"
+    }
+  ],
+  "conversation_count": 0,
+  "feature": "FTX-20",
+  "feature_type": "multistep",
+  "parent": {
+    "aggregate": {
+      "analyzed_count": 0,
+      "by_provenance": [],
+      "by_skill": [],
+      "by_tool": [],
+      "conversation_count": 0,
+      "issue_keys": null,
+      "models": null,
+      "sidechain_turns": 0,
+      "skill_turns": 0,
+      "skills": [],
+      "timeframe": {
+        "first_ts": null,
+        "last_ts": null,
+        "span_s": null
+      },
+      "tokens": {
+        "cache_read": 0,
+        "cache_write": 0,
+        "in": 0,
+        "out": 0,
+        "total": 0
+      },
+      "tool_calls": 0,
+      "tool_errors": 0
+    },
+    "conversation_count": 0,
+    "conversations": [],
+    "key": "FTX-20",
+    "summary": "Empty multistep fixture parent"
+  },
+  "schema": "jira-sdlc/conversation-debugger/feature-report@3"
+}
