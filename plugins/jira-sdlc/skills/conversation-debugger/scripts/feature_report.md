@@ -27,10 +27,15 @@ Detection is the presence of a `children` array (equivalently a `@3` schema
 tag); `@1`/`@2` JSON has no `children` and renders through the **untouched**
 single-step path, so there is **no regression** on existing single-step reports.
 
-**It ships as a working posix+win contract pair** — `posix/feature_report.sh`
-(bash + `python3`) and `win/feature_report.ps1` take the same input, render the
-same markdown on stdout, and use the same exit codes. Callers pick the branch
-from their own runtime, matching `collect_feature`.
+**It ships in three pieces around one dual-use core** — the canonical
+implementation is `py/feature_report.py`, plain cross-platform Python that runs
+on Linux, macOS, and Windows-with-Python. `posix/feature_report.sh` is a thin
+shim that exec's it (kept as the POSIX entry point so the skill's existing
+`bash posix/…` dispatch is unchanged), and `win/feature_report.ps1` is a
+native-PowerShell port kept for **back-compat** so Windows hosts without Python
+still work. All entry points take the same input, render the same markdown on
+stdout, and use the same exit codes; callers pick by their runtime, matching
+`collect_feature`.
 
 ## Arguments and input
 
@@ -152,12 +157,13 @@ the one shared artifact is the JSON schema doc, which both halves point at.
 ## Script dispatch
 
 ```bash
-bash  posix/feature_report.sh  [<json-path>]   # Linux / macOS
+bash  posix/feature_report.sh  [<json-path>]   # Linux / macOS (shim over py/)
 ```
 
 ```powershell
-pwsh  win/feature_report.ps1   [<json-path>]                                   # PowerShell 7+
+pwsh  win/feature_report.ps1   [<json-path>]                                   # PowerShell 7+ (no Python needed)
 powershell -ExecutionPolicy Bypass -File win/feature_report.ps1 [<json-path>]  # Windows PowerShell 5.1
+python3 py/feature_report.py [<json-path>]                                     # any host WITH Python — the dual-use core, directly
 ```
 
 (paths relative to this file's directory, `conversation-debugger/scripts/`)
@@ -174,15 +180,24 @@ would show it verbatim. No measured number changes either way.
 
 ## Platform parity
 
-`feature_report` ships as a working **posix+win contract pair**:
-`posix/feature_report.sh` (a thin bash shim over a `python3` renderer, the same
-"advanced JSON parsing in python" pattern as `sync_conversations.sh`) and
-`win/feature_report.ps1` take the same input and render the same markdown with
-the same exit codes. Because it re-measures nothing — it only formats the
-collector's JSON — the two ports are byte-for-byte identical on the same input
-JSON (verified on single-step and multistep, populated and empty). Confirm with:
+`feature_report`'s canonical implementation is the dual-use Python core
+`py/feature_report.py` — importable and lintable (`ruff check` runs clean), no
+embedded heredoc. `posix/feature_report.sh` is a thin shim over it, and
+`win/feature_report.ps1` is the native-PowerShell back-compat port (no Python
+required). Because it re-measures nothing — it only formats the collector's
+JSON — the core and the `.ps1` are byte-for-byte identical on the same input.
+
+That parity is enforced by a **committed golden-file harness**,
+[`../tests/feature_report/`](../tests/feature_report/): fixed `collect_feature`
+JSON fixtures (single-step `@2` and multistep `@3`, populated and empty)
+rendered through the py core, the `.sh` shim, and the `.ps1`, each diffed
+against goldens captured from the pre-refactor renderer:
 
 ```bash
-diff <(bash posix/feature_report.sh some.json) \
-     <(pwsh win/feature_report.ps1 some.json)
+bash ../tests/feature_report/run_parity.sh   # from this directory
 ```
+
+Any byte of drift fails the run and prints the diff. Without a PowerShell host
+the `.ps1` legs are skipped and the run says so (`PARTIAL`) — rerun where
+`pwsh` exists (pwsh 7 runs on Linux) before releasing. This replaces the old
+manual `diff <(bash …) <(pwsh …)` spot-check.
