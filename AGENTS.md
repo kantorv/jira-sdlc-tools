@@ -152,6 +152,8 @@ The `ps1` engine needs `pwsh` (7 on Linux is enough) and skips with a loud note
 otherwise — a green run that skipped it has **not** verified the Windows port.
 `--update` re-captures the goldens; use it only when an output change is
 intended, so the golden diff in that commit documents the change.
+`skills/conversation-debugger/scripts/tests/README.md` explains the staging
+model and how to add a scenario or a harness for another script.
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
 

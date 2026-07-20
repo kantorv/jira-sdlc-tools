@@ -258,7 +258,8 @@ counted exactly once feature-wide). The goldens were captured from the
 pre-refactor collector, so a pass also certifies no behavior drifted in the
 py-core extraction; `--update` re-captures them from the py engine when an
 output change is *intended* — the golden diff in that commit then documents
-the change.
+the change. [`tests/README.md`](tests/README.md) covers the staging model,
+the fixture layout, and how to add a scenario.
 
 ### Live parity check (real feature, two hosts)
 
