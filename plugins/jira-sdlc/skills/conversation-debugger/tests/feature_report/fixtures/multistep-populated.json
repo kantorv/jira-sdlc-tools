@@ -1,0 +1,208 @@
+{
+  "schema": "jira-sdlc/conversation-debugger/feature-report@3",
+  "feature": "JST-200",
+  "feature_type": "multistep",
+  "parent": {
+    "key": "JST-200",
+    "summary": "Example multistep feature — parent story",
+    "conversation_count": 1,
+    "conversations": [
+      {
+        "uuid": "e5a61b23-5555-4abc-8def-000000000005",
+        "transcript": "/home/user/.claude/projects/main-checkout/e5a61b23-5555-4abc-8def-000000000005.jsonl",
+        "provenance": "main-checkout",
+        "skill": "jira-task-assigner",
+        "issue_key": "JST-200",
+        "key_status": "expected",
+        "models": ["claude-opus-4-8"],
+        "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 },
+        "skill_turns": 18,
+        "sidechain_turns": 0,
+        "tool_calls": 25,
+        "tool_errors": 1,
+        "tools": [
+          { "name": "Bash", "calls": 15, "errors": 1 },
+          { "name": "Read", "calls": 10, "errors": 0 }
+        ],
+        "wall_clock_s": 415.2,
+        "first_ts": "2026-07-10T09:00:00.000Z",
+        "last_ts": "2026-07-10T09:06:55.200Z",
+        "size_bytes": 152400
+      }
+    ],
+    "aggregate": {
+      "conversation_count": 1,
+      "analyzed_count": 1,
+      "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 },
+      "skill_turns": 18,
+      "sidechain_turns": 0,
+      "tool_calls": 25,
+      "tool_errors": 1,
+      "timeframe": {
+        "first_ts": "2026-07-10T09:00:00.000Z",
+        "last_ts": "2026-07-10T09:06:55.200Z",
+        "span_s": 415.2
+      },
+      "models": ["claude-opus-4-8"],
+      "skills": ["jira-task-assigner"],
+      "issue_keys": ["JST-200"],
+      "by_skill": [
+        { "skill": "jira-task-assigner", "conversations": 1,
+          "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 } }
+      ],
+      "by_provenance": [
+        { "provenance": "main-checkout", "conversations": 1,
+          "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 } }
+      ],
+      "by_tool": [
+        { "tool": "Bash", "conversations": 1, "calls": 15, "errors": 1 },
+        { "tool": "Read", "conversations": 1, "calls": 10, "errors": 0 }
+      ]
+    }
+  },
+  "children": [
+    {
+      "key": "JST-201",
+      "summary": "Example child feature — implemented and reviewed",
+      "conversation_count": 2,
+      "conversations": [
+        {
+          "uuid": "f8b92c34-6666-4bcd-9eff-000000000006",
+          "transcript": "/home/user/.claude/projects/worktree-JST-201/f8b92c34-6666-4bcd-9eff-000000000006.jsonl",
+          "provenance": "worktree",
+          "skill": "jira-task-executor",
+          "issue_key": "JST-201",
+          "key_status": "expected",
+          "models": ["claude-opus-4-8"],
+          "tokens": { "in": 70, "out": 52000, "cache_read": 5100000, "cache_write": 140000, "total": 5292070 },
+          "skill_turns": 30,
+          "sidechain_turns": 1,
+          "tool_calls": 40,
+          "tool_errors": 2,
+          "tools": [
+            { "name": "Bash", "calls": 28, "errors": 2 },
+            { "name": "Edit", "calls": 7, "errors": 0 },
+            { "name": "Read", "calls": 5, "errors": 0 }
+          ],
+          "wall_clock_s": 1980.5,
+          "first_ts": "2026-07-10T10:00:00.000Z",
+          "last_ts": "2026-07-10T10:33:00.500Z",
+          "size_bytes": 4718592
+        },
+        {
+          "uuid": "09c73d45-7777-4cde-8aff-000000000007",
+          "transcript": "/home/user/.claude/projects/worktree-JST-201/09c73d45-7777-4cde-8aff-000000000007.jsonl",
+          "provenance": "worktree",
+          "skill": "jira-task-reviewer",
+          "issue_key": "JST-201",
+          "key_status": "expected",
+          "models": ["claude-opus-4-8"],
+          "tokens": { "in": 22, "out": 9000, "cache_read": 900000, "cache_write": 41000, "total": 950022 },
+          "skill_turns": 11,
+          "sidechain_turns": 0,
+          "tool_calls": 14,
+          "tool_errors": 0,
+          "tools": [
+            { "name": "Read", "calls": 9, "errors": 0 },
+            { "name": "Bash", "calls": 5, "errors": 0 }
+          ],
+          "wall_clock_s": 208.7,
+          "first_ts": "2026-07-11T08:00:00.000Z",
+          "last_ts": "2026-07-11T08:03:28.700Z",
+          "size_bytes": 84322
+        }
+      ],
+      "aggregate": {
+        "conversation_count": 2,
+        "analyzed_count": 2,
+        "tokens": { "in": 92, "out": 61000, "cache_read": 6000000, "cache_write": 181000, "total": 6242092 },
+        "skill_turns": 41,
+        "sidechain_turns": 1,
+        "tool_calls": 54,
+        "tool_errors": 2,
+        "timeframe": {
+          "first_ts": "2026-07-10T10:00:00.000Z",
+          "last_ts": "2026-07-11T08:03:28.700Z",
+          "span_s": 79408.7
+        },
+        "models": ["claude-opus-4-8"],
+        "skills": ["jira-task-executor", "jira-task-reviewer"],
+        "issue_keys": ["JST-201"],
+        "by_skill": [
+          { "skill": "jira-task-executor", "conversations": 1,
+            "tokens": { "in": 70, "out": 52000, "cache_read": 5100000, "cache_write": 140000, "total": 5292070 } },
+          { "skill": "jira-task-reviewer", "conversations": 1,
+            "tokens": { "in": 22, "out": 9000, "cache_read": 900000, "cache_write": 41000, "total": 950022 } }
+        ],
+        "by_provenance": [
+          { "provenance": "worktree", "conversations": 2,
+            "tokens": { "in": 92, "out": 61000, "cache_read": 6000000, "cache_write": 181000, "total": 6242092 } }
+        ],
+        "by_tool": [
+          { "tool": "Bash", "conversations": 2, "calls": 33, "errors": 2 },
+          { "tool": "Read", "conversations": 2, "calls": 14, "errors": 0 },
+          { "tool": "Edit", "conversations": 1, "calls": 7, "errors": 0 }
+        ]
+      }
+    },
+    {
+      "key": "JST-202",
+      "summary": "Example child feature — not started yet",
+      "conversation_count": 0,
+      "conversations": [],
+      "aggregate": {
+        "conversation_count": 0,
+        "analyzed_count": 0,
+        "tokens": { "in": 0, "out": 0, "cache_read": 0, "cache_write": 0, "total": 0 },
+        "skill_turns": 0,
+        "sidechain_turns": 0,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "timeframe": { "first_ts": null, "last_ts": null, "span_s": null },
+        "models": [],
+        "skills": [],
+        "issue_keys": [],
+        "by_skill": [],
+        "by_provenance": [],
+        "by_tool": []
+      }
+    }
+  ],
+  "conversation_count": 3,
+  "aggregate": {
+    "conversation_count": 3,
+    "analyzed_count": 3,
+    "tokens": { "in": 132, "out": 82000, "cache_read": 8000000, "cache_write": 271000, "total": 8353132 },
+    "skill_turns": 59,
+    "sidechain_turns": 1,
+    "tool_calls": 79,
+    "tool_errors": 3,
+    "timeframe": {
+      "first_ts": "2026-07-10T09:00:00.000Z",
+      "last_ts": "2026-07-11T08:03:28.700Z",
+      "span_s": 83008.7
+    },
+    "models": ["claude-opus-4-8"],
+    "skills": ["jira-task-assigner", "jira-task-executor", "jira-task-reviewer"],
+    "issue_keys": ["JST-200", "JST-201"],
+    "by_skill": [
+      { "skill": "jira-task-assigner", "conversations": 1,
+        "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 } },
+      { "skill": "jira-task-executor", "conversations": 1,
+        "tokens": { "in": 70, "out": 52000, "cache_read": 5100000, "cache_write": 140000, "total": 5292070 } },
+      { "skill": "jira-task-reviewer", "conversations": 1,
+        "tokens": { "in": 22, "out": 9000, "cache_read": 900000, "cache_write": 41000, "total": 950022 } }
+    ],
+    "by_provenance": [
+      { "provenance": "main-checkout", "conversations": 1,
+        "tokens": { "in": 40, "out": 21000, "cache_read": 2000000, "cache_write": 90000, "total": 2111040 } },
+      { "provenance": "worktree", "conversations": 2,
+        "tokens": { "in": 92, "out": 61000, "cache_read": 6000000, "cache_write": 181000, "total": 6242092 } }
+    ],
+    "by_tool": [
+      { "tool": "Bash", "conversations": 3, "calls": 48, "errors": 3 },
+      { "tool": "Read", "conversations": 3, "calls": 24, "errors": 0 },
+      { "tool": "Edit", "conversations": 1, "calls": 7, "errors": 0 }
+    ]
+  }
+}

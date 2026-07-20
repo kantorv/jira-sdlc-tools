@@ -26,9 +26,12 @@
 # Output: the markdown report on stdout, nothing else. Read-only: it neither
 # writes files nor touches Jira/git.
 #
-# This is the Windows (PowerShell 5.1+) half of a posix+win contract pair; the
-# POSIX twin (../posix/feature_report.sh) is a full bash+python3 port with the
-# same CLI, stdout, and exit codes. Callers dispatch by their runtime.
+# This is the native-PowerShell (5.1+) BACK-COMPAT port, kept so no-Python
+# Windows hosts still work. The canonical implementation is the dual-use Python
+# core ../py/feature_report.py (which ../posix/feature_report.sh shims, and a
+# Windows host WITH Python can run directly); this port must stay byte-for-byte
+# identical to it — same CLI, stdout, exit codes — enforced by the golden-file
+# harness in ../../tests/feature_report/. Callers dispatch by their runtime.
 #
 # Exit: 0 = markdown emitted   1 = usage / unreadable-or-invalid JSON
 
