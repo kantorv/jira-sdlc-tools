@@ -28,7 +28,7 @@ immediately, no settings changed. Three working paths:
   Method 2, but untested live — see its own section below.
 
 > **Verification note.** The `.agent/skills` discovery path and its slash
-> invocation (`/<skill-name>`, no setting toggle) are **live-verified** —
+> invocation (`/<skill-name>`, no setting toggle) are **live-verified** (specifically tested on Antigravity versions 1.23.2 and 1.0.8; other releases are untested) —
 > confirmed by directly testing this plugin's skills in Antigravity's
 > native chat panel. This directly overrides an earlier version of this doc,
 > which claimed (from static analysis of the installed Antigravity 1.107.0
