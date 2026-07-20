@@ -37,32 +37,6 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
-## Other AI assistants
-
-The skills target the Claude skills spec, so `jira-sdlc` also works —
-natively or through the [Agent Skills](https://agentskills.io)
-adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
-Code, NVIDIA NIM (via fcc), Codex, Antigravity, OpenCode, Grok Build, and
-Pi. See [**Integrations**](INTEGRATIONS.md) for the platform-by-platform
-table — each one's spec, wiring, integration status, and a link to its
-detailed doc.
-
-| Platform | Specification | How it loads | Integration status | Verified | Documentation |
-|---|---|---|---|---|---|
-| [Claude Code](plugins/jira-sdlc/README.md) | Native Claude skills | plugin marketplace or `--plugin-dir` | First-class (reference) | ✅ | [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md) |
-| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
-| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ⚠️ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
-| [NVIDIA NIM](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) | Native Claude skills, via fcc | Anthropic-compatible model proxy → Claude Code loads the skills | Draft — architecture verified; live NIM run unverified | ❌ | [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) |
-| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified — sandbox caveats | ✅ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
-| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) | Verified | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
-| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | ❌ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | ⚠️ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | ❌ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
-
-**Verified:** ✅ first-class or verified in a live session · ⚠️ working, not
-run end-to-end here · ❌ draft, not yet exercised in this environment. See
-[Integrations](INTEGRATIONS.md) for the full status legend.
-
 ## Task lifecycle preview
 
 The three skills map to three phases of a task's life. The Jira states
@@ -180,6 +154,16 @@ Create two files in the root of the repo you're building features in:
 
 The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
 
+### Tokens to get
+
+Two API tokens go into `jira-sdlc-tools.local.env` — one for Jira, one for
+GitHub:
+
+| Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
+|---|---|---|---|---|---|
+| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | none for a classic token (site-wide); a scoped token needs the coarse `read:jira-work` + `write:jira-work` (granular per-issue scopes are rejected by acli) | No — use a **classic** token | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
+| `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+
 ## Repository layout
 
 ```
@@ -291,6 +275,33 @@ describe compatibility.
 
 [MIT](LICENSE), covering the whole repo, including the plugin.
 
+## Integrations
+
+The skills target the Claude skills spec, so `jira-sdlc` also works —
+natively or through the [Agent Skills](https://agentskills.io)
+adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
+Code, NVIDIA NIM (via fcc), Codex, Antigravity, OpenCode, Grok Build, Pi,
+and Kimi Code. See [**Integrations**](INTEGRATIONS.md) for the
+platform-by-platform table — each one's spec, wiring, integration status,
+and a link to its detailed doc.
+
+| Platform | Specification | How it loads | Integration status | Verified | Documentation |
+|---|---|---|---|---|---|
+| [Claude Code](plugins/jira-sdlc/README.md) | Native Claude skills | plugin marketplace or `--plugin-dir` | First-class (reference) | ✅ | [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md) |
+| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
+| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ⚠️ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
+| [NVIDIA NIM](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) | Native Claude skills, via fcc | Anthropic-compatible model proxy → Claude Code loads the skills | Draft — architecture verified; live NIM run unverified | ❌ | [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) |
+| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified — sandbox caveats | ✅ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
+| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) | Verified | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
+| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | ❌ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
+| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | ⚠️ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
+| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | ❌ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
+| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ⚠️ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
+
+**Verified:** ✅ first-class or verified in a live session · ⚠️ working, not
+run end-to-end here · ❌ draft, not yet exercised in this environment. See
+[Integrations](INTEGRATIONS.md) for the full status legend.
+
 ## Lab channel
 
 Everything above describes the **main** channel — this repo's default
@@ -300,15 +311,13 @@ core skills, reviewed, released, and tagged.
 The **lab** channel is the same plugin sourced from the `lab` branch
 instead. It's kept synced with the default branch, so it's never *behind*
 main — it's main plus work that hasn't landed yet: more advanced scripts,
-wider permissions, and two extra skills.
+wider permissions, and an extra skill.
 
-- **`jira-task-helper`** — the around-the-task plumbing the core three
-  leave out: a cross-worktree `status` dashboard, `cleanup` of worktrees
-  whose work is already merged, `dump_changes`, `sync_conversations`, and
-  `setup`.
 - **`conversation-debugger`** — post-mortems a recorded run of one of the
   three core skills against its own prose, verdicting each instruction as
-  followed / diverged / skipped / not-reached.
+  followed / diverged / skipped / not-reached. It also ships the
+  [**Feature report script**](https://github.com/kantorv/jira-sdlc-tools/blob/lab/plugins/jira-sdlc/skills/conversation-debugger/scripts/feature_report.md),
+  which rolls a whole feature's runs up into a single report.
 
 To install it, suffix the marketplace repo with `@lab`:
 
