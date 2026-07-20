@@ -24,12 +24,36 @@ Detection is a single Jira fetch (see [Feature-type detection](#feature-type-det
 below); the schema for both shapes is owned here and documented in
 [`../references/feature-report-schema.md`](../references/feature-report-schema.md).
 
-**It ships as a working posix+win contract pair** — the bash port
-(`posix/collect_feature.sh`) and the PowerShell port (`win/collect_feature.ps1`)
+**It ships as a working posix+win contract pair** — the POSIX side
+(`posix/collect_feature.sh`, a thin shim over the `py/collect_feature.py`
+dual-use core) and the PowerShell port (`win/collect_feature.ps1`)
 take the same argument, emit the same JSON/stderr split, and use the same exit
-codes (see [Platform parity](#platform-parity) below). Callers pick the branch
+codes (see [Architecture](#architecture-py-core--sh-shim--native-ps1) and
+[Platform parity](#platform-parity) below). Callers pick the branch
 from their own runtime: `bash posix/collect_feature.sh` on Linux/macOS,
 `pwsh`/`powershell win/collect_feature.ps1` on Windows.
+
+## Architecture — py core, sh shim, native ps1
+
+Three files, one behavior:
+
+- **`py/collect_feature.py` — the dual-use core.** All of the collector's
+  logic, in plain cross-platform Python (stdlib only), so it runs the same on
+  Linux, macOS, and Windows-with-Python — runnable directly
+  (`python3 py/collect_feature.py <KEY>`) or through the shim. Its module
+  docstring is the authoritative header.
+- **`posix/collect_feature.sh` — a thin shim.** Checks `python3` is on `PATH`
+  and `exec`s the core; it exists so the skill's documented POSIX entry point
+  (and every `bash …/posix/collect_feature.sh` call site) keeps working
+  unchanged.
+- **`win/collect_feature.ps1` — native PowerShell, kept for back-compat.** It
+  needs no Python, so Windows hosts without one still work. It is a full port,
+  not a shim; the parity harness below is what keeps it honest.
+
+The core shells out to its sibling scripts (`sync_conversations.sh`,
+`collect_run.sh`) in `posix/` by default, resolved relative to its own
+location; the `CF_SCRIPT_DIR` environment variable overrides that sibling
+directory — the same seam the golden-file harness uses to substitute stubs.
 
 ## Arguments
 
@@ -203,13 +227,41 @@ an unsigned `.ps1` unless the machine policy is already
 ## Platform parity
 
 `collect_feature` ships as a working **posix+win contract pair**:
-`posix/collect_feature.sh` (bash + `jq` via `collect_run` + `python3` for the
-nested roll-up, mirroring `collect_run.sh` / `sync_conversations.sh`) and
+`posix/collect_feature.sh` (the shim over the `py/collect_feature.py` core) and
 `win/collect_feature.ps1` take the same argument and emit the same JSON/stderr
 split with the same exit codes. Because the JSON's numbers are each host's
 `collect_run` output verbatim, a raw byte-diff of the two collectors' JSON is
 **not** the parity check: the `wall_clock_s` field (and nothing else) traces to
 the `collect_run.sh` vs `collect_run.ps1` precision difference noted above.
+
+### Golden-file harness (the committed parity check)
+
+The normalized-diff check is committed as
+[`tests/run_collect_feature_golden.sh`](tests/run_collect_feature_golden.sh):
+
+```bash
+bash tests/run_collect_feature_golden.sh          # all engines: sh, py, ps1
+bash tests/run_collect_feature_golden.sh ps1      # one engine (ps1 needs pwsh — pwsh 7 on Linux is enough)
+```
+
+It replays captured fixtures (canned `sync_conversations` listings,
+`collect_run` KEY=VALUE blocks, and the `acli` sub-task lookup) through stub
+siblings, so the collector's real orchestration, dedup, and aggregation run
+end to end on numbers that never move mid-run, then diffs the normalized JSON
+byte-for-byte against the committed goldens under
+`tests/fixtures/collect_feature/`. Normalization is exactly the live-check
+recipe below — `jq -S` with `wall_clock_s` nulled — plus canonical number
+formatting and a staging-path placeholder. The scenarios cover single-step
+(`feature-report@2`) and multistep (`feature-report@3`), each populated and
+empty, and assert the multistep parent-priority dedup (the assigner session
+counted exactly once feature-wide). The goldens were captured from the
+pre-refactor collector, so a pass also certifies no behavior drifted in the
+py-core extraction; `--update` re-captures them from the py engine when an
+output change is *intended* — the golden diff in that commit then documents
+the change.
+
+### Live parity check (real feature, two hosts)
+
 Verify parity on quiescent data by comparing the two collectors' JSON with
 `wall_clock_s` normalized out, e.g.:
 
