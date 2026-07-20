@@ -289,14 +289,14 @@ and a link to its detailed doc.
 |---|---|---|---|---|---|
 | [Claude Code](plugins/jira-sdlc/README.md) | Native Claude skills | plugin marketplace or `--plugin-dir` | First-class (reference) | ✅ | [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md) |
 | [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
-| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ⚠️ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
+| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
 | [NVIDIA NIM](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) | Native Claude skills, via fcc | Anthropic-compatible model proxy → Claude Code loads the skills | Draft — architecture verified; live NIM run unverified | ❔ | [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) |
-| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified — sandbox caveats | ✅ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
+| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
 | [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) | Verified | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
 | [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | ❔ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | ⚠️ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
+| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
 | [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | ❔ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
-| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ⚠️ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
+| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
 
 **Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
