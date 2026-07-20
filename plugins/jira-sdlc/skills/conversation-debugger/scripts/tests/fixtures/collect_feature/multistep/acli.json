@@ -1,0 +1,2 @@
+Viewing work item FTX-10
+{"key":"FTX-10","fields":{"summary":"Multistep fixture parent","subtasks":[{"key":"FTX-11","fields":{"summary":"Child one"}},{"key":"FTX-12","fields":{"summary":"Child two"}}]}}

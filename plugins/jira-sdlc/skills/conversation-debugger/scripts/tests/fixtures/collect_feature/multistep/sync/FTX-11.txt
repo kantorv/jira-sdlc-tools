@@ -1,0 +1,11 @@
+Conversations for FTX-11
+
+  worktree sessions (1):
+    ffffffff-0011-4000-8000-000000000011  executor session
+
+  main-checkout sessions (1):
+    eeeeeeee-0010-4000-8000-000000000010  assigner session (mentions every key)
+
+=== attachment paths ===
+@WORK@/main/eeeeeeee-0010-4000-8000-000000000010.jsonl
+@WORK@/wt/FTX-11/ffffffff-0011-4000-8000-000000000011.jsonl

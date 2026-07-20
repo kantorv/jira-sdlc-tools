@@ -1,0 +1,13 @@
+Conversations for FTX-12
+
+  worktree sessions (2):
+    99999999-0012-4000-8000-000000000012  executor session
+    88888888-0013-4000-8000-000000000013  reviewer session
+
+  main-checkout sessions (1):
+    eeeeeeee-0010-4000-8000-000000000010  assigner session (mentions every key)
+
+=== attachment paths ===
+@WORK@/main/eeeeeeee-0010-4000-8000-000000000010.jsonl
+@WORK@/wt/FTX-12/99999999-0012-4000-8000-000000000012.jsonl
+@WORK@/wt/FTX-12/88888888-0013-4000-8000-000000000013.jsonl

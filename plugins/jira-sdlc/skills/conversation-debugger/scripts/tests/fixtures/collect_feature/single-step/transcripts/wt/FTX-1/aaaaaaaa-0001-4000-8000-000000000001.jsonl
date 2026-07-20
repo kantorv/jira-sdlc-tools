@@ -1,0 +1,3 @@
+{"type":"user","text":"<command-name>/jira-sdlc:jira-task-executor</command-name>"}
+{"type":"assistant","text":"working"}
+{"type":"user","text":"<command-name>/jira-task-reviewer</command-name>"}
