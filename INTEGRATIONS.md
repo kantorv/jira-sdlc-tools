@@ -15,6 +15,7 @@
 | [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
 | [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
 | [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
+| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
 
 **Status legend:**
 - **First-class** — the reference platform the skills are written for.
@@ -25,7 +26,7 @@
 
 ## The two wiring mechanisms
 
-**Mechanism A — native Claude skills wiring.** The platform reads `SKILL.md` and plugin configuration from a skills path named in its own config file, or from the `~/.claude/` tree it shares with Claude Code. No copy step, no per-skill adaptation file — the skill frontmatter (`disable-model-invocation: true` included) is read as shipped. Claude Code, Cursor, Kilo Code, OpenCode, Grok Build, and Pi all live in this family.
+**Mechanism A — native Claude skills wiring.** The platform reads `SKILL.md` and plugin configuration from a skills path named in its own config file, or from the `~/.claude/` tree it shares with Claude Code. No copy step, no per-skill adaptation file — the skill frontmatter (`disable-model-invocation: true` included) is read as shipped. Claude Code, Cursor, Kilo Code, OpenCode, Grok Build, Pi, and Kimi Code all live in this family.
 
 **Mechanism B — Agent Skills (agentskills.io) adaptation.** A platform that follows the agentskills.io spec instead expects a manual **copy** of the skill folders into a platform-specific skills root — `.codex/skills/` for Codex, `.agent/skills/` for Antigravity — plus a per-skill `agents/openai.yml` that reproduces `disable-model-invocation: true`. That flag is a Claude Code frontmatter field and is not part of the agentskills.io spec, so the adaptation file is how the same "explicit-only invocation" intent is re-expressed on a platform that wouldn't otherwise see it. Codex and Antigravity live in this family.
 
