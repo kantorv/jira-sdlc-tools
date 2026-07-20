@@ -275,13 +275,13 @@ describe compatibility.
 
 [MIT](LICENSE), covering the whole repo, including the plugin.
 
-## Integrations
+## Platform Compatibility Matrix
 
 The skills target the Claude skills spec, so `jira-sdlc` also works —
 natively or through the [Agent Skills](https://agentskills.io)
 adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
 Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
-and Kimi Code. See [**Integrations**](INTEGRATIONS.md) for the
+and Kimi Code. See [**Platform Compatibility Matrix**](INTEGRATIONS.md) for the
 platform-by-platform table — each one's spec, wiring, integration status,
 and a link to its detailed doc.
 
@@ -299,7 +299,7 @@ and a link to its detailed doc.
 
 **Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
-yet exercised in this environment. See [Integrations](INTEGRATIONS.md) for the
+yet exercised in this environment. See [Platform Compatibility Matrix](INTEGRATIONS.md) for the
 full status legend.
 
 ## Lab channel

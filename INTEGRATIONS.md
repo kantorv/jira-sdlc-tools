@@ -1,4 +1,4 @@
-# Integrations
+# Platform Compatibility Matrix
 
 `jira-sdlc` is built to the [Claude skills](https://docs.claude.com/en/docs/claude-code/skills) specification. Some AI assistants load that spec natively; others reach it through the [Agent Skills](https://agentskills.io) adaptation. This page is the hub: a summary of every supported platform, which spec it uses, how it loads the skills, how mature the integration is, and where its detailed doc lives.
 
