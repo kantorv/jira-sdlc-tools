@@ -2,8 +2,25 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Claude Code plugin marketplace for Jira-tracked, parallel feature
-delivery via git worktrees.
+An SDLC layer for AI coding assistants; using JIRA API, Gitflow model,
+git worktrees as isolated per-issue workspaces.
+
+## ⚠️ Caution
+
+**This plugin acts on your behalf in both git and Jira.** Given your
+credentials, it will commit, create and push branches, open and update
+pull requests, and take the other actions needed to follow the
+[`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
+create, update, transition, and comment on issues in your Jira project.
+Those actions are visible to your team and land under your name.
+
+Use it with caution: point it at a project you're comfortable having
+changed, and read [Configuration](#either-way) before the first run so
+you know which repo and which Jira project it's wired to.
+
+What it deliberately never does on its own — merging into your base
+branch, deleting Jira issues, resolving conflicts — is listed in
+[Safety model](plugins/jira-sdlc/README.md#safety-model).
 
 ## What's here
 
@@ -109,7 +126,7 @@ GitHub:
 
 | Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
 |---|---|---|---|---|---|
-| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | none for a classic token (site-wide); a scoped token needs the coarse `read:jira-work` + `write:jira-work` (granular per-issue scopes are rejected by acli) | No — use a **classic** token | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
+| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | N/A (granular per-issue scopes are rejected by acli) | No — use non scoped **API token** | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
 | `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
 
 ### Helper tools
