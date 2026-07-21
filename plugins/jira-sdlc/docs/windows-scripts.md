@@ -34,12 +34,15 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 | `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `acli` is logged in as? Compares **accountId** (not email — email is hidden on others' assignee objects). Run **after** `jira_acli_login`. Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
 | `acli-list-subtasks` | `skills/_shared/scripts/win/acli-list-subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `acli workitem view --json` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<acli code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-acli-reference.md` §10 |
 
-> **Note on `acli-list-subtasks`:** unlike the five above, its sibling is
-> `skills/_shared/scripts/posix/acli-list-subtasks.py` (**python**, not a bash
-> original), so it is the one `win/` port with **no `.sh` counterpart** and is
-> outside the bash↔ps1 parity loop. It is also the port that *most* benefits
-> from existing: on default Windows 11 `python3` is a Store stub (see "No
-> python, no jq" below), so the `.py` cannot run there — the `.ps1` can.
+> **Note on `acli-list-subtasks`:** its POSIX sibling is now
+> `skills/_shared/scripts/posix/acli-list-subtasks.sh` — a bash original like
+> the other five, in the normal bash↔ps1 parity loop (the old python version
+> is kept for reference at `docs/examples/acli-list-subtasks.py`, outside the
+> active toolset). One asymmetry remains: the bash twin requires `jq` to
+> address the nested per-sub-task fields reliably (see the script's own
+> comment), while the `.ps1` port still needs neither `python3` nor `jq` (see
+> "No python, no jq" below) — so on a `jq`-less POSIX box, the `.ps1` port run
+> under `pwsh` is still the one that works.
 
 ## PowerShell 5.1 + 7 compatibility (load-bearing)
 
@@ -123,7 +126,7 @@ side-step it.
   twin must stay in sync" — the parity contract, the `STATUSCHECK_FORCE_OS`-forced
   bash↔pwsh diff loop, and the residual Windows-only surface a Linux+pwsh diff
   can't reproduce.
-- `skills/_shared/jira-acli-reference.md` §10 — `acli-list-subtasks.py` /
+- `skills/_shared/jira-acli-reference.md` §10 — `acli-list-subtasks.sh` /
   `acli-create-parent-and-subtasks.sh` operator helpers (the ps1 twin is the
   Windows form of the former).
 - `skills/_shared/project-config.md` — the `jira-sdlc-tools.env` /

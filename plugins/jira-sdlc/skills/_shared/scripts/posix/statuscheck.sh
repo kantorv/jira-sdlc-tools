@@ -323,16 +323,36 @@ else
 fi
 
 # --- gh auth (needed by 'gh pr create') ----------------------------------
+# Log gh in from a persistent PAT session at the very start of the run, so the
+# whole conversation holds this session (no per-command token prefix, no
+# logout). GITHUB_PAT_TOKEN is a secret, machine-specific value → it lives only
+# in the gitignored jira-sdlc-tools.local.env (never the tracked
+# jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token → FAIL with
+# a remedy, and the skill stops like any other FAIL row. Accepted tradeoff: this
+# writes ~/.config/gh/hosts.yml, which is global to the OS user, so it overwrites
+# the developer's own gh session and is not logged out afterward — see
+# plugins/jira-sdlc/docs/github/ (JST-126).
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
-    "install it (https://cli.github.com) and run 'gh auth login', then $RERUN."
+    "install it (https://cli.github.com), then $RERUN."
 else
-  GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
-  if [ -n "$GH_LINE" ]; then
-    row gh_auth OK "$GH_LINE"
+  GH_PAT=$(cfg GITHUB_PAT_TOKEN || true)
+  # cfg parses rather than sources the env file, so a quoted value keeps its
+  # quotes — strip one surrounding pair before handing the token to gh.
+  GH_PAT=${GH_PAT#\"}; GH_PAT=${GH_PAT%\"}
+  GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
+  if [ -z "$GH_PAT" ]; then
+    row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
+      "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
   else
-    row gh_auth FAIL "gh is installed but not authenticated" \
-      "run 'gh auth login', then $RERUN."
+    printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token >/dev/null 2>&1 || true
+    GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
+    if [ -n "$GH_LINE" ]; then
+      row gh_auth OK "$GH_LINE (PAT session login)"
+    else
+      row gh_auth FAIL "gh auth login --with-token with GITHUB_PAT_TOKEN did not produce an authenticated session" \
+        "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT, then $RERUN."
+    fi
   fi
 fi
 

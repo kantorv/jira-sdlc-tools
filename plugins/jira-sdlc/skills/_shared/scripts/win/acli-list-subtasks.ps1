@@ -1,9 +1,9 @@
-# acli-list-subtasks.ps1 — Windows (PowerShell 5.1+) port of acli-list-subtasks.py.
+# acli-list-subtasks.ps1 — Windows (PowerShell 5.1+) port of acli-list-subtasks.sh.
 # Lists a Jira parent's sub-tasks. `acli jira workitem view <KEY> --json` omits
 # `subtasks` by default, so this requests just `subtasks,issuetype` and prints
-# each sub-task's key + summary. Mirrors the python helper's behavior and output
+# each sub-task's key + summary. Mirrors the bash helper's behavior and output
 # (same parent/env/json flags, same text + JSON formats, same exit codes), but
-# parses acli's JSON with PowerShell's built-in ConvertFrom-Json — no python/jq.
+# parses acli's JSON with PowerShell's built-in ConvertFrom-Json — no jq needed.
 #
 # Requires `acli` authenticated (see ../jira-acli-reference.md §0).
 # Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with -EnvPath or
