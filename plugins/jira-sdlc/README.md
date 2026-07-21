@@ -276,7 +276,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   └── _shared/
         │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — lean call-site reference (detailed companion: docs/JIRA-ACLI.md)
         │       ├── jira-api-reference.md    # direct REST API (no acli) — verified curl examples
-        │       ├── project-config.md        # ← reference: describes each .env variable
+        │       ├── project-config.md        # ← reference: describes each .env variable + the rules file
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
         │           └── acli-list-subtasks.sh               # list a parent's sub-tasks via acli view --json
@@ -287,6 +287,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
         │   └── SDLC.md            # the branching/release policy these skills assume
+        ├── JIRA-SDLC-TOOLS-RULES.example.md  # template: optional per-project rules file
         ├── LICENSE
         └── README.md
 ```
@@ -297,12 +298,14 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in two files in the project root:
+All project-specific values live in two files in the project root, with an
+optional third for conventions that aren't values:
 
 | File | Purpose | Committed? |
 |------|---------|------------|
 | `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
 | `jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
+| `JIRA-SDLC-TOOLS-RULES.md` | *Optional.* Prose instructions for the three skills — see [Project rules file](#project-rules-file) below | ✅ Yes |
 
 See `skills/_shared/project-config.md` for a description of each variable.
 
@@ -323,6 +326,39 @@ Nothing else under `skills/` should need editing. It covers:
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
 Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
+
+### Project rules file
+
+`JIRA-SDLC-TOOLS-RULES.md` is the **optional** prose counterpart to the
+`.env` files. Where those carry *values*, it carries the *behavioural
+conventions* between your codebase and these skills — the things a
+generic plugin can't know:
+
+> *"Don't transition to `<STATUS_IN_REVIEW>` at the end — opening the PR
+> is enough, our Jira automation moves the card."*
+> *"Transition an approved issue to `<STATUS_DONE>` yourself; we have no
+> merge automation connected."*
+
+It lives in the project root next to `jira-sdlc-tools.env`, is committed
+(team-shared, unlike `jira-sdlc-tools.local.env`), and is plain markdown
+with four fixed H2 sections — `## COMMON`, then one per skill
+(`## JIRA-TASK-ASSIGNER`, `## JIRA-TASK-EXECUTOR`,
+`## JIRA-TASK-REVIEWER`). Any of them may be empty.
+
+Every skill reads it at the very start of a run, adopts `## COMMON` plus
+its own section, ignores the other two — and **where a rule and a skill
+instruction disagree, the rule wins**; overriding generic defaults with
+what your project actually does is the whole point. If the file doesn't
+exist, the skills carry on silently: it's genuinely optional, and no
+existing setup needs one.
+
+Start from the template that ships with the plugin:
+
+```bash
+cp "${CLAUDE_PLUGIN_ROOT}/JIRA-SDLC-TOOLS-RULES.example.md" JIRA-SDLC-TOOLS-RULES.md
+```
+
+Full format and load contract: `skills/_shared/project-config.md`.
 
 ### Generating the Jira API token
 

@@ -22,6 +22,12 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
+**Project rules — read these first.** If `JIRA-SDLC-TOOLS-RULES.md` exists
+in the project root, adopt its `## COMMON` + `## JIRA-TASK-REVIEWER`
+sections for this run (ignore the other two); on any conflict with an
+instruction here, that file wins. Absent → continue silently, it's
+optional. Contract: `../_shared/project-config.md`.
+
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
 Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,

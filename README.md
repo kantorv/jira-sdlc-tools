@@ -179,6 +179,13 @@ Create two files in the root of the repo you're building features in:
 1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
 2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
 
+Optionally, a third: **`JIRA-SDLC-TOOLS-RULES.md`** — prose instructions
+for the three skills (project conventions rather than values), committed
+like the first file. Skip it unless you have something to say; the skills
+run unchanged without it. Template:
+[`plugins/jira-sdlc/JIRA-SDLC-TOOLS-RULES.example.md`](plugins/jira-sdlc/JIRA-SDLC-TOOLS-RULES.example.md),
+and [this repo's own](JIRA-SDLC-TOOLS-RULES.md) as a worked example.
+
 The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
 
 ## Repository layout
@@ -193,10 +200,12 @@ jira-sdlc-tools/
 │       │   └── plugin.json
 │       ├── skills/
 │       ├── docs/
+│       ├── JIRA-SDLC-TOOLS-RULES.example.md  # template — optional per-project rules file
 │       ├── LICENSE
 │       └── README.md           # full plugin documentation
 ├── jira-sdlc-tools.env         # template — team-shared settings (committed)
 ├── jira-sdlc-tools.local.env.example  # template — machine-specific settings (gitignored)
+├── JIRA-SDLC-TOOLS-RULES.md    # this repo's own rules for the three skills (committed)
 ├── AGENTS.md                   # repo-wide instructions for AI coding agents
 ├── CLAUDE.md                   # imports AGENTS.md + Claude Code–specific notes
 ├── LICENSE

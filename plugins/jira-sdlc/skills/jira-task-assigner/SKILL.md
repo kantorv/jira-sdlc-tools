@@ -32,6 +32,12 @@ project. Given a task description from the user ($ARGUMENTS):
   top-level issue or a Sub-task — this keeps the branch-parsing regex in
   step 2 working no matter which branch someone checks out later.
 
+**Project rules — read these first.** If `JIRA-SDLC-TOOLS-RULES.md` exists
+in the project root, adopt its `## COMMON` + `## JIRA-TASK-ASSIGNER`
+sections for this run (ignore the other two); on any conflict with an
+instruction here, that file wins. Absent → continue silently, it's
+optional. Contract: `../_shared/project-config.md`.
+
 ## 1. Discovery and healthcheck
 
 **Script dispatch — settle this before running any script below.** Every

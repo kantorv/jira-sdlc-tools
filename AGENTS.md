@@ -22,6 +22,15 @@ table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
 
+The one file exempt from this is `JIRA-SDLC-TOOLS-RULES.md` in this repo's
+root — the optional per-project rules file the skills read at the start of
+every run (contract:
+`plugins/jira-sdlc/skills/_shared/project-config.md`). It's a
+*destination-repo* file that happens to live here because this repo is also
+one of its own destinations, so real values belong in it. Its shipped
+template, `plugins/jira-sdlc/JIRA-SDLC-TOOLS-RULES.example.md`, is **not**
+exempt and must stay generic.
+
 ## Editing a skill — keep it small but effective
 
 The three `SKILL.md` files under `plugins/jira-sdlc/skills/` are prompts
@@ -114,7 +123,14 @@ assuming you're done:
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
   README for any new cross-references before assuming a rename is
-  isolated to one file.
+  isolated to one file. A rename also breaks the rules file **silently**:
+  its `## JIRA-TASK-<ROLE>` headings are the skill's own name upper-cased,
+  and a skill that doesn't find its heading just adopts `## COMMON` and
+  carries on, so nothing errors. Update the headings in
+  `JIRA-SDLC-TOOLS-RULES.md`, its template
+  (`plugins/jira-sdlc/JIRA-SDLC-TOOLS-RULES.example.md`), the section
+  table in `skills/_shared/project-config.md`, and the one-line pointer
+  each `SKILL.md` carries near its top.
 
 ## Validating a change
 

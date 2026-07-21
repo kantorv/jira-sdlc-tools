@@ -52,6 +52,12 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Project rules — read these first.** If `JIRA-SDLC-TOOLS-RULES.md` exists
+in the project root, adopt its `## COMMON` + `## JIRA-TASK-EXECUTOR`
+sections for this run (ignore the other two); on any conflict with an
+instruction here, that file wins. Absent → continue silently, it's
+optional. Contract: `../_shared/project-config.md`.
+
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
 Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,

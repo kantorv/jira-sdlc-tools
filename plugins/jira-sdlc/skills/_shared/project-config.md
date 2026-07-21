@@ -1,8 +1,9 @@
 # Project configuration reference
 
 This file describes every variable used in `jira-sdlc-tools.env` and
-`jira-sdlc-tools.local.env` (the `.env` files in the project root). All
-project-specific values live in these two files — nothing else under `skills/`
+`jira-sdlc-tools.local.env` (the `.env` files in the project root), plus the
+optional `JIRA-SDLC-TOOLS-RULES.md` that sits beside them. All
+project-specific values live in these files — nothing else under `skills/`
 should need editing after they're filled in.
 
 Each skill's "Conventions used below" section names the tokens it needs
@@ -20,6 +21,11 @@ describe what each variable means.
 Both files are sourced by tools that need them. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
 define the same variable (though they define disjoint sets by convention).
+
+A third, **optional** file may sit beside them —
+`JIRA-SDLC-TOOLS-RULES.md`, prose rather than values. It is described in
+[Project rules file](#project-rules-file--jira-sdlc-tools-rulesmd) at the
+end of this document.
 
 ## Required (in `jira-sdlc-tools.env`)
 
@@ -172,3 +178,59 @@ JIRA_TOKEN            = ATATT3xFfGF0…
 #JIRA_REVIEWER_EMAIL   = reviewer@example.com
 #JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
 ```
+
+## Project rules file — `JIRA-SDLC-TOOLS-RULES.md`
+
+The prose counterpart to the two `.env` files: where those hold *values*
+(keys, branch names, status names), this holds the *behavioural
+conventions* between one codebase and these skills — "opening a PR is
+enough, never transition to `<STATUS_IN_REVIEW>`", "transition to
+`<STATUS_DONE>` yourself once the review approves", "our generated
+directories are never hand-edited". It ships with the **destination
+repo**, not with the plugin.
+
+| | |
+|---|---|
+| Location | project root, next to `jira-sdlc-tools.env` |
+| Committed? | **Yes** — team-shared, unlike `jira-sdlc-tools.local.env` |
+| Required? | **No.** Absent is the normal case and never an error |
+
+Start one by copying the template that ships in the plugin:
+
+```bash
+cp "${CLAUDE_PLUGIN_ROOT}/JIRA-SDLC-TOOLS-RULES.example.md" JIRA-SDLC-TOOLS-RULES.md
+```
+
+### Format
+
+Markdown with exactly these four H2 sections, in this order. Any of them
+may be empty; content is free-form prose instructions.
+
+| Section | Applies to |
+|---|---|
+| `## COMMON` | all three skills |
+| `## JIRA-TASK-ASSIGNER` | `jira-task-assigner` only |
+| `## JIRA-TASK-EXECUTOR` | `jira-task-executor` only |
+| `## JIRA-TASK-REVIEWER` | `jira-task-reviewer` only |
+
+### Load contract
+
+Each skill reads the file at the very start of its run — before its own
+discovery/healthcheck work, so a project rule can shape the run from its
+first step — and then:
+
+1. **File absent** → proceed silently. No warning, no failure; it is optional.
+2. **File present** → adopt `## COMMON` plus your own named section, and
+   ignore the other two skills' sections. They belong to skills that
+   aren't running.
+3. Treat what you adopt as project conventions layered on top of the
+   skill's own logic, and **where a rule and a `SKILL.md` instruction
+   disagree, the rule wins** — the project knows its board, branches, and
+   codebase; the skill only carries the generic default. Overriding skill
+   behaviour is the entire point of the file, so a rule that contradicts a
+   step is working as intended, not a conflict to resolve.
+
+The read is deliberately prose and not a script: it is a single
+conditional file read, so each skill just reads the path with its own
+file-reading tool and there is no POSIX/Windows script pair to keep in
+sync.
