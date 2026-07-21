@@ -49,7 +49,7 @@ Three skills, three jobs:
 | Skill | Runs | Does |
 |---|---|---|
 | `jira-task-assigner` | Once, on a task description | Plans: creates the Jira issue(s), decides single-step vs. multistep, creates branches and `git worktree`s, decides how each piece should land in git. Never writes code. |
-| `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, Jira status transition, investigation, implementation, tests, commit, push, PR. |
+| `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, investigation, implementation, tests, commit, push, PR. |
 | `jira-task-reviewer` | Once, on the parent issue | Reviews: iterates over each In Review sub-task PR, approves or requests changes per-PR (continuing past rejections), posts findings to Jira, and reviews the aggregate parent PR. Never merges anything — all merges are manual. |
 
 ## Quick start
@@ -163,19 +163,28 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 `Story`, `Task`, and `Bug` are the top-level types (peers), with
 `Sub-task` underneath.
 
-**Jira status flow across the three skills.** Each skill drives the issue's
-Kanban status explicitly with the four status names from
-`jira-sdlc-tools.env`, so board progress reflects the work without
-relying on opaque GitHub-for-Jira transition rules:
-- New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
-  (Jira's default initial status for new issues — no explicit move needed).
-- `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
-  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
-  the sub-task's PR (step 11, dedicated-branch path only).
-- `jira-task-reviewer` transitions a rejected sub-task back to
-  `<STATUS_IN_PROGRESS>` (step 3d, `REQUEST_CHANGES` path) so the executor
-  can pick it up again. It never transitions anything to `<STATUS_DONE>` —
-  GitHub-for-Jira automation handles that when the human merges the PRs.
+**Jira status flow across the three skills.** **No skill moves a card by
+itself.** The four status names in `jira-sdlc-tools.env` exist so that
+*something* can name the state it moves an issue to — a rule in
+`JIRA-SDLC-TOOLS-RULES.md`, your own automation, GitHub-for-Jira, or a
+person. A skill transitions an issue only when a project rule (or you, in
+chat) asks it to.
+
+The reasoning: status is a *shared* field. Humans, GitHub-for-Jira, and
+Jira Automation all write it, and none of them can tell a card an agent
+moved from one a person moved — so a transition nobody asked for is a
+claim your team can't audit.
+
+Two consequences worth knowing before you wire up a board:
+- The skills read status in exactly one place: `jira-task-reviewer`
+  reviews only sub-tasks sitting in `<STATUS_IN_REVIEW>`. Since nothing
+  writes that by default, something else must, or the reviewer finds
+  nothing to review.
+- Earlier versions made three transitions automatically (executor →
+  `<STATUS_IN_PROGRESS>` on pickup and `<STATUS_IN_REVIEW>` on PR open,
+  reviewer → `<STATUS_IN_PROGRESS>` on reject). That behaviour is now a
+  copy-paste rule in [`docs/JIRA-STATES.md`](docs/JIRA-STATES.md), and the
+  shipped template carries it commented out.
 
 ## Prerequisites
 
@@ -286,7 +295,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
-        │   ├── JIRA-STATES.md        # who moves a card — the 3 agent-initiated transitions
+        │   ├── JIRA-STATES.md        # who moves a card, and the opt-in transition rules
         │   └── SDLC.md            # the branching/release policy these skills assume
         ├── JIRA-SDLC-TOOLS-RULES.example.md  # template: optional per-project rules file
         ├── LICENSE
@@ -335,9 +344,10 @@ Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's
 conventions* between your codebase and these skills — the things a
 generic plugin can't know:
 
-> *"Don't transition to `<STATUS_IN_REVIEW>` at the end — opening the PR
-> is enough, our Jira automation moves the card."*
-> *"Transition an approved issue to `<STATUS_DONE>` yourself; we have no
+> *"Move the issue to `<STATUS_IN_PROGRESS>` when you pick it up and
+> `<STATUS_IN_REVIEW>` once the PR is open — our board is how the team
+> sees progress."*
+> *"Transition an approved issue to `<STATUS_DONE>` yourself — we have no
 > merge automation connected."*
 
 It lives in the project root next to `jira-sdlc-tools.env`, is committed
@@ -557,8 +567,11 @@ real task, not discovering mid-failure:
 **A sub-task with an open PR is not being reviewed by `jira-task-reviewer`.**
 The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g., "In Review"). A sub-task still in `<STATUS_IN_PROGRESS>` (or any other
-status) is silently skipped. Ask the executor to transition it (or move it
-manually) and re-run the reviewer.
+status) is silently skipped — and **no skill writes that status by
+default**, so this is the expected state until something does. Move it
+manually, or add the executor transition rule from
+[`docs/JIRA-STATES.md`](docs/JIRA-STATES.md) to `JIRA-SDLC-TOOLS-RULES.md`
+so the executor sets it on PR open. Then re-run the reviewer.
 
 **I fixed a sub-task that the reviewer rejected, but re-running still shows
 changes requested.**

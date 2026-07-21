@@ -14,7 +14,8 @@ jobs:
     # spinning one up just to `exit 0`. Mirrors the job-level guard in
     # jira_issue_transition_on_branch.yml. head_ref is set on pull_request
     # events and equals github.event.pull_request.head.ref used below.
-    if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+    if: false
+    #if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
 
     steps:
