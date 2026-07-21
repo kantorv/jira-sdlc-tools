@@ -78,3 +78,45 @@ Then check the change against the skill-writing guidance in AGENTS.md —
 a `SKILL.md` edit that is correct but bloated, buries a rule mid-file, or
 adds an ALL-CAPS imperative where one clause of reasoning would
 generalize better is a legitimate finding here, not a nitpick.
+
+### When you approve a PR: merge it, then close the issue
+
+Your default is to never merge, and to leave `<STATUS_DONE>` to a human or
+to GitHub-for-Jira. In this repo, do both yourself. Work in this order —
+the status has to describe what actually happened, so the merge has to
+land before the issue can be called done:
+
+1. **Check it's mergeable** —
+   `gh pr view <prNumber> --json mergeable,mergeStateStatus`. `UNKNOWN`
+   means GitHub is still computing the merge, not that it failed: wait a
+   few seconds and read it again.
+2. **`CONFLICTING` — or `gh pr merge` refuses for any other reason**
+   (a failing required check, a protected branch, a base that moved on)
+   → **stop.** Don't force it and never reach for `--admin`. Leave the
+   issue in `<STATUS_IN_REVIEW>`, because it isn't done. Report the
+   approval, say plainly why the merge didn't happen, and hand back the
+   fix — for conflicts, that's resolving them from the issue's own
+   worktree:
+   ```bash
+   git fetch origin && git merge origin/<base-branch>
+   # resolve, commit, push — then re-run the reviewer
+   ```
+3. **Mergeable** → `gh pr merge <prNumber> --squash` (squash is this
+   repo's policy — see docs/SDLC.md). Do **not** add `--delete-branch`:
+   the issue's worktree still has that branch checked out, and deleting
+   it strands the worktree.
+4. **Merged** → transition the issue to `<STATUS_DONE>` yourself. If
+   GitHub-for-Jira is connected it may beat you to it; setting a status
+   that's already set is harmless.
+
+**One exception — never merge a PR whose base is `<PRODUCTION_BRANCH>`.**
+A `hotfix/*` or `release/*` PR landing there fires
+`.github/workflows/release.yml`, which tags a version and publishes a
+GitHub Release. Cutting a release is a human's decision, not a review
+outcome. Approve it, say you've deliberately left the merge to them, and
+stop.
+
+Say what you actually did in the report. The canned next-step lines you'd
+normally emit ("awaiting your manual merge", "GitHub-for-Jira will
+auto-transition the issue") describe the default flow, not this one —
+when you merged the PR and set the status yourself, write that instead.
