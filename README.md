@@ -12,7 +12,7 @@ credentials, it will commit, create and push branches, open and update
 pull requests, and take the other actions needed to follow the
 [`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
 create, update, transition, and comment on issues in your Jira project.
-Those actions are visible to your team and land under your name.
+Those actions are visible to your team and land under your (or agent's own) account.
 
 Use it with caution: point it at a project you're comfortable having
 changed, and read [Configuration](#either-way) before the first run so

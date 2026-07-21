@@ -49,7 +49,126 @@ JIRA_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 GITHUB_PAT_TOKEN="XXXXXXXXXXXXX"
 ```
 
-### Run the healthcheck
+## Section 2. GitHub repository preparation
+
+### 2.1 The branching model
+
+The skills are written against **Gitflow** — they don't invent branch names,
+they follow the policy in [SDLC.md](SDLC.md). The five branches that matter:
+
+| Branch | Source | Merges to | Purpose |
+|---|---|---|---|
+| `main` | `release/*`, `hotfix/*` | `development` | Production state, tagged `vX.Y.Z` |
+| `development` | `main` | `release/*` | The **base branch** — where day-to-day work starts and lands |
+| `feature/<KEY>-slug` | `development` | `development` | One per Jira issue, created by `jira-task-assigner` |
+| `hotfix/<KEY>-slug` | `main` | `main` + `development` | Critical production fixes only |
+| `release/sprint-<X.Y.Z>` | `development` | `main` | Sprint QA branch, cut at release time |
+
+You only create the first two by hand. The skills create `feature/` and
+`hotfix/` branches themselves, one per issue, each with its own worktree.
+
+### 2.2 Split production from base
+
+Gitflow needs two long-lived branches. If your repo only has `main`, create
+the base branch off it once:
+
+```bash
+git switch main
+git switch -c development
+git push -u origin development
+```
+
+Make `development` the repository default so PRs target it automatically:
+
+```bash
+gh repo edit <OWNER>/<REPO> --default-branch development
+```
+
+Then record both in `jira-sdlc-tools.env` — the skills read these, never a
+hardcoded branch name:
+
+```
+DEFAULT_BASE_BRANCH=development
+PRODUCTION_BRANCH=main
+```
+
+Protecting both branches is recommended: everything reaches them through a
+reviewed PR, which is exactly the flow the skills produce.
+
+### 2.3 Clone the base branch — this is the entry point
+
+**`jira-task-assigner` runs only from the base branch.** Invoked from a
+feature or hotfix branch, it stops and tells you to switch back — it plans
+work *from* the base branch, then hands each issue its own branch and
+worktree. So the clone you work in should sit on `development`:
+
+```bash
+git clone -b development git@github.com:<OWNER>/<REPO>.git myapp
+cd myapp
+```
+
+The worktrees directory is a **sibling** of that clone, and must already
+exist — the assigner refuses to create it:
+
+```bash
+mkdir -p ../myapp-worktrees
+```
+
+Then point `WORKTREES_DIR` at it in `jira-sdlc-tools.local.env`. From here
+on, the loop is: run the assigner in this clone, then run the executor from
+inside each issue's worktree.
+
+## Section 3. Jira board preparation
+
+### 3.1 Create the board
+
+Create a Jira project and its board. **This plugin was tested on a simple
+Kanban board** — the default Kanban template, with its default columns, is
+the known-good setup. Scrum boards and custom workflows should work provided
+step 3.2 holds, but they aren't what was exercised.
+
+### 3.2 Confirm the four statuses exist
+
+The skills move issues through four workflow statuses. Open your board's
+column/workflow settings and confirm each one exists, then copy the names
+**exactly** as Jira spells them — matching is literal, so `In progress` and
+`In Progress` are different statuses:
+
+| Setting | Default Kanban name | Who sets it |
+|---|---|---|
+| `STATUS_TODO` | `To Do` | `jira-task-assigner`, on newly created issues |
+| `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts work |
+| `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
+| `STATUS_DONE` | `Done` | Nothing in this plugin — GitHub-for-Jira automation on merge, or you, by hand |
+
+`In Review` is the one most likely to be missing: several Jira templates ship
+`To Do` / `In Progress` / `Done` only. Add the column, or point the setting at
+whatever your workflow calls that stage.
+
+To prove a name is right rather than assume it, transition a throwaway issue:
+
+```bash
+acli jira workitem transition --key <KEY> --status "In Review" --yes
+```
+
+A wrong name fails here, at setup, instead of mid-run.
+
+### 3.3 Record the project key and statuses
+
+Put all five in `jira-sdlc-tools.env` (the shared/team file — the tokens and
+paths from Section 1 live in `jira-sdlc-tools.local.env` instead):
+
+```
+PROJECT_KEY=PROJ
+STATUS_TODO=To Do
+STATUS_IN_PROGRESS=In Progress
+STATUS_IN_REVIEW=In Review
+STATUS_DONE=Done
+```
+
+`PROJECT_KEY` is the prefix in your issue keys — `PROJ` in `PROJ-278`.
+
+## Section 4. Run the healthcheck
 
 From your **main repository**, run the statuscheck script — it confirms both
 logins, your settings, and the platform in one pass:
