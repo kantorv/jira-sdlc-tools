@@ -2,8 +2,25 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Claude Code plugin marketplace for Jira-tracked, parallel feature
-delivery via git worktrees.
+An SDLC layer for AI coding assistants; using JIRA API, Gitflow model,
+git worktrees as isolated per-issue workspaces.
+
+## ⚠️ Caution
+
+**This plugin acts on your behalf in both git and Jira.** Given your
+credentials, it will commit, create and push branches, open and update
+pull requests, and take the other actions needed to follow the
+[`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
+create, update, transition, and comment on issues in your Jira project.
+Those actions are visible to your team and land under your (or agent's own) account.
+
+Use it with caution: point it at a project you're comfortable having
+changed, and read [Configuration](#either-way) before the first run so
+you know which repo and which Jira project it's wired to.
+
+What it deliberately never does on its own — merging into your base
+branch, deleting Jira issues, resolving conflicts — is listed in
+[Safety model](plugins/jira-sdlc/README.md#safety-model).
 
 ## What's here
 
@@ -36,16 +53,6 @@ The three skills, one per stage of the lifecycle:
   changes), posts findings to Jira, and reviews the parent PR into the
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
-
-## Other AI assistants
-
-The skills target the Claude skills spec, so `jira-sdlc` also works —
-natively or through the [Agent Skills](https://agentskills.io)
-adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
-Code, NVIDIA NIM (via fcc), Codex, Antigravity, OpenCode, Grok Build, and
-Pi. See [**Integrations**](INTEGRATIONS.md) for the platform-by-platform
-table — each one's spec, wiring, integration status, and a link to its
-detailed doc.
 
 ## Task lifecycle preview
 
@@ -90,6 +97,57 @@ See **[Task lifecycle](plugins/jira-sdlc/docs/TASK-LIFECYCLE.md)** for the
 full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
 
 ## Install
+
+In a hurry? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** is the
+short, ordered walkthrough — tools, tokens, settings, and a healthcheck, in
+the order you actually do them.
+
+### Prerequisites
+
+Three CLIs must be installed and authenticated on your machine first.
+
+**Install tools**
+
+| Tool   | Title           | Uses                       | Install URL                                                              | Auth method | Token link                                                                        | Local docs                                                                          |
+| ------ | --------------- | -------------------------- | ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `git`  | Version control | commit/push                | [git-scm.com/downloads](https://git-scm.com/downloads)                  | global auth | —                                                                                 | —                                                                                   |
+| `gh`   | GitHub CLI      | pr create/update           | [cli.github.com](https://cli.github.com/)                               | token       | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md)     |
+| `acli` | Atlassian CLI   | jira api (issues, comments)| [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) | token       | [Jira API token](https://id.atlassian.com/manage-profile/security/api-tokens)     | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md)                                  |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
+(`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
+[Either way](#either-way) below).
+
+### Tokens to get
+
+Two API tokens go into `jira-sdlc-tools.local.env` — one for Jira, one for
+GitHub:
+
+| Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
+|---|---|---|---|---|---|
+| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | N/A (granular per-issue scopes are rejected by acli) | No — use non scoped **API token** | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
+| `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+
+### Helper tools
+
+The skills run bundled scripts that need a shell runtime plus a JSON parser —
+which ones depend on your OS.
+
+**Windows** — one of:
+
+| Tool         | Uses                                            | Install URL                                                                                              |
+| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `pwsh`       | run skill scripts (`win/*.ps1`), PowerShell 7+  | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
+| `powershell` | run skill scripts (`win/*.ps1`), PowerShell 5.1 | ships with Windows                                                                                       |
+
+**Linux / macOS:** the scripts are bash, which has no native JSON parsing, so
+they shell out to an external tool for it:
+
+| Tool      | Uses                                 | Install URL                                                 |
+| --------- | ------------------------------------ | ---------------------------------------------------------- |
+| `jq`      | parse Jira JSON                      | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) |
+| `python3` | scripting (`jq` fallback for JSON)   | [python.org/downloads](https://www.python.org/downloads/)  |
 
 ### Remote — from the marketplace (recommended)
 
@@ -187,6 +245,32 @@ change. Note too that this toolkit repo isn't a valid target for its
 own skills — you'll need a separate application repo, with its own
 `jira-sdlc-tools.env`, to actually exercise one against.
 
+### Run your own
+
+For anyone who wants to customize the skills and run their own version
+rather than track this one.
+
+This repo is [MIT-licensed](LICENSE) and is already a ready-to-use Claude
+Code marketplace — it's only a few clicks from being cloned or forked into
+your own copy, then registered as a marketplace in your local Claude Code.
+Fork or clone it, edit the skills to taste, and install from your local
+folder:
+
+1. **Fork it on GitHub** (if you want your own upstream to push to), then
+   clone your copy:
+   ```bash
+   git clone https://github.com/<you>/jira-sdlc-tools.git
+   ```
+2. **Add the local folder as a marketplace**, pointing at the repo root
+   (the directory holding `.claude-plugin/marketplace.json`):
+   ```
+   /plugin marketplace add ./jira-sdlc-tools
+   /plugin install jira-sdlc@jira-sdlc-tools
+   ```
+   From here it behaves like the remote install — your fork is the source.
+   While actively editing, use the `--plugin-dir` edit-reload loop above
+   instead, since a marketplace install copies a snapshot into the cache.
+
 ## Contributing
 
 Read [`AGENTS.md`](AGENTS.md) first, especially if an AI coding agent is
@@ -207,3 +291,71 @@ describe compatibility.
 ## License
 
 [MIT](LICENSE), covering the whole repo, including the plugin.
+
+## Platform Compatibility Matrix
+
+The skills target the Claude skills spec, so `jira-sdlc` also works —
+natively or through the [Agent Skills](https://agentskills.io)
+adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
+Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
+and Kimi Code. See [**Platform Compatibility Matrix**](INTEGRATIONS.md) for the
+platform-by-platform table — each one's spec, wiring, integration status,
+and a link to its detailed doc.
+
+| Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
+|---|---|---|---|---|---|
+| [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
+| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
+| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
+| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
+| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
+| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | ❔ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
+| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
+| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | ❔ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
+| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
+
+**Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
+with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
+yet exercised in this environment. See [Platform Compatibility Matrix](INTEGRATIONS.md) for the
+full status legend.
+
+## Lab channel
+
+Everything above describes the **main** channel — this repo's default
+branch, and what every install command on this page gives you: the three
+core skills, reviewed, released, and tagged.
+
+The **lab** channel is the same plugin sourced from the `lab` branch
+instead. It's kept synced with the default branch, so it's never *behind*
+main — it's main plus work that hasn't landed yet: more advanced scripts,
+wider permissions, and an extra skill.
+
+| Name | Type | Description | Example reports |
+|---|---|---|---|
+| [`conversation-debugger`](https://github.com/kantorv/jira-sdlc-tools/blob/lab/plugins/jira-sdlc/skills/conversation-debugger/SKILL.md) | skill | Post-mortems a recorded run of one of the three core skills against its own prose, verdicting each instruction as followed / diverged / skipped / not-reached. | TBD |
+| [`feature_report`](https://github.com/kantorv/jira-sdlc-tools/blob/lab/plugins/jira-sdlc/skills/conversation-debugger/scripts/feature_report.md) | script | Rolls a whole feature's runs up into a single report. | TBD |
+
+### Example reports
+
+| Report | Generated by | Source | Description |
+|---|---|---|---|
+| [`jira-task-assigner-JST-126`](plugins/jira-sdlc/docs/examples/reports/jira-task-assigner-JST-126-e0471131-44aa-44cb-9ed8-9ca85852bc89.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-assigner` conversation for JST-126, verdicting each instruction as followed / diverged / skipped / not-reached. |
+| [`jira-task-executor-JST-125`](plugins/jira-sdlc/docs/examples/reports/jira-task-executor-JST-125-bb91775f-028f-48b1-acdb-9eaec28d6d9b.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-executor` conversation for JST-125, run on the Windows/PowerShell dispatch path. |
+| [`jira-task-reviewer-JST-122`](plugins/jira-sdlc/docs/examples/reports/jira-task-reviewer-JST-122-df864d2f-3115-4f06-b3c2-24456615eed0.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-reviewer` conversation for JST-122, run on the Windows/PowerShell dispatch path. |
+| [`JST-122-story-report`](plugins/jira-sdlc/docs/examples/reports/JST-122-story-report.md) | script | `feature_report` | Feature-wide rollup for multistep JST-122 (parent + 3 child issues, 15 conversations) built from `collect_feature` JSON — token/cost/model totals, nothing re-estimated. |
+| [`JST-126-task-report`](plugins/jira-sdlc/docs/examples/reports/JST-126-task-report.md) | script | `feature_report` | Feature-wide rollup for single-issue JST-126 (3 conversations) built from `collect_feature` JSON — token/cost/model totals, nothing re-estimated. |
+
+To install it, suffix the marketplace repo with `@lab`:
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools@lab
+/plugin install jira-sdlc@jira-sdlc-tools
+```
+
+Worth knowing before you switch: the extras aren't release-gated, and they
+reach wider than the core three do — into your whole workspace rather than
+a single issue's worktree, with the scripts and permissions to match.
+
+See [**LAB-CHANNEL.md**](https://github.com/kantorv/jira-sdlc-tools/blob/lab/LAB-CHANNEL.md)
+on the lab branch for the full description, both install routes, and the
+lab-only configuration step.

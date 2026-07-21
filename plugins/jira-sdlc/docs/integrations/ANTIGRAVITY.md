@@ -18,17 +18,18 @@ immediately, no settings changed. Three working paths:
 - **Method 2 — Antigravity's native `.agent/skills` discovery.** Works out
   of the box in Antigravity's own chat panel; no experimental setting to
   enable. `disable-model-invocation: true` is a Claude Code-specific
-  frontmatter field that isn't part of the agentskills.io spec at all, and
-  there's no confirmed evidence Antigravity reads it (see Caveats) — treat
-  this as the gap that makes Method 1 the safer default for this plugin.
-- **Method 3 — Antigravity's `chat.useClaudeSkills` scanner.** A second,
+  frontmatter field that isn't part of the agentskills.io spec, so it does
+  nothing here — its spec-side analogue is a per-skill
+  `agents/openai.yml` carrying `policy: allow_implicit_invocation: false`,
+  and this plugin's skills need it (install step 2 below).
+- **⚠️ Method 3 (unconfirmed) — Antigravity's `chat.useClaudeSkills` scanner.** A second,
   separate native mechanism found by inspecting the installed product's
   code (not by a live test): an off-by-default setting that reads
   `.claude/skills/` instead of `.agent/skills/`. Real and independent of
   Method 2, but untested live — see its own section below.
 
 > **Verification note.** The `.agent/skills` discovery path and its slash
-> invocation (`/<skill-name>`, no setting toggle) are **live-verified** —
+> invocation (`/<skill-name>`, no setting toggle) are **live-verified** (specifically tested on Antigravity IDE 1.23.2 and agy 1.0.8; other releases are untested) —
 > confirmed by directly testing this plugin's skills in Antigravity's
 > native chat panel. This directly overrides an earlier version of this doc,
 > which claimed (from static analysis of the installed Antigravity 1.107.0
@@ -40,9 +41,11 @@ immediately, no settings changed. Three working paths:
 > a second, separate mechanism — an off-by-default `chat.useClaudeSkills`
 > setting that reads `.claude/skills/` — which is real (confirmed in code)
 > but wasn't needed for the live test to succeed, so it's documented as
-> Method 3, a fallback rather than the primary path. Whether `disable-model-invocation`
-> is honored for ambient (non-slash) invocation under Method 2 has **not**
-> been live-tested either way — only explicit slash invocation was tested.
+> Method 3, a fallback rather than the primary path. What has **not** been
+> live-tested under Method 2 is *ambient* (non-slash) invocation — only
+> explicit slash invocation was tested — so the `agents/openai.yml` policy
+> file that suppresses it is documented below as a required install step
+> rather than as a verified behavior.
 
 ## Prerequisites
 
@@ -50,8 +53,8 @@ immediately, no settings changed. Three working paths:
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - **Method 1 only** — nothing extra: the Claude Code extension ships inside Antigravity already.
-- **Method 2 only** — nothing extra: no setting to enable, no extension to install.
-- **Method 3 only** — Antigravity Settings access to toggle an experimental setting (see below).
+- **Method 2 only** — no setting to enable and no extension to install, but you do write one `agents/openai.yml` per skill (install step 2).
+- **⚠️ Method 3 only (unconfirmed)** — Antigravity Settings access to toggle an experimental setting, plus the same per-skill `agents/openai.yml` (see below).
 
 ## Install / Wire-up Steps
 
@@ -87,16 +90,36 @@ Method 1:
    mkdir -p .agent/skills
    cp -a </ABSOLUTE/PATH/TO/MARKETPLACE/ROOT>/plugins/jira-sdlc/skills/* .agent/skills/
    ```
-2. No `chmod` step needed: every script call in these skills is written as
+2. Add an `agents/openai.yml` policy file to each skill — this is the
+   agentskills.io-side analogue of Claude Code's
+   `disable-model-invocation: true`, which Antigravity does not read:
+   ```bash
+   for skill in jira-task-assigner jira-task-executor jira-task-reviewer; do
+     mkdir -p ".agent/skills/$skill/agents"
+     printf 'policy:\n  allow_implicit_invocation: false\n' \
+       > ".agent/skills/$skill/agents/openai.yml"
+   done
+   ```
+   Same content as [CODEX.md](CODEX.md) step 2 — the file is not part of the
+   Claude plugin source, it's the adaptation you write per platform. All
+   three skills are built to be run deliberately (they create Jira issues,
+   push branches, open PRs), so leaving it out means the model may load one
+   from ambient chat context on a prompt that merely *sounds* like the job.
+3. No `chmod` step needed: every script call in these skills is written as
    `bash "<path>"`, never a bare `./script.sh`, so the executable bit is
    never required.
-3. `.agent/skills/` is a manual copy, not committed — gitignore it (a
+4. `.agent/skills/` is a manual copy, not committed — gitignore it (a
    single `*` inside a `.agent/.gitignore` works). There is no sync script;
    when the plugin updates, re-run step 1's copy.
-4. Nothing to reload or toggle — Antigravity's native chat reads the
+5. Nothing to reload or toggle — Antigravity's native chat reads the
    directory directly.
 
-### Method 3: `chat.useClaudeSkills` + `.claude/skills` (code-confirmed, not live-tested)
+### ⚠️ Method 3 (unconfirmed): `chat.useClaudeSkills` + `.claude/skills`
+
+> **⚠️ Unconfirmed.** Every step below comes from reading the installed
+> product's code, not from running it. No one has enabled the setting and
+> invoked a skill this way end to end. Use Method 1 or 2 unless you are
+> deliberately exploring this path.
 
 Found by inspecting the installed Antigravity 1.107.0 build's config
 schema and skill-loading code — a second, independent native discovery
@@ -126,11 +149,15 @@ project skills from this same `.claude/skills/` path).
    If you already did [CURSOR.md](CURSOR.md) Method 2 (drop-in symlinks
    under `~/.claude/skills/`), this scan picks that up too — no separate
    copy needed.
-3. Same no-`chmod`-needed note as Method 2 applies.
-4. `.claude/skills/` (the workspace copy) is a manual copy, not committed —
+3. Add the same per-skill `agents/openai.yml` as Method 2 step 2, under
+   `.claude/skills/$skill/agents/` — this scanner reads only
+   `name`/`description` out of the frontmatter, so
+   `disable-model-invocation: true` is inert on this path too.
+4. Same no-`chmod`-needed note as Method 2 applies.
+5. `.claude/skills/` (the workspace copy) is a manual copy, not committed —
    gitignore it. No sync script here either.
-5. Reload the window.
-6. **Invocation syntax is unverified** — the code path that parses
+6. Reload the window.
+7. **Invocation syntax is unverified** — the code path that parses
    `.claude/skills/` frontmatter only extracts `name`/`description`, the
    same fields Method 2 exposes, so `/skill-name` slash invocation
    *plausibly* works the same way it does for Method 2, but this has not
@@ -147,7 +174,7 @@ native chat: `/jira-task-assigner`, `/jira-task-executor`, or
 `/jira-task-executor`, the other two follow the same `.agent/skills/<name>/`
 layout and are expected to match but were not individually retested).
 
-**Method 3** — presumed identical bare-name slash invocation to Method 2
+**⚠️ Method 3 (unconfirmed)** — presumed identical bare-name slash invocation to Method 2
 (`/jira-task-executor`, etc.), since the code exposes the same `name` field
 the same way, but this is **unverified** — not tried live.
 
@@ -155,19 +182,28 @@ the same way, but this is **unverified** — not tried live.
 
 ### `disable-model-invocation: true`
 
-- **Method 1**: honored — same runtime as Claude Code.
-- **Method 2**: **no confirmed support**. This field is a Claude Code
-  plugin-specific extension, not part of the agentskills.io spec's
-  frontmatter (the published spec's table lists only `name`, `description`,
-  `license`, `compatibility`, `metadata`, `allowed-tools`). Explicit slash
-  invocation (`/jira-task-executor`) is live-verified to work; whether the
-  model can *also* load the skill unprompted from ambient chat context —
-  the exact thing this field exists to prevent — has not been tested either
-  way. **Until that's tested, treat Method 2 as unconfirmed on this point**
-  and prefer Method 1 for this plugin, whose three skills all set this field
-  deliberately.
+- **Method 1**: honored as-is — same runtime as Claude Code, nothing to add.
+- **Methods 2 and 3**: the frontmatter field itself does nothing. It is a
+  Claude Code plugin-specific extension, not part of the agentskills.io
+  spec's frontmatter (the published spec's table lists only `name`,
+  `description`, `license`, `compatibility`, `metadata`, `allowed-tools`),
+  so you re-express the intent in `agents/openai.yml` instead:
+  ```yaml
+  policy:
+    allow_implicit_invocation: false
+  ```
+  Write it for all three skills (install step 2) — this plugin's skills are
+  explicit-only by design and this file is what carries that across.
+  Note what it does and doesn't buy you: explicit invocation
+  (`/jira-task-executor`) works with or without the file — that much is
+  live-verified — so the policy is not a prerequisite for *running* a skill.
+  It's what stops the router from semantic-matching an ambient prompt onto a
+  skill that creates Jira issues and opens PRs. Antigravity's enforcement of
+  the flag has not been live-tested (see below), so on Methods 2/3 treat the
+  suppression as intended-but-unconfirmed; Method 1 is the path where
+  explicit-only is guaranteed.
 
-### Method 3 is a fallback, not a requirement
+### ⚠️ Method 3 is an unconfirmed fallback, not a requirement
 
 Method 2's live test succeeded via `.agent/skills/` without touching
 `chat.useClaudeSkills` at all, so Method 3 is not a dependency of Method 2
@@ -181,11 +217,19 @@ Same caveat as Codex: `.agent/skills/` is a manual copy of
 silently — there is no sync script or version pin. Re-run the copy recipe
 (Install step 1) after every plugin update.
 
-### `agents/openai.yml` has no confirmed effect in Antigravity
+### `agents/openai.yml` — write it, but don't over-trust it
 
-If you're copying from an existing Codex `.agent/`-style tree that includes
-`agents/openai.yml` per skill, it's harmless to leave in place but has no
-known effect here — an exhaustive search of the installed Antigravity
-product found no code that reads `openai.yml` or an
-`allow_implicit_invocation` field. Slash invocation worked without it in
-the live test. It isn't required for Method 2.
+A search of the installed Antigravity 1.107.0 build found no code reading
+`openai.yml` or an `allow_implicit_invocation` field, and the live test
+invoked a skill fine without one. Neither observation means the policy is
+ignored: a grep over a shipped build can only prove a literal string is
+absent, not a feature — the same reasoning that made this doc wrongly
+declare `.agent/skills/` unsupported until a live test contradicted it (see
+the Verification note). Nor does explicit invocation working tell you
+anything about implicit invocation, which is the only thing the policy
+governs.
+
+So the file is part of the install for Methods 2 and 3, and it costs
+nothing if Antigravity turns out to ignore it. What's still open is whether
+ambient invocation is actually blocked — nobody has tried to provoke it.
+Until someone does, Method 1 remains the recommended path for this plugin.

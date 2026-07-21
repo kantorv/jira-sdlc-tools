@@ -1,4 +1,4 @@
-# Integrations
+# Platform Compatibility Matrix
 
 `jira-sdlc` is built to the [Claude skills](https://docs.claude.com/en/docs/claude-code/skills) specification. Some AI assistants load that spec natively; others reach it through the [Agent Skills](https://agentskills.io) adaptation. This page is the hub: a summary of every supported platform, which spec it uses, how it loads the skills, how mature the integration is, and where its detailed doc lives.
 
@@ -6,12 +6,11 @@
 
 | Platform | Specification | How it loads | Integration status | Documentation |
 |---|---|---|---|---|
-| [Claude Code](plugins/jira-sdlc/README.md) | Native Claude skills | plugin marketplace or `--plugin-dir` | First-class (reference) | [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md) |
+| [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
 | [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
 | [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
-| [NVIDIA NIM](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) | Native Claude skills, via fcc | Anthropic-compatible model proxy → Claude Code loads the skills | Draft — architecture verified; live NIM run unverified | [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) |
 | [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified — sandbox caveats | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
-| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) | Verified | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
+| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
 | [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
 | [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
 | [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
