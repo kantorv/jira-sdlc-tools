@@ -2,68 +2,86 @@
 
 The four `<STATUS_*>` tokens in `jira-sdlc-tools.env` are **anchor
 states**: names mapped onto whichever real statuses your board uses for
-those roles. This document answers the question that matters when you're
-wiring a board or an automation up to these skills — *which of those moves
-does an agent make by itself, and which does something else have to make?*
+those roles.
 
-The short answer: **an agent writes a Jira status in exactly three
-places.** Everything else on your board is moved by a human, by
-GitHub-for-Jira, or by your own automation.
+**No skill moves a card by itself.** All three read the board where they
+need to, and none of them writes to it — not at pickup, not when a PR
+opens, not on either review verdict. A skill transitions an issue only
+when something explicitly asks it to:
 
-## The three agent-initiated transitions
+1. a rule in `JIRA-SDLC-TOOLS-RULES.md` — `## COMMON` or the section named
+   after that skill, or
+2. you, in chat, during a run.
 
-| # | Skill | Where | Transition | Trigger |
-|---|---|---|---|---|
-| 1 | `jira-task-executor` | step 3 — *Transition the issue* | → `<STATUS_IN_PROGRESS>` | It has picked up the issue and is about to work it |
-| 2 | `jira-task-executor` | step 11 — *Update Jira* | → `<STATUS_IN_REVIEW>` | It has just opened the PR |
-| 3 | `jira-task-reviewer` | step 3d — reject path | → `<STATUS_IN_PROGRESS>` | The review verdict is CHANGES REQUESTED |
+The reasoning is that status is a *shared* signal. Humans, GitHub-for-Jira,
+Jira Automation, and your own workflows all write to the same field, and
+none of them can tell a card an agent moved from one a person moved. A
+transition nobody asked for is therefore a claim your team has no way to
+audit — so the default is to make none, and to say in the run report which
+status the issue is actually in.
 
-All three are `acli jira workitem transition --key <KEY> --status "…" --yes`.
+This also means the anchors are yours to map freely: a board with six
+columns between "picked up" and "merged" needs no special handling,
+because the skills aren't trying to drive it.
 
-Site 3 is keyed on `<SUBTASK-KEY-or-PARENT-KEY>`, so it covers both a
-multistep sub-task's PR and a single-step top-level issue's PR. It is the
-**actual workflow gate** on the reject path — GitHub blocks an author from
-formally rejecting their own PR when the executor and reviewer share one
-`gh` account, so the verdict is recorded as a review *comment* and the
-Jira move is what really sends the work back.
+## What each token is for
 
-## What no agent ever does
+| Token | Read by a skill? | Written by a skill? |
+|---|---|---|
+| `<STATUS_TODO>` | no | no |
+| `<STATUS_IN_PROGRESS>` | no | no |
+| `<STATUS_IN_REVIEW>` | **yes** — `jira-task-reviewer` reviews only sub-tasks sitting in this status | no |
+| `<STATUS_DONE>` | no | no |
 
-- **`<STATUS_DONE>` is never written by a skill.** It is reached when a
-  human merges the PR — by GitHub-for-Jira's merge automation if you have
-  it connected, otherwise by a manual transition. `jira-task-executor`
-  step 11 says so explicitly ("Don't transition to Done here"), and the
-  reviewer never merges anything.
-- **`<STATUS_TODO>` is never written by a skill either.** New issues land
-  in whatever status your workflow makes the creation default; the token
-  exists so the rest of the config can name that state, not because
-  anything sets it.
-- **`jira-task-assigner` transitions nothing at all.** It creates issues,
-  branches, and worktrees, and leaves status entirely alone.
-- **Nothing moves a card through intermediate states** your board may have
-  between these anchors. That is the anchor-mapping contract: the skills
-  touch only the anchors, and every state in between belongs to you.
+The one read matters: `<STATUS_IN_REVIEW>` is how the reviewer decides
+which sub-tasks are in scope. Since nothing writes it by default,
+**something else has to** — a rule below, your automation, or a person —
+or the reviewer will find nothing to review.
 
-## Changing this behaviour
+## Restoring the built-in transitions
 
-Don't edit a `SKILL.md` to change what your project's board does — the
-skills ship generic and the next update overwrites them. Put the rule in
-**`JIRA-SDLC-TOOLS-RULES.md`** in your project root instead. Every skill
-reads it at the start of a run, and **where a rule there disagrees with a
-skill instruction, the rule wins** — overriding these defaults is exactly
-what the file is for.
+Earlier versions of these skills made three transitions automatically.
+That behaviour now lives here as a rule you opt into. Copy what you want
+into `JIRA-SDLC-TOOLS-RULES.md` in your project root:
 
-Suppressing a transition, in the section for the skill that makes it:
+| # | Skill | When | Transition |
+|---|---|---|---|
+| 1 | `jira-task-executor` | it picks up the issue (step 3) | → `<STATUS_IN_PROGRESS>` |
+| 2 | `jira-task-executor` | it has just opened the PR (step 11) | → `<STATUS_IN_REVIEW>` |
+| 3 | `jira-task-reviewer` | verdict is CHANGES REQUESTED (step 3d) | → `<STATUS_IN_PROGRESS>` |
 
 ```markdown
 ## JIRA-TASK-EXECUTOR
 
-Don't transition to <STATUS_IN_REVIEW> when you open the PR — our Jira
-automation moves the card off the back of the PR event, and a second
-transition trips its rule quota.
+Move the issue as you work it — our board is how the team sees progress:
+- when you pick it up (step 3) → <STATUS_IN_PROGRESS>
+- once you've opened the PR (step 11) → <STATUS_IN_REVIEW>
+
+The second one matters beyond reporting: jira-task-reviewer only reviews
+sub-tasks sitting in <STATUS_IN_REVIEW>, so skipping it leaves the work
+invisible to review.
+
+## JIRA-TASK-REVIEWER
+
+When your verdict is CHANGES REQUESTED, transition the issue back to
+<STATUS_IN_PROGRESS> — the review comment records *what* was wrong, but
+the status is what tells the board the work bounced.
+
+This applies to every reject path, including step 5b (the aggregate
+parent PR on the multistep track). Step 3d and step 5b behave the same
+way here.
 ```
 
-Adding one the skills don't make:
+That last paragraph closes a gap the built-in behaviour had: step 3d
+transitioned on reject, step 5b didn't, so a rejected multistep *parent*
+PR left its issue sitting in `<STATUS_IN_REVIEW>` with no board signal at
+all. Stating the rule once for "every reject path" avoids re-inheriting
+that asymmetry.
+
+## Going further than the old defaults
+
+Nothing restricts you to the three above. Rules can add transitions the
+skills never made:
 
 ```markdown
 ## JIRA-TASK-REVIEWER
@@ -72,7 +90,7 @@ When you approve a PR, transition the issue to <STATUS_DONE> yourself.
 We have no GitHub-for-Jira connection, so nothing else will.
 ```
 
-Or routing through an intermediate state your board has:
+Or route through states specific to your board:
 
 ```markdown
 ## COMMON
@@ -82,22 +100,12 @@ for any reason, move the issue there first and say so in your report —
 otherwise the card looks like it's still being worked.
 ```
 
-See [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md)
-for the file's format and full load contract, and
-[`../JIRA-SDLC-TOOLS-RULES.example.md`](../JIRA-SDLC-TOOLS-RULES.example.md)
-for a template to copy.
+## Reference
 
-## Known asymmetry on the reject path
-
-The reject path in `jira-task-reviewer` **step 5b** — the aggregate parent
-PR on the multistep track — posts its `CHANGES REQUESTED` review comment
-but does *not* transition the parent issue, unlike step 3d. A rejected
-parent PR therefore leaves its issue in `<STATUS_IN_REVIEW>`.
-
-This may be deliberate: sending a parent back to `<STATUS_IN_PROGRESS>`
-implies an executor run against a parent issue, which `jira-task-executor`
-step 1 deliberately refuses without confirmation, since implementing on a
-parent branch shadows its sub-tasks' own PRs. It is recorded here because
-the asymmetry is currently undocumented in either direction — if your
-board needs the parent moved, add that rule to
-`JIRA-SDLC-TOOLS-RULES.md`'s `## JIRA-TASK-REVIEWER` section.
+- [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md)
+  — the rules file's format and full load contract, and every `<TOKEN>`.
+- [`../JIRA-SDLC-TOOLS-RULES.example.md`](../JIRA-SDLC-TOOLS-RULES.example.md)
+  — template to copy, with the transition rules above pre-filled and
+  commented out.
+- Precedence: where a rule and a `SKILL.md` instruction disagree, **the
+  rule wins**. Overriding a skill default is what the file is for.

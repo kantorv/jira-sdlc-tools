@@ -1,6 +1,6 @@
 ---
 name: jira-task-reviewer
-description: Run from the parent issue's worktree — no issue-key argument; the issue is derived from the branch, climbing from a sub-task branch to its parent automatically. Finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything.
+description: Run from the parent issue's worktree — no issue-key argument; the issue is derived from the branch, climbing from a sub-task branch to its parent automatically. Finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. Never moves an issue's Jira status on its own — see JIRA-SDLC-TOOLS-RULES.md. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -16,9 +16,10 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into — resolve with §12's mechanics (`../_shared/jira-acli-reference.md`: git-config → Jira "PR target branch" comment → `<DEFAULT_BASE_BRANCH>` env default) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current`: from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` (not the base). Step 1 gives the exact resolution.
 - Sub-task PRs all target `<PARENT-BRANCH>` — every sub-task gets its own dedicated branch and PR.
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
-- Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `<STATUS_IN_PROGRESS>`) are silently ignored — the executor will transition them when ready.
+- Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those in any other status are silently ignored. This is a **read** of the board, and nothing in this plugin writes that status by default — whoever owns transitions here (a human, your automation, or a rule in `JIRA-SDLC-TOOLS-RULES.md`) is what puts a sub-task in scope.
 - Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores credentials after a one-time `acli jira auth login`, so no per-command `JIRA_API_TOKEN` prefix; run commands bare.
-- **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
+- **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b) — that prefix, not a Jira status, is the durable record of a verdict. The idempotency check (3a) and the verdict-comment detection both key on this identity.
+- **Jira status — not yours to change.** You do **not** transition any issue to any state, on either verdict, at any point in this run, unless a rule in `JIRA-SDLC-TOOLS-RULES.md` (`## COMMON` or `## JIRA-TASK-REVIEWER`) or the user in chat tells you to. Absent that, leave the board alone and let your verdict live in the review comment: status here is owned by humans and automation, which can't tell a card *you* moved from one they moved, so a transition nobody asked for is a lie they have no way to spot. When you *are* asked, resolve the name from `jira-sdlc-tools.env` and use `acli jira workitem transition --key <KEY> --status "<STATUS_*>" --yes`.
 - **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
@@ -46,7 +47,7 @@ for an issue key, but don't add one.
 
 **Make sure local credentials exist, then log in as the reviewer — run
 both FIRST, before the healthcheck.** Every Jira write this skill makes
-(verdict comments, reject-path transitions) should come from the
+(the verdict comments, and any transition a project rule asks for) should come from the
 reviewer's account, not from whoever was last logged in. Both calls are
 safe to run every time (`ensure_local_env` no-ops when the file already
 exists; `jira_acli_login` always logs out then back in as the role, so a
@@ -59,8 +60,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" rev
 ```
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
-status, calls `gh pr list` / `gh pr review`, and — on the reject path —
-transitions issues; finding a busted environment mid-review wastes a
+status and calls `gh pr list` / `gh pr review`; finding a busted environment mid-review wastes a
 pass and can leave an inconsistent verdict trail. Run the shared
 healthcheck first, overriding its rerun hint to name this skill instead
 of the executor default:
@@ -77,7 +77,7 @@ It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero
 if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
-(every verdict comment, `gh pr list` call, and Jira transition depends on
+(every verdict comment and `gh pr list` call depends on
 them). The `worktree` and `branch` rows are context INFO — the shared
 script reports them for every role and never FAILs on them.
 
@@ -313,7 +313,7 @@ Evaluate the diff against these dimensions (all must pass for approve):
 
 ### 3d. Execute verdict immediately
 
-Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> --comment --body-file`: in this plugin's default deployment the executor and reviewer share one `gh` account, and GitHub blocks an author from approving *or* requesting changes on their own PR — the self-review restriction covers both verdicts, not just approval. So neither verdict can use a state-based review. The Jira transition to `<STATUS_IN_PROGRESS>` (on the reject path) is the actual workflow gate; the GitHub comment only records the verdict and makes it detectable by 3a. The leading `APPROVED — …` / `CHANGES REQUESTED — …` header is that detection contract — keep it verbatim.
+Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> --comment --body-file`: in this plugin's default deployment the executor and reviewer share one `gh` account, and GitHub blocks an author from approving *or* requesting changes on their own PR — the self-review restriction covers both verdicts, not just approval. So neither verdict can use a state-based review. The GitHub comment is therefore the whole verdict record — it is what 3a detects on a re-run, and no Jira status backs it up unless a project rule asks for one. The leading `APPROVED — …` / `CHANGES REQUESTED — …` header is that detection contract — keep it verbatim.
 
 Both the GitHub verdict comment and the Jira per-issue comment carry the **full canonical review report** (see *The canonical review report* above), scoped to this one PR — not a terse one-liner. Write **one** report body to a temp file and post that same file to both destinations, so GitHub and Jira read identically:
 
@@ -327,9 +327,9 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
-  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Do NOT move the Jira status — let the GitHub-for-Jira automation handle it when the PR is merged.
+  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Do NOT move the Jira status — see *Jira status* in the conventions above.
 
-* **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
+* **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations. Do NOT move the Jira status — see *Jira status* in the conventions above:
   ```bash
   cat > /tmp/<KEY>-report.md <<'EOF'
   CHANGES REQUESTED — <one-line summary>
@@ -338,7 +338,6 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   EOF
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
-  acli jira workitem transition --key <SUBTASK-KEY-or-PARENT-KEY> --status "<STATUS_IN_PROGRESS>" --yes
   ```
   Remember this PR as blocked. Continue the loop — review the next PR.
 

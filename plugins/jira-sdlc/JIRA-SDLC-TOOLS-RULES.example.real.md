@@ -67,20 +67,6 @@ in use:
   arguments, output, and exit codes. Change one, change its twin, then
   diff the two with `STATUSCHECK_FORCE_OS=windows` as AGENTS.md shows.
 
-### Move the card as you work it
-
-You don't transition anything by default. In this repo you do — the board
-is how progress is visible, and nothing else here writes these states:
-
-| When | Transition |
-|---|---|
-| You pick the issue up (step 3) | → `<STATUS_IN_PROGRESS>` |
-| You've just opened the PR (step 11) | → `<STATUS_IN_REVIEW>` |
-
-The second one is load-bearing beyond reporting: `jira-task-reviewer`
-reviews only sub-tasks sitting in `<STATUS_IN_REVIEW>`, so an issue you
-leave behind is invisible to review.
-
 ## JIRA-TASK-REVIEWER
 
 Review the same two invariants the executor is told to protect, since
@@ -92,59 +78,3 @@ Then check the change against the skill-writing guidance in AGENTS.md —
 a `SKILL.md` edit that is correct but bloated, buries a rule mid-file, or
 adds an ALL-CAPS imperative where one clause of reasoning would
 generalize better is a legitimate finding here, not a nitpick.
-
-### Move the card on a rejection — on every reject path
-
-You don't transition anything by default. In this repo, when your verdict
-is CHANGES REQUESTED, transition the issue back to `<STATUS_IN_PROGRESS>`.
-The review comment records *what* was wrong; the status is what tells the
-board the work bounced, and it's what puts the issue back in the
-executor's lane.
-
-This applies to **every** reject path — step 3d (a sub-task PR, or a
-single-step issue's PR) and step 5b (the aggregate parent PR on the
-multistep track) alike. Don't treat 5b as special: a rejected parent PR
-with no status change is a card that reads "in review" while it's
-actually waiting on a human, and nothing else on the board contradicts it.
-
-### When you approve a PR: merge it, then close the issue
-
-Your default is to never merge, and to leave `<STATUS_DONE>` to a human or
-to GitHub-for-Jira. In this repo, do both yourself. Work in this order —
-the status has to describe what actually happened, so the merge has to
-land before the issue can be called done:
-
-1. **Check it's mergeable** —
-   `gh pr view <prNumber> --json mergeable,mergeStateStatus`. `UNKNOWN`
-   means GitHub is still computing the merge, not that it failed: wait a
-   few seconds and read it again.
-2. **`CONFLICTING` — or `gh pr merge` refuses for any other reason**
-   (a failing required check, a protected branch, a base that moved on)
-   → **stop.** Don't force it and never reach for `--admin`. Leave the
-   issue in `<STATUS_IN_REVIEW>`, because it isn't done. Report the
-   approval, say plainly why the merge didn't happen, and hand back the
-   fix — for conflicts, that's resolving them from the issue's own
-   worktree:
-   ```bash
-   git fetch origin && git merge origin/<base-branch>
-   # resolve, commit, push — then re-run the reviewer
-   ```
-3. **Mergeable** → `gh pr merge <prNumber> --squash` (squash is this
-   repo's policy — see docs/SDLC.md). Do **not** add `--delete-branch`:
-   the issue's worktree still has that branch checked out, and deleting
-   it strands the worktree.
-4. **Merged** → transition the issue to `<STATUS_DONE>` yourself. If
-   GitHub-for-Jira is connected it may beat you to it; setting a status
-   that's already set is harmless.
-
-**One exception — never merge a PR whose base is `<PRODUCTION_BRANCH>`.**
-A `hotfix/*` or `release/*` PR landing there fires
-`.github/workflows/release.yml`, which tags a version and publishes a
-GitHub Release. Cutting a release is a human's decision, not a review
-outcome. Approve it, say you've deliberately left the merge to them, and
-stop.
-
-Say what you actually did in the report. The canned next-step lines you'd
-normally emit ("awaiting your manual merge", "GitHub-for-Jira will
-auto-transition the issue") describe the default flow, not this one —
-when you merged the PR and set the status yourself, write that instead.
