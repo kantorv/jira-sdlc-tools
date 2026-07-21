@@ -31,13 +31,11 @@ project. Given a task description from the user ($ARGUMENTS):
   Branch naming is always `feature/<KEY>-<slug>` whether `<KEY>` is the
   top-level issue or a Sub-task — this keeps the branch-parsing regex in
   step 2 working no matter which branch someone checks out later.
-- **Jira status — not yours to change.** Issues you create land in
-  whatever status the project's workflow makes the creation default. You
-  do **not** transition any issue to any state unless a rule in
-  `JIRA-SDLC-TOOLS-RULES.md` (`## COMMON` or `## JIRA-TASK-ASSIGNER`) or
-  the user in chat tells you to — status here is owned by humans and
-  automation, and a card moved by a skill nobody asked is indistinguishable
-  from one they moved themselves.
+- **Jira status** — issues you create land in whatever status the
+  project's workflow makes the creation default (`<STATUS_TODO>`), and you
+  transition nothing: the executor moves an issue to `<STATUS_IN_PROGRESS>`
+  when it picks it up. A rule in `JIRA-SDLC-TOOLS-RULES.md` can change that
+  and wins over this default.
 
 **Project rules — read these first.** If `JIRA-SDLC-TOOLS-RULES.md` exists
 in the project root, adopt its `## COMMON` + `## JIRA-TASK-ASSIGNER`

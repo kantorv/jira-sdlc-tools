@@ -2,9 +2,8 @@
 
 Phase 3 of the task lifecycle, run by the **`jira-task-reviewer`** skill.
 Triggered from the parent's worktree (branch-derived key; no key
-argument) after every leaf executor has reported back and its issue is
-sitting in `<STATUS_IN_REVIEW>` — put there by a project rule, your
-automation, or a person (no skill moves it by default).
+argument) after every leaf executor has reported back and transitioned
+its issue to `<STATUS_IN_REVIEW>`.
 
 The reviewer handles **both** single-step top-level issues (no sub-tasks)
 and multistep parents (with sub-tasks). For single-step, it reviews the
@@ -24,7 +23,7 @@ idempotency lookup, fetching PR diffs, `gh pr review --comment
 verdicts, and finding or creating the aggregate parent PR) and **JIRA**
 (anything that mutates issue state: fetching the parent + In-Review
 sub-tasks, climbing from a sub-task branch to its parent, each rejected
-optional sub-task → In Progress transition, multi-line comments on the reviewed
+sub-task → In Progress transition, multi-line comments on the reviewed
 issue after every verdict, the per-sub-task summary comment on the
 parent, and every report comment posted on the parent) — so the full
 interaction reads `User ↔ Reviewer ↔ GIT ↔ JIRA` left to right.
@@ -44,7 +43,7 @@ sequenceDiagram
     activate Reviewer
     Reviewer->>JIRA: jira_acli_login.sh reviewer<br/>(idempotent — no-op if already it)
     JIRA-->>Reviewer: acli is now the reviewer account
-    Note right of Reviewer: login fails → stop.<br/>Every verdict comment below<br/>is now attributed to the reviewer
+    Note right of Reviewer: login fails → stop.<br/>Every verdict comment + reject transition below<br/>is now attributed to the reviewer
     Reviewer->>GIT: git fetch origin --prune
     Reviewer->>JIRA: fetch issue from branch key<br/>(type, status, parent, subtasks)
     JIRA-->>Reviewer: issue fields
@@ -79,9 +78,7 @@ sequenceDiagram
                 Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
             else REQUEST_CHANGES
                 Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-                    Reviewer-->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
-                end
+                Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
                 Reviewer->>JIRA: canonical report on <PARENT-KEY><br/>(S-CHANGES-REQUESTED, step 6)
                 Reviewer-->>User: "changes requested — fix, push & re-run"
             end
@@ -117,9 +114,7 @@ sequenceDiagram
                         Reviewer->>JIRA: parent tally on <PARENT-KEY><br/>"Sub-task <KEY>: ✅ approved"
                     else REQUEST_CHANGES
                         Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                        opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-                            Reviewer-->>JIRA: transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
-                        end
+                        Reviewer->>JIRA: transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
                         Reviewer->>JIRA: canonical report on <SUBTASK-KEY><br/>(M-SUBTASK-CHANGES-REQUESTED)
                         Reviewer->>JIRA: parent tally on <PARENT-KEY><br/>"Sub-task <KEY>: ❌ changes requested"
                         Note over Reviewer: continue to next sub-task PR
@@ -149,9 +144,7 @@ sequenceDiagram
                         Reviewer-->>User: "parent PR approved — merge manually"
                     else REQUEST_CHANGES
                         Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                        opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-                            Reviewer-->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
-                        end
+                        Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
                         Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
                         Reviewer-->>User: "parent PR changes requested — fix on <PARENT-BRANCH> & re-run"
                     end
@@ -170,9 +163,7 @@ sequenceDiagram
             Reviewer-->>User: "parent PR reviewed and approved — merge manually"
         else REQUEST_CHANGES
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-            opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-                Reviewer-->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
-            end
+            Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
             Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
             Reviewer-->>User: "parent PR changes requested — fix & re-run"
         end
@@ -181,6 +172,12 @@ sequenceDiagram
         Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled Done, no wrap-up
         Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
         Reviewer-->>User: "fully complete — all PRs merged"
+    end
+
+    opt anything approved this run — step 6, asked once
+        Reviewer->>User: move approved issue(s) to <STATUS_DONE>?
+        User-->>Reviewer: yes / no (JIRA-SDLC-TOOLS-RULES.md can answer it up front)
+        Reviewer->>JIRA: transition → <STATUS_DONE> (only what the user approved)
     end
     deactivate Reviewer
 ```
@@ -202,7 +199,7 @@ sequenceDiagram
   review --comment --body-file`), and finding or creating the aggregate
   parent PR. **JIRA** owns issue state: fetching the parent + sub-tasks
   (filtering to `<STATUS_IN_REVIEW>`), climbing from a sub-task branch to
-  its parent, each rejected sub-task's *optional* → In Progress transition with its
+  its parent, each rejected sub-task → In Progress transition with its
   findings comment, and the summary/report comments posted on the parent
   after every review.
 - **Parent via climb (sub-task branches climb up)** — the reviewer derives
@@ -223,7 +220,7 @@ sequenceDiagram
   already handled `<STATUS_DONE>` and there is no wrap-up to take.
 - **The reviewer logs in as itself first** — `jira_acli_login.sh reviewer`,
   before any read or write, so every canonical report and every reject-path
-  write below is attributed to the reviewer's Jira account rather than
+  transition below is attributed to the reviewer's Jira account rather than
   to whoever was logged in last (acli's credential store is machine-global,
   so that could be the executor from phase 2). The call is idempotent — a
   no-op when acli is already the reviewer — so it runs unconditionally. Note
@@ -247,14 +244,14 @@ sequenceDiagram
   default deployment the executor and reviewer share one `gh` account, and
   GitHub blocks an author from approving *or* requesting changes on their
   own PR. Both verdicts are recorded as review comments with the decision
-  in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`). That
-  prefix — not a Jira status — is the durable record of a verdict: it is
-  what the idempotency check (step 3a) detects on a re-run, and it stands
-  on its own whether or not a project rule adds a transition alongside it.
+  in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`). The
+  Jira transition to `<STATUS_IN_PROGRESS>` (reject path) is the actual
+  workflow gate; the GitHub comment records findings and makes the verdict
+  machine-detectable by the idempotency check (step 3a).
 - **Single-step is one-and-done** — on the single-step track, approval
   posts the final report immediately (S-APPROVED outcome, step 6).
-  Whatever moves the issue to `<STATUS_DONE>` on merge — GitHub-for-Jira,
-  your automation, or a project rule — no reviewer re-run is required. Only the
+  GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` when the
+  user merges (the reviewer also offers it at step 6); no re-run is required. Only the
   S-CHANGES-REQUESTED outcome (reject) needs a re-run after fixes.
 - **Single pass, no merge cascade** — each In Review sub-task PR is
   reviewed **in order, one at a time**. The verdict happens
@@ -263,9 +260,8 @@ sequenceDiagram
   the loop going so the full state is known. The only thing that stops
   the loop is running out of sub-task PRs.
 - **Continue on rejection, don't stop** — when a PR fails the review,
-  the reviewer posts the `CHANGES REQUESTED —` verdict comment (moving the
-  issue back to `<STATUS_IN_PROGRESS>` only if a project rule asks),
-  **records it as blocked**, and
+  the reviewer posts the `CHANGES REQUESTED —` verdict comment, transitions
+  that issue back to `<STATUS_IN_PROGRESS>`, **records it as blocked**, and
   continues to the next sub-task. After every single PR (approved or
   rejected), a short summary comment is posted on the parent so the human
   can see progress in real time (intentional audit trail). The final
@@ -280,20 +276,21 @@ sequenceDiagram
   --body-file`: **approve** → M-PARENT-READY (awaiting the human's manual
   merge), or **request changes** → M-PARENT-CHANGES-REQUESTED (integration
   `file:line` findings; fix on `<PARENT-BRANCH>` and re-run). The parent
-  reject is now shaped exactly like a sub-task reject — including the
-  optional transition — where it used to be the one reject path that moved
-  nothing. The reviewer never calls
+  reject transitions `<PARENT-KEY>` back to `<STATUS_IN_PROGRESS>`, exactly
+  as a sub-task reject does — it used to be the one reject path that moved
+  nothing, which left a rejected parent reading as *In Review*. The
+  reviewer never calls
   `gh pr merge` on the parent — merging into `<BASE_BRANCH>` is the human
   release decision. After the parent PR merges, no re-run is required; a
   re-run only reports the already-merged state (M-FULLY-COMPLETE).
-- **The reviewer moves no card on its own** — every transition in the
-  diagram sits inside an `opt` block on a dashed arrow, and fires only when
-  `JIRA-SDLC-TOOLS-RULES.md` (or the user, in chat) asks for it. Out of the
-  box a verdict is a review comment and a Jira report comment, nothing more.
-  When you *do* enable the reject-path rule, write it as "every reject
-  path": the old built-in behaviour transitioned on 3d but not on 5b, so a
-  rejected multistep parent PR left its card reading *In Review* with no
-  signal at all. See [JIRA-STATES.md](JIRA-STATES.md).
+- **Rejects move the card, approvals ask** — every reject path (3d
+  sub-task, 3d single-step, 5b parent) sends its issue back to
+  `<STATUS_IN_PROGRESS>`. Approval never transitions silently: the `opt`
+  block at the end of the diagram is step 6 asking, once per run, whether
+  to move the approved issue(s) to `<STATUS_DONE>` — because an approval
+  is not a merge, and only you know whether Done means merged on your
+  board. `JIRA-SDLC-TOOLS-RULES.md` can answer that question up front, or
+  override any of it. See [JIRA-STATES.md](JIRA-STATES.md).
 - **Every terminal branch posts a JIRA report comment on the parent**
   — per step 6, the report goes to chat *and* as a single Jira comment
   on `<PARENT-KEY>`: the single-step *no-PR-yet* exit, the single-step

@@ -163,28 +163,28 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 `Story`, `Task`, and `Bug` are the top-level types (peers), with
 `Sub-task` underneath.
 
-**Jira status flow across the three skills.** **No skill moves a card by
-itself.** The four status names in `jira-sdlc-tools.env` exist so that
-*something* can name the state it moves an issue to — a rule in
-`JIRA-SDLC-TOOLS-RULES.md`, your own automation, GitHub-for-Jira, or a
-person. A skill transitions an issue only when a project rule (or you, in
-chat) asks it to.
+**Jira status flow across the three skills.** Each skill drives the issue's
+Kanban status with the four status names from `jira-sdlc-tools.env`, so
+board progress reflects the work — and every move below is a **default**
+that [`JIRA-SDLC-TOOLS-RULES.md`](#project-rules-file) can override:
+- New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
+  (Jira's default initial status for new issues — no explicit move needed).
+- `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
+  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
+  the PR (step 11). The second one is load-bearing: the reviewer picks up
+  only sub-tasks sitting in `<STATUS_IN_REVIEW>`.
+- `jira-task-reviewer` transitions a **rejected** issue back to
+  `<STATUS_IN_PROGRESS>` so the executor can pick it up again — on every
+  reject path (sub-task, single-step, and the aggregate parent PR alike).
+- On **approval**, the reviewer never transitions silently: it **asks you**,
+  once at the end of a run, whether to move the approved issue(s) to
+  `<STATUS_DONE>`. An approval is not a merge, so Done may be premature —
+  only you know whether your board closes a card at approval or at merge.
+  Normally GitHub-for-Jira's merge automation handles `<STATUS_DONE>` when
+  the human merges.
 
-The reasoning: status is a *shared* field. Humans, GitHub-for-Jira, and
-Jira Automation all write it, and none of them can tell a card an agent
-moved from one a person moved — so a transition nobody asked for is a
-claim your team can't audit.
-
-Two consequences worth knowing before you wire up a board:
-- The skills read status in exactly one place: `jira-task-reviewer`
-  reviews only sub-tasks sitting in `<STATUS_IN_REVIEW>`. Since nothing
-  writes that by default, something else must, or the reviewer finds
-  nothing to review.
-- Earlier versions made three transitions automatically (executor →
-  `<STATUS_IN_PROGRESS>` on pickup and `<STATUS_IN_REVIEW>` on PR open,
-  reviewer → `<STATUS_IN_PROGRESS>` on reject). That behaviour is now a
-  copy-paste rule in [`docs/JIRA-STATES.md`](docs/JIRA-STATES.md), and the
-  shipped template carries it commented out.
+Full map, and the rules that override any of it:
+[`docs/JIRA-STATES.md`](docs/JIRA-STATES.md).
 
 ## Prerequisites
 
@@ -295,7 +295,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
-        │   ├── JIRA-STATES.md        # who moves a card, and the opt-in transition rules
+        │   ├── JIRA-STATES.md        # who moves a card, what the reviewer asks about
         │   └── SDLC.md            # the branching/release policy these skills assume
         ├── JIRA-SDLC-TOOLS-RULES.example.md  # template: optional per-project rules file
         ├── LICENSE
@@ -567,11 +567,9 @@ real task, not discovering mid-failure:
 **A sub-task with an open PR is not being reviewed by `jira-task-reviewer`.**
 The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g., "In Review"). A sub-task still in `<STATUS_IN_PROGRESS>` (or any other
-status) is silently skipped — and **no skill writes that status by
-default**, so this is the expected state until something does. Move it
-manually, or add the executor transition rule from
-[`docs/JIRA-STATES.md`](docs/JIRA-STATES.md) to `JIRA-SDLC-TOOLS-RULES.md`
-so the executor sets it on PR open. Then re-run the reviewer.
+status) is silently skipped. That normally means the executor hasn't opened
+its PR yet (step 11 sets the status) — or a project rule suppressed that
+transition. Move it manually or re-run the executor, then re-run the reviewer.
 
 **I fixed a sub-task that the reviewer rejected, but re-running still shows
 changes requested.**

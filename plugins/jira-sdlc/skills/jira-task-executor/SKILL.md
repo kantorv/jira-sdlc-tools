@@ -1,6 +1,6 @@
 ---
 name: jira-task-executor
-description: Picks up the issue implied by the current worktree's branch end-to-end — branch, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link. Never moves the issue's Jira status on its own — see JIRA-SDLC-TOOLS-RULES.md.
+description: Picks up the issue implied by the current worktree's branch end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and updated Jira status.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 ---
@@ -93,7 +93,7 @@ pass one explicitly only when running outside the issue's worktree. If
 relative to this skill.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
-skill commits, pushes, and opens a PR — every
+skill transitions Jira status, commits, pushes, and opens a PR — every
 one of those assumes the right starting point and working credentials,
 and finding a busted environment mid-flow (e.g. a logged-out `gh`
 failing at step 10, *after* the implementation is already written and
@@ -208,16 +208,12 @@ stale-branch merge and step 10's PR-base resolution).
      resolver handles an unset parentbranch (Jira comment, then env
      default).
 
-3. **Jira status — not yours to change.** You do **not** transition `<KEY>`
-   to any state, at any point in this run, unless one of exactly two things
-   tells you to: a rule in `JIRA-SDLC-TOOLS-RULES.md` (its `## COMMON` or
-   `## JIRA-TASK-EXECUTOR` section), or the user asking you directly in
-   chat. Absent that, leave the board alone — status here is owned by
-   humans and automation, which can't tell a card *you* moved from one they
-   moved, so a transition nobody asked for is a lie they have no way to
-   spot. When you are asked, resolve the status name from
-   `jira-sdlc-tools.env` and use:
-   `acli jira workitem transition --key <KEY> --status "<STATUS_*>" --yes`.
+3. **Transition the issue** to in-progress:
+   `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
+   `jira-sdlc-tools.env` in the project root for the confirmed status name for this
+   project — default example `In Progress`). This is a **default**, not a
+   fixed rule: `JIRA-SDLC-TOOLS-RULES.md` can change it or suppress it, and
+   where it does, it wins over this step.
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
@@ -368,16 +364,22 @@ stale-branch merge and step 10's PR-base resolution).
       `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
       (get `<org>/<repo>` from `git remote get-url origin`).
 
-11. **Jira status after the PR — still not yours to change.** Opening a PR
-    is not a licence to move the card; step 3's rule holds to the end of
-    the run. If `JIRA-SDLC-TOOLS-RULES.md` or the user asked for a move at
-    this point — commonly to `<STATUS_IN_REVIEW>` — make it now, and only
-    then. Everything the card does afterwards belongs to whoever owns it
-    here: a human, GitHub-for-Jira's merge automation, or a project rule.
+11. **Update Jira — status transition, no comment yet:**
+    You just opened a PR (step 10), so the work is now under review —
+    transition it to in-review:
+    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
+    `jira-sdlc-tools.env` in the project root for the confirmed status
+    name for this project — default example `In Review`). Like step 3 this
+    is a default `JIRA-SDLC-TOOLS-RULES.md` can override — and it is
+    load-bearing: `jira-task-reviewer` reviews only sub-tasks sitting in
+    `<STATUS_IN_REVIEW>`, so suppressing it without arranging another way
+    to set that status leaves the work invisible to review.
+    Reaching `<STATUS_DONE>` is not yours: the reviewer asks the user about
+    it on an approved PR, and GitHub-for-Jira (if connected) sets it when
+    the PR merges. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the status `<KEY>` is actually in (which
-    is whatever it was when you started, unless step 3 authorized a move). Pass through any
+    commit(s), the PR link, and the issue's new status. Pass through any
     note the identity gate printed on success (it flags when acli is now a
     dedicated executor account machine-globally). Post this
     same report to the user in chat **and** as a single Jira comment: this is

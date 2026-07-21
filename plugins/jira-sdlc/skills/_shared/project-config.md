@@ -35,15 +35,14 @@ end of this document.
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
-| `<STATUS_IN_PROGRESS>` | The "being worked" state. No skill writes it by default; name it here so a rule in `JIRA-SDLC-TOOLS-RULES.md` or your own automation can. | `In Progress` |
-| `<STATUS_IN_REVIEW>` | The "PR open, under review" state. `jira-task-reviewer` **reads** it to decide which sub-tasks are in scope, but no skill writes it by default. | `In Review` |
-| `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state directly; it is handled by automation or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`. Must match your workflow's real status name exactly. | `Done` |
+| `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work, and `jira-task-reviewer` sends a rejected issue back to. | `In Progress` |
+| `<STATUS_IN_REVIEW>` | Status `jira-task-executor` sets when it opens the PR. `jira-task-reviewer` **reads** it to decide which sub-tasks are in scope. | `In Review` |
+| `<STATUS_DONE>` | Final status, normally reached when a PR merges (GitHub-for-Jira automation). No skill sets it unprompted — `jira-task-reviewer` **asks** before moving an approved issue here, since an approval is not a merge. Must match your workflow's real status name exactly. | `Done` |
 
-**No skill transitions an issue by default.** All four tokens exist so
-that *something* — a rule in `JIRA-SDLC-TOOLS-RULES.md`, your automation,
-or a human — can name the state it moves a card to. `../../docs/JIRA-STATES.md`
-explains the model and gives copy-paste rules that restore the transitions
-earlier versions made automatically.
+Those are **defaults**, not fixed behaviour: a rule in
+`JIRA-SDLC-TOOLS-RULES.md` overrides any of them, and wins wherever it
+disagrees with a `SKILL.md`. `../../docs/JIRA-STATES.md` is the full map of
+who moves a card and when, with copy-paste rules for the common overrides.
 
 ## Required (in `jira-sdlc-tools.local.env`)
 

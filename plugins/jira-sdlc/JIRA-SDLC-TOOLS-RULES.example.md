@@ -73,18 +73,13 @@ Rules for implementing an issue. Examples:
 - Test policy beyond what CLAUDE.md / AGENTS.md already state.
 - PR conventions: body template, required reviewers, labels this repo's
   release tooling reads.
+- Board conventions that differ from the defaults. By default the executor
+  moves the issue to <STATUS_IN_PROGRESS> when it picks it up and
+  <STATUS_IN_REVIEW> when it opens the PR (docs/JIRA-STATES.md) — override
+  either here, e.g.:
 
-No skill moves a Jira card on its own. Uncomment the block below to have
-the executor drive the board as it works — this is exactly what earlier
-versions of the plugin did automatically (see docs/JIRA-STATES.md):
-
-Move the issue as you work it — our board is how the team sees progress:
-- when you pick it up (step 3) -> <STATUS_IN_PROGRESS>
-- once you've opened the PR (step 11) -> <STATUS_IN_REVIEW>
-
-The second matters beyond reporting: jira-task-reviewer only reviews
-sub-tasks sitting in <STATUS_IN_REVIEW>, so skipping it leaves the work
-invisible to review.
+Don't transition to <STATUS_IN_REVIEW> at the end — opening the PR is
+enough, our automation moves the card.
 -->
 
 ## JIRA-TASK-REVIEWER
@@ -94,19 +89,15 @@ Rules for reviewing. Examples:
 
 - Extra review dimensions this codebase cares about: migrations,
   public API surface, generated artifacts, accessibility.
+- The <STATUS_DONE> question. By default the reviewer ASKS you, at the end
+  of a run, whether to move approved issues to <STATUS_DONE>. Answer it
+  once here and it stops asking — either:
 
-Same idea as above — uncomment to restore the reject-path transition.
-Note it says *every* reject path: the old built-in behaviour transitioned
-on step 3d but not on step 5b (the aggregate parent PR), which left a
-rejected parent with no board signal at all.
+When you approve a PR, transition the issue to <STATUS_DONE> yourself —
+don't ask. We have no GitHub-for-Jira connection, so nothing else will.
 
-When your verdict is CHANGES REQUESTED, transition the issue back to
-<STATUS_IN_PROGRESS> — the review comment records *what* was wrong, but
-the status is what tells the board the work bounced. This applies to
-every reject path, step 3d and step 5b alike.
+  or the opposite:
 
-You can also go further than the old defaults, e.g.:
-
-When you approve a PR, transition the issue to <STATUS_DONE> yourself.
-We have no GitHub-for-Jira connection, so nothing else will.
+Never move an issue to <STATUS_DONE>, and don't ask about it — merging is
+what closes a card here, and our automation handles that.
 -->

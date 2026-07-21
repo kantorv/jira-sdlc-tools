@@ -9,9 +9,9 @@ swimlanes — **GIT** (anything that mutates repo state: reading the
 worktree's branch and `parentbranch` config, merging the parent branch
 current, committing, pushing, opening the PR) and
 **JIRA** (anything that mutates issue state: fetching the issue and its
-prior comments, any `Task memory` comments posted along the way, the
-final run-report comment, and — only when a project rule asks for them —
-the optional *In Progress* / *In Review* transitions) — so the full interaction reads
+prior comments, the *In Progress* / *In Review* transitions, any `Task
+memory` comments posted along the way, and the final run-report
+comment) — so the full interaction reads
 `User ↔ Executor ↔ GIT ↔ JIRA` left to right.
 
 ## Sequence diagram
@@ -41,9 +41,7 @@ sequenceDiagram
         Executor->>GIT: bring worktree branch current (merge parent branch — branch already exists)
         GIT-->>Executor: working branch ready
         Note right of Executor: merge conflict → stop & ask · unset parentbranch → skip merge, flag possibly-stale
-        opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-            Executor-->>JIRA: transition → In Progress
-        end
+        Executor->>JIRA: transition → In Progress
         Executor->>Executor: investigate (reads prior task memory) • clarify
         opt memory-worthy finding or decision
             Executor->>JIRA: post Task memory comment
@@ -52,9 +50,7 @@ sequenceDiagram
         Note right of Executor: repeated individual test failure → stop & ask, no commit/push/PR
         Executor->>GIT: commit + push + open PR
         GIT-->>Executor: PR URL
-        opt only if JIRA-SDLC-TOOLS-RULES.md (or the user) asks
-            Executor-->>JIRA: transition → In Review
-        end
+        Executor->>JIRA: transition → In Review
         Executor->>JIRA: post run-report comment (PR URL, branch, status)
         Executor-->>User: report (PR URL, branch, status)
         deactivate Executor
@@ -73,37 +69,35 @@ sequenceDiagram
   the parent branch current, the commit, the push, and the PR open).
   **JIRA** owns issue state (the issue fetch
   that carries the parent family *and prior comments* used in the
-  ownership check and task-memory read, any `Task memory` comments posted
-  along the way, the final run-report comment, and the two *optional*
-  transitions). Everything
+  ownership check and task-memory read, the *In Progress* and *In
+  Review* transitions, any `Task memory` comments posted along the way,
+  and the final run-report comment). Everything
   else (investigating, clarifying, implementing, testing) stays inside
   the executor.
 - **Parallel lanes** — the `par / and / end` block encodes the
   worktree-level parallelism the assigner's phase 1 setup makes
   possible. **Every leaf has its own worktree** and can run concurrently.
 - **Uniform path** — the executor validates its worktree (GIT), brings
-  its branch current, commits, pushes, opens a PR (GIT), and posts its
-  run-report comment (JIRA). The PR is the thing phase 3 reviews.
-- **Status transitions are opt-in, and the executor owns none of them** —
-  the two `opt` blocks with dashed arrows fire *only* when
-  `JIRA-SDLC-TOOLS-RULES.md` (or the user, in chat) asks for them.
-  Out of the box the executor never moves the card, and the run report
-  states the status the issue is actually in. Both blocks are worth
-  enabling if your board drives review off status: `jira-task-reviewer`
-  picks up only sub-tasks sitting in *In Review*. See
-  [JIRA-STATES.md](JIRA-STATES.md) for the copy-paste rule.
+  its branch current, commits, pushes, opens a PR (GIT),
+  transitions to *In Review* (JIRA), and posts its run-report
+  comment (JIRA). The PR is the thing phase 3 reviews.
+- **Status transitions the executor owns** — to *In Progress* on start,
+  to *In Review* on PR open (both JIRA). The second is load-bearing:
+  `jira-task-reviewer` picks up only sub-tasks sitting in *In Review*.
+  Both are defaults a project can override in `JIRA-SDLC-TOOLS-RULES.md` —
+  see [JIRA-STATES.md](JIRA-STATES.md).
 - **Task memory is a first-class JIRA interaction, not a single comment
   invariant** — the executor reads prior `Task memory
   (jira-task-executor)` comments as part of the step-1 fetch, and may
   post its own as investigation/implementation turns up findings worth
   preserving (the `opt` block — zero or more per run, not fixed). These
   are expected companions to the **one** comprehensive run report posted
-  once the PR is open (PR URL, branch, current status) — the
+  after the *In Review* transition (PR URL, branch, final status) — the
   invariant is "one run report per run," not "one Jira comment per run."
 - **Identity first, then ownership** — before anything else, the executor
   **logs in as itself** (`jira_acli_login.sh executor`), so every Jira write
-  in the run — the task-memory notes, the run report, and any transition a
-  project rule asked for — is attributed to the executor account rather than
+  in the run — the *In Progress* and *In Review* transitions, the task-memory
+  notes, the run report — is attributed to the executor account rather than
   to whoever happened to be logged in. It then **gates on ownership**
   (`check_assignee.sh`): `<KEY>` must be assigned to that account. Anything
   else — unassigned, assigned to someone else, unreadable — stops the run

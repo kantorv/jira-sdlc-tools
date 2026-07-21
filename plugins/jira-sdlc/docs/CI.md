@@ -1,10 +1,10 @@
 > **Note on this document:** this describes the GitHub Actions workflows in
 > `.github/workflows/` at the **marketplace repo root** (not inside the
 > plugin) — they automate the release policy in [SDLC.md](SDLC.md) and the
-> Jira issue transitions. Those transition workflows matter more than they
-> used to: **no skill moves a card by itself** ([JIRA-STATES.md](JIRA-STATES.md)),
-> so CI is one of the two supported ways to drive the board — the other
-> being a rule in `JIRA-SDLC-TOOLS-RULES.md`. It complements
+> Jira issue transitions the `jira-sdlc` skills assume. Which moves the
+> skills make themselves (and which they ask about) is
+> [JIRA-STATES.md](JIRA-STATES.md) — these workflows are the CI-side
+> alternative for boards that would rather not have a skill do it. It complements
 > [AGENTS.md → Releasing](../../../AGENTS.md); this file is the CI-side
 > reference, AGENTS.md is the authoring-side one. For the **user-facing** lab
 > channel (how to install it, what extra skills it carries), see
