@@ -39,6 +39,10 @@ end of this document.
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state directly; it is handled by automation or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`. Must match your workflow's real status name exactly. | `Done` |
 
+An agent writes a status in only three places across the three skills —
+`../../docs/JIRA-STATES.md` lists them, and shows how to change that
+behaviour from `JIRA-SDLC-TOOLS-RULES.md` rather than by editing a skill.
+
 ## Required (in `jira-sdlc-tools.local.env`)
 
 | Token | What it is | Example |

@@ -286,6 +286,7 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
+        │   ├── JIRA-STATES.md        # who moves a card — the 3 agent-initiated transitions
         │   └── SDLC.md            # the branching/release policy these skills assume
         ├── JIRA-SDLC-TOOLS-RULES.example.md  # template: optional per-project rules file
         ├── LICENSE
