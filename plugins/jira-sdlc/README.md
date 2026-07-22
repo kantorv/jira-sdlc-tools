@@ -174,8 +174,10 @@ relying on opaque GitHub-for-Jira transition rules:
   the sub-task's PR (step 11, dedicated-branch path only).
 - `jira-task-reviewer` transitions a rejected sub-task back to
   `<STATUS_IN_PROGRESS>` (step 3d, `REQUEST_CHANGES` path) so the executor
-  can pick it up again. It never transitions anything to `<STATUS_DONE>` —
-  GitHub-for-Jira automation handles that when the human merges the PRs.
+  can pick it up again. It never transitions anything to `<STATUS_DONE>` on
+  its own: when a run approved something, its last step (step 7) asks you
+  whether to close those issues and moves only what you approve. Decline,
+  and GitHub-for-Jira automation handles it when the human merges the PRs.
 
 ## Prerequisites
 
@@ -286,6 +288,8 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
+        │   ├── JIRA-STATES.md     # who moves a card to which state, and when
+        │   ├── STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md  # driving Jira status from CI
         │   └── SDLC.md            # the branching/release policy these skills assume
         ├── LICENSE
         └── README.md

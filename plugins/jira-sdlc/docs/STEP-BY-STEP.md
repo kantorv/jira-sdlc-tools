@@ -139,7 +139,7 @@ column/workflow settings and confirm each one exists, then copy the names
 | `STATUS_TODO` | `To Do` | `jira-task-assigner`, on newly created issues |
 | `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts work |
 | `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
-| `STATUS_DONE` | `Done` | Nothing in this plugin — GitHub-for-Jira automation on merge, or you, by hand |
+| `STATUS_DONE` | `Done` | `jira-task-reviewer` step 7, but only for approved issues and only if you say yes — otherwise GitHub-for-Jira automation on merge, or you, by hand |
 
 `In Review` is the one most likely to be missing: several Jira templates ship
 `To Do` / `In Progress` / `Done` only. Add the column, or point the setting at

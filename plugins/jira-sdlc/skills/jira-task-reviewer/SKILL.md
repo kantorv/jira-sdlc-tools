@@ -1,6 +1,6 @@
 ---
 name: jira-task-reviewer
-description: Run from the parent issue's worktree — no issue-key argument; the issue is derived from the branch, climbing from a sub-task branch to its parent automatically. Finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything.
+description: Run from the parent issue's worktree — no issue-key argument; the issue is derived from the branch, climbing from a sub-task branch to its parent automatically. Finds all sub-tasks in "In Review" status that have an open PR into the parent branch, reviews each PR (approve or request changes), posts findings to Jira, and continues past any rejections to report the full state. After a reject-and-fix cycle, re-run to resume. Once all sub-task PRs are merged (by a human), the skill reviews the parent PR into the base branch. Also handles single-step top-level issues (no sub-tasks) by reviewing their PR directly into the base branch. Never merges anything; if anything was approved, it ends by asking whether to move those issues to "Done".
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -267,7 +267,7 @@ side-effects.
 
 Iterate through **the PR set** (defined in step 1 — the one parent PR on the single-step track, each in-review sub-task PR on the multistep track) in ascending key order. Treat each PR individually — do not hold results for a batch. The loop body below is the same for every PR in the set regardless of track.
 
-Resolve this skill's GitHub identity **once here, before the loop** — `SELF=$(gh api user --jq .login)` — and reuse it for every iteration (3a keys on it). If `gh api user` errors, gh isn't installed or authenticated: see the edge case in step 7.
+Resolve this skill's GitHub identity **once here, before the loop** — `SELF=$(gh api user --jq .login)` — and reuse it for every iteration (3a keys on it). If `gh api user` errors, gh isn't installed or authenticated: see the edge case in step 8.
 
 ### 3a. Check idempotency — already reviewed by me?
 
@@ -321,7 +321,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
-  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Do NOT move the Jira status — let the GitHub-for-Jira automation handle it when the PR is merged.
+  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Don't move the Jira status *here* — mid-loop the PR is only approved, not merged. Step 7 offers the user the `<STATUS_DONE>` move once at the end of the run; declining it leaves the issue to the GitHub-for-Jira merge automation.
 
 * **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
   ```bash
@@ -402,7 +402,7 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state
 
 ### 5b. Review the parent PR (apply the 3a idempotency check first)
 
-Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the step-1 phase check jumps straight here and skips step 3, where `SELF` is normally set; if it's unset, resolve it now (`SELF=$(gh api user --jq .login)`; if `gh api user` errors, see step 7). Then apply the **3a body-prefix idempotency check** before reviewing: a prior self-review whose body starts `APPROVED —` → report "Parent PR already reviewed — waiting for manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the fresh aggregate code. Otherwise:
+Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the step-1 phase check jumps straight here and skips step 3, where `SELF` is normally set; if it's unset, resolve it now (`SELF=$(gh api user --jq .login)`; if `gh api user` errors, see step 8). Then apply the **3a body-prefix idempotency check** before reviewing: a prior self-review whose body starts `APPROVED —` → report "Parent PR already reviewed — waiting for manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the fresh aggregate code. Otherwise:
 
 1. Review the aggregate diff: same criteria as 3c, but lighter. The sub-tasks were already reviewed individually — focus on integration issues, conflicts, and anything that only surfaces when the pieces combine.
 2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical review report** (see *The canonical review report* above), scoped to the parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d, just the aggregate PR). Do NOT merge. Tell the user the parent PR is approved and awaiting their manual merge; step 6 posts the run-level report.
@@ -476,7 +476,27 @@ outcomes above.
   Fix the findings above in the sub-task's branch and push; the executor re-run moves the sub-task back to <STATUS_IN_REVIEW>. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
 
-## 7. Edge cases
+## 7. Offer to close what was approved
+
+*(Last step of the run — after the step-6 report is posted, and only when this run approved something. If every PR was rejected, 3d already sent those issues back to `<STATUS_IN_PROGRESS>` and there is nothing to offer.)*
+
+Ask the user **once**, naming every issue this run approved, whether to move them to `<STATUS_DONE>`, and transition only the ones they say yes to:
+
+```
+acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes
+```
+
+Ask rather than decide, because an approval is not a merge — this skill never merges, so every PR you just approved is still open. Teams whose Done means "merged" get there by automation (GitHub-for-Jira's merge rule, a Jira automation, a workflow), and moving the card here would jump ahead of it; teams that close at approval have no such automation and want exactly this. Nothing in the repo says which kind this project is, so the user decides. If they decline, or the run is non-interactive and no answer comes, change nothing — approved-but-open is the safe resting state, and a later re-run detects the merge on its own.
+
+Which issues to name:
+
+- **Single-step** — `<PARENT-KEY>`, on the S-APPROVED outcome.
+- **Multistep** — every sub-task whose 3d verdict was APPROVED, plus `<PARENT-KEY>` itself when 5b approved the parent PR (M-PARENT-READY). On M-SOME-BLOCKED offer only the approved subset.
+- **Already merged** (S-MERGED, M-FULLY-COMPLETE) — skip the question entirely; those issues are Done already.
+
+Post nothing further to Jira here. The step-6 report is the run's single final comment and it recorded the review verdict, which a closure after the fact doesn't change — so don't edit or re-post it. Report what moved in chat instead.
+
+## 8. Edge cases
 
 - **No sub-tasks in review status, but sub-tasks exist** → report that the executor hasn't pushed any PRs to In Review yet; the user may re-run later.
 - **Sub-task with no branch / no PR**: flag in the report. The skill can only review what has been pushed and has a PR open. Don't attempt to create branches or PRs — that's the executor's job.
