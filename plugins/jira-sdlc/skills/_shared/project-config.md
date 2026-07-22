@@ -31,7 +31,7 @@ define the same variable (though they define disjoint sets by convention).
 | `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
-| `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state directly; it is handled by automation or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`. Must match your workflow's real status name exactly. | `Done` |
+| `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state on its own: `jira-task-reviewer` step 7 offers it for approved issues at the end of a run and moves only what you approve; otherwise it is handled by automation or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`. Must match your workflow's real status name exactly. | `Done` |
 
 ## Required (in `jira-sdlc-tools.local.env`)
 
