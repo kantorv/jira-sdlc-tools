@@ -13,6 +13,55 @@ The skills are explicit-invocation only by design — never auto-triggered —
 and carry the corresponding setting on both specs: `disable-model-invocation`
 for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
+## ⚠️ Caution
+
+**This plugin acts on your behalf in both git and Jira.** Given your
+credentials, it will commit, create and push branches, open and update
+pull requests, and take the other actions needed to follow the
+[`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
+create, update, transition, and comment on issues in your Jira project.
+Those actions are visible to your team and land under your (or agent's own) account.
+
+Use it with caution: point it at a project you're comfortable having
+changed, and read [Configuration](#either-way) before the first run so
+you know which repo and which Jira project it's wired to.
+
+What it deliberately never does on its own — merging into your base
+branch, deleting Jira issues, resolving conflicts — is listed in
+[Safety model](plugins/jira-sdlc/README.md#safety-model).
+
+## What's here
+
+This repo currently hosts one plugin, **[`jira-sdlc`](plugins/jira-sdlc)**
+— three coupled skills (`jira-task-assigner`, `jira-task-executor`,
+`jira-task-reviewer`) that turn a feature request into Jira issues and
+git worktrees, implement each piece in parallel, and then review and
+merge the result as a single unit, leaving only the final release merge
+for a human.
+
+This page is the front door. Everything about how the plugin actually
+works — architecture, prerequisites, configuration, a full usage
+walkthrough, safety model, and troubleshooting — lives in
+[`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
+
+The three skills, one per stage of the lifecycle:
+
+- **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** — turns a feature/task/bug description into
+  Jira issues with matching git branches and worktrees. Investigates the
+  codebase, asks clarifying questions, decides whether the request is one
+  self-contained task or a multistep split into parallel sub-tasks, and
+  gives every leaf issue its own branch and worktree so parallel work can
+  start immediately.
+- **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** — implements the issue implied by the current
+  worktree's branch, end to end: status transition, investigation,
+  implementation, tests, commit, push, and PR. No issue-key argument —
+  run it from inside the issue's own worktree.
+- **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** — run from the parent issue's worktree.
+  Reviews each sub-task PR into the parent branch (approve or request
+  changes), posts findings to Jira, and reviews the parent PR into the
+  base branch once the sub-task PRs are merged. Never merges anything
+  itself.
+
 ## Quick install
 
 ### Claude Code
@@ -69,84 +118,16 @@ For every platform's skills directory, spec, wiring and verification status,
 see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
 bottom.
 
-## What's here
-
-This repo currently hosts one plugin, **[`jira-sdlc`](plugins/jira-sdlc)**
-— three coupled skills (`jira-task-assigner`, `jira-task-executor`,
-`jira-task-reviewer`) that turn a feature request into Jira issues and
-git worktrees, implement each piece in parallel, and then review and
-merge the result as a single unit, leaving only the final release merge
-for a human.
-
-This page is the front door. Everything about how the plugin actually
-works — architecture, prerequisites, configuration, a full usage
-walkthrough, safety model, and troubleshooting — lives in
-[`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
-
-The three skills, one per stage of the lifecycle:
-
-- **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** — turns a feature/task/bug description into
-  Jira issues with matching git branches and worktrees. Investigates the
-  codebase, asks clarifying questions, decides whether the request is one
-  self-contained task or a multistep split into parallel sub-tasks, and
-  gives every leaf issue its own branch and worktree so parallel work can
-  start immediately.
-- **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** — implements the issue implied by the current
-  worktree's branch, end to end: status transition, investigation,
-  implementation, tests, commit, push, and PR. No issue-key argument —
-  run it from inside the issue's own worktree.
-- **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** — run from the parent issue's worktree.
-  Reviews each sub-task PR into the parent branch (approve or request
-  changes), posts findings to Jira, and reviews the parent PR into the
-  base branch once the sub-task PRs are merged. Never merges anything
-  itself.
-
-## ⚠️ Caution
-
-**This plugin acts on your behalf in both git and Jira.** Given your
-credentials, it will commit, create and push branches, open and update
-pull requests, and take the other actions needed to follow the
-[`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
-create, update, transition, and comment on issues in your Jira project.
-Those actions are visible to your team and land under your (or agent's own) account.
-
-Use it with caution: point it at a project you're comfortable having
-changed, and read [Configuration](#either-way) before the first run so
-you know which repo and which Jira project it's wired to.
-
-What it deliberately never does on its own — merging into your base
-branch, deleting Jira issues, resolving conflicts — is listed in
-[Safety model](plugins/jira-sdlc/README.md#safety-model).
-
-## Jira states - who can move a card
-
-The four statuses are configurable — `<STATUS_*>` below are the tokens you map
-onto your board's real names in `jira-sdlc-tools.env`. Full detail, including
-what each skill does at every step, is in
-**[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
-
-✅ does it · ⚠️ only with your confirmation · ❌ never
-
-| Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
-|---|---|---|---|---|
-| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `acli … transition`, or drag the card |
-| **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
-| **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
-| **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
-| **[GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
-| **[Jira Automation](plugins/jira-sdlc/docs/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
-
-The GitHub Actions row is **this repo's own CI** (`.github/workflows/`), not
-files the plugin installs — a marketplace install copies only
-`plugins/jira-sdlc/`. Copy them into your project to get that row; setup and
-secrets are in
-[Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
-
 ## Full Setup
 
-In a hurry? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** is the
-short, ordered walkthrough — tools, tokens, settings, and a healthcheck, in
-the order you actually do them.
+Two shorter routes through the same ground:
+
+- **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** — the ordered
+  walkthrough: tools, tokens, settings, and a healthcheck, in the order you
+  actually do them.
+- **[Full setup checklist](plugins/jira-sdlc/docs/FULL-SETUP-CHECKLIST.md)** —
+  the same prerequisites as tickable items, each with how to verify it, ending
+  in one command that checks most of them for you.
 
 ### Prerequisites
 
@@ -193,6 +174,30 @@ Create two files in the root of the repo you're building features in:
 2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
 
 The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
+
+## Jira states - who can move a card
+
+The four statuses are configurable — `<STATUS_*>` below are the tokens you map
+onto your board's real names in `jira-sdlc-tools.env`. Full detail, including
+what each skill does at every step, is in
+**[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
+
+✅ does it · ⚠️ only with your confirmation · ❌ never
+
+| Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
+|---|---|---|---|---|
+| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `acli … transition`, or drag the card |
+| **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
+| **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
+| **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
+| **[GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
+| **[Jira Automation](plugins/jira-sdlc/docs/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
+
+The GitHub Actions row is **this repo's own CI** (`.github/workflows/`), not
+files the plugin installs — a marketplace install copies only
+`plugins/jira-sdlc/`. Copy them into your project to get that row; setup and
+secrets are in
+[Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
 ## Task lifecycle preview
 

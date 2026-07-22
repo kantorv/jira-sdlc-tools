@@ -166,20 +166,39 @@ JIRA_TOKEN=your-api-token-value      # the raw token, not a path to a file
 #JIRA_REVIEWER_TOKEN=…
 ```
 
-Two traps worth knowing: `JIRA_TOKEN` is the **raw token value**, not a path to
-a file holding it; and `JIRA_EXECUTOR_EMAIL`, if set, doubles as the
-**assignee** — the assigner puts it on every issue it creates, and the executor
-refuses to work an issue that isn't assigned to it.
+One trap worth knowing: `JIRA_TOKEN` is the **raw token value**, not a path to
+a file holding it.
 
 ## Verify it
 
-Rather than re-reading the list, run the healthcheck from your project root —
-it's the same script the skills run before they do anything:
+Rather than re-reading the list, run the healthcheck from your **main
+repository** — it's the same script the skills run before they do anything, and
+it confirms both logins, your settings, and the platform in one pass. The
+settings it reads are documented in
+[project-config.md](../skills/_shared/project-config.md); what it does to log
+`gh` in, and why that session lasts the whole conversation, is in
+[What the healthcheck does](github/GH-PAT-SESSION-LOGIN.md#what-the-healthcheck-does).
 
+**Linux / macOS** (bash) — read it first:
+[`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
-bash <path-to-plugin>/skills/_shared/scripts/posix/statuscheck.sh
-# Windows: pwsh -NoProfile -File <path-to-plugin>/skills/_shared/scripts/win/statuscheck.ps1
+curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
+bash statuscheck.sh
 ```
+
+**Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
+[`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
+```powershell
+iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
+pwsh -File statuscheck.ps1        # PowerShell 7+
+powershell -File statuscheck.ps1  # PowerShell 5.1
+```
+
+Both are plain and dependency-free: they read config and check auth, and the
+only thing either writes is `jira-sdlc-tools.local.env`, copied into a worktree
+from your main checkout when it's missing. If you already have the plugin
+installed, run your local copy instead of downloading:
+`bash <path-to-plugin>/skills/_shared/scripts/posix/statuscheck.sh`.
 
 It prints one table and exits non-zero if anything is broken. The rows that map
 onto this checklist:
