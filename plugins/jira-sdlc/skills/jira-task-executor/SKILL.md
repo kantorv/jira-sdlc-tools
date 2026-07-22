@@ -52,6 +52,12 @@ the issue key is derived from the current branch (see Discovery below).
   (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
   project root.
 
+**Project rules — read these first.** If `JIRA-SDLC-TOOLS-RULES.md` exists
+in the project root, adopt its `## COMMON` + `## JIRA-TASK-EXECUTOR`
+sections for this run (ignore the other two); on any conflict with an
+instruction here, that file wins. Absent → continue silently, it's
+optional. Contract: `../_shared/project-config.md`.
+
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
 Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,
@@ -119,6 +125,7 @@ actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
+| `project_rules` | INFO: whether `JIRA-SDLC-TOOLS-RULES.md` exists and which sections it has. **Present → read it now** and adopt `## COMMON` + `## JIRA-TASK-EXECUTOR`, which override this skill. WARN means its headings are malformed, so nothing in it applies |
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
@@ -205,7 +212,9 @@ stale-branch merge and step 10's PR-base resolution).
 3. **Transition the issue** to in-progress:
    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
    `jira-sdlc-tools.env` in the project root for the confirmed status name for this
-   project — default example `In Progress`).
+   project — default example `In Progress`). This is a **default**, not a
+   fixed rule: `JIRA-SDLC-TOOLS-RULES.md` can change it or suppress it, and
+   where it does, it wins over this step.
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
@@ -361,22 +370,14 @@ stale-branch merge and step 10's PR-base resolution).
     transition it to in-review:
     `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
     `jira-sdlc-tools.env` in the project root for the confirmed status
-    name for this project — default example `In Review`).
-    How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
-    a parent (check `fields.parent` from step 1):
-    - **Has a parent (multistep sub-task)** → Once the reviewer
-      approves the PR, the human merges it into the parent branch.
-      GitHub-for-Jira automation (if connected) transitions the
-      sub-task to `<STATUS_DONE>` on merge. If the reviewer rejects
-      it, the sub-task moves to `<STATUS_IN_PROGRESS>` and the
-      executor must re-run `/jira-sdlc:jira-task-executor` (bare, from
-      this same worktree) to fix it.
-    - **No parent (single-step top-level issue)** → the reviewer
-      (when run on that issue) will review this PR targeting the
-      base branch. `<STATUS_DONE>` is handled when the human merges the
-      PR into the base branch — via GitHub-for-Jira's merge automation
-      if connected, or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`
-      otherwise. Don't transition to Done here.
+    name for this project — default example `In Review`). Like step 3 this
+    is a default `JIRA-SDLC-TOOLS-RULES.md` can override — and it is
+    load-bearing: `jira-task-reviewer` reviews only sub-tasks sitting in
+    `<STATUS_IN_REVIEW>`, so suppressing it without arranging another way
+    to set that status leaves the work invisible to review.
+    Reaching `<STATUS_DONE>` is not yours: the reviewer asks the user about
+    it on an approved PR, and GitHub-for-Jira (if connected) sets it when
+    the PR merges. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
     commit(s), the PR link, and the issue's new status. Pass through any

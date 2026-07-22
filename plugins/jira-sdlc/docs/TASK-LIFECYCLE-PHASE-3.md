@@ -144,6 +144,7 @@ sequenceDiagram
                         Reviewer-->>User: "parent PR approved — merge manually"
                     else REQUEST_CHANGES
                         Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+                        Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
                         Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
                         Reviewer-->>User: "parent PR changes requested — fix on <PARENT-BRANCH> & re-run"
                     end
@@ -162,6 +163,7 @@ sequenceDiagram
             Reviewer-->>User: "parent PR reviewed and approved — merge manually"
         else REQUEST_CHANGES
             Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+            Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
             Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
             Reviewer-->>User: "parent PR changes requested — fix & re-run"
         end
@@ -170,6 +172,12 @@ sequenceDiagram
         Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled Done, no wrap-up
         Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
         Reviewer-->>User: "fully complete — all PRs merged"
+    end
+
+    opt anything approved this run — step 6, asked once
+        Reviewer->>User: move approved issue(s) to <STATUS_DONE>?
+        User-->>Reviewer: yes / no (JIRA-SDLC-TOOLS-RULES.md can answer it up front)
+        Reviewer->>JIRA: transition → <STATUS_DONE> (only what the user approved)
     end
     deactivate Reviewer
 ```
@@ -243,7 +251,7 @@ sequenceDiagram
 - **Single-step is one-and-done** — on the single-step track, approval
   posts the final report immediately (S-APPROVED outcome, step 6).
   GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` when the
-  user merges; no reviewer re-run is required. Only the
+  user merges (the reviewer also offers it at step 6); no re-run is required. Only the
   S-CHANGES-REQUESTED outcome (reject) needs a re-run after fixes.
 - **Single pass, no merge cascade** — each In Review sub-task PR is
   reviewed **in order, one at a time**. The verdict happens
@@ -267,18 +275,22 @@ sequenceDiagram
   records a verdict on the parent PR via `gh pr review --comment
   --body-file`: **approve** → M-PARENT-READY (awaiting the human's manual
   merge), or **request changes** → M-PARENT-CHANGES-REQUESTED (integration
-  `file:line` findings; fix on `<PARENT-BRANCH>` and re-run). Unlike a
-  sub-task reject, the parent reject does **not** transition any Jira issue
-  — the aggregate `<PARENT-KEY>` stays as-is. The reviewer never calls
+  `file:line` findings; fix on `<PARENT-BRANCH>` and re-run). The parent
+  reject transitions `<PARENT-KEY>` back to `<STATUS_IN_PROGRESS>`, exactly
+  as a sub-task reject does — it used to be the one reject path that moved
+  nothing, which left a rejected parent reading as *In Review*. The
+  reviewer never calls
   `gh pr merge` on the parent — merging into `<BASE_BRANCH>` is the human
   release decision. After the parent PR merges, no re-run is required; a
   re-run only reports the already-merged state (M-FULLY-COMPLETE).
-- **Automated status transitions removed** — the reviewer no longer moves
-  issues to Done on merge (GitHub-for-Jira automation handles that) and
-  no longer moves the parent to Done. The only transition the reviewer
-  still performs is a **rejected** issue → In Progress, and only on a
-  *sub-task* reject (3d) or a *single-step* reject (3d) — never on the
-  multistep parent-PR reject (5b).
+- **Rejects move the card, approvals ask** — every reject path (3d
+  sub-task, 3d single-step, 5b parent) sends its issue back to
+  `<STATUS_IN_PROGRESS>`. Approval never transitions silently: the `opt`
+  block at the end of the diagram is step 6 asking, once per run, whether
+  to move the approved issue(s) to `<STATUS_DONE>` — because an approval
+  is not a merge, and only you know whether Done means merged on your
+  board. `JIRA-SDLC-TOOLS-RULES.md` can answer that question up front, or
+  override any of it. See [JIRA-STATES.md](JIRA-STATES.md).
 - **Every terminal branch posts a JIRA report comment on the parent**
   — per step 6, the report goes to chat *and* as a single Jira comment
   on `<PARENT-KEY>`: the single-step *no-PR-yet* exit, the single-step

@@ -82,7 +82,10 @@ sequenceDiagram
   transitions to *In Review* (JIRA), and posts its run-report
   comment (JIRA). The PR is the thing phase 3 reviews.
 - **Status transitions the executor owns** — to *In Progress* on start,
-  to *In Review* on PR open (both JIRA).
+  to *In Review* on PR open (both JIRA). The second is load-bearing:
+  `jira-task-reviewer` picks up only sub-tasks sitting in *In Review*.
+  Both are defaults a project can override in `JIRA-SDLC-TOOLS-RULES.md` —
+  see [JIRA-STATES.md](JIRA-STATES.md).
 - **Task memory is a first-class JIRA interaction, not a single comment
   invariant** — the executor reads prior `Task memory
   (jira-task-executor)` comments as part of the step-1 fetch, and may

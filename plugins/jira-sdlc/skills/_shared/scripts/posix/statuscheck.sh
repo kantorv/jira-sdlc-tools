@@ -272,6 +272,27 @@ else
   row env_local_ignored INFO "skipped (file absent)"
 fi
 
+# JIRA-SDLC-TOOLS-RULES.md — the optional per-project rules file each skill
+# adopts at the start of a run (skills/_shared/project-config.md). Reported
+# here so the read is prompted by tool output the skill just received, rather
+# than only by a line of prose it read hundreds of lines earlier. Deliberately
+# role-neutral, like every other row: this lists which sections exist and each
+# skill picks its own — the script still takes no role argument.
+RULES_FILE="$CFG_DIR/JIRA-SDLC-TOOLS-RULES.md"
+if [ -f "$RULES_FILE" ]; then
+  RULES_SECTIONS=$(tr -d '\r' < "$RULES_FILE" \
+    | grep -oE '^##[[:space:]]+(COMMON|JIRA-TASK-(ASSIGNER|EXECUTOR|REVIEWER))[[:space:]]*$' \
+    | sed -E 's/^##[[:space:]]+//; s/[[:space:]]+$//' \
+    | paste -sd, - | sed 's/,/, /g')
+  if [ -n "$RULES_SECTIONS" ]; then
+    row project_rules INFO "JIRA-SDLC-TOOLS-RULES.md present — READ IT before step 1 and adopt COMMON + your own section (it overrides this skill). Sections: $RULES_SECTIONS"
+  else
+    row project_rules WARN "JIRA-SDLC-TOOLS-RULES.md present but has no recognized '## COMMON' or '## JIRA-TASK-<ROLE>' heading, so nothing in it can be adopted — fix the headings (see skills/_shared/project-config.md)"
+  fi
+else
+  row project_rules INFO "no JIRA-SDLC-TOOLS-RULES.md (optional — skills run on their own defaults)"
+fi
+
 # --- current branch (BR/BR_TAIL/BR_KEY parsed at the top) ------------------
 # Context only — report which kind of branch this is; the caller decides
 # whether it's the right one for its role (executor/reviewer want a

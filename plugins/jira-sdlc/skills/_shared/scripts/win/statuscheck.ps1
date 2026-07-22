@@ -146,6 +146,9 @@ if ($OS -eq 'windows') {
     $winDir = $PSScriptRoot
     $missing = ''
     $major = $PSVersionTable.PSVersion.Major   # 5.1+ acceptable — scripts are compatible with both
+    # Name the runtime the way statuscheck.sh's platform row does — it probes
+    # for pwsh then powershell, we simply report the one we're running under.
+    $psRuntime = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
     if (-not (Get-Command acli -ErrorAction SilentlyContinue)) { $missing += ' acli' }
     if (-not (Get-Command gh   -ErrorAction SilentlyContinue)) { $missing += ' gh' }
     foreach ($s in 'statuscheck', 'ensure_local_env', 'jira_acli_login', 'get_assignee_email', 'check_assignee') {
@@ -155,7 +158,7 @@ if ($OS -eq 'windows') {
         Add-Row platform FAIL "os=windows$OsForced — missing:$missing" `
             "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $Rerun."
     } else {
-        Add-Row platform OK "os=windows$OsForced — PowerShell $major + acli + gh + win/ ports present (Windows dispatch path ready)"
+        Add-Row platform OK "os=windows$OsForced — PowerShell $major ($psRuntime) + acli + gh + win/ ports present (Windows dispatch path ready)"
     }
 } else {
     Add-Row platform INFO "os=$OS$OsForced — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
@@ -214,6 +217,30 @@ if (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.local.env')) {
     Add-Row env_local FAIL "jira-sdlc-tools.local.env not found in $CfgDir" `
         "create it in the project root (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
     Add-Row env_local_ignored INFO "skipped (file absent)"
+}
+
+# --- JIRA-SDLC-TOOLS-RULES.md ------------------------------------------------
+# The optional per-project rules file each skill adopts at the start of a run
+# (skills/_shared/project-config.md). Reported here so the read is prompted by
+# tool output the skill just received, rather than only by a line of prose it
+# read hundreds of lines earlier. Deliberately role-neutral, like every other
+# row: this lists which sections exist and each skill picks its own — the
+# script still takes no role argument.
+$RulesFile = Join-Path $CfgDir 'JIRA-SDLC-TOOLS-RULES.md'
+if (Test-Path -LiteralPath $RulesFile) {
+    $rulesSections = @(
+        Get-Content -LiteralPath $RulesFile |
+            ForEach-Object { $_ -replace "`r$", '' } |
+            Where-Object { $_ -match '^##\s+(COMMON|JIRA-TASK-(ASSIGNER|EXECUTOR|REVIEWER))\s*$' } |
+            ForEach-Object { ($_ -replace '^##\s+', '').Trim() }
+    )
+    if ($rulesSections.Count -gt 0) {
+        Add-Row project_rules INFO ("JIRA-SDLC-TOOLS-RULES.md present — READ IT before step 1 and adopt COMMON + your own section (it overrides this skill). Sections: " + ($rulesSections -join ', '))
+    } else {
+        Add-Row project_rules WARN "JIRA-SDLC-TOOLS-RULES.md present but has no recognized '## COMMON' or '## JIRA-TASK-<ROLE>' heading, so nothing in it can be adopted — fix the headings (see skills/_shared/project-config.md)"
+    }
+} else {
+    Add-Row project_rules INFO "no JIRA-SDLC-TOOLS-RULES.md (optional — skills run on their own defaults)"
 }
 
 # --- current branch ----------------------------------------------------------
