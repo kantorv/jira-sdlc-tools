@@ -15,16 +15,18 @@ for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
 ## ⚠️ Caution
 
-**This plugin acts on your behalf in both git and Jira.** Given your
+**This plugin acts as an authenticated user in both git and Jira.** Given
 credentials, it will commit, create and push branches, open and update
 pull requests, and take the other actions needed to follow the
 [`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
 create, update, transition, and comment on issues in your Jira project.
-Those actions are visible to your team and land under your (or agent's own) account.
+Those actions are visible to your team and land under whichever account you
+configured — your own, or a dedicated one per skill.
 
 Use it with caution: point it at a project you're comfortable having
-changed, and read [Configuration](#either-way) before the first run so
-you know which repo and which Jira project it's wired to.
+changed, and read
+[Settings files](plugins/jira-sdlc/docs/FULL-SETUP-CHECKLIST.md#settings-files)
+before the first run so you know which repo and which Jira project it's wired to.
 
 What it deliberately never does on its own — merging into your base
 branch, deleting Jira issues, resolving conflicts — is listed in
@@ -120,60 +122,14 @@ bottom.
 
 ## Full Setup
 
-Two shorter routes through the same ground:
+Everything to have in place before the first run — the three CLIs, both API
+tokens, the two settings files, and the branches and board your project needs —
+is a tickable list in
+**[Full setup checklist](plugins/jira-sdlc/docs/FULL-SETUP-CHECKLIST.md)**,
+ending in one command that verifies most of it for you.
 
-- **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** — the ordered
-  walkthrough: tools, tokens, settings, and a healthcheck, in the order you
-  actually do them.
-- **[Full setup checklist](plugins/jira-sdlc/docs/FULL-SETUP-CHECKLIST.md)** —
-  the same prerequisites as tickable items, each with how to verify it, ending
-  in one command that checks most of them for you.
-
-### Prerequisites
-
-Three CLIs must be installed and authenticated on your machine first.
-
-**Install tools**
-
-| Tool   | Title           | Uses                       | Install URL                                                              | Auth method | Token link                                                                        | Local docs                                                                          |
-| ------ | --------------- | -------------------------- | ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `git`  | Version control | commit/push                | [git-scm.com/downloads](https://git-scm.com/downloads)                  | global auth | —                                                                                 | —                                                                                   |
-| `gh`   | GitHub CLI      | pr create/update           | [cli.github.com](https://cli.github.com/)                               | token       | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md)     |
-| `acli` | Atlassian CLI   | jira api (issues, comments)| [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) | token       | [Jira API token](https://id.atlassian.com/manage-profile/security/api-tokens)     | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md)                                  |
-
-**Platform specific**
-| Platform | Needs | Why |
-|---|---|---|
-| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | execute `.ps1` scripts |
-| **Linux / macOS** | [`jq`](https://jqlang.github.io/jq/download/) · [`python3`](https://www.python.org/downloads/) *(recommended)* | JSON parsing, scripting |
-
-`git` uses your machine's existing global credentials. `gh` authenticates
-with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
-(`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
-[Either way](#either-way) below).
-
----
-
- 
-
-### Tokens to get
-
-Two API tokens go into `jira-sdlc-tools.local.env` — one for Jira, one for
-GitHub:
-
-| Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
-|---|---|---|---|---|---|
-| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | N/A (granular per-issue scopes are rejected by acli) | No — use non scoped **API token** | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
-| `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
-
-### Either way
-
-Create two files in the root of the repo you're building features in:
-
-1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
-2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
-
-The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
+Prefer it as prose? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)**
+walks the same ground in the order you actually do it.
 
 ## Jira states - who can move a card
 
