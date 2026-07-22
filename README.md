@@ -13,6 +13,7 @@ The skills are explicit-invocation only by design — never auto-triggered —
 and carry the corresponding setting on both specs: `disable-model-invocation`
 for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
+## Quick install
 
 ### Claude Code
 
@@ -67,7 +68,6 @@ whatever path `kilo.jsonc` points at for Kilo Code.
 For every platform's skills directory, spec, wiring and verification status,
 see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
 bottom.
-
 
 ## What's here
 
