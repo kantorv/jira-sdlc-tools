@@ -13,6 +13,62 @@ The skills are explicit-invocation only by design — never auto-triggered —
 and carry the corresponding setting on both specs: `disable-model-invocation`
 for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
+
+### Claude Code
+
+#### Remote — from the marketplace (recommended)
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
+```
+
+#### Local — clone, then load with `--plugin-dir`
+
+```bash
+git clone https://github.com/kantorv/jira-sdlc-tools.git
+claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
+```
+
+### Non Claude Code assistants
+
+Assistants that read the Claude skills spec don't need the plugin wrapper —
+copy the skills in and they discover the three directly:
+
+```bash
+cp -r plugins/jira-sdlc/skills/* skills/
+```
+
+What has to end up there:
+
+```text
+skills/
+├── jira-task-assigner/
+│   ├── SKILL.md
+│   └── agents/openai.yml     ← Codex + Antigravity only
+├── jira-task-executor/
+│   ├── SKILL.md
+│   └── agents/openai.yml
+├── jira-task-reviewer/
+│   ├── SKILL.md
+│   └── agents/openai.yml
+└── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
+    ├── jira-acli-reference.md
+    ├── jira-api-reference.md
+    ├── project-config.md
+    ├── scripts/
+    └── templates/
+```
+
+That `skills/` folder is `.codex/skills/` for Codex, `.agent/skills/` for
+Antigravity, `~/.claude/skills/` for Cursor (shared with Claude Code), and
+whatever path `kilo.jsonc` points at for Kilo Code.
+
+For every platform's skills directory, spec, wiring and verification status,
+see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
+bottom.
+
+
 ## What's here
 
 This repo currently hosts one plugin, **[`jira-sdlc`](plugins/jira-sdlc)**
@@ -62,67 +118,6 @@ What it deliberately never does on its own — merging into your base
 branch, deleting Jira issues, resolving conflicts — is listed in
 [Safety model](plugins/jira-sdlc/README.md#safety-model).
 
-## Install Plugin
-
-### Claude Code
-
-#### Remote — from the marketplace (recommended)
-
-```
-/plugin marketplace add kantorv/jira-sdlc-tools
-/plugin install jira-sdlc@jira-sdlc-tools
-```
-
-#### Local — clone, then load with `--plugin-dir`
-
-```bash
-git clone https://github.com/kantorv/jira-sdlc-tools.git
-claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
-```
-
-No marketplace step and nothing gets installed — this loads the plugin
-directly from your local clone for that Claude Code session. Point
-`--plugin-dir` at the plugin's own root (`plugins/jira-sdlc`), not the
-toolkit repo root — the toolkit root only holds `marketplace.json`,
-not a `plugin.json`. Useful if you'd rather track updates via `git pull`
-than a marketplace, or if you're testing a change before publishing it.
-If you're planning to actively edit the plugin rather than just run it,
-see [Development](#development) below for the edit-reload loop.
-
-### Non Claude Code assistants — as a loose skills folder
-
-Assistants that read the Claude skills spec don't need the plugin wrapper —
-copy the skills in and they discover the three directly:
-
-```bash
-cp -r plugins/jira-sdlc/skills/* <assistant-skills-dir>/
-```
-
-Copy the **contents** of `plugins/jira-sdlc/skills/` — the three `SKILL.md`
-folders *plus* `_shared/` — not the folder itself. `_shared/` has to land as a
-sibling of the three skills, because every `SKILL.md` reaches for it as
-`../_shared/…`; nesting it one level deeper breaks all three.
-
-| Assistant | Skills directory | Also needs |
-|---|---|---|
-| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | `.codex/skills/` | a per-skill `agents/openai.yml` |
-| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | `.agent/skills/` | a per-skill `agents/openai.yml` |
-| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | shares Claude Code's `~/.claude/skills/` | — |
-| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | whatever path `kilo.jsonc` points at | — |
-
-…and more — OpenCode, Grok Build, Pi and Kimi Code all load them too. See the
-[Platform Compatibility Matrix](#platform-compatibility-matrix) for each
-platform's spec, wiring and verification status.
-
-### Either way
-
-Create two files in the root of the repo you're building features in:
-
-1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
-2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
-
-The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
-
 ## Jira states - who can move a card
 
 The four statuses are configurable — `<STATUS_*>` below are the tokens you map
@@ -147,7 +142,7 @@ files the plugin installs — a marketplace install copies only
 secrets are in
 [Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
-## Install
+## Full Setup
 
 In a hurry? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** is the
 short, ordered walkthrough — tools, tokens, settings, and a healthcheck, in
@@ -168,7 +163,7 @@ Three CLIs must be installed and authenticated on your machine first.
 `git` uses your machine's existing global credentials. `gh` authenticates
 with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
 (`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
-[Either way](#either-way) under Install Plugin).
+[Either way](#either-way) below).
 
 ### Tokens to get
 
@@ -199,6 +194,15 @@ they shell out to an external tool for it:
 | --------- | ------------------------------------ | ---------------------------------------------------------- |
 | `jq`      | parse Jira JSON                      | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) |
 | `python3` | scripting (`jq` fallback for JSON)   | [python.org/downloads](https://www.python.org/downloads/)  |
+
+### Either way
+
+Create two files in the root of the repo you're building features in:
+
+1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
+2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
+
+The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
 
 ## Task lifecycle preview
 
