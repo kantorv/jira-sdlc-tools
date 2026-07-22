@@ -173,13 +173,15 @@ STATUS_DONE=Done
 From your **main repository**, run the statuscheck script — it confirms both
 logins, your settings, and the platform in one pass:
 
-**Linux / macOS** (bash):
+**Linux / macOS** (bash) — read it first:
+[`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
 bash statuscheck.sh
 ```
 
-**Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`):
+**Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
+[`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
 pwsh -File statuscheck.ps1        # PowerShell 7+
