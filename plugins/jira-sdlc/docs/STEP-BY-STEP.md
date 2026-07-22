@@ -139,7 +139,7 @@ column/workflow settings and confirm each one exists, then copy the names
 | `STATUS_TODO` | `To Do` | `jira-task-assigner`, on newly created issues |
 | `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts work |
 | `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
-| `STATUS_DONE` | `Done` | Nothing in this plugin — GitHub-for-Jira automation on merge, or you, by hand |
+| `STATUS_DONE` | `Done` | `jira-task-reviewer` step 7, but only for approved issues and only if you say yes — otherwise GitHub-for-Jira automation on merge, or you, by hand |
 
 `In Review` is the one most likely to be missing: several Jira templates ship
 `To Do` / `In Progress` / `Done` only. Add the column, or point the setting at
@@ -173,13 +173,15 @@ STATUS_DONE=Done
 From your **main repository**, run the statuscheck script — it confirms both
 logins, your settings, and the platform in one pass:
 
-**Linux / macOS** (bash):
+**Linux / macOS** (bash) — read it first:
+[`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
 bash statuscheck.sh
 ```
 
-**Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`):
+**Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
+[`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
 pwsh -File statuscheck.ps1        # PowerShell 7+

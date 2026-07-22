@@ -4,7 +4,7 @@
 > form of its short, ordered walkthrough. Until this page is written, the
 > installation content lives in the plugin
 > [README.md](../README.md#installation) and the root
-> [README.md](../../../README.md#install).
+> [README.md](../../../README.md#full-setup).
 
 ## What belongs here
 

@@ -50,7 +50,7 @@ with a token env var.
 [9. Other useful commands](#9-other-useful-commands) ·
 [10. Helper scripts](#10-helper-scripts) ·
 [11. Cross-reference to jira-cli](#11-cross-reference-to-jira-cli) ·
-[12. PR-base resolver](#12-pr-base-resolver-git-config--jira-comment--env-default)
+[12. PR-base resolver](#12-pr-base-resolver-git-config--jira-comment--parent-branch-search--env-default)
 
 ---
 

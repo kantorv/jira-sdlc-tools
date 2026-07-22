@@ -46,6 +46,9 @@ syncing**.
   from the site's `/_edge/tenant_info`), because a scoped API token is
   rejected by Basic auth on the `*.atlassian.net` domain. Each transition is
   **guarded** to only advance from the expected source status, never regress.
+  To reuse these three in your own project — secrets, status-name edits, and
+  how they interleave with the skills — see
+  [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
 ### Secrets used
 
