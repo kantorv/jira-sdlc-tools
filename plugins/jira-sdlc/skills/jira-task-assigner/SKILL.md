@@ -107,6 +107,7 @@ per-issue worktree), the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
 |---|---|
+| `project_rules` | INFO: whether `JIRA-SDLC-TOOLS-RULES.md` exists and which sections it has. **Present → read it now** and adopt `## COMMON` + `## JIRA-TASK-ASSIGNER`, which override this skill. WARN means its headings are malformed, so nothing in it applies |
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; a linked-worktree reading is a stop condition (see "Reading the result" below) |
 | `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **The assigner requires the base branch**; step 2 consumes this row and resolves the other two readings |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |

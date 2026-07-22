@@ -89,6 +89,7 @@ actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
+| `project_rules` | INFO: whether `JIRA-SDLC-TOOLS-RULES.md` exists and which sections it has. **Present → read it now** and adopt `## COMMON` + `## JIRA-TASK-REVIEWER`, which override this skill. WARN means its headings are malformed, so nothing in it applies |
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below makes that a stop condition |
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |

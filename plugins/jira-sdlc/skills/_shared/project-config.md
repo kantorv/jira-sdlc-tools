@@ -235,7 +235,12 @@ first step — and then:
    behaviour is the entire point of the file, so a rule that contradicts a
    step is working as intended, not a conflict to resolve.
 
-The read is deliberately prose and not a script: it is a single
-conditional file read, so each skill just reads the path with its own
-file-reading tool and there is no POSIX/Windows script pair to keep in
-sync.
+The read itself is a single conditional file read — each skill reads the
+path with its own file-reading tool, so there is no separate loader script.
+What *is* mechanical is the reminder: `statuscheck.sh` (which every skill
+runs before anything else) emits a **`project_rules`** row naming the file
+and the sections it contains, so the instruction to read it arrives as tool
+output the skill has just received rather than only as prose further up its
+own SKILL.md. That row also WARNs when the file exists but carries no
+recognized `##` heading — the one failure that would otherwise be silent,
+since a typo'd heading means the section is simply never adopted.

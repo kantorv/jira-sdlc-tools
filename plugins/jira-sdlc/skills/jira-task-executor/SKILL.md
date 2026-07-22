@@ -125,6 +125,7 @@ actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
+| `project_rules` | INFO: whether `JIRA-SDLC-TOOLS-RULES.md` exists and which sections it has. **Present → read it now** and adopt `## COMMON` + `## JIRA-TASK-EXECUTOR`, which override this skill. WARN means its headings are malformed, so nothing in it applies |
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
