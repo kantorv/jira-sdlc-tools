@@ -279,6 +279,8 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — lean call-site reference (detailed companion: docs/JIRA-ACLI.md)
         │       ├── jira-api-reference.md    # direct REST API (no acli) — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
+        │       ├── templates/
+        │       │   └── review-report.md     # jira-task-reviewer's report template + outcome catalogue
         │       └── scripts/
         │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
         │           └── acli-list-subtasks.sh               # list a parent's sub-tasks via acli view --json

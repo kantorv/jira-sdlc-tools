@@ -183,85 +183,25 @@ If **zero** sub-tasks have open PRs, report and exit.
 
 ## The canonical review report
 
-Every report-shaped output this skill emits is **one and the same
-report**, defined here once and *referenced* — never re-spelled — by the
-steps that emit it:
+Every report-shaped output this skill emits — the GitHub verdict comments
+(3d, 5b), the Jira per-issue comment (3d), the parent tally (3e), and the
+end-of-run report (6) — is **one and the same report**, so a person
+following the review across GitHub, Jira, and chat sees one layout. The
+template, its `<VERDICT-HEADER>` rules, and the ten outcome blocks live in
+**`../_shared/templates/review-report.md`** — read it once before your
+first emission (normally 3d; 5b or 6 if this run skips the review loop),
+then fill it rather than composing a shape of your own.
 
-- the GitHub PR verdict comments (3d approve/reject, 5b parent),
-- the Jira per-issue comment (3d),
-- the parent per-sub-task tally (3e), and
-- the end-of-run chat + parent report (6).
+Two things from it are load-bearing enough to state here as well:
 
-A person following the same review across GitHub, Jira, and chat therefore
-sees one layout at one level of detail. An individual emission only varies
-along two axes; the section structure never changes:
-
-- **PR set in scope** — a *per-PR* emission (3d, 5b, 3e) fills the report
-  for the single PR just reviewed; the *end-of-run* emission (6) fills it
-  for every PR in the run's PR set (step 1).
-- **Which outcome block is filled** — exactly one outcome from step 6's
-  catalogue (S-APPROVED, S-CHANGES-REQUESTED, S-MERGED, M-SUBTASK-APPROVED,
-  M-SUBTASK-CHANGES-REQUESTED, M-ALL-APPROVED, M-SOME-BLOCKED, M-PARENT-READY,
-  M-PARENT-CHANGES-REQUESTED, M-FULLY-COMPLETE), chosen by track × phase —
-  and, for a *per-PR* emission, by *which* PR: the single-step parent PR
-  uses the `S-*` outcomes, a multistep sub-task PR uses the `M-SUBTASK-*`
-  outcomes, and the multistep parent PR uses M-PARENT-READY (5b approve) or
-  M-PARENT-CHANGES-REQUESTED (5b reject). It supplies the
-  `<OUTCOME_TITLE>` and the `### Next step` wording; everything else is the
-  same for all outcomes.
-
-**Template — fill every section:**
-
-```text
-<VERDICT-HEADER>
-
-## Review Status: <OUTCOME_TITLE>
-Parent: <PARENT-KEY> (<PARENT-BRANCH> → <BASE_BRANCH>)
-
-### Pull Request Summary
-- <KEY> PR #<n>: [✅ approved | ❌ changes requested | ⏳ skipped] <PR URL>
-- ...   (one line per PR in scope — a single PR for 3d/5b/3e, every PR in the set for 6)
-
-### What I reviewed
-- Track: <single-step | multistep>
-- <KEY> PR #<n> — the six 3c dimensions, each ✅/❌ with a one-line note:
-  Correctness · Pattern consistency · No scope creep · No obvious
-  regressions · Test coverage · Build hygiene.
-- Per-AC results, when the issue defines acceptance criteria:
-  | # | Acceptance criterion | Result |
-  |---|---|---|
-  | 1 | <criterion> | ✅ / ❌ <note> |
-- On the reject path, the `file:line` findings for each failed dimension
-  (this is the detail the CHANGES REQUESTED verdict is made of — never drop it).
-
-### Verdict recorded
-- GitHub: <APPROVED / CHANGES REQUESTED comment on PR #<n>, or "—" if none posted this emission>
-- Jira: <note posted on <KEY>; whether status moved to <STATUS_IN_PROGRESS>>
-
-### Next step
-<the outcome block's guidance from step 6: manual-merge / fix-and-re-run / no re-run needed>
-```
-
-**`<VERDICT-HEADER>` — the load-bearing first line.** It is always the
-literal first line of the body and starts with `APPROVED — ` or
-`CHANGES REQUESTED — ` followed by a one-line summary:
-
-- On a **GitHub verdict comment** (3d, 5b) this prefix is a byte-for-byte
-  contract — 3a's idempotency detection matches on it. Keep it verbatim;
-  never reword the two-word prefix or the ` — ` separator.
-- On the **Jira per-issue comment** (3d), the **parent tally** (3e), and
-  the **end-of-run report** (6), the same line leads the body so every
-  destination opens identically. On a per-PR emission it is that PR's
-  verdict; on the end-of-run report it is the run's overall verdict
-  (`CHANGES REQUESTED — …` whenever any PR in the set was rejected — e.g.
-  M-SOME-BLOCKED — otherwise `APPROVED — …`, including the already-merged
-  S-MERGED / M-FULLY-COMPLETE outcomes).
-
-The idempotency-detection contract (3a) and workflow gates (the reject
-transition to `<STATUS_IN_PROGRESS>`, the "never merge" rule) are unchanged
-by this unification — the template only fixes the *shape* of what those
-steps already emit; it does not add, remove, or reorder any of their
-side-effects.
+- The body's literal first line is `APPROVED — <summary>` or
+  `CHANGES REQUESTED — <summary>`. On GitHub comments that prefix is a
+  byte-for-byte contract — 3a's idempotency check matches on it, so
+  rewording the two-word prefix or the ` — ` separator silently breaks
+  re-run detection.
+- Exactly one outcome block is filled per emission, chosen by track × phase
+  (and, per-PR, by *which* PR). It supplies only the title and the
+  `### Next step` wording; every other section is identical across outcomes.
 
 ## 3. Sequential per-PR review loop
 
@@ -278,7 +218,7 @@ gh pr view <prNumber> --json reviews --jq \
   '.reviews[] | select(.author.login == "'"$SELF"'") | .body'
 ```
 
-Inspect the prior self-review bodies this returns. An `APPROVED —` body wins over a `CHANGES REQUESTED —` one — approval is terminal (the reviewer doesn't keep re-reviewing something it already approved; request a forced re-review via the step-7 flag if you genuinely need a fresh pass):
+Inspect the prior self-review bodies this returns. An `APPROVED —` body wins over a `CHANGES REQUESTED —` one — approval is terminal (the reviewer doesn't keep re-reviewing something it already approved; a forced re-review is a manual act — say so in `$ARGUMENTS`):
 
 - **A prior self-review whose body starts `APPROVED —`** → already approved. Report the PR as "already approved — waiting for manual merge" and move to the next PR without re-reviewing.
 - **A prior self-review whose body starts `CHANGES REQUESTED —` (and none starts `APPROVED —`)** → re-review: this is a fix-and-re-run scenario, and fresh code may have been pushed since. Continue to 3b.
@@ -342,7 +282,7 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
 
 Regardless of whether the review above was approved or rejected, immediately post the **canonical review report** (see *The canonical review report* above), scoped to the sub-task just reviewed, to the parent Jira issue `<PARENT-KEY>` so the progress is visible. It renders the same template as every other emission — same verdict-header line, same sections — filled for this one sub-task's PR (the M-SUBTASK-APPROVED / M-SUBTASK-CHANGES-REQUESTED outcome, per the 3d verdict — 3e is multistep-only, so it is always a sub-task PR). You have already written this exact body to `/tmp/<KEY>-report.md` in 3d; reuse it here rather than composing a second shape.
 
-A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment. This is reconciled with the single-final-comment invariant exactly as step 6 is — the step-6 report is the one *run-level* canonical render, and these 3e comments are its per-sub-task audit-trail companions, not replacements for it. So do **not** use `-e/--edit-last`; post a new comment each time:
+A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment, alongside step 6's single run-level report rather than competing with it (see *One run-level render per run* in the template). So do **not** use `-e/--edit-last`; post a new comment each time:
 
 ```
 acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<KEY>-report.md
@@ -414,67 +354,14 @@ Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the 
 
 Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` via the §6 `--body-file` convention. This is the **run-level** render of *The canonical review report* (defined above) — same verdict-header line and same sections as every per-PR emission, but with the *whole run's* PR set in its `### Pull Request Summary` and its verdict-header reflecting the run's overall verdict (`CHANGES REQUESTED — …` if any PR was rejected, else `APPROVED — …`). Do **not** re-spell the report shape here — fill the template.
 
-Pick **exactly one** outcome from the catalogue below — chosen by the step-1 track × the current phase (decided in step 4 or detected in step 1/5/6). The outcome supplies only the `<OUTCOME_TITLE>` and the `### Next step` wording; the rest of the report is identical across outcomes. Do not emit more than one outcome. The **per-sub-task-PR outcomes** (M-SUBTASK-APPROVED / M-SUBTASK-CHANGES-REQUESTED) are for the 3d/3e per-PR emissions only — this run-level step-6 report never selects them; on the multistep track it uses the `M-*` outcomes.
-
-#### Single-step track
-
-- **S-APPROVED** — single-step PR approved, awaiting manual merge (final update — no re-run needed). Title: `Single-step PR approved — merge manually`. Next step:
-  ```
-  Single-step PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
-  GitHub-for-Jira will auto-transition the issue to <STATUS_DONE> on merge. No re-run needed — this is the final update.
-  ```
-- **S-CHANGES-REQUESTED** — single-step PR rejected. Title: `Single-step PR changes requested — see findings`. (The `file:line` findings live in the report's `### What I reviewed` section.) Next step:
-  ```
-  Fix the findings above, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
-  ```
-- **S-MERGED** — single-step PR already merged (detected by the step-1 phase check). Title: `Single-step PR merged — complete`. Next step:
-  ```
-  Single-step PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
-  ```
-
-#### Multistep track
-
-- **M-ALL-APPROVED** — all sub-task PRs approved, some still open. Title: `All sub-task PRs approved — merge manually and re-run`. Next step:
-  ```
-  All sub-task PRs approved. Merge them manually into <PARENT-BRANCH>, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to pick up the parent PR.
-  ```
-- **M-SOME-BLOCKED** — some approved, some rejected. Title: `Some PRs approved, some blocked — see below`. The approved-vs-blocked split is already visible in `### Pull Request Summary` (✅ vs. ❌ per PR, with URLs) and the per-PR `file:line` findings in `### What I reviewed` — no separate breakdown section. Next step:
-  ```
-  Fix the findings above in each blocked branch, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
-  ```
-- **M-PARENT-READY** — all sub-tasks merged, parent PR reviewed/approved, awaiting manual merge into base. Title: `All sub-tasks merged — parent PR ready`. Next step:
-  ```
-  Parent PR #<n>: ✅ reviewed and approved. Merging is manual — merge it yourself on GitHub when ready: <PR URL>.
-  GitHub-for-Jira will auto-transition all related issues to <STATUS_DONE> on merge. No re-run is needed after merge — this report is the final update, and no further action or skill call is expected on the issue.
-  ```
-- **M-PARENT-CHANGES-REQUESTED** — all sub-tasks merged, parent PR rejected on the 5b integration review. Title: `Parent PR changes requested — see findings`. (The integration `file:line` findings live in the report's `### What I reviewed` section — never dropped.) Next step:
-  ```
-  Fix the integration findings above on <PARENT-BRANCH>, push, then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to re-review the parent PR.
-  ```
-- **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
-  ```
-  Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
-  ```
-
-#### Per-sub-task-PR outcomes (multistep track — 3d/3e emissions only, never the run-level step-6 pick)
-
-These fill the *per-PR* emission for a single sub-task PR on the multistep
-track (the 3d verdict comment + its 3e parent-tally reuse). They exist
-because a sub-task PR is not single-step — it merges into `<PARENT-BRANCH>`
-rather than `<BASE_BRANCH>`, and a reviewer re-run *is* required afterwards
-to pick up the parent PR — so the single-step `S-*` wording ("merge into
-`<BASE_BRANCH>`", "final update, no re-run needed") would be wrong on it.
-Step 6's own run-level report never selects these; it uses the `M-*`
-outcomes above.
-
-- **M-SUBTASK-APPROVED** — a sub-task PR approved. Title: `Sub-task PR approved — awaiting merge into parent`. Next step:
-  ```
-  Sub-task PR #<n>: ✅ reviewed and approved. It merges into <PARENT-BRANCH>, not <BASE_BRANCH> — merging is manual. Once every sub-task PR is approved and merged into <PARENT-BRANCH>, re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to pick up the parent PR. A re-run IS required — this is not the final update.
-  ```
-- **M-SUBTASK-CHANGES-REQUESTED** — a sub-task PR rejected. Title: `Sub-task PR changes requested — see findings`. (The `file:line` findings live in the report's `### What I reviewed` section.) Next step:
-  ```
-  Fix the findings above in the sub-task's branch and push; the executor re-run moves the sub-task back to <STATUS_IN_REVIEW>. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
-  ```
+Pick **exactly one** outcome from the catalogue in
+`../_shared/templates/review-report.md` — chosen by the step-1 track × the
+current phase (decided in step 4, or detected in step 1/5/6). Use its
+**run-level** blocks: `S-APPROVED` / `S-CHANGES-REQUESTED` / `S-MERGED` on
+the single-step track, `M-ALL-APPROVED` / `M-SOME-BLOCKED` /
+`M-PARENT-READY` / `M-PARENT-CHANGES-REQUESTED` / `M-FULLY-COMPLETE` on the
+multistep track. The two `M-SUBTASK-*` blocks belong to the 3d/3e per-PR
+emissions and are never this report's pick.
 
 ## 7. Offer to close what was approved
 
