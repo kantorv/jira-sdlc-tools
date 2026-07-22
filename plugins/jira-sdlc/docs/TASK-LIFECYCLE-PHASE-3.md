@@ -11,7 +11,9 @@ one PR and posts a final report — no re-run needed (GitHub-for-Jira
 auto-transitions the issue to `<STATUS_DONE>` on merge). For multistep,
 it reviews each sub-task PR, finds or creates the aggregate parent PR
 once sub-tasks are merged, and reviews that too. The reviewer never
-merges anything — that remains the user's deliberate step.
+merges anything — that remains the user's deliberate step. When a run
+approved anything, its last step (7) asks whether to move those issues to
+`<STATUS_DONE>` and transitions only what the user says yes to.
 
 The diagram surfaces the two systems the reviewer drives as their own
 swimlanes — **GIT** (anything that mutates or reads repo/PR state:
@@ -25,7 +27,8 @@ verdicts, and finding or creating the aggregate parent PR) and **JIRA**
 sub-tasks, climbing from a sub-task branch to its parent, each rejected
 sub-task → In Progress transition, multi-line comments on the reviewed
 issue after every verdict, the per-sub-task summary comment on the
-parent, and every report comment posted on the parent) — so the full
+parent, every report comment posted on the parent, and the step-7
+user-approved → Done transitions) — so the full
 interaction reads `User ↔ Reviewer ↔ GIT ↔ JIRA` left to right.
 
 ## Sequence diagram
@@ -171,6 +174,13 @@ sequenceDiagram
         Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
         Reviewer-->>User: "fully complete — all PRs merged"
     end
+
+    opt step 7 — this run approved something (not the already-merged exits)
+        Reviewer->>User: move the approved issues to <STATUS_DONE>?<br/>(names every approved key — asked once)
+        User-->>Reviewer: yes (all or some) | no
+        Reviewer->>JIRA: transition each approved key → <STATUS_DONE><br/>(only the ones the user said yes to)
+        Note over Reviewer,JIRA: declined or non-interactive → nothing moves<br/>merge automation closes them later · no extra Jira comment
+    end
     deactivate Reviewer
 ```
 
@@ -209,7 +219,8 @@ sequenceDiagram
   onward); an *open* parent PR → skip straight to the step-5 aggregate
   review; a *merged* parent PR → the M-FULLY-COMPLETE report and exit.
   Every merged-state exit posts the step-6 report only — GitHub-for-Jira
-  already handled `<STATUS_DONE>` and there is no wrap-up to take.
+  already handled `<STATUS_DONE>`, so there is no wrap-up to take and step 7
+  has nothing to offer.
 - **The reviewer logs in as itself first** — `jira_acli_login.sh reviewer`,
   before any read or write, so every canonical report and every reject-path
   transition below is attributed to the reviewer's Jira account rather than
@@ -241,9 +252,10 @@ sequenceDiagram
   workflow gate; the GitHub comment records findings and makes the verdict
   machine-detectable by the idempotency check (step 3a).
 - **Single-step is one-and-done** — on the single-step track, approval
-  posts the final report immediately (S-APPROVED outcome, step 6).
-  GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` when the
-  user merges; no reviewer re-run is required. Only the
+  posts the final report immediately (S-APPROVED outcome, step 6), then
+  step 7 offers to close the issue. Decline and GitHub-for-Jira
+  auto-transitions it to `<STATUS_DONE>` when the user merges instead;
+  either way no reviewer re-run is required. Only the
   S-CHANGES-REQUESTED outcome (reject) needs a re-run after fixes.
 - **Single pass, no merge cascade** — each In Review sub-task PR is
   reviewed **in order, one at a time**. The verdict happens
@@ -273,12 +285,23 @@ sequenceDiagram
   `gh pr merge` on the parent — merging into `<BASE_BRANCH>` is the human
   release decision. After the parent PR merges, no re-run is required; a
   re-run only reports the already-merged state (M-FULLY-COMPLETE).
-- **Automated status transitions removed** — the reviewer no longer moves
-  issues to Done on merge (GitHub-for-Jira automation handles that) and
-  no longer moves the parent to Done. The only transition the reviewer
-  still performs is a **rejected** issue → In Progress, and only on a
-  *sub-task* reject (3d) or a *single-step* reject (3d) — never on the
-  multistep parent-PR reject (5b).
+- **No automatic status transitions** — the reviewer never moves an issue
+  to Done on its own. The only transition it performs unprompted is a
+  **rejected** issue → In Progress, and only on a *sub-task* reject (3d) or
+  a *single-step* reject (3d) — never on the multistep parent-PR reject
+  (5b), where no executor will pick the parent branch up anyway.
+- **Done is offered, never assumed (step 7)** — the run's last step names
+  every issue it approved and asks once whether to close them, moving only
+  what the user confirms. It asks because an approval is not a merge: the
+  reviewer never merges, so those PRs are still open, and on boards where
+  Done means merged the card would be jumping ahead of the automation that
+  really closes it. Boards that close at approval want the opposite, and
+  nothing in the repo says which kind this project is. Declining (or a
+  non-interactive run) leaves everything as-is and GitHub-for-Jira's merge
+  automation closes the issues later. The already-merged exits (S-MERGED,
+  M-FULLY-COMPLETE) skip the question — those issues are Done already. No
+  extra Jira comment is posted either way: the step-6 report is still the
+  run's single final comment.
 - **Every terminal branch posts a JIRA report comment on the parent**
   — per step 6, the report goes to chat *and* as a single Jira comment
   on `<PARENT-KEY>`: the single-step *no-PR-yet* exit, the single-step

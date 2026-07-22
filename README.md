@@ -2,8 +2,16 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An SDLC layer for AI coding assistants; using JIRA API, Gitflow model,
+An SDLC layer for AI coding assistants — the Jira API, the Gitflow model, and
 git worktrees as isolated per-issue workspaces.
+
+Shipped as a Claude Code plugin (installable from its own marketplace) and as
+a loose skill set for coding-assistant platforms that respect the Claude or
+[agentskills.io](https://agentskills.io) specifications.
+
+The skills are explicit-invocation only by design — never auto-triggered —
+and carry the corresponding setting on both specs: `disable-model-invocation`
+for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
 ## ⚠️ Caution
 
@@ -54,6 +62,143 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
+## Quick install
+
+### Claude Code
+
+#### Remote — from the marketplace (recommended)
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
+```
+
+#### Local — clone, then load with `--plugin-dir`
+
+```bash
+git clone https://github.com/kantorv/jira-sdlc-tools.git
+claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
+```
+
+### Non Claude Code assistants
+
+Assistants that read the Claude skills spec don't need the plugin wrapper —
+copy the skills in and they discover the three directly:
+
+```bash
+cp -r plugins/jira-sdlc/skills/* skills/
+```
+
+What has to end up there:
+
+```text
+skills/
+├── jira-task-assigner/
+│   ├── SKILL.md
+│   └── agents/openai.yml     ← Codex + Antigravity only
+├── jira-task-executor/
+│   ├── SKILL.md
+│   └── agents/openai.yml
+├── jira-task-reviewer/
+│   ├── SKILL.md
+│   └── agents/openai.yml
+└── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
+    ├── jira-acli-reference.md
+    ├── jira-api-reference.md
+    ├── project-config.md
+    ├── scripts/
+    └── templates/
+```
+
+That `skills/` folder is `.codex/skills/` for Codex, `.agent/skills/` for
+Antigravity, `~/.claude/skills/` for Cursor (shared with Claude Code), and
+whatever path `kilo.jsonc` points at for Kilo Code.
+
+For every platform's skills directory, spec, wiring and verification status,
+see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
+bottom.
+
+## Full Setup
+
+Two shorter routes through the same ground:
+
+- **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** — the ordered
+  walkthrough: tools, tokens, settings, and a healthcheck, in the order you
+  actually do them.
+- **[Full setup checklist](plugins/jira-sdlc/docs/FULL-SETUP-CHECKLIST.md)** —
+  the same prerequisites as tickable items, each with how to verify it, ending
+  in one command that checks most of them for you.
+
+### Prerequisites
+
+Three CLIs must be installed and authenticated on your machine first.
+
+**Install tools**
+
+| Tool   | Title           | Uses                       | Install URL                                                              | Auth method | Token link                                                                        | Local docs                                                                          |
+| ------ | --------------- | -------------------------- | ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `git`  | Version control | commit/push                | [git-scm.com/downloads](https://git-scm.com/downloads)                  | global auth | —                                                                                 | —                                                                                   |
+| `gh`   | GitHub CLI      | pr create/update           | [cli.github.com](https://cli.github.com/)                               | token       | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md)     |
+| `acli` | Atlassian CLI   | jira api (issues, comments)| [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) | token       | [Jira API token](https://id.atlassian.com/manage-profile/security/api-tokens)     | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md)                                  |
+
+**Platform specific**
+| Platform | Needs | Why |
+|---|---|---|
+| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | execute `.ps1` scripts |
+| **Linux / macOS** | [`jq`](https://jqlang.github.io/jq/download/) · [`python3`](https://www.python.org/downloads/) *(recommended)* | JSON parsing, scripting |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
+(`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
+[Either way](#either-way) below).
+
+---
+
+ 
+
+### Tokens to get
+
+Two API tokens go into `jira-sdlc-tools.local.env` — one for Jira, one for
+GitHub:
+
+| Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
+|---|---|---|---|---|---|
+| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | N/A (granular per-issue scopes are rejected by acli) | No — use non scoped **API token** | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
+| `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+
+### Either way
+
+Create two files in the root of the repo you're building features in:
+
+1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
+2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
+
+The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
+
+## Jira states - who can move a card
+
+The four statuses are configurable — `<STATUS_*>` below are the tokens you map
+onto your board's real names in `jira-sdlc-tools.env`. Full detail, including
+what each skill does at every step, is in
+**[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
+
+✅ does it · ⚠️ only with your confirmation · ❌ never
+
+| Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
+|---|---|---|---|---|
+| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `acli … transition`, or drag the card |
+| **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
+| **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
+| **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
+| **[GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
+| **[Jira Automation](plugins/jira-sdlc/docs/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
+
+The GitHub Actions row is **this repo's own CI** (`.github/workflows/`), not
+files the plugin installs — a marketplace install copies only
+`plugins/jira-sdlc/`. Copy them into your project to get that row; setup and
+secrets are in
+[Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
+
 ## Task lifecycle preview
 
 The three skills map to three phases of a task's life. The Jira states
@@ -95,91 +240,6 @@ flowchart LR
 
 See **[Task lifecycle](plugins/jira-sdlc/docs/TASK-LIFECYCLE.md)** for the
 full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
-
-## Install
-
-In a hurry? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)** is the
-short, ordered walkthrough — tools, tokens, settings, and a healthcheck, in
-the order you actually do them.
-
-### Prerequisites
-
-Three CLIs must be installed and authenticated on your machine first.
-
-**Install tools**
-
-| Tool   | Title           | Uses                       | Install URL                                                              | Auth method | Token link                                                                        | Local docs                                                                          |
-| ------ | --------------- | -------------------------- | ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `git`  | Version control | commit/push                | [git-scm.com/downloads](https://git-scm.com/downloads)                  | global auth | —                                                                                 | —                                                                                   |
-| `gh`   | GitHub CLI      | pr create/update           | [cli.github.com](https://cli.github.com/)                               | token       | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md)     |
-| `acli` | Atlassian CLI   | jira api (issues, comments)| [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) | token       | [Jira API token](https://id.atlassian.com/manage-profile/security/api-tokens)     | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md)                                  |
-
-`git` uses your machine's existing global credentials. `gh` authenticates
-with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `acli` with a Jira API token
-(`JIRA_TOKEN`) — both set per repo in `jira-sdlc-tools.local.env` (see
-[Either way](#either-way) below).
-
-### Tokens to get
-
-Two API tokens go into `jira-sdlc-tools.local.env` — one for Jira, one for
-GitHub:
-
-| Token | Get it from | Permissions to add | Granular? | What it's for | Docs |
-|---|---|---|---|---|---|
-| `JIRA_TOKEN` | [Jira API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) | N/A (granular per-issue scopes are rejected by acli) | No — use non scoped **API token** | authenticates `acli` to the Jira REST API — issues, comments, transitions | [JIRA-ACLI.md](plugins/jira-sdlc/docs/JIRA-ACLI.md) |
-| `GITHUB_PAT_TOKEN` | [GitHub fine-grained PAT](https://github.com/settings/personal-access-tokens/new) | **Contents** → Read and write · **Pull requests** → Read and write (**Metadata** → Read-only is added automatically) | Yes — fine-grained PAT | authenticates `gh` to push the branch and open PRs | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
-
-### Helper tools
-
-The skills run bundled scripts that need a shell runtime plus a JSON parser —
-which ones depend on your OS.
-
-**Windows** — one of:
-
-| Tool         | Uses                                            | Install URL                                                                                              |
-| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `pwsh`       | run skill scripts (`win/*.ps1`), PowerShell 7+  | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
-| `powershell` | run skill scripts (`win/*.ps1`), PowerShell 5.1 | ships with Windows                                                                                       |
-
-**Linux / macOS:** the scripts are bash, which has no native JSON parsing, so
-they shell out to an external tool for it:
-
-| Tool      | Uses                                 | Install URL                                                 |
-| --------- | ------------------------------------ | ---------------------------------------------------------- |
-| `jq`      | parse Jira JSON                      | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) |
-| `python3` | scripting (`jq` fallback for JSON)   | [python.org/downloads](https://www.python.org/downloads/)  |
-
-### Remote — from the marketplace (recommended)
-
-```
-/plugin marketplace add kantorv/jira-sdlc-tools
-/plugin install jira-sdlc@jira-sdlc-tools
-```
-
-### Local — clone, then load with `--plugin-dir`
-
-```bash
-git clone https://github.com/kantorv/jira-sdlc-tools.git
-claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
-```
-
-No marketplace step and nothing gets installed — this loads the plugin
-directly from your local clone for that Claude Code session. Point
-`--plugin-dir` at the plugin's own root (`plugins/jira-sdlc`), not the
-toolkit repo root — the toolkit root only holds `marketplace.json`,
-not a `plugin.json`. Useful if you'd rather track updates via `git pull`
-than a marketplace, or if you're testing a change before publishing it.
-If you're planning to actively edit the plugin rather than just run it,
-see [Development](#development) below for the edit-reload loop.
-
-### Either way
-
-Create two files in the root of the repo you're building features in:
-
-1. **`jira-sdlc-tools.env`** — team-shared settings (project key, status names, default branch). A filled-in template ships at [`jira-sdlc-tools.env`](jira-sdlc-tools.env) in this repo's root; copy it over and fill in the blanks.
-2. **`jira-sdlc-tools.local.env`** — developer/machine-specific settings (worktrees path, Jira URL, email, token path). This file is **gitignored**; each developer creates their own copy. See [`jira-sdlc-tools.local.env.example`](jira-sdlc-tools.local.env.example) for the template.
-
-The plugin README explains what each value means. Then you're ready to run `/jira-sdlc:jira-task-assigner`.
 
 ## Repository layout
 
