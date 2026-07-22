@@ -15,12 +15,13 @@ for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
 ## ⚠️ Caution
 
-**This plugin acts on your behalf in both git and Jira.** Given your
+**This plugin acts as an authenticated user in both git and Jira.** Given
 credentials, it will commit, create and push branches, open and update
 pull requests, and take the other actions needed to follow the
 [`gitflow`](plugins/jira-sdlc/docs/SDLC.md) strategy — and it will
 create, update, transition, and comment on issues in your Jira project.
-Those actions are visible to your team and land under your (or agent's own) account.
+Those actions are visible to your team and land under whichever account you
+configured — your own, or a dedicated one per skill.
 
 Use it with caution: point it at a project you're comfortable having
 changed, and read
