@@ -268,9 +268,12 @@ if ($KeyArg) {
 # before any work — is the right home for it, no per-skill wiring needed.
 # GITHUB_PAT_TOKEN is a secret, machine-specific value → gitignored
 # jira-sdlc-tools.local.env only. Missing token → FAIL with a remedy, and the
-# skill stops like any other FAIL row. Accepted tradeoff: this writes the
-# OS-user-global gh config, overwriting the developer's own gh session and not
-# restoring it afterward — see plugins/jira-sdlc/docs/github/ (JST-126/145).
+# skill stops like any other FAIL row. A login that runs but FAILs (non-zero
+# exit — an expired or revoked PAT, etc.) also FAILs, relaying gh's first stderr
+# line (token redacted) rather than falling through to a generic "no session" —
+# so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
+# writes the OS-user-global gh config, overwriting the developer's own gh session
+# and not restoring it afterward — see plugins/jira-sdlc/docs/github/ (JST-126/145).
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
         "install it (https://cli.github.com), then $Rerun."
@@ -285,14 +288,28 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     } else {
         # logout FIRST — see header; non-fatal if there's nothing to log out.
         & gh auth logout --hostname github.com 2>&1 | Out-Null
-        $ghPat | & gh auth login --with-token 2>&1 | Out-Null
-        $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
-            Select-Object -First 1) -replace '^[^L]*', ''
-        if ($ghLine) {
-            Add-Row gh_auth OK "$ghLine (PAT session login)"
+        # Login: capture gh's stderr. gh never echoes the token on error, but we
+        # redact it anyway (issue NOTES) before relaying. A FAILED login now FAILs
+        # the row with gh's own first error line instead of falling through to the
+        # generic "no session" FAIL — so a real auth failure (expired/revoked PAT,
+        # etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
+        # stderr; only then do we run 'gh auth status' for the account line.
+        $loginErr = ($ghPat | & gh auth login --with-token 2>&1 | Out-String)
+        if ($LASTEXITCODE -eq 0) {
+            $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
+                Select-Object -First 1) -replace '^[^L]*', ''
+            if ($ghLine) {
+                Add-Row gh_auth OK "$ghLine (PAT session login)"
+            } else {
+                Add-Row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" `
+                    "gh reported a successful login but no active session — inspect 'gh auth status' by hand, then $Rerun."
+            }
         } else {
-            Add-Row gh_auth FAIL "gh auth login --with-token with GITHUB_PAT_TOKEN did not produce an authenticated session" `
-                "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT, then $Rerun."
+            $redacted = if ($ghPat) { $loginErr -replace [regex]::Escape($ghPat), '[REDACTED]' } else { $loginErr }
+            $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
+            if (-not $err) { $err = '(no stderr from gh)' }
+            Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
+                "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
         }
     }
 }
