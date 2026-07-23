@@ -19,6 +19,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Quick start](#quick-start)
 - [How the three skills relate](#how-the-three-skills-relate)
 - [Core concepts](#core-concepts)
+  - [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Repository layout](#repository-layout)
@@ -126,6 +127,11 @@ self-contained single task, or one sub-task of a split) gets its own
 `git worktree`, so multiple executors — separate terminals, or separate
 subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
+Worktrees isolate the *source tree*, but not anything the running app
+touches outside it (a database, cache, storage, or port) — see
+[Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+for how to decide, per external asset, whether each worktree's instance
+shares it or gets its own.
 
 **What the assigner creates.** The assigner runs only from your base
 branch — invoke it from an existing feature/hotfix branch and it stops,
@@ -497,6 +503,13 @@ Deliberately never automated, regardless of how routine a run looks:
   required at the one step that's never automated (the final merge) —
   treat the automated review as a strong first pass, not a replacement
   for your own team's standards.
+- Worktrees give each issue its own **source tree**, not its own
+  **running app instance**. Anything the app touches outside its source
+  (a database, cache, storage, queue, or port) is shared across worktrees
+  by default and can collide when several run at once — see
+  [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  for the per-asset share-vs-isolate decision (and the Django database
+  worked example).
 
 ## First-run verification checklist
 
