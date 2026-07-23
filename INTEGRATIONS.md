@@ -13,7 +13,7 @@
 | [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
 | [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Draft — not run in this environment | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
 | [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Draft — not run in this environment | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
+| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
 | [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
 
 **Status legend:**
