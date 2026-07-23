@@ -64,8 +64,11 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
-(If `CLAUDE_PLUGIN_ROOT` isn't set, the script lives at
-`../_shared/scripts/posix/statuscheck.sh` relative to this skill's directory.)
+(If `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
+provided/default skills folder (the folder it loads these skills from; each
+non-Claude client is expected to have this set), keeping
+`../_shared/scripts/posix/statuscheck.sh` relative to this skill's directory as
+the default; see INTEGRATIONS.md.)
 
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`

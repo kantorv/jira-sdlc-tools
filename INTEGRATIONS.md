@@ -35,6 +35,18 @@ Before opening a platform's doc, use the table above to tell which family your p
 
 > **One platform spans a third axis.** NVIDIA NIM is *native-spec* for skills wiring (Mechanism A), but introduces a separate, orthogonal concern — the model endpoint itself. NIM serves an OpenAI-compatible API, so an Anthropic-compatible **model proxy** (fcc, Router9, or a self-run gateway) must sit between Claude Code and NIM. That proxy is transport, not a skills mechanism — the skills reader is still Claude Code — see [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) for why a proxy is required and exactly what it does and does not touch.
 
+## Locating the shared scripts — `CLAUDE_PLUGIN_ROOT`
+
+The three skills invoke their shared helper scripts through
+`${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/…`. **Claude Code** sets
+`CLAUDE_PLUGIN_ROOT` automatically to the plugin root, so those paths resolve
+with no configuration. On a **non-Claude-compatible client** the variable may be
+unset; there, resolve it against the platform's provided or default skills
+folder — the folder it loads these skills from (every such client is expected to
+have this configured). Each skill also carries the concrete relative fallback
+(`../_shared/scripts/posix/…`, relative to the skill's own directory) as the
+default.
+
 ## Adding a new platform
 
 The per-platform docs all follow a shared five-section shape: (1) which spec the platform uses — one line, (2) prerequisites, (3) install / wire-up steps, (4) how to invoke the three skills, (5) platform-specific caveats and known gaps. A copy-paste skeleton with guidance for each section lives at [`plugins/jira-sdlc/docs/integrations/_TEMPLATE.md`](plugins/jira-sdlc/docs/integrations/_TEMPLATE.md) — start from it, fill in the five sections, then add a row to the summary table above with the new doc's path and status.
