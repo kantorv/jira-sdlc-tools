@@ -83,8 +83,11 @@ bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned t
 
 (`check_assignee.sh` takes the key from the branch, as the healthcheck does;
 pass one explicitly only when running outside the issue's worktree. If
-`CLAUDE_PLUGIN_ROOT` isn't set, all three live in `../_shared/scripts/posix/`
-relative to this skill.)
+`CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
+provided/default skills folder (the folder it loads these skills from; each
+non-Claude client is expected to have this set), keeping
+`../_shared/scripts/posix/` relative to this skill as the default — all three
+live there; see INTEGRATIONS.md.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
@@ -99,9 +102,11 @@ call rather than a sequence of separate probes:
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
-(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
-plugin session — the script lives at `../_shared/scripts/posix/statuscheck.sh`
-relative to this skill's directory.)
+(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill on a non-Claude
+client — resolve it against the platform's provided/default skills folder (the
+folder it loads these skills from; each non-Claude client is expected to have
+this set), keeping `../_shared/scripts/posix/statuscheck.sh` relative to this
+skill's directory as the default; see INTEGRATIONS.md.)
 
 The script resolves
 `<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
