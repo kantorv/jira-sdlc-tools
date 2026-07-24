@@ -12,9 +12,6 @@ name: Reviewer Skill on PR (Smoke Test)
 
 on:
   workflow_dispatch:
-  pull_request:
-    types:
-      - opened
 
 jobs:
   reviewer-smoke:
