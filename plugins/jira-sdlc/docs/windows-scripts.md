@@ -31,7 +31,7 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 | `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (which is born without it); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
 | `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL` → `JIRA_ACCOUNT_EMAIL` fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
 | `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `jira.ps1` authenticates as? Compares **accountId** (not email — email is hidden on others' assignee objects). Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
-| `list_subtasks` | `skills/_shared/scripts/win/list_subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-api-reference.md` §10 |
+| `list_subtasks` | `skills/_shared/scripts/win/list_subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `docs/JIRA-REST.md` §10 |
 
 > **Note on `list_subtasks`:** its POSIX sibling is
 > `skills/_shared/scripts/posix/list_subtasks.sh` — a bash original like
@@ -110,7 +110,7 @@ side-step it.
   twin must stay in sync" — the parity contract, the `STATUSCHECK_FORCE_OS`-forced
   bash↔pwsh diff loop, and the residual Windows-only surface a Linux+pwsh diff
   can't reproduce.
-- `skills/_shared/jira-api-reference.md` §10 — `list_subtasks.sh` /
+- `docs/JIRA-REST.md` §10 — `list_subtasks.sh` /
   `create_parent_and_subtasks.sh` operator helpers (the ps1 twin is the
   Windows form of the former).
 - `skills/_shared/project-config.md` — the `jira-sdlc-tools.env` /
