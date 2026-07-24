@@ -19,7 +19,8 @@
 # Exit codes:  0 ok · 1 transport · 2 usage · 3 auth(401) · 4 not-found/perm(404)
 #              · 5 validation(400) · 6 forbidden(403) · 7 unexpected · 8 no such transition
 #
-# NOTE: PowerShell twin (win/jira.ps1) intentionally not written yet.
+# PowerShell twin: ../win/jira.ps1 (contract pair — same args/output/exit codes;
+# edit one, edit the other). Live smoke tests: jira.test.sh / ../win/jira.test.ps1.
 
 set -u
 
