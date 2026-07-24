@@ -9,8 +9,9 @@
 # just the fields it parses (subtasks,issuetype) and prints every sub-task's
 # key + summary. Reusable form of the check run after bulk-seeding sub-tasks.
 #
-# Requires jira.sh working (curl + jq + a valid credential) and `jq`. Reads
-# <PROJECT-KEY> from jira-sdlc-tools.env (override with --env or $PROJECT_KEY);
+# Requires jira.sh working (curl + jq + a valid credential) and `jq`. Run from
+# within the repo/worktree — jira.sh resolves its config from the git top-level.
+# Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with --env or $PROJECT_KEY);
 # it's printed for confirmation, never sent to the API.
 #
 # Usage:

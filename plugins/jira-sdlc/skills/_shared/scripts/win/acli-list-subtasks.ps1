@@ -5,7 +5,8 @@
 # native Invoke-WebRequest port. Mirrors the bash helper's flags, output, and
 # exit codes; parses the response with ConvertFrom-Json (no jq needed).
 #
-# Requires jira.ps1 working (a valid credential; ../jira-api-reference.md).
+# Requires jira.ps1 working (a valid credential; ../jira-api-reference.md). Run
+# from within the repo/worktree — jira.ps1 resolves its config from the git top-level.
 # Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with -EnvPath or
 # $env:PROJECT_KEY); the project is a printed label only, never sent to the API.
 #
