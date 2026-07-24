@@ -3,12 +3,16 @@
 The jira-sdlc skills use the GitHub CLI (`gh`) to open PRs (`gh pr create`).
 Rather than relying on the developer having run `gh auth login` by hand before a
 session, the healthcheck logs `gh` in deterministically from a Personal Access
-Token at the very start of every run, and holds that session for the whole
-conversation.
+Token at the very start of every run — logging **out** first so a stale token
+can't survive — and holds that session for the whole conversation.
 
 This is the flow implemented in **`statuscheck.sh`** (and its Windows twin
 `statuscheck.ps1`) — the pre-flight healthcheck every skill runs before it
-touches anything.
+touches anything. It's the healthcheck's job rather than a per-skill step
+because `gh` uses one shared PAT (per-role GitHub identities are out of scope,
+below), so — unlike the per-role `acli` login, which lives in each skill's
+credential block — a single role-agnostic login in the shared healthcheck
+covers every skill.
 
 ## The setting: `GITHUB_PAT_TOKEN`
 
@@ -52,20 +56,29 @@ untracked `jira-sdlc-tools.local.env`.
 ## What the healthcheck does
 
 At the start of the run, the `gh_auth` check resolves `GITHUB_PAT_TOKEN` from
-`jira-sdlc-tools.local.env` and logs `gh` in with it — equivalent to:
+`jira-sdlc-tools.local.env`, logs `gh` **out** of github.com, then logs it back
+in with the token — equivalent to:
 
 ```bash
 source jira-sdlc-tools.local.env \
+  && gh auth logout --hostname github.com \
   && echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token \
   && gh auth status
 ```
+
+The logout is the point: like `acli`, a second `gh auth login` does not reliably
+overwrite an already-stored credential, so without it a stale (e.g. read-only)
+token could survive and only surface as a 403 at `gh pr create` — after the work
+is already implemented, committed, and pushed (JST-143). Logging out first
+guarantees `GITHUB_PAT_TOKEN` is the active token before any work begins.
 
 Because this runs first, the resulting `gh` session is held for the **entire
 conversation** — subsequent `gh` calls (notably `gh pr create`) just use it. The
 `gh_auth` row reports the logged-in account on success.
 
-**No logout is performed.** The session is intentionally left in place for the
-whole conversation; nothing tears it down at the end.
+**The opening logout is the only teardown.** It drops whatever `gh` session was
+there so a stale token can't linger; nothing logs back out at the *end* of the
+run, so the `GITHUB_PAT_TOKEN` session persists for the whole conversation.
 
 ## Halt on a missing token
 
@@ -81,8 +94,9 @@ only discovering the missing auth at `gh pr create` time.
 `gh auth login --with-token` writes to `~/.config/gh/hosts.yml` (the equivalent
 OS-user-global config on Windows), which is **global to the OS user, not
 per-repo**. Because the agent and the developer run as the same OS user, this
-login **overwrites the developer's own personal `gh` session**, and since no
-logout is performed, it **stays** overwritten after the run.
+login **overwrites the developer's own personal `gh` session** — the run's
+opening logout drops whatever was there, and since nothing logs back into your
+personal identity afterward, it **stays** as `GITHUB_PAT_TOKEN` after the run.
 
 This is a deliberately accepted tradeoff in favor of a simpler, session-wide
 login: one `gh auth login` at the start, held for the whole conversation, versus

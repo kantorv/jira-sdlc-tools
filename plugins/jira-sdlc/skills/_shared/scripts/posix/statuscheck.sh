@@ -323,15 +323,24 @@ else
 fi
 
 # --- gh auth (needed by 'gh pr create') ----------------------------------
-# Log gh in from a persistent PAT session at the very start of the run, so the
-# whole conversation holds this session (no per-command token prefix, no
-# logout). GITHUB_PAT_TOKEN is a secret, machine-specific value → it lives only
-# in the gitignored jira-sdlc-tools.local.env (never the tracked
-# jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token → FAIL with
-# a remedy, and the skill stops like any other FAIL row. Accepted tradeoff: this
-# writes ~/.config/gh/hosts.yml, which is global to the OS user, so it overwrites
-# the developer's own gh session and is not logged out afterward — see
-# plugins/jira-sdlc/docs/github/ (JST-126).
+# Log gh in from a persistent PAT session at the very start of the run — logout
+# FIRST, then login — so the whole conversation holds a KNOWN-GOOD session. The
+# logout is load-bearing: a bare `gh auth login` does not reliably replace an
+# already-stored keyring token, so a stale PR-read-only PAT from the developer's
+# own session could otherwise survive and 403 at `gh pr create` mid-run, after
+# the work is done (JST-143). This mirrors jira_acli_login's always-logout-then-
+# login rule. gh uses ONE shared PAT (not a per-role identity like acli), so this
+# role-agnostic healthcheck — which every skill already runs before any work — is
+# the right home for it: no per-skill wiring needed. GITHUB_PAT_TOKEN is a secret,
+# machine-specific value → gitignored jira-sdlc-tools.local.env only (never the
+# tracked jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token →
+# FAIL with a remedy, and the skill stops like any other FAIL row. A login that
+# runs but FAILs (non-zero exit — an expired or revoked PAT, etc.) also FAILs,
+# relaying gh's first stderr line (token redacted) rather than falling through to
+# a generic "no session" — so the actual auth error is named (JST-145 AC#3).
+# Accepted tradeoff: this writes ~/.config/gh/hosts.yml, global to the OS user,
+# so it overwrites the developer's own gh session and is not restored afterward —
+# see plugins/jira-sdlc/docs/github/ (JST-126/145).
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
     "install it (https://cli.github.com), then $RERUN."
@@ -345,13 +354,28 @@ else
     row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
       "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
   else
-    printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token >/dev/null 2>&1 || true
-    GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
-    if [ -n "$GH_LINE" ]; then
-      row gh_auth OK "$GH_LINE (PAT session login)"
+    # logout FIRST — see header; non-fatal if there's nothing to log out.
+    $TMOUT_CMD gh auth logout --hostname github.com >/dev/null 2>&1 || true
+    # Login: capture gh's stderr separately. gh never echoes the token on error,
+    # but we redact it anyway (issue NOTES) before relaying. A FAILED login now
+    # FAILs the row with gh's own first error line instead of falling through to
+    # the generic "no session" FAIL — so a real auth failure (expired/revoked
+    # PAT, etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
+    # stderr; only then do we run 'gh auth status' for the account line.
+    if LOGIN_ERR=$(printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token 2>&1 >/dev/null); then
+      GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
+      if [ -n "$GH_LINE" ]; then
+        row gh_auth OK "$GH_LINE (PAT session login)"
+      else
+        row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" \
+          "gh reported a successful login but no active session — inspect 'gh auth status' by hand, then $RERUN."
+      fi
     else
-      row gh_auth FAIL "gh auth login --with-token with GITHUB_PAT_TOKEN did not produce an authenticated session" \
-        "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT, then $RERUN."
+      ERR=$(printf '%s' "${LOGIN_ERR//"$GH_PAT"/[REDACTED]}" \
+        | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
+      [ "${ERR:-}" ] || ERR='(no stderr from gh)'
+      row gh_auth FAIL "gh auth login --with-token failed: $ERR" \
+        "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $RERUN."
     fi
   fi
 fi
