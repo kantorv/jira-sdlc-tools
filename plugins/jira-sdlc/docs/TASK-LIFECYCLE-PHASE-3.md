@@ -44,8 +44,8 @@ sequenceDiagram
     User->>Reviewer: cd worktree-<PARENT-KEY>, invoke /jira-task-reviewer (no key arg)
 
     activate Reviewer
-    Reviewer->>JIRA: jira_acli_login.sh reviewer<br/>(idempotent — no-op if already it)
-    JIRA-->>Reviewer: acli is now the reviewer account
+    Reviewer->>JIRA: check_assignee.sh --role reviewer<br/>(identity check)
+    JIRA-->>Reviewer: ok, continue
     Note right of Reviewer: login fails → stop.<br/>Every verdict comment + reject transition below<br/>is now attributed to the reviewer
     Reviewer->>GIT: git fetch origin --prune
     Reviewer->>JIRA: fetch issue from branch key<br/>(type, status, parent, subtasks)
@@ -206,7 +206,7 @@ sequenceDiagram
   after every review.
 - **Parent via climb (sub-task branches climb up)** — the reviewer derives
   the key from the current branch (feature/<KEY>-slug or hotfix/<KEY>-slug)
-  and `acli` fetches the issue. If the issue is a Subtask, step 1 climbs
+  and `jira.sh` fetches the issue. If the issue is a Subtask, step 1 climbs
   to its parent via `fields.parent.key` and continues from there — the
   `opt branch key is a Subtask` block right after the initial Jira fetch.
   A top-level issue with no sub-tasks follows the single-step track.

@@ -1,22 +1,29 @@
-# jira-api-reference.md (Jira Cloud REST API v3, direct)
+# jira-api-reference.md (Jira Cloud REST v3 — the `jira.sh` client + the raw API)
 
-Reference for Claude Code when driving Jira **directly over the REST API**
-instead of through `acli` (see [`jira-acli-reference.md`](jira-acli-reference.md)
-for the CLI path, which is what the three skills normally use).
+The single operational reference for Claude Code driving Jira. The three
+skills (`jira-task-assigner`, `jira-task-executor`, `jira-task-reviewer`)
+and `_shared/scripts` drive Jira through **`jira.sh`** (POSIX) / **`jira.ps1`**
+(Windows) — a small REST v3 client that wraps the raw calls documented here.
+This file is both halves of that:
 
-Reach for this when you need to call Jira **without `acli`** — e.g. from a
-GitHub Actions runner, or with a **scoped** API token that `acli` can't
-use. Every `curl` below is a *verified working call*: they were run against
-a live Jira Cloud instance on 2026-07-12 and are the exact shapes the
-`.github/workflows/jira_issue_transition_*.yml` workflows use.
+- **§9–§13 — the operational surface the skills invoke**: the `jira.sh`
+  command surface + `--role` auth (§9), issue field lists (§10), comment
+  mechanics & markers (§11), the git branch convention (§12), and the
+  PR-base resolver (§13). Start here for anything a skill does.
+- **§0–§8 — the raw REST substrate**: the exact `curl` shapes `jira.sh`
+  implements, and the direct-REST path for callers that can't use it — a
+  GitHub Actions runner, or a **scoped** API token. Every `curl` below is a
+  *verified working call*, run against a live Jira Cloud instance and the
+  exact shapes the `.github/workflows/jira_issue_transition_*.yml` workflows
+  use.
 
 Project-specific values are `<TOKEN>`s resolved from the two config files
 (see [`project-config.md`](project-config.md)):
 
 **`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
 - `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped)
-- `<JIRA_ACCOUNT_EMAIL>` — the account the token belongs to
-- `<JIRA_TOKEN>` — API token (classic **or** scoped; see §5)
+- `<JIRA_ACCOUNT_EMAIL>` / `<JIRA_TOKEN>` — the default account + its API token (classic **or** scoped; see §5)
+- optional per-role pairs `JIRA_{EXECUTOR,ASSIGNER,REVIEWER}_{EMAIL,TOKEN}` — selected by `jira.sh --role` (§9); each falls back to the default pair independently
 
 `<CLOUD_ID>` is *not* configured — resolve it at runtime (see §1).
 
@@ -28,7 +35,12 @@ Project-specific values are `<TOKEN>`s resolved from the two config files
 [5. Token types & scopes](#5-token-types--scopes) ·
 [6. People fields — assignee and reporter](#6-people-fields--assignee-and-reporter) ·
 [7. Bulk field updates across a project](#7-bulk-field-updates-across-a-project) ·
-[8. Gotchas](#8-gotchas)
+[8. Gotchas](#8-gotchas) ·
+[9. The `jira.sh` client — command surface & `--role` auth](#9-the-jirash-client--command-surface--role-auth) ·
+[10. Issue field lists](#10-issue-field-lists) ·
+[11. Comments & markers](#11-comments--markers) ·
+[12. Git branch convention](#12-git-branch-convention) ·
+[13. PR-base resolver](#13-pr-base-resolver)
 
 ---
 
@@ -47,9 +59,9 @@ kind of API token here (that's for real OAuth 3LO access tokens) — use
 Basic.
 
 **Therefore: always go through the `api.atlassian.com/ex/jira/<CLOUD_ID>`
-gateway.** It works for both token types, so it's the portable choice.
-(`acli`, by contrast, hits the site domain for operations, which is exactly
-why `acli` can't use a scoped token.)
+gateway.** It works for both token types, so it's the portable choice —
+`jira.sh` (§9) hits the gateway for exactly this reason, which is what lets a
+scoped token work through it.
 
 ## 1. Resolve the cloud id
 
@@ -173,24 +185,23 @@ Create tokens at `id.atlassian.com` → Security → API tokens.
 
 ## 6. People fields — `assignee` and `reporter`
 
-`acli` can set an **assignee** (`workitem create/assign/edit --assignee`) but
-has **no `--reporter` flag on any subcommand** — `workitem edit --reporter`
-errors with `unknown flag`. Reporter is REST-only, which is the main reason a
-skill would come here at all.
+`jira.sh` can set an **assignee** (`issue assign`, or `issue create --assignee`)
+but exposes **no reporter operation** — reporter is REST-only, which is the main
+reason a skill would reach past `jira.sh` to the raw calls below.
 
 The two fields differ in a way worth knowing before you plan a change:
 
 | field | mutable? | notes |
 |---|---|---|
-| `assignee` | yes | who *works* it. `acli` can do this — prefer it. |
+| `assignee` | yes | who *works* it. `jira.sh issue assign` does this — prefer it. |
 | `reporter` | yes, **with permission** | who *filed* it. Needs the project's **Modify Reporter** permission (admin-level by default). |
 | `creator` | **never** | set by Jira from the authenticated caller at create time. No API can change it, ever. |
 
 **`creator` and `reporter` are set from whoever authenticates on create** — so
-the ordinary way to get them right is simply to *be the right account*
-(`jira_acli_login.sh assigner`, per
-[`project-config.md`](project-config.md)); no field-setting needed. Reach for
-the REST writes below only to **retrofit existing issues**.
+the ordinary way to get them right is simply to *be the right account*, which
+under per-request auth means creating with `jira.sh --role assigner` (§9); no
+field-setting needed. Reach for the REST writes below only to **retrofit
+existing issues**.
 
 ### Check it's writable before you try
 
@@ -236,12 +247,12 @@ per-role identities had always been in place) is a loop of the §6 PUT. The
 shape below is the one that matters — **collect keys → write → verify from the
 server**.
 
-### Collect the keys — paginate, and don't trust `acli` here
+### Collect the keys — paginate over REST search
 
-`acli jira workitem search --fields 'key'` returns entries whose `key` is
-**`null`** — a key list built from it comes back empty, and a loop over it
-silently does nothing. Use REST search, which pages with `nextPageToken`
-(*not* `startAt` — that's the old `/search` endpoint):
+`jira.sh` deliberately exposes no bulk-search subcommand (this whole section is
+a rare human-run retrofit, not skill surface) — drive it with the raw call, or
+`jira.sh raw GET /search/jql`. REST search pages with `nextPageToken` (*not*
+`startAt` — that's the old `/search` endpoint):
 
 ```bash
 next=""; : > keys.txt
@@ -303,8 +314,6 @@ to reconstruct it.
   *not* evidence that the gateway is broken or that your token is bad — it's
   the wrong endpoint. Resolve the cloud id from `_edge/tenant_info` (§1),
   which needs no auth at all.
-- **`acli` search returns `null` keys with `--fields 'key'`** — see §7. Build
-  key lists from REST search, not from `acli`.
 - **People fields need `accountId`, not email** — `{"assignee":{"accountId":…}}`.
   An email in that field is rejected. Resolve via `$BASE/user/search` (§6).
 - **`creator` cannot be changed** — by any API, ever (§6). If it's wrong, the
@@ -320,3 +329,274 @@ to reconstruct it.
 - **Transitions are current-status-dependent** — the id for a target status
   can differ (or be absent) depending on where the issue is now. Always
   resolve the id from a fresh `GET …/transitions`; never hard-code it.
+
+---
+
+## 9. The `jira.sh` client — command surface & `--role` auth
+
+The skills don't call `curl` — they call `jira.sh` (POSIX) / `jira.ps1`
+(Windows), a small client over the §0–§8 REST calls. It authenticates
+**per-request** (Basic, §0): every invocation resolves its own credential and
+sends it on that one call. There is no login step, no stored credential, and no
+machine-global "active account" — which is what removes the single-account
+race that a login-based CLI forced on parallel runs (the whole reason the
+executor, assigner, and reviewer can run at once as different identities).
+
+**`--role executor|assigner|reviewer`** (global; may appear anywhere in the
+args) picks which credential the call uses: it reads
+`JIRA_<ROLE>_EMAIL` / `JIRA_<ROLE>_TOKEN` from `jira-sdlc-tools.local.env`,
+each **falling back to the default `JIRA_ACCOUNT_EMAIL` / `JIRA_TOKEN`
+independently** (a role may set only its email and share the default token).
+Omit `--role` for a role-neutral call on the default pair (statuscheck's
+`jira whoami` does this). `check_assignee` passes `--role` because *who* it
+authenticates as is the thing it's checking.
+
+### Command surface
+
+```
+jira [--role executor|assigner|reviewer] <command>
+
+  whoami                                    who this credential authenticates as (GET /myself)
+  project exists  <KEY>                     is the project visible to this account?
+  issue view      <KEY> [--fields a,b,c]    get an issue — raw JSON on stdout (§10)
+  issue create    --project K --type T --summary S
+                  [--parent K] [--assignee email|@me]
+                  [--desc-file FILE | --adf-file FILE]   -> prints the new key on stdout
+  issue transition <KEY> --to "In Review"   transition by target status NAME (resolves the id, §4)
+  issue assign     <KEY> (--to email|@me | --remove)
+  issue comment add  <KEY> (--body-file FILE | --adf-file FILE)   (§11)
+  issue comment list <KEY>                  raw JSON on stdout
+  issue delete     <KEY> [--with-subtasks]
+  raw <METHOD> </PATH> [--data-file FILE]   escape hatch; PATH is under /rest/api/3 (e.g. /myself)
+```
+
+Note the shape shifts from the old CLI: the key is **positional everywhere**
+(no `--key`); reads are **always JSON** (no `--json` flag); `transition` takes
+the **target status name** via `--to` (not `--status … --yes`); there is **no
+inline comment body** — comments always come from a file (§11); and `create`
+**prints the new key** on stdout, nothing to parse out of a browse URL.
+
+### Output & exit contract
+
+- **Reads** (`whoami`, `issue view`, `comment list`) print **raw JSON** on
+  stdout — pipe it to `jq`. **Writes** (`transition`, `assign`, `comment add`,
+  `delete`) print **nothing** on success (REST returns `204`). **`create`**
+  prints just the new key. Errors go to **stderr**.
+- Exit codes: `0` ok · `1` transport · `2` usage · `3` auth (401) · `4`
+  not-found/permission (404) · `5` validation (400) · `6` forbidden (403) ·
+  `7` unexpected · `8` no such transition. A non-zero exit from a skill's
+  `jira` call is a stop condition — relay the stderr line, don't retry blindly.
+
+### Dispatch & config
+
+Ships as a contract pair: `bash …/scripts/posix/jira.sh` on Linux/macOS,
+`pwsh`/`powershell …/scripts/win/jira.ps1` on Windows (identical args, output,
+exit codes). It resolves `jira-sdlc-tools.env` / `.local.env` from the **git
+top-level**, so **run it from inside the repo/worktree**; from an unrelated
+directory it can't find config and stops with `JIRA_ACCOUNT_URL is unset`.
+
+## 10. Issue field lists
+
+`jira.sh issue view <KEY>` returns the issue as JSON (it's `GET /issue/<KEY>`,
+which returns *all* fields by default). Pass **`--fields a,b,c`** to narrow the
+payload to just what you parse — smaller, and explicit about what the caller
+depends on. This toolkit uses two canonical field lists — the **single source
+of truth**; the skills cite them by name rather than re-listing them:
+
+| canonical list | `--fields` value | used by |
+|---|---|---|
+| **fetch-with-comments** | `summary,description,issuetype,status,parent,subtasks,comment` | `jira-task-executor` step 1 — it scans `fields.comment.comments` for the assigner's assignment report + `Task memory` notes (step 4) |
+| **review-fetch** | `summary,description,issuetype,status,parent,subtasks` | `jira-task-reviewer` — it doesn't read comments, and `comment` dominates the payload on comment-heavy issues, so omitting it shrinks the parent + every per-sub-task fetch |
+
+`subtasks` comes back as an array of `{"key": …, "fields": {"summary": …}}`,
+so both `fields.subtasks[].key` and the nested `.fields.summary` are available.
+`parent` and `comment` appear only when the issue actually has them (a leaf has
+no `parent`; a non-parent's `subtasks` is `[]`), so naming them is safe on any
+issue.
+
+```bash
+# executor fetch (with comments):
+jira.sh issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks,comment'
+# reviewer fetch (no comments):
+jira.sh issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks'
+```
+
+### ⚠️ Comparing an assignee? Use `accountId`, never `emailAddress`
+
+Jira returns `assignee.emailAddress` **only for your own account**. When the
+issue is assigned to *anyone else*, the field is **absent from the object
+entirely** — you get `accountId` and `displayName` and nothing more (a
+user-privacy setting, on by default, not a permissions error):
+
+```jsonc
+// assigned to ME — email present
+"assignee": { "accountId": "<MY_ACCOUNT_ID>", "displayName": "Task Executor",
+              "emailAddress": "executor@example.com" }
+// assigned to SOMEONE ELSE — no emailAddress key at all
+"assignee": { "accountId": "<OTHER_ACCOUNT_ID>", "displayName": "Task Reviewer" }
+// unassigned
+"assignee": null
+```
+
+So an **email comparison can confirm a match but never detect a mismatch**:
+"assigned to someone else" and "unassigned" both collapse to an empty string,
+and code testing `email == mine` reports the wrong reason for the failure. This
+was a live bug — an issue assigned to the reviewer reported to the executor as
+*unassigned*. **Compare `accountId`**, which is always present on both sides:
+`jira.sh --role <role> whoami` returns the caller's own (`.accountId`), and
+every assignee object carries it. Use `displayName` for the human-readable
+message, never for the comparison.
+`skills/_shared/scripts/posix/check_assignee.sh` is the invoked implementation.
+
+## 11. Comments & markers
+
+### Add a comment
+
+```bash
+jira.sh issue comment add <KEY> --body-file /tmp/comment.txt   # plain text
+jira.sh issue comment add <KEY> --adf-file  /tmp/comment.adf   # a bare ADF "doc" object
+```
+
+There is **no inline `--body`** — a comment body always comes from a file. With
+`--body-file`, `jira.sh` turns the plain text into ADF, **one paragraph per
+non-blank line**, so markdown syntax (`##`, `-`, `1.`) is stored *literally* as
+text, not rendered. For real structure — headings, lists, code blocks — build
+an ADF `doc` object yourself and pass it with `--adf-file`. Because the body is
+read from a file, backticks and other shell-active characters in it are never
+at risk of command substitution.
+
+```bash
+cat > /tmp/c.txt <<'EOF'
+Multi-line comment body in plain text.
+Backticks (`like this`) are literal — they're in the file, not the shell.
+EOF
+jira.sh issue comment add <KEY> --body-file /tmp/c.txt
+```
+
+### Machine-recoverable comment markers
+
+Some comments carry a fixed leading marker so a later session (or a human) can
+grep them back out. `jira.sh` stores a plain-text line as a single ADF text
+node verbatim, so the marker survives round-trip and a `grep` over
+`issue comment list <KEY>` JSON still finds it. Mirror the exact prefix when
+posting, match on it when reading:
+
+- `PR target branch: <branch>.` — the PR base for the issue's branch, posted by
+  `jira-task-assigner` (or the no-assigner bootstrap, §12) and consumed by the
+  §13 PR-base resolver.
+- `Task memory (jira-task-executor)` — a durable per-task memory note the
+  executor leaves for future sessions (findings, gotchas, design decisions +
+  rationale, recovery context). Deliberately distinct from the executor's
+  single end-of-run report and from the `PR target branch:` line, so grepping
+  the marker returns only memory notes.
+
+### List a work item's comments
+
+```bash
+jira.sh issue comment list <KEY>        # raw JSON on stdout
+```
+
+## 12. Git branch convention
+
+Every change goes on its own branch, `feature/<KEY>-<slug>` or
+`hotfix/<KEY>-<slug>` — no "small enough to commit straight to the working
+branch" shortcut. **The prefix follows the base branch, not the issue type**
+(SDLC.md §2): `feature/` = branched from `<DEFAULT_BASE_BRANCH>`
+(`development`), covering all planned work — features *and* bug fixes alike;
+`hotfix/` = an emergency fix branched from `<PRODUCTION_BRANCH>`.
+`jira-task-assigner` pre-creates the branch and worktree for every leaf issue,
+and since it only ever branches from `development`, every branch it creates is
+a `feature/` branch — a `hotfix/` branch is only ever produced by the
+no-assigner bootstrap below.
+
+GitHub-for-Jira links a branch to an issue purely by finding the issue key
+inside the branch name — no API call required.
+
+```
+git checkout -b feature/<ISSUE-KEY>-<slugified-summary>
+git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
+```
+
+Slugify the title: lowercase, spaces → hyphens, strip punctuation.
+`"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
+
+### No-assigner bootstrap (issue with no branch/worktree yet)
+
+`jira-task-executor` never creates the issue branch — it derives the issue key
+*from* the branch it's standing on, so there is no state where it runs and the
+branch is missing. When an issue was created without `jira-task-assigner` (e.g.
+an ad-hoc `Bug`), provision it manually **before** invoking the executor:
+
+1. Pick the prefix from the **base branch you're branching from**:
+   `<PRODUCTION_BRANCH>` (an emergency production fix) → `hotfix/`; any other
+   base, such as `<DEFAULT_BASE_BRANCH>` (`development`) → `feature/`.
+2. From the intended base branch — checked out and up to date with origin;
+   this is what the PR will target:
+   ```bash
+   BASE=$(git branch --show-current)
+   git worktree add <WORKTREES_DIR>/worktree-<KEY> -b <prefix>/<KEY>-<slug> "$BASE"
+   git config branch."<prefix>/<KEY>-<slug>".parentbranch "$BASE"
+   ```
+3. Post the durable PR-base fallback the assigner normally posts. `jira.sh`
+   has no inline body, so write the one line to a file first (§11):
+   ```bash
+   printf 'PR target branch: %s.\n' "$BASE" > /tmp/prbase.txt
+   jira.sh issue comment add <KEY> --body-file /tmp/prbase.txt
+   ```
+4. `cd` into the new worktree and run the executor.
+
+## 13. PR-base resolver
+
+Every leaf issue's PR needs a base branch. The assigner records it in two
+places — one local (`git config branch.<branch>.parentbranch`), one durable (a
+`PR target branch: …` Jira comment that survives a fresh clone). This resolver
+checks both, then — for a sub-task, whose real base is its parent's branch and
+never the env default — recovers by searching for that parent branch. Run it
+verbatim whenever a skill asks for a PR base. `PARENT_KEY` is not an env var:
+it's the leaf's `fields.parent.key` from the issue fetch (§10), empty for a
+top-level issue. (POSIX form below; on Windows the skill substitutes `jira.ps1`.)
+
+```bash
+CUR=$(git branch --show-current)
+PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
+[ -z "$PR_BASE" ] && PR_BASE=$(jira.sh issue comment list <KEY> \
+  | grep -oE 'PR target branch: [^" ]+' | head -1 \
+  | sed -e 's/PR target branch: //' -e 's/\.$//')
+# Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
+# Normalize before counting, or one branch reads as several and looks "ambiguous":
+# strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
+# (checked out in another linked worktree, the normal state of a parent branch
+# while a sub-task's worktree runs this search) — and fold the remotes/origin/
+# copy of a pushed branch into its local name (§12).
+if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
+  CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+    | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
+  MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
+  [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
+fi
+# The env default is the right answer ONLY for a top-level issue (no parent).
+# A sub-task that reached here is unresolved — leave PR_BASE empty so the skill stops.
+[ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"  # skill flags this
+echo "$PR_BASE"   # empty ⇒ sub-task base unresolved: STOP, ask the user, do not open the PR
+```
+
+The `PR target branch:` marker sits verbatim in an ADF text node (§11), so the
+`grep` matches `jira.sh issue comment list` JSON exactly as it did the old CLI's
+output. Sources, in order:
+1. `git config branch.<current>.parentbranch` — set by the assigner when the
+   branch was created; local to this clone.
+2. The issue's `PR target branch: …` Jira comment — the durable fallback the
+   assigner posts (or the no-assigner bootstrap does, §12); survives a fresh
+   clone or different machine.
+3. **Parent-branch search** — sub-tasks only, i.e. when the leaf's `PARENT_KEY`
+   is non-empty. Searches for a `feature/<PARENT_KEY>-*` / `hotfix/<PARENT_KEY>-*`
+   branch, deduping the local and `remotes/origin/` copies (§12) so a pushed
+   branch counts once.
+   - Exactly one match → use it, and say in the report the base was **recovered
+     by branch search**, not read from the primary sources.
+   - Zero or multiple matches → `PR_BASE` stays empty. **Stop before
+     `gh pr create` and ask the user** — do not fall back to
+     `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
+4. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` — reachable **only for a
+   top-level issue** (empty `PARENT_KEY`), for which it is correct. Still call
+   it out in the report.

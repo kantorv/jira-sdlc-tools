@@ -19,14 +19,19 @@ the issue key is derived from the current branch (see Discovery below).
   Fold it into investigation (step 4), clarification (step 5), and
   implementation (step 6) alongside the Jira issue description; it
   supplements, never replaces, that description.
-- Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores
-  credentials after a one-time `acli jira auth login`, so no per-command
-  token prefix; run commands bare.
-- **Jira comment mechanics**: multi-line / markdown comments are written to
-  a temp file and posted with `acli jira workitem comment create --key <KEY>
-  --body-file <file>`. Never wrap markdown in an inline `--body` string
-  (backticks → command substitution), and `--body-file -` / stdin does not
-  work — see §6.
+- **Jira access is the `jira.sh` / `jira.ps1` client, not a global CLI.** It
+  lives at `$S/jira.sh` (POSIX) / the `win/jira.ps1` port (Windows), where `S`
+  is the scripts dir set in the credential block below. The steps write Jira
+  calls as `jira.sh <cmd>` for brevity — actually invoke it as
+  `bash "$S/jira.sh" <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows),
+  re-setting `S` at the top of each shell block that needs it. It authenticates
+  **per-request as `--role executor`** (`../_shared/jira-api-reference.md` §9) —
+  no login step and no stored credential, so nothing to log into first.
+- **Jira comment mechanics**: comments are written to a temp file and posted
+  with `jira.sh --role executor issue comment add <KEY> --body-file <file>`.
+  There is no inline-body form — the body always comes from a file, so backticks
+  in it are never at risk of shell substitution; `jira.sh` stores plain text as
+  ADF (one paragraph per non-blank line). See §11.
 - **Task memory (Jira comments as durable per-task memory)**: treat the
   issue's Jira comments as this task's long-term memory across sessions —
   read prior notes before implementing (step 4) and record memory-worthy
@@ -41,10 +46,9 @@ the issue key is derived from the current branch (see Discovery below).
   pointer for the next session, not a permanent home for design the
   codebase itself should own; it's for task-recovery, reimplementation, and
   already-touched-code investigation context. Post memory comments with the
-  same temp-file + `--body-file` mechanics as any other comment (§6) —
-  never an inline `--body` with backticks.
+  same temp-file + `--body-file` mechanics as any other comment (§11).
 - Every leaf gets its own dedicated branch and opens its own PR; the PR's
-  base is resolved in step 10 per `../_shared/jira-acli-reference.md` §12 —
+  base is resolved in step 10 per `../_shared/jira-api-reference.md` §13 —
   git config `parentbranch` first, then the assigner's
   `PR target branch: …` Jira comment (the durable fallback), then the env
   default.
@@ -63,31 +67,33 @@ below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
 chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `jira_acli_login`, which takes a role argument, **statuscheck itself
-takes no role or issue-key argument — run it bare** on both POSIX and Windows;
-a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
-for an issue key, but don't add one.
+unlike `check_assignee`, which takes a `--role` (and an optional issue key),
+**statuscheck itself takes no role or issue-key argument — run it bare** on
+both POSIX and Windows; a stray role name (e.g. `reviewer`) reaching it is
+ignored rather than mistaken for an issue key, but don't add one.
 
-**Get local credentials, be the executor, and own the issue — run these
-FIRST, before the healthcheck.** All three are idempotent and take no
-decisions of their own; a non-zero exit from any of them means **STOP** —
-relay its stderr verbatim and do not transition status, branch, commit,
-comment, or work the issue.
+**Get local credentials and confirm you own the issue — run these FIRST,
+before the healthcheck.** Both are idempotent and take no decisions of their
+own; a non-zero exit from either means **STOP** — relay its stderr verbatim and
+do not transition status, branch, commit, comment, or work the issue. There is
+no "become the executor" login step: `jira.sh` authenticates per-request as
+`--role executor`, so ownership is *confirmed* here, not *assumed* by switching
+a global account.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"
-bash "$S/ensure_local_env.sh"          || exit 1   # 1. worktree gets local.env if it's missing
-bash "$S/jira_acli_login.sh" executor  || exit 1   # 2. become the executor
-bash "$S/check_assignee.sh"            || exit 1   # 3. <KEY> must be assigned to it
+bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets local.env if it's missing
+bash "$S/check_assignee.sh" --role executor  || exit 1   # 2. <KEY> must be assigned to the executor
 ```
 
-(`check_assignee.sh` takes the key from the branch, as the healthcheck does;
-pass one explicitly only when running outside the issue's worktree. If
+(`check_assignee.sh` resolves the executor identity via `jira.sh --role
+executor whoami` and takes the key from the branch, as the healthcheck does;
+pass a key explicitly only when running outside the issue's worktree. If
 `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
 provided/default skills folder (the folder it loads these skills from; each
 non-Claude client is expected to have this set), keeping
-`../_shared/scripts/posix/` relative to this skill as the default — all three
-live there; see INTEGRATIONS.md.)
+`../_shared/scripts/posix/` relative to this skill as the default — both, and
+the `jira.sh` client they and the steps below call, live there; see INTEGRATIONS.md.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this
 skill transitions Jira status, commits, pushes, and opens a PR — every
@@ -125,7 +131,7 @@ actually acts on).
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the reading note below makes that a stop condition |
-| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
 
@@ -134,8 +140,8 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing by `ensure_local_env.sh`, called
 before this script — see step 1 above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
-(step 10's `gh pr create`), `acli_auth` (every `acli jira …` call),
-`jira_project`, plus context `base_branch`, `working_tree` (WARN when
+(step 10's `gh pr create`), `jira_auth` (the default credential authenticates —
+`jira.sh whoami`), `jira_project`, plus context `base_branch`, `working_tree` (WARN when
 dirty), and `worktrees_dir` (WARN when missing — only the assigner acts
 on it).
 
@@ -161,9 +167,9 @@ already confirmed `<KEY>` is assigned to the executor. Continue to step 1,
 carrying the INFO rows forward as context (`parent_branch` feeds step 2's
 stale-branch merge and step 10's PR-base resolution).
 
-1. **Fetch the issue** — `acli jira workitem view <KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (auth per §0; source of truth for this fetch-with-comments field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
+1. **Fetch the issue** — `jira.sh --role executor issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (reads print raw JSON on stdout; source of truth for this fetch-with-comments field list: `../_shared/jira-api-reference.md` §10 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
-     explicitly — the default `--json` omits it; see §3):
+     explicitly so the narrowed payload keeps it; see §10):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
        sub-tasks' PRs, not an implementation surface. Implementing here
        risks conflicting with / shadowing the sub-tasks' separate PRs that
@@ -176,7 +182,7 @@ stale-branch merge and step 10's PR-base resolution).
        the base branch). Proceed normally.
    - Every leaf gets its own dedicated branch and opens its own PR (no
      per-issue strategy to read). The PR's base is resolved in step 10
-     per `../_shared/jira-acli-reference.md` §12 — git config first, then
+     per `../_shared/jira-api-reference.md` §13 — git config first, then
      the assigner's `PR target branch: ...` Jira comment, then (for
      sub-tasks) a parent-branch search, then the env default.
 
@@ -185,7 +191,7 @@ stale-branch merge and step 10's PR-base resolution).
    the branch exists and is checked out, so there is nothing to locate or
    create here. (An issue with no branch/worktree yet — one created
    without the assigner — is provisioned *before* this skill runs; the
-   bootstrap recipe lives in `../_shared/jira-acli-reference.md` §7.)
+   bootstrap recipe lives in `../_shared/jira-api-reference.md` §12.)
    What the branch *can* be is **stale**: the branch it was created from
    may have moved since — most commonly a sibling sub-task's PR merging
    into the shared parent branch. Discovery's `parent_branch` row already
@@ -208,9 +214,10 @@ stale-branch merge and step 10's PR-base resolution).
      default).
 
 3. **Transition the issue** to in-progress:
-   `acli jira workitem transition --key <KEY> --status "<STATUS_IN_PROGRESS>" --yes` (see
-   `jira-sdlc-tools.env` in the project root for the confirmed status name for this
-   project — default example `In Progress`).
+   `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_PROGRESS>"` (transition
+   by target status *name*; `jira.sh` resolves it to the id — see
+   `jira-sdlc-tools.env` in the project root for the confirmed status name for
+   this project — default example `In Progress`).
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
    writing anything. Understand existing patterns, not just the issue text.
@@ -300,14 +307,15 @@ stale-branch merge and step 10's PR-base resolution).
 9. **Push** — `git push -u origin <branch-name>`.
 
 10. **Open a PR:**
-    - Resolve the PR base per `../_shared/jira-acli-reference.md` §12
+    - Resolve the PR base per `../_shared/jira-api-reference.md` §13
       (git-config → Jira "PR target branch" comment → parent-branch search →
       env default). `PARENT_KEY` is step 1's `fields.parent.key` — set for a
       sub-task, empty for a top-level issue:
       ```bash
+      S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
       CUR=$(git branch --show-current)
       PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
-      [ -z "$PR_BASE" ] && PR_BASE=$(acli jira workitem comment list --key <KEY> --json \
+      [ -z "$PR_BASE" ] && PR_BASE=$(bash "$S/jira.sh" --role executor issue comment list <KEY> \
         | grep -oE 'PR target branch: [^" ]+' | head -1 \
         | sed -e 's/PR target branch: //' -e 's/\.$//')
       # Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
@@ -315,7 +323,7 @@ stale-branch merge and step 10's PR-base resolution).
       # strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
       # (checked out in another linked worktree, the normal state of a parent branch
       # while a sub-task's worktree runs this search) — and fold the remotes/origin/
-      # copy of a pushed branch into its local name (§7).
+      # copy of a pushed branch into its local name (§12).
       if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
         CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
           | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
@@ -339,8 +347,8 @@ stale-branch merge and step 10's PR-base resolution).
       - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `jira-sdlc-tools.env`;
         top-level issues only) — proceed, and say so explicitly in the final report.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
-      (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.env` in the
-      project root — acli has no browse-URL subcommand, so construct the
+      (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.local.env` in the
+      project root — there's no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
     - Write the PR body to a temp file and use `--body-file` (backticks
@@ -364,7 +372,7 @@ stale-branch merge and step 10's PR-base resolution).
 11. **Update Jira — status transition, no comment yet:**
     You just opened a PR (step 10), so the work is now under review —
     transition it to in-review:
-    `acli jira workitem transition --key <KEY> --status "<STATUS_IN_REVIEW>" --yes` (see
+    `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_REVIEW>"` (see
     `jira-sdlc-tools.env` in the project root for the confirmed status
     name for this project — default example `In Review`).
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
@@ -380,13 +388,11 @@ stale-branch merge and step 10's PR-base resolution).
       (when run on that issue) will review this PR targeting the
       base branch. `<STATUS_DONE>` is handled when the human merges the
       PR into the base branch — via GitHub-for-Jira's merge automation
-      if connected, or a manual `acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes`
+      if connected, or a manual `jira.sh --role executor issue transition <KEY> --to "<STATUS_DONE>"`
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the issue's new status. Pass through any
-    note the identity gate printed on success (it flags when acli is now a
-    dedicated executor account machine-globally). Post this
+    commit(s), the PR link, and the issue's new status. Post this
     same report to the user in chat **and** as a single Jira comment: this is
     the one comprehensive **run report** — don't fragment it (in
     particular, no separate trivial "PR opened" comment earlier). The
@@ -394,15 +400,16 @@ stale-branch merge and step 10's PR-base resolution).
     sanctioned companions to it (they carry the marker line; this run
     report never does). Since it's multi-line,
     post it using the temp-file + `--body-file` convention (see the preamble
-    above and §6):
-    ```
-    acli jira workitem comment create --key <KEY> --body-file /tmp/<KEY>-report.md
+    above and §11):
+    ```bash
+    S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
+    bash "$S/jira.sh" --role executor issue comment add <KEY> --body-file /tmp/<KEY>-report.md
     ```
     (Write the report content to `/tmp/<KEY>-report.md` first with a
-    `cat > … <<'EOF'` heredoc, as shown in §6.)
+    `cat > … <<'EOF'` heredoc, as shown in §11.)
 
-Reference: `../_shared/jira-acli-reference.md` has the full acli syntax,
-confirmed issue types, and git/branch conventions this skill depends on.
-The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
-(machine-specific) files in the project root have this repo's specific values for every
-`<TOKEN>` used above.
+Reference: `../_shared/jira-api-reference.md` is the operational + REST
+reference — the `jira.sh` command surface, field lists, comment mechanics, and
+git/branch conventions this skill depends on. The `jira-sdlc-tools.env`
+(team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the
+project root have this repo's specific values for every `<TOKEN>` used above.

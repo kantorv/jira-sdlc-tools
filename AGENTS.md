@@ -184,7 +184,7 @@ an error; the semicolon is the one that bites, and the checker will point at it.
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
 The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`jira_acli_login`, `get_assignee_email`, `check_assignee`) ship **twice**: the
+`get_assignee_email`, `check_assignee`, `jira`) ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
@@ -200,16 +200,16 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
-done   # pass a role arg to jira_acli_login; an issue-key arg to check_assignee
+done   # pass an issue-key arg to check_assignee; a subcommand (e.g. whoami) to jira
 ```
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
-diff's reach): real backslash paths / drive letters, CRLF, and acli's config
-location — confirm those on a real Windows 11 box, but the port logic and
+diff's reach): real backslash paths / drive letters and CRLF — confirm those on
+a real Windows 11 box, but the port logic and
 dispatch are verified here.
 
 Beyond that, "testing" a skill means tracing through which assignment

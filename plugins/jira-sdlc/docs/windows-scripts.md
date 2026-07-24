@@ -29,10 +29,9 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 |---|---|---|---|
 | `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+acli auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
 | `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (which is born without it); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
-| `jira_acli_login` | `skills/_shared/scripts/win/jira_acli_login.ps1` `<role>` | Logs `acli` in as the role's Jira identity (`executor`\|`assigner`\|`reviewer`), idempotently — no-op if already that site+email, else `logout` then `login`. Exit 0/1. Token delivered via temp-file + `Start-Process -RedirectStandardInput` (see gotcha). | **assigner**→`assigner`, **executor**→`executor`, **reviewer**→`reviewer` — run after `ensure_local_env` |
 | `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL` → `JIRA_ACCOUNT_EMAIL` fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
-| `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `acli` is logged in as? Compares **accountId** (not email — email is hidden on others' assignee objects). Run **after** `jira_acli_login`. Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
-| `acli-list-subtasks` | `skills/_shared/scripts/win/acli-list-subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `acli workitem view --json` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<acli code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-acli-reference.md` §10 |
+| `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `jira.ps1` authenticates as? Compares **accountId** (not email — email is hidden on others' assignee objects). Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
+| `acli-list-subtasks` | `skills/_shared/scripts/win/acli-list-subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-api-reference.md` §10 |
 
 > **Note on `acli-list-subtasks`:** its POSIX sibling is now
 > `skills/_shared/scripts/posix/acli-list-subtasks.sh` — a bash original like
@@ -88,26 +87,12 @@ and were live-run on a real Windows 11 box against a real Jira instance under:
   installs *alongside* 5.1 — `pwsh` ↔ 7, `powershell` ↔ 5.1, nothing overwritten).
 
 `statuscheck.ps1` reports `PowerShell 5 + …` or `PowerShell 7 + …` under the
-respective runtime; `jira_acli_login.ps1`, `check_assignee.ps1`, and
+respective runtime; `check_assignee.ps1` and
 `acli-list-subtasks.ps1` were exercised live against Jira under both.
 
-## Two gotchas to never undo
+## One gotcha to never undo
 
-### 1. `jira_acli_login.ps1` token delivery — temp-file, NOT a native pipe
-
-The raw API-token **value** is fed to `acli` on stdin. You **cannot** use
-PowerShell's native string pipe (`"$Token" | & acli … --token`): on **Windows
-PowerShell 5.1** the piped bytes arrive CRLF-corrupted, so `acli` rejects the
-token. The bash twin's `printf '%s' "$token"` is byte-clean — so the port
-matches that by writing the exact token bytes to a transient temp file (UTF-8,
-no BOM, no trailing newline) and feeding it via `Start-Process
--RedirectStandardInput`, with a 180s `WaitForExit` cap (acli login can take
-2–3 minutes on a real Jira instance). stdout and stderr go to **separate** temp
-files — PS 5.1 throws if both are redirected to the same device/path (`NUL`).
-Byte-clean on both 5.1 and 7. **Do not "simplify" this block back to a bare
-pipe** — it breaks silently only on a real PS-5.1 box.
-
-### 2. No python, no jq — the ports are dependency-free
+### 1. No python, no jq — the ports are dependency-free
 
 The `win/*.ps1` ports parse `acli`'s `--json` output (and, for `acli-list-subtasks`,
 the subtask list) with PowerShell's **built-in `ConvertFrom-Json`** — they need

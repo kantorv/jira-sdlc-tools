@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # acli-create-parent-and-subtasks.sh
 #
+# NOTE: the name is kept for compatibility, but this no longer uses acli — it
+# wraps `jira.sh issue create` (REST v3). See ../jira-api-reference.md.
+#
 # Create a Jira parent work item plus N sub-tasks, driven by a manifest.
 # Bundled as a reusable form of the "turn a review into tracked sub-tasks"
 # pattern used while seeding issues from a skill review.
 #
 # Reads <PROJECT-KEY> from jira-sdlc-tools.env (team-shared) in the project root
-# (override with --project or $PROJECT_KEY). Requires `acli` to be
-# authenticated (acli jira auth login — see ../jira-acli-reference.md §0).
+# (override with --project or $PROJECT_KEY). Requires jira.sh working (curl + jq
+# + a valid credential); run from within the repo/worktree — jira.sh resolves its
+# config from the git top-level. Creates as --role (default assigner) so the created
+# issues' creator/reporter is that role's account.
 #
 # subtasks-dir must contain:
 #   manifest.tsv   — one row per sub-task: <name>\t<summary>
@@ -19,13 +24,17 @@
 #     --parent-body ./parent.md \
 #     --subtasks-dir ./sub \
 #     [--parent-type Story] [--subtask-type Subtask] \
-#     [--project PROJ] [--keys-out ./keys.tsv] [--dry-run]
+#     [--project PROJ] [--role assigner] [--keys-out ./keys.tsv] [--dry-run]
 
 set -uo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+JIRA_SH="$SCRIPT_DIR/jira.sh"
 
 PARENT_TYPE="Story"
 SUBTASK_TYPE="Subtask"
 PROJECT_KEY=""
+ROLE="assigner"
 PARENT_SUMMARY=""
 PARENT_BODY=""
 SUBTASKS_DIR=""
@@ -40,21 +49,21 @@ usage() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --parent-summary) PARENT_SUMMARY="$2"; shift 2 ;;
-    --parent-body)     PARENT_BODY="$2";     shift 2 ;;
-    --subtasks-dir)   SUBTASKS_DIR="$2";    shift 2 ;;
-    --parent-type)     PARENT_TYPE="$2";     shift 2 ;;
-    --subtask-type)    SUBTASK_TYPE="$2";    shift 2 ;;
-    --project)         PROJECT_KEY="$2";     shift 2 ;;
-    --keys-out)        KEYS_OUT="$2";        shift 2 ;;
-    --dry-run)         DRY_RUN=1;            shift   ;;
-    -h|--help)         usage 0 ;;
+    --parent-body)    PARENT_BODY="$2";    shift 2 ;;
+    --subtasks-dir)   SUBTASKS_DIR="$2";   shift 2 ;;
+    --parent-type)    PARENT_TYPE="$2";    shift 2 ;;
+    --subtask-type)   SUBTASK_TYPE="$2";   shift 2 ;;
+    --project)        PROJECT_KEY="$2";    shift 2 ;;
+    --role)           ROLE="$2";           shift 2 ;;
+    --keys-out)       KEYS_OUT="$2";       shift 2 ;;
+    --dry-run)        DRY_RUN=1;           shift   ;;
+    -h|--help)        usage 0 ;;
     *) echo "unknown flag: $1" >&2; usage 1 ;;
   esac
 done
 
 # --- resolve project key from jira-sdlc-tools.env (team-shared) if not given ---
 if [ -z "$PROJECT_KEY" ]; then
-  PROJECT_KEY="${PROJECT_KEY:-}"
   for envfile in ./jira-sdlc-tools.env ../jira-sdlc-tools.env; do
     if [ -f "$envfile" ]; then
       k=$(grep -E '^PROJECT[-_]KEY=' "$envfile" | tail -1 | cut -d= -f2-)
@@ -78,34 +87,38 @@ miss=0
 [ -f "$SUBTASKS_DIR/manifest.tsv" ] || { echo "ERROR: no manifest.tsv in $SUBTASKS_DIR" >&2;    exit 1; }
 [ -z "$KEYS_OUT" ] && KEYS_OUT="$SUBTASKS_DIR/created-keys.tsv"
 
-# acli create output:  ✓ Work item PROJ-33 created: https://<site>/browse/PROJ-33
-extract_key() { sed -nE 's#.*/browse/([A-Z]+-[0-9]+).*#\1#p' | head -1; }
+is_key() { printf '%s' "$1" | grep -qE '^[A-Za-z][A-Za-z0-9]*-[0-9]+$'; }
 
-run() {
-  if [ "$DRY_RUN" -eq 1 ]; then echo "  [dry-run] $*"; return 0; fi
-  "$@"
+# jira.sh issue create prints the new key directly on success — no
+# "✓ … /browse/PROJ-N" line to parse. Errors go to stderr + a non-zero exit.
+create_issue() {  # create_issue <type> <summary> <body> [parent-key]
+  local type="$1" summary="$2" body="$3" parent="${4:-}"
+  if [ -n "$parent" ]; then
+    bash "$JIRA_SH" --role "$ROLE" issue create --project "$PROJECT_KEY" --type "$type" \
+      --parent "$parent" --summary "$summary" --desc-file "$body"
+  else
+    bash "$JIRA_SH" --role "$ROLE" issue create --project "$PROJECT_KEY" --type "$type" \
+      --summary "$summary" --desc-file "$body"
+  fi
 }
 
 echo "Project: $PROJECT_KEY"
-echo "Parent type: $PARENT_TYPE   sub-task type: $SUBTASK_TYPE"
+echo "Parent type: $PARENT_TYPE   sub-task type: $SUBTASK_TYPE   role: $ROLE"
 [ "$DRY_RUN" -eq 1 ] && echo "(dry run — no issues will be created)"
 echo
 
 # --- create parent ---
 if [ "$DRY_RUN" -eq 1 ]; then
   PARENT_KEY="<dry-run-parent>"
-  echo "[parent] acli jira workitem create --project $PROJECT_KEY --type $PARENT_TYPE --summary \"$PARENT_SUMMARY\" --description-file $PARENT_BODY"
+  echo "[parent] jira.sh --role $ROLE issue create --project $PROJECT_KEY --type $PARENT_TYPE --summary \"$PARENT_SUMMARY\" --desc-file $PARENT_BODY"
 else
-  out=$(acli jira workitem create \
-    --project "$PROJECT_KEY" --type "$PARENT_TYPE" \
-    --summary "$PARENT_SUMMARY" \
-    --description-file "$PARENT_BODY" 2>&1)
-  echo "$out"
-  PARENT_KEY=$(printf '%s\n' "$out" | extract_key)
-  if [ -z "$PARENT_KEY" ]; then
-    echo "ERROR: could not parse parent key from create output above. Aborting before sub-tasks." >&2
+  out=$(create_issue "$PARENT_TYPE" "$PARENT_SUMMARY" "$PARENT_BODY" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] || ! is_key "$out"; then
+    echo "ERROR: could not create the parent. jira.sh said:" >&2
+    printf '%s\n' "$out" | sed 's/^/      /' >&2
     exit 1
   fi
+  PARENT_KEY="$out"
 fi
 echo "parent -> $PARENT_KEY"
 echo
@@ -127,24 +140,19 @@ while IFS=$'\t' read -r name summary || [ -n "$name" ]; do
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[subtask] $name -> acli ... --type $SUBTASK_TYPE --parent $PARENT_KEY --summary \"$summary\" --description-file $body"
+    echo "[subtask] $name -> jira.sh ... --type $SUBTASK_TYPE --parent $PARENT_KEY --summary \"$summary\" --desc-file $body"
     printf '%s\t%s\t%s\n' "$name" "<dry-run>" "$summary" >> "$KEYS_OUT"
     continue
   fi
 
-  out=$(acli jira workitem create \
-    --project "$PROJECT_KEY" --type "$SUBTASK_TYPE" \
-    --parent "$PARENT_KEY" \
-    --summary "$summary" \
-    --description-file "$body" 2>&1)
-  k=$(printf '%s\n' "$out" | extract_key)
-  if [ -n "$k" ]; then
-    echo "  $name -> $k"
-    printf '%s\t%s\t%s\n' "$name" "$k" "$summary" >> "$KEYS_OUT"
+  out=$(create_issue "$SUBTASK_TYPE" "$summary" "$body" "$PARENT_KEY" 2>&1); rc=$?
+  if [ "$rc" -eq 0 ] && is_key "$out"; then
+    echo "  $name -> $out"
+    printf '%s\t%s\t%s\n' "$name" "$out" "$summary" >> "$KEYS_OUT"
     ok=$((ok+1))
   else
     echo "  $name -> FAILED"
-    echo "$out" | sed 's/^/      /'
+    printf '%s\n' "$out" | sed 's/^/      /'
     printf '%s\t%s\t%s\n' "$name" "FAILED" "$summary" >> "$KEYS_OUT"
     fail=$((fail+1))
   fi
@@ -153,4 +161,4 @@ done < "$SUBTASKS_DIR/manifest.tsv"
 echo
 echo "done. parent=$PARENT_KEY  created=$ok  failed=$fail"
 echo "keys: $KEYS_OUT"
-[ "$DRY_RUN" -eq 0 ] && echo "view: acli jira workitem view $PARENT_KEY --json --fields 'summary,description,issuetype,status,parent,subtasks,comment'"
+[ "$DRY_RUN" -eq 0 ] && echo "view: jira.sh issue view $PARENT_KEY --fields 'summary,description,issuetype,status,parent,subtasks,comment'"
