@@ -7,8 +7,11 @@ short, ordered version.
 
 ## Section 1. Preparing environment
 
-1. **Install the required tools** — `acli`, `git`, `gh`. On Windows, make sure
-   `acli` is on your `PATH`.
+1. **Install the required tools** — `git` and `gh`. There is nothing to
+   install for Jira: the skills drive it over the REST API through their own
+   client, `jira.sh` / `jira.ps1`, which ships with the plugin. On Linux and
+   macOS that client needs `curl` and `jq` on your `PATH`; the Windows
+   PowerShell port uses built-in cmdlets and needs neither.
 2. **Have a git repository and a Jira account with a board created.**
    [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md) is a great, recommended
    integration — but it is **not** required.
@@ -22,13 +25,17 @@ short, ordered version.
 
 ### Verify your tokens
 
-**Jira** — log `acli` in with your token:
+**Jira** — there is no login step. The client sends your email and token as
+Basic auth on each request, so "verifying" is just making one authenticated
+call. `_edge/tenant_info` is unauthenticated and gives you the cloud id;
+`/myself` is the part that proves the token:
 ```bash
-echo "$JIRA_TOKEN" | acli jira auth login \
-  --site your-jira-site.atlassian.net \
-  --email yourmail@gmail.com \
-  --token
+CLOUD_ID=$(curl -fsSL "https://$JIRA_ACCOUNT_URL/_edge/tenant_info" | jq -r .cloudId)
+curl -sS -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" \
+  "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/myself" | jq -r .emailAddress
 ```
+Getting your own email back means the pair works. The Section 4 healthcheck
+makes the same call, so you can also just skip ahead to it.
 
 **GitHub** — log `gh` in with your PAT:
 ```bash
@@ -41,13 +48,25 @@ echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 WORKTREES_DIR=/path/to/worktrees/PROJ-worktrees
 
 JIRA_ACCOUNT_URL=your-jira-site.atlassian.net
-JIRA_ACCOUNT_EMAIL=yourmail@gmail.com
+JIRA_ACCOUNT_EMAIL=yourmail@example.com
 JIRA_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
-#  acli jira auth login --site coolapp-dev.atlassian.net --email kantorvv@gmail.com < .jira/token.txt
+# Optional — one Jira account per role, so the board shows who did what.
+# Each falls back to the default pair above; configure none and everything
+# still works, owned by that one account.
+#JIRA_ASSIGNER_EMAIL=assigner@example.com
+#JIRA_ASSIGNER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+#JIRA_EXECUTOR_EMAIL=executor@example.com
+#JIRA_EXECUTOR_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+#JIRA_REVIEWER_EMAIL=reviewer@example.com
+#JIRA_REVIEWER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
 GITHUB_PAT_TOKEN="XXXXXXXXXXXXX"
 ```
+
+`JIRA_TOKEN` is the token **value**, not a path to a file holding it. Every
+variable above is described in
+[../skills/_shared/project-config.md](../skills/_shared/project-config.md).
 
 ## Section 2. GitHub repository preparation
 
@@ -145,10 +164,15 @@ column/workflow settings and confirm each one exists, then copy the names
 `To Do` / `In Progress` / `Done` only. Add the column, or point the setting at
 whatever your workflow calls that stage.
 
-To prove a name is right rather than assume it, transition a throwaway issue:
+To prove a name is right rather than assume it, transition a throwaway issue
+with the plugin's own Jira client. Run it from your skills folder (Section
+"Loading the skills" in the README says where that is on your platform):
 
 ```bash
-acli jira workitem transition --key <KEY> --status "In Review" --yes
+bash _shared/scripts/posix/jira.sh issue transition <KEY> --to "In Review"
+```
+```powershell
+pwsh -File _shared\scripts\win\jira.ps1 issue transition <KEY> --to "In Review"
 ```
 
 A wrong name fails here, at setup, instead of mid-run.
