@@ -12,12 +12,12 @@ automates it.
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see [project-config.md](../../skills/_shared/project-config.md) for the one-time `acli jira auth login`
+- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - `.codex/config.toml` at the repo root with network access enabled (see
-  **Sandboxing** in the caveats section below — without it, every `acli jira …`
-  call fails)
+  **Sandboxing** in the caveats section below — without it, every `jira.sh`
+  call fails when it shells out to `curl`)
 
 ## Install / Wire-up Steps
 
@@ -68,9 +68,9 @@ be safe. **This was checked during the verification run** — the scripts in
 
 ### 4. Add `.codex/config.toml`
 
-Codex's Jira workflow shells out to `acli`, which needs outbound HTTPS to
-the Atlassian site. In the default `workspace-write` sandbox, network is
-blocked unless you opt in:
+Codex's Jira workflow shells out to `jira.sh`, which in turn calls `curl` —
+both need outbound HTTPS to the Atlassian site. In the default
+`workspace-write` sandbox, network is blocked unless you opt in:
 
 ```toml
 # .codex/config.toml
@@ -80,14 +80,18 @@ sandbox_mode = "workspace-write"
 network_access = true
 ```
 
-> **⚠️ Verified gap:** with this file present, `acli jira auth login`
-> *still* failed inside the sandbox during the verification run — the
-> session that set the config did not pick up the change, and a fresh
-> session was not tested end-to-end. The reliable workaround is to run
-> `acli jira auth login` once manually in a normal terminal (where it
-> succeeds — **verified**), or to use Codex's **escalated execution**
-> (`sandbox_permissions: "require_escalated"`) for any `acli` or script
-> call that reaches the network. See **Sandboxing** in the caveats.
+> **⚠️ Needs re-verification under the REST client.** The gap verified here
+> was specific to the old Atlassian CLI's `jira auth login` step — a step
+> that no longer exists:
+> `jira.sh`/`jira.ps1` authenticate per-request from
+> `jira-sdlc-tools.local.env`, with nothing to log into first. Whether a
+> bare `jira.sh` network call (e.g. `statuscheck.sh`'s own `jira whoami`)
+> succeeds in a session that just picked up this config, or still needs a
+> fresh session, has not been re-tested against the REST client. Until it
+> is, treat Codex's **escalated execution**
+> (`sandbox_permissions: "require_escalated"`) as the safe default for any
+> `jira.sh`/`jira.ps1` or script call that reaches the network. See
+> **Sandboxing** in the caveats.
 
 ### 5. Gitignore the tree
 
@@ -131,15 +135,17 @@ by the copy; the model interprets them.
 This is the main reason Codex gets its own file (the sibling Antigravity
 doc covers the rest of mechanism B without these rules).
 
-The skills shell out to `acli`, `gh`, `git`, and `bash`. In Codex's default
-`workspace-write` sandbox:
+The skills shell out to `gh`, `git`, `bash`, and `jira.sh` (which itself
+calls `curl`). In Codex's default `workspace-write` sandbox:
 
-- **Network (Jira):** blocked without `network_access = true`. Even with it
-  set, `acli jira auth login` failed inside the sandbox during the
-  verification run (**unverified end-to-end** — a fresh session with the
-  config loaded was not tested). The reliable approach is **escalated
-  execution** (`sandbox_permissions: "require_escalated"`) for any `acli`
-  command or script that calls it. The skill's own preamble says: "if the
+- **Network (Jira):** blocked without `network_access = true`. Whether a
+  bare `jira.sh` call succeeds inside the sandbox with just that setting is
+  **unverified** against the REST client — the verification run predates
+  the migration off the old Atlassian CLI, whose auth-login step used to
+  fail here even with the config set. The reliable approach is
+  **escalated execution**
+  (`sandbox_permissions: "require_escalated"`) for any `jira.sh`/`jira.ps1`
+  call or script that calls it. The skill's own preamble says: "if the
   sandbox blocks Jira, request scoped network-capable execution."
 - **Git metadata (read-only FS):** git's worktree metadata (`.git/` in a
   linked worktree) lives outside the sandbox's writable root. Every git
@@ -149,13 +155,16 @@ The skills shell out to `acli`, `gh`, `git`, and `bash`. In Codex's default
   is not a Jira-specific allowlist; it is the sandbox's file-write boundary
   applied to the worktree's own `.git` directory.
 - **Execution timeout:** Codex's Bash tool defaults to a short yield window.
-  An `acli jira auth login` (or a `statuscheck.sh` run) that takes
-  ~20–30 s will be reported as still running. Poll the session for output
-  rather than treating the first chunk as a failure — and set a generous
+  A `jira.sh`/`jira.ps1` call (or a `statuscheck.sh` run) that runs long
+  will be reported as still running. Poll the session for output rather
+  than treating the first chunk as a failure — and set a generous
   `yield_time_ms` / `timeout_ms` (the skill preamble recommends
-  `timeout_ms: 300000`, i.e. 5 minutes). **Verified:** `acli jira auth
-  login` takes ~20 s and `acli jira workitem view` takes ~20 s; both
-  appeared as running sessions that needed one or two polls.
+  `timeout_ms: 300000`, i.e. 5 minutes). **Needs re-measurement:** the
+  verification run timed the old Atlassian CLI's `jira auth login` and
+  `jira workitem view` commands at ~20 s each, both appearing as running
+  sessions that needed one or two polls — those figures were measured
+  against that CLI and have not been re-timed against the equivalent
+  `jira.sh` REST calls.
 - **File-mode loss:** a plain copy (not `cp -a`) or a Windows checkout can
   strip the executable bit from `*.sh` / `*.py` under
   `.codex/skills/_shared/scripts/`. Run `chmod +x` after copying (step 3

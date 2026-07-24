@@ -18,13 +18,15 @@
 
 ## Prerequisites
 
-<!-- Standard prereqs shared with every integration: `acli` (Atlassian CLI)
-     authenticated, `gh` (GitHub CLI) authenticated, and the two
-     project-root env files. LINK to
+<!-- Standard prereqs shared with every integration: Jira auth (per-request
+     Basic auth from `jira-sdlc-tools.local.env`, no login step — LINK to
+     [`../../skills/_shared/jira-api-reference.md`](../../skills/_shared/jira-api-reference.md)
+     §9 for the auth model), `gh` (GitHub CLI) authenticated, and the two
+     project-root env files (LINK to
      [`../../skills/_shared/project-config.md`](../../skills/_shared/project-config.md)
-     for the one-time `acli jira auth login` and the env-file descriptions —
-     do not restate their contents. Then call out anything platform-
-     specific: a runtime, a subscription, a model proxy, a sandbox policy. -->
+     for the env-file descriptions — do not restate their contents). Then
+     call out anything platform-specific: a runtime, a subscription, a
+     model proxy, a sandbox policy. -->
 
 ## Install / Wire-up Steps
 
