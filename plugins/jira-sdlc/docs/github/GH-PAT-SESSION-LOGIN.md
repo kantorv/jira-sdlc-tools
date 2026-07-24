@@ -80,6 +80,32 @@ conversation** — subsequent `gh` calls (notably `gh pr create`) just use it. T
 there so a stale token can't linger; nothing logs back out at the *end* of the
 run, so the `GITHUB_PAT_TOKEN` session persists for the whole conversation.
 
+### Windows caveat: the token is fed to `gh` from a file, not a pipe
+
+The `echo … | gh auth login --with-token` shape above is what `statuscheck.sh`
+does on POSIX. `statuscheck.ps1` deliberately does **not** mirror it: Windows
+PowerShell 5.1 prepends a UTF-8 BOM (`EF BB BF`) when a string is piped into a
+native command, so `gh` receives BOM + token, forwards that to GitHub, and gets
+a legitimate `HTTP 401: Bad credentials` — **for a completely valid PAT**
+(JST-171). pwsh 7 does not do this, so the same token works there and fails
+under 5.1, which is the confusing part.
+
+If you hit this, the symptom is a `gh_auth` `FAIL` row reading
+`gh auth login --with-token failed: … HTTP 401: Bad credentials`, whose remedy
+line tells you to check the token. **Regenerating the PAT will not help** — a
+fresh token fails identically. Check the runtime instead.
+
+The Windows port therefore writes the token to a GUID-named temp file with an
+explicitly BOM-free encoder and lets `cmd` redirect stdin from it, removing the
+file in a `finally` block so no plaintext token survives a failed login either.
+Nothing settable fixes the pipe on 5.1 — `$OutputEncoding` and
+`[Console]::OutputEncoding` are not consulted, and .NET Framework builds the
+`StandardInput` writer from `[Console]::OutputEncoding` and emits its preamble
+(`ProcessStartInfo.StandardInputEncoding`, which would override it, is .NET
+Core only). Setting `GH_TOKEN` instead is not an option here either: it lives
+only in the current process, whereas this login has to persist a session that
+the executor's later `gh pr create` — a separate process — depends on.
+
 ## Halt on a missing token
 
 If `GITHUB_PAT_TOKEN` is not present in settings, the run **stops**: the

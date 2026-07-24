@@ -297,8 +297,37 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         # generic "no session" FAIL — so a real auth failure (expired/revoked PAT,
         # etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
         # stderr; only then do we run 'gh auth status' for the account line.
-        $loginErr = ($ghPat | & gh auth login --with-token 2>&1 | Out-String)
-        if ($LASTEXITCODE -eq 0) {
+        # Do NOT "simplify" this back to `$ghPat | gh auth login` (JST-171): Windows
+        # PowerShell 5.1 prepends a UTF-8 BOM (EF BB BF) when piping a string into a
+        # native command, so gh sends BOM+token and GitHub returns a genuine 401 for
+        # a perfectly valid PAT — and the remedy line then blames the token, sending
+        # people off to regenerate a working one. Nothing settable fixes the pipe on
+        # 5.1 ($OutputEncoding and [Console]::OutputEncoding are both ignored; .NET
+        # Framework builds StandardInput from [Console]::OutputEncoding and emits its
+        # preamble, and the StandardInputEncoding that would override that is .NET
+        # Core only). Hence: write the token BOM-free and let cmd redirect stdin from
+        # the file — PowerShell has no stdin redirection operator for native commands.
+        # Unchanged on pwsh 7. GH_TOKEN is not a substitute either — it affects only
+        # this process, while the persisted session is what the executor's later
+        # `gh pr create` (a separate process) depends on.
+        $tmpTok = Join-Path $env:TEMP ("ghtok-" + [guid]::NewGuid().ToString('N') + ".txt")
+        $loginErr = ''; $loginCode = 1
+        try {
+            [System.IO.File]::WriteAllText($tmpTok, $ghPat + "`n", (New-Object System.Text.UTF8Encoding $false))
+            $ghExe = (Get-Command gh).Source
+            $loginErr = (& cmd /c "`"$ghExe`" auth login --with-token < `"$tmpTok`" 2>&1") | Out-String
+            $loginCode = $LASTEXITCODE
+        } finally {
+            # The PAT sits on disk in plain text until this runs — clear it even when
+            # the login failed. If the delete is blocked, blank the contents first so
+            # no token-bearing file can survive, then try once more.
+            if (Test-Path -LiteralPath $tmpTok) { Remove-Item -LiteralPath $tmpTok -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $tmpTok) {
+                [System.IO.File]::WriteAllText($tmpTok, '', (New-Object System.Text.UTF8Encoding $false))
+                Remove-Item -LiteralPath $tmpTok -Force -ErrorAction SilentlyContinue
+            }
+        }
+        if ($loginCode -eq 0) {
             $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
                 Select-Object -First 1) -replace '^[^L]*', ''
             if ($ghLine) {
