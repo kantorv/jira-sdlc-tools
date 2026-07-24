@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# check_assignee.sh — is this issue assigned to the account acli is logged in as?
+# check_assignee.sh — is this issue assigned to the given role's account?
 #
-# Usage:  bash check_assignee.sh [ISSUE-KEY]
+# Usage:  bash check_assignee.sh [--role <role>] [ISSUE-KEY]
+#         --role   executor|assigner|reviewer. Defaults to executor — its sole
+#                  caller is the executor's ownership gate — and is also read
+#                  from $JIRA_ROLE when the flag is absent.
 #         ISSUE-KEY defaults to the key derived from the current branch
 #         (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>), as statuscheck.sh does.
 #
-# Run it AFTER `jira_acli_login.sh <role>` — it checks the issue against whoever
-# acli is currently logged in as, so the login is what decides which identity is
-# being demanded.
+# Identity comes from `jira.sh --role <role> whoami` (GET /myself) — per-request
+# Basic auth, no acli, no stored login, no jira_config.yaml. This is what removes
+# the multi-profile parse that used to false-negative the moment a second account
+# was in acli's store (JST-146): "who am I" is now the token in hand.
 #
 # Anything other than "assigned to me" is a halt: unassigned, assigned to someone
-# else, an unreadable issue, a hidden assignee email. There is no partial pass.
+# else, an unreadable issue. There is no partial pass.
 #
-# Exit 0 — the issue is assigned to the logged-in account: CONTINUE.
+# Exit 0 — the issue is assigned to the role's account: CONTINUE.
 # Exit 1 — everything else: STOP. The reason, and the command that fixes it, are
 #          on stderr; relay them verbatim. Do not transition status, branch,
 #          commit, comment, or work the issue.
@@ -21,70 +25,49 @@ set -u
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
-command -v acli >/dev/null 2>&1 || die "check_assignee: acli is not installed."
+# --- args: optional --role, optional ISSUE-KEY -------------------------------
+ROLE="${JIRA_ROLE:-}"
+KEY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --role)   ROLE="${2:-}"; shift 2 ;;
+    --role=*) ROLE="${1#--role=}"; shift ;;
+    *)        KEY="$1"; shift ;;
+  esac
+done
+ROLE="${ROLE:-executor}"
 
-TMOUT_CMD=""
-command -v timeout >/dev/null 2>&1 && TMOUT_CMD="timeout 30"
+command -v jq >/dev/null 2>&1 || die "check_assignee: jq is required but not installed."
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+JIRA_SH="$SCRIPT_DIR/jira.sh"
 
-# --- who is acli logged in as? ----------------------------------------------
-# acli records the active profile here on login and clears it on logout, so this
-# is an instant local read — and it reflects the identity that will actually make
-# the Jira calls, rather than a second guess from the env files.
-ACLI_CFG="$HOME/.config/acli/jira_config.yaml"
-[ -f "$ACLI_CFG" ] || die "check_assignee: acli is not logged in (no $ACLI_CFG) — run jira_acli_login.sh <role> first."
-
-_yaml1() {  # first `key: value` from acli's config
-  grep -E "^[[:space:]]*-?[[:space:]]*$1:[[:space:]]*" "$ACLI_CFG" 2>/dev/null \
-    | head -1 | sed -e 's/^[^:]*:[[:space:]]*//' -e 's/[[:space:]]*$//'
+# --- config (site for the fixup URL) -----------------------------------------
+CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+cfg() {
+  local f v
+  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
+    [ -f "$CFG_DIR/$f" ] || continue
+    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
+        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
+    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
+  done
+  return 1
 }
+SITE=$(cfg JIRA_ACCOUNT_URL || true); SITE="${SITE#*://}"
 
-# accountId is the identifier that actually works. Jira only exposes
-# `emailAddress` on the assignee object for YOUR OWN account — for anyone else
-# the field is absent entirely (only accountId + displayName come back). So an
-# email comparison can confirm a match but can never distinguish "assigned to
-# someone else" from "unassigned". acli records our own account_id on login, and
-# every assignee object carries accountId, so compare on that.
-#
-# --- resolve the ACTIVE account across BOTH acli config shapes ---------------
-# acli's jira_config.yaml comes two ways, and telling them apart is the whole
-# fix here:
-#   * flat / single-account: one top-level `account_id:`/`email:`. First match
-#     is the active identity because there's only one.
-#   * multi-profile: `profiles:` is a SEQUENCE (one block per logged-in account,
-#     in login order) plus a single `current_profile: <cloud_id>:<account_id>`
-#     pointer naming the active one. The FIRST `account_id:` is then just the
-#     earliest-logged-in account, NOT the active one — so the old first-match
-#     read silently returns the wrong profile the moment a second account has
-#     ever been added to the store (no acli upgrade required to trigger it).
-# Prefer current_profile when present (authoritative right after
-# jira_acli_login's logout+login); fall back to first-match for the flat shape.
-# We resolve ONE active identity per shape — we do NOT accept a match against
-# "either" candidate, which would let this session act on an issue assigned to a
-# DIFFERENT stored account and defeat the gate.
-CURRENT_PROFILE=$(_yaml1 current_profile)
-if [ -n "$CURRENT_PROFILE" ]; then
-  # `<cloud_id>:<account_id>` — cloud_id has no colon and the account_id is
-  # `<digits>:<uuid>`, so the account_id is everything after the first colon.
-  MY_ID=${CURRENT_PROFILE#*:}
-  # Email of the active profile: the `email:` in the block whose `account_id:`
-  # equals MY_ID (account_id precedes email within a block). Cosmetic — used
-  # only in messages / the assign fixup — so a miss falls back to first email.
-  ME=$(awk -v id="$MY_ID" '
-    /^[[:space:]]*account_id:/ { cur=$0; sub(/^[^:]*:[[:space:]]*/,"",cur) }
-    /^[[:space:]]*email:/      { e=$0; sub(/^[^:]*:[[:space:]]*/,"",e);
-                                 if (cur==id) { print e; exit } }
-  ' "$ACLI_CFG")
-  [ -n "$ME" ] || ME=$(_yaml1 email)
-else
-  MY_ID=$(_yaml1 account_id)
-  ME=$(_yaml1 email)
-fi
-[ -n "$MY_ID" ] || die "check_assignee: acli reports no active account — run jira_acli_login.sh <role> first."
-
-SITE=$(_yaml1 site)
+# --- who is this role? (GET /myself via jira.sh) -----------------------------
+# accountId is the identifier that actually works: Jira exposes `emailAddress` on
+# an assignee only for YOUR OWN account, so an email comparison can confirm a
+# match but never distinguish "assigned to someone else" from "unassigned".
+# Every assignee object carries accountId, so compare on that.
+WHOAMI=$(bash "$JIRA_SH" --role "$ROLE" whoami 2>/dev/null) \
+  || die "check_assignee: could not authenticate as role '$ROLE' — check JIRA_$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')_TOKEN (or JIRA_TOKEN) in jira-sdlc-tools.local.env."
+MY_ID=$(printf '%s' "$WHOAMI" | jq -r '.accountId // empty')
+ME=$(printf '%s' "$WHOAMI"   | jq -r '.emailAddress // .displayName // empty')
+[ -n "$MY_ID" ] || die "check_assignee: jira whoami returned no accountId for role '$ROLE'."
+[ -n "$ME" ] || ME="role '$ROLE'"
 
 # --- which issue? ------------------------------------------------------------
-KEY="${1:-}"
 if [ -z "$KEY" ]; then
   BR=$(git branch --show-current 2>/dev/null || true)
   BR_TAIL=${BR#*/}
@@ -93,44 +76,18 @@ if [ -z "$KEY" ]; then
 fi
 
 # --- assigned to me? ---------------------------------------------------------
-VIEW=$($TMOUT_CMD acli jira workitem view "$KEY" --json --fields 'assignee' </dev/null 2>&1) \
+VIEW=$(bash "$JIRA_SH" --role "$ROLE" issue view "$KEY" --fields assignee 2>&1) \
   || die "check_assignee: cannot read $KEY as $ME — $(printf '%s' "$VIEW" | tail -1). The account may lack access to this project, or the Jira API timed out."
 
-# -> "<accountId>|<displayName>", or empty when unassigned.
-# Zero-dependency parse — no python3. On stock Windows 11, `python3` is the
-# Microsoft Store App Execution Alias stub: it prints a "Python was not found"
-# line to stderr and exits non-zero with NO stdout. The old pipeline guarded
-# that with `2>/dev/null || true` and the embedded script's exception branch did
-# `print(""); sys.exit(0)`, so a dead python3 yielded an EMPTY assignee string,
-# which this script reads as UNASSIGNED — a false-negative halt on an issue that
-# is in fact assigned. jq, when present, is the fast path; a grep/sed fallback
-# mirrors statuscheck.sh's zero-dependency stance and covers the common case.
-# With `--fields assignee` the only accountId / displayName in the payload is
-# the assignee's, so extracting either by its literal key name is unambiguous.
-if command -v jq >/dev/null 2>&1; then
-  ASSIGNEE=$(printf '%s' "$VIEW" | jq -r '
-    (.fields.assignee // {})
-    | (if .accountId then "\(.accountId)|\(.displayName // "unknown")" else empty end)
-  ' 2>/dev/null || true)
-else
-  if printf '%s' "$VIEW" | grep -Eq '"assignee"[[:space:]]*:[[:space:]]*null'; then
-    ASSIGNEE=""
-  else
-    THEIR_ID=$(printf '%s' "$VIEW" | grep -oE '"accountId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
-      | sed -E 's/.*"accountId"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
-    THEIR_NAME=$(printf '%s' "$VIEW" | grep -oE '"displayName"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
-      | sed -E 's/.*"displayName"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
-    if [ -n "$THEIR_ID" ]; then
-      [ -z "$THEIR_NAME" ] && THEIR_NAME="unknown"
-      ASSIGNEE="$THEIR_ID|$THEIR_NAME"
-    else
-      ASSIGNEE=""
-    fi
-  fi
-fi
+# -> "<accountId>|<displayName>", or empty when unassigned. With --fields
+# assignee the only accountId/displayName in the payload is the assignee's.
+ASSIGNEE=$(printf '%s' "$VIEW" | jq -r '
+  (.fields.assignee // {})
+  | (if .accountId then "\(.accountId)|\(.displayName // "unknown")" else empty end)
+' 2>/dev/null || true)
 
 FIXUP="Assign it and rerun:
-  acli jira workitem assign --key $KEY --assignee \"$ME\" --yes
+  jira issue assign $KEY --to \"$ME\"   (--role $ROLE; jira.sh on POSIX / jira.ps1 on Windows)
 Or assign it by hand: https://$SITE/browse/$KEY"
 
 if [ -z "$ASSIGNEE" ]; then

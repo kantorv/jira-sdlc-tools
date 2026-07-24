@@ -13,13 +13,13 @@ You are acting as the code reviewer for the **`<PROJECT-KEY>`** project. Run thi
 - `<PARENT-KEY>` = the Jira issue key derived from the current branch (via the Discovery healthcheck's `issue_key` row below) — or, when the branch belongs to a sub-task, that sub-task's `fields.parent.key` (step 1 climbs automatically and notes it in the report). It just means "the resolved key" — it is only literally the parent of sub-tasks on the multistep track; on the single-step track it is a standalone issue with no sub-tasks.
 - `$ARGUMENTS`, when non-empty, is free-form notes about this run (focus areas, constraints, context) — fold them into the review criteria (3c); never parsed as an issue key.
 - `<PARENT-BRANCH>` = the git branch for `<PARENT-KEY>`, always named `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
-- `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into — resolve with §12's mechanics (`../_shared/jira-acli-reference.md`: git-config → Jira "PR target branch" comment → `<DEFAULT_BASE_BRANCH>` env default) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current`: from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` (not the base). Step 1 gives the exact resolution.
+- `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into — resolve with §13's mechanics (`../_shared/jira-api-reference.md`: git-config → Jira "PR target branch" comment → `<DEFAULT_BASE_BRANCH>` env default) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current`: from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` (not the base). Step 1 gives the exact resolution.
 - Sub-task PRs all target `<PARENT-BRANCH>` — every sub-task gets its own dedicated branch and PR.
 - **Single-step top-level issues** (no sub-tasks) have a PR targeting `<BASE_BRANCH>` directly.
 - Reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`. Those not yet in review (e.g. still `<STATUS_IN_PROGRESS>`) are silently ignored — the executor will transition them when ready.
-- Auth follows `../_shared/jira-acli-reference.md` §0 — `acli` stores credentials after a one-time `acli jira auth login`, so no per-command `JIRA_API_TOKEN` prefix; run commands bare.
+- **Jira access is the `jira.sh` / `jira.ps1` client** (`../_shared/jira-api-reference.md` §9), invoked as `bash "$S/jira.sh" <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows) where `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`; the steps write `jira.sh <cmd>` for brevity. It authenticates **per-request as `--role reviewer`** — no login step and no stored credential; every Jira write below carries `--role reviewer` and picks up the reviewer credential on that one call.
 - **Your GitHub identity** = `gh api user --jq .login` — resolve it once and reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh api user --jq .login)`). The executor opens PRs with the *same* `gh` account in this plugin's default deployment, and GitHub blocks an author from approving *or* requesting changes on their own PR, so both verdicts are recorded as **review comments** carrying the decision in their body prefix (`APPROVED — …` / `CHANGES REQUESTED — …`; see 3d/5b); the Jira transition to `<STATUS_IN_PROGRESS>` is the actual workflow gate, the comment only records findings. The idempotency check (3a) and the verdict-comment detection both key on this identity.
-- **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `acli jira workitem comment create --key <KEY> --body-file <file>` (see `../_shared/jira-acli-reference.md` §6). Single-line comments can use the `--body "<text>"` form. *Never wrap markdown in a quoted inline `--body` string* — backticks are interpreted as shell command substitutions, and `--body-file -` / stdin does not work.
+- **Jira-comment mechanics**: reports and updates are multi-line — write them to a temp file and post with `jira.sh --role reviewer issue comment add <KEY> --body-file <file>` (see `../_shared/jira-api-reference.md` §11). There is no inline body — the body always comes from a file, so backticks in it are never at risk of shell substitution; plain text is stored as ADF, one paragraph per non-blank line.
 - **GitHub-body mechanics**: the same backtick hazard applies to `gh pr review` / `gh pr create` bodies. Write every GitHub-side body to a temp file and pass `--body-file` (never inline `--body "…"`). The `APPROVED — …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
 
 **Script dispatch — settle this before running any script below.** Every
@@ -33,23 +33,22 @@ below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
 chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `jira_acli_login`, which takes a role argument, **statuscheck itself
+unlike `check_assignee`, which takes a `--role` argument, **statuscheck itself
 takes no role or issue-key argument — run it bare** on both POSIX and Windows;
 a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
 for an issue key, but don't add one.
 
-**Make sure local credentials exist, then log in as the reviewer — run
-both FIRST, before the healthcheck.** Every Jira write this skill makes
-(verdict comments, reject-path transitions) should come from the
-reviewer's account, not from whoever was last logged in. Both calls are
-safe to run every time (`ensure_local_env` no-ops when the file already
-exists; `jira_acli_login` always logs out then back in as the role, so a
-stale token can't survive), so run them unconditionally. On non-zero from
-either, relay its stderr and **stop**.
+**Make sure local credentials exist — run FIRST, before the healthcheck.**
+`ensure_local_env` no-ops when the file already exists, so run it
+unconditionally; on non-zero, relay its stderr and **stop**. There is no
+login step: `jira.sh` authenticates **per-request as `--role reviewer`**
+(`../_shared/jira-api-reference.md` §9), so every Jira write this skill makes
+(verdict comments, reject-path transitions) comes from the reviewer's
+credential on that one call — no account to become, and no stale login to
+outlive.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" reviewer || exit 1
 ```
 
 **Discovery and healthcheck — run before step 1.** This skill reads Jira
@@ -73,7 +72,7 @@ the default; see INTEGRATIONS.md.)
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero
-if any row is `FAIL`. `gh_auth` and `acli_auth` are load-bearing here
+if any row is `FAIL`. `gh_auth` and `jira_auth` are load-bearing here
 (every verdict comment, `gh pr list` call, and Jira transition depends on
 them). The `worktree` and `branch` rows are context INFO — the shared
 script reports them for every role and never FAILs on them.
@@ -87,7 +86,7 @@ actually acts on).
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **This skill requires a linked worktree** — the parent's, or a sub-task's own; the reading note below makes that a stop condition |
-| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§7) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **This skill requires a feature/hotfix issue branch** — the parent's or a sub-task's; the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — equals `<BASE_BRANCH>` only from the parent worktree; from a sub-task worktree it's `<PARENT-BRANCH>`, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
 
@@ -96,7 +95,7 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing by `ensure_local_env.sh`, called
 before this script — see the login step above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
-`acli_auth` (both load-bearing, as noted above), `jira_project`, plus
+`jira_auth` (both load-bearing, as noted above), `jira_project`, plus
 context `base_branch`, `working_tree` (WARN when dirty), and
 `worktrees_dir` (WARN when missing — only the assigner acts on it).
 
@@ -121,35 +120,36 @@ climbing from a sub-task to its parent if needed).
 ## 1. Resolve the parent, sub-tasks, and pick a track
 
 - `git fetch origin --prune` first. Branches created or merged by parallel sub-task executors (possibly from different worktrees) may not be visible locally yet.
-- Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `acli jira workitem view <RUN-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (source of truth for this review-fetch field list: `../_shared/jira-acli-reference.md` §3 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
+- Fetch the issue derived from the branch (the healthcheck's `issue_key` row — call it `<RUN-KEY>`): `jira.sh --role reviewer issue view <RUN-KEY> --fields 'summary,description,issuetype,status,parent,subtasks'` (reads print raw JSON on stdout; source of truth for this review-fetch field list: `../_shared/jira-api-reference.md` §10 — resolve there rather than here if the two ever disagree). It omits `comment`, which this skill never reads (fetching it would bloat the parent + every sub-task fetch on comment-heavy issues). Check `fields.issuetype.name`:
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
-  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → per the rule at the top, review **this sub-task's own PR only**. Do *not* re-fetch the parent as an acting issue and do *not* read its `fields.subtasks` — that sweep belongs to a run from the parent's worktree. `<PARENT-BRANCH>` (this PR's base) = §12's resolver with `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report (step 6) that only `<RUN-KEY>` was reviewed.
+  - **`Subtask`** (this worktree is a sub-task's own, not the parent's) → per the rule at the top, review **this sub-task's own PR only**. Do *not* re-fetch the parent as an acting issue and do *not* read its `fields.subtasks` — that sweep belongs to a run from the parent's worktree. `<PARENT-BRANCH>` (this PR's base) = §13's resolver with `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report (step 6) that only `<RUN-KEY>` was reviewed.
 - **Resolve `<PARENT-BRANCH>`**: list branch names deduped to unique shorts — strip the local `*`/indent and the `remotes/origin/` prefix so a branch that exists both locally and on origin counts once — then match the key:
   ```bash
   git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <PARENT-KEY>
   ```
   Exactly one match → that's `<PARENT-BRANCH>`. Zero or multiple → ask the user rather than guessing.
-- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Use §12's resolver (`../_shared/jira-acli-reference.md`) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current` (they coincide only in the parent worktree; from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` — using it would set `<BASE_BRANCH>` = `<PARENT-BRANCH>` and make step 5a open a parent PR into itself). Branch config lives in the shared `.git/config`, so keying off `<PARENT-BRANCH>` works from any worktree:
+- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Use §13's resolver (`../_shared/jira-api-reference.md`) but keyed on `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current` (they coincide only in the parent worktree; from a sub-task's own worktree the current branch is the sub-task's, whose `parentbranch` is `<PARENT-BRANCH>` — using it would set `<BASE_BRANCH>` = `<PARENT-BRANCH>` and make step 5a open a parent PR into itself). Branch config lives in the shared `.git/config`, so keying off `<PARENT-BRANCH>` works from any worktree:
   ```bash
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
   BASE_BRANCH=$(git config branch."<PARENT-BRANCH>".parentbranch 2>/dev/null)
-  [ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(acli jira workitem comment list --key <PARENT-KEY> --json \
+  [ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(bash "$S/jira.sh" --role reviewer issue comment list <PARENT-KEY> \
     | grep -oE 'PR target branch: [^" ]+' | head -1 \
     | sed -e 's/PR target branch: //' -e 's/\.$//')
   [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
   ```
   Only ask the user if all three come up empty.
 
-  **Why no parent-branch search here, unlike §12.** That step recovers a
-  *sub-task's* base by finding its parent's branch, and §12 gates it on a
+  **Why no parent-branch search here, unlike §13.** That step recovers a
+  *sub-task's* base by finding its parent's branch, and §13 gates it on a
   non-empty `PARENT_KEY`. Here the key is already the top-level parent (step 1
   climbed), so the same search would match `<PARENT-BRANCH>` itself — setting
   `<BASE_BRANCH>` = `<PARENT-BRANCH>` and making 5a open a PR into itself.
   `<DEFAULT_BASE_BRANCH>` is the correct last resort on this path, exactly as
-  §12 step 4 is for a top-level issue. (A run from a sub-task's own worktree
-  does use the full §12 resolver — see the `Subtask` branch above.)
+  §13 step 4 is for a top-level issue. (A run from a sub-task's own worktree
+  does use the full §13 resolver — see the `Subtask` branch above.)
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty `[]` → **single-step**; anything else → **multistep**). This sets the run's **PR set** and the steps you will walk. Name the track explicitly so the rest of the skill reads as one track at a time:
   - **Single-step track** — the PR set is *just the one parent PR* (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* → review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If the phase check detects an already-merged PR on a later re-run, jump straight to the step-6 report with the S-MERGED outcome — GitHub-for-Jira auto-transitions the issue to `<STATUS_DONE>` on merge, so no re-run is required and no further action is expected on the issue.)
-  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §3 — the default `--json` omits it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `acli jira workitem view <SUBTASK-KEY> --json --fields 'summary,description,issuetype,status,parent,subtasks'` (same §3 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
+  - **Multistep track** — the PR set is *each in-review sub-task PR*. Extract sub-task keys from `fields.subtasks` (the review-fetch field list above names `subtasks` explicitly, per §10 so the narrowed payload keeps it; the shape is an array of objects, i.e. `fields.subtasks[].key`, not bare strings). For each sub-task key run `jira.sh --role reviewer issue view <SUBTASK-KEY> --fields 'summary,description,issuetype,status,parent,subtasks'` (same §10 review-fetch list) and keep only those whose `fields.status.name` matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
 
 ### Single-step phase check (only for the single-step track)
 
@@ -263,9 +263,9 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   ## Review Status: ...        # the full canonical report, scoped to this PR
   EOF
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
-  acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
+  bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
-  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR.) Don't move the Jira status *here* — mid-loop the PR is only approved, not merged. Step 7 offers the user the `<STATUS_DONE>` move once at the end of the run; declining it leaves the issue to the GitHub-for-Jira merge automation.
+  (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step parent PR; `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"` — `win/jira.ps1` on Windows.) Don't move the Jira status *here* — mid-loop the PR is only approved, not merged. Step 7 offers the user the `<STATUS_DONE>` move once at the end of the run; declining it leaves the issue to the GitHub-for-Jira merge automation.
 
 * **If REQUEST_CHANGES (one or more dimensions fail):** fill the same canonical template with the per-PR reject outcome **for this track** — **S-CHANGES-REQUESTED** when this is the single-step parent PR, **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and verdict-header line `CHANGES REQUESTED — <one-line summary>`; the `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` — that is the actual gate:
   ```bash
@@ -275,10 +275,10 @@ Both the GitHub verdict comment and the Jira per-issue comment carry the **full 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
   EOF
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
-  acli jira workitem comment create --key <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
-  acli jira workitem transition --key <SUBTASK-KEY-or-PARENT-KEY> --status "<STATUS_IN_PROGRESS>" --yes
+  bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
+  bash "$S/jira.sh" --role reviewer issue transition <SUBTASK-KEY-or-PARENT-KEY> --to "<STATUS_IN_PROGRESS>"
   ```
-  Remember this PR as blocked. Continue the loop — review the next PR.
+  (`S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"` — `win/jira.ps1` on Windows.) Remember this PR as blocked. Continue the loop — review the next PR.
 
 ### 3e. Post a summary on the parent after each sub-task
 
@@ -288,8 +288,8 @@ Regardless of whether the review above was approved or rejected, immediately pos
 
 A **fresh comment per sub-task is intentional** — it's an audit trail: each sub-task's verdict stands on its own permanent comment, alongside step 6's single run-level report rather than competing with it (see *One run-level render per run* in the template). So do **not** use `-e/--edit-last`; post a new comment each time:
 
-```
-acli jira workitem comment create --key <PARENT-KEY> --body-file /tmp/<KEY>-report.md
+```bash
+bash "$S/jira.sh" --role reviewer issue comment add <PARENT-KEY> --body-file /tmp/<KEY>-report.md
 ```
 
 ## 4. After the PR set has been reviewed (loop complete)
@@ -356,7 +356,7 @@ Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path the 
 
 ## 6. Report back
 
-Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` via the §6 `--body-file` convention. This is the **run-level** render of *The canonical review report* (defined above) — same verdict-header line and same sections as every per-PR emission, but with the *whole run's* PR set in its `### Pull Request Summary` and its verdict-header reflecting the run's overall verdict (`CHANGES REQUESTED — …` if any PR was rejected, else `APPROVED — …`). Do **not** re-spell the report shape here — fill the template.
+Post the review summary to the user in chat **and** as a single Jira comment on `<PARENT-KEY>` via the §11 `--body-file` convention (`jira.sh --role reviewer issue comment add <PARENT-KEY> --body-file <file>`). This is the **run-level** render of *The canonical review report* (defined above) — same verdict-header line and same sections as every per-PR emission, but with the *whole run's* PR set in its `### Pull Request Summary` and its verdict-header reflecting the run's overall verdict (`CHANGES REQUESTED — …` if any PR was rejected, else `APPROVED — …`). Do **not** re-spell the report shape here — fill the template.
 
 Pick **exactly one** outcome from the catalogue in
 `../_shared/templates/review-report.md` — chosen by the step-1 track × the
@@ -373,8 +373,8 @@ emissions and are never this report's pick.
 
 Ask the user **once**, naming every issue this run approved, whether to move them to `<STATUS_DONE>`, and transition only the ones they say yes to:
 
-```
-acli jira workitem transition --key <KEY> --status "<STATUS_DONE>" --yes
+```bash
+bash "$S/jira.sh" --role reviewer issue transition <KEY> --to "<STATUS_DONE>"
 ```
 
 Ask rather than decide, because an approval is not a merge — this skill never merges, so every PR you just approved is still open. Teams whose Done means "merged" get there by automation (GitHub-for-Jira's merge rule, a Jira automation, a workflow), and moving the card here would jump ahead of it; teams that close at approval have no such automation and want exactly this. Nothing in the repo says which kind this project is, so the user decides. If they decline, or the run is non-interactive and no answer comes, change nothing — approved-but-open is the safe resting state, and a later re-run detects the merge on its own.
@@ -397,4 +397,4 @@ Post nothing further to Jira here. The step-6 report is the run's single final c
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and reports the merged state via step 6 (S-MERGED), then exits — no wrap-up; GitHub-for-Jira already handled the `<STATUS_DONE>` transition.
 
-Reference: `../_shared/jira-acli-reference.md` has the full acli syntax, confirmed issue types, and git/branch conventions this skill depends on. The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the project root have this repo's specific values for every `<TOKEN>` used above.
+Reference: `../_shared/jira-api-reference.md` is the operational + REST reference — the `jira.sh` command surface, confirmed issue types, and git/branch conventions this skill depends on. The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the project root have this repo's specific values for every `<TOKEN>` used above.

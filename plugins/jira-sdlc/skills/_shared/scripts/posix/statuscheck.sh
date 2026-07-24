@@ -15,7 +15,7 @@
 #   asked to run. Passing an issue-key-shaped ISSUE-KEY (PROJ-123) explicitly
 #   makes the script do that comparison itself instead (`issue_key` FAILs on
 #   mismatch). A positional argument that is NOT issue-key-shaped — e.g. a role
-#   name like "reviewer" accidentally carried over from jira_acli_login — is
+#   name like "reviewer" passed by mistake — is
 #   ignored, not compared: the branch-derived key is used exactly as in the
 #   no-arg case. statuscheck takes no role argument. Neither jira-task-executor
 #   nor jira-task-reviewer pass one anymore — both take no issue-key argument,
@@ -58,8 +58,8 @@ BR=$(git branch --show-current 2>/dev/null || true)
 BR_TAIL=${BR#*/}
 BR_KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
 # Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
-# value — most often a role name like "reviewer" carried over by mistake from the
-# preceding `jira_acli_login <role>` call — is NOT an issue key: ignore it and fall
+# value — most often a role name like "reviewer" passed by mistake — is NOT an
+# issue key: ignore it and fall
 # back to the branch-derived key, exactly as the no-arg path does, instead of
 # FAILing issue_key against it. statuscheck itself takes no role argument.
 KEY_ARG_IGNORED=""
@@ -74,7 +74,7 @@ ROWS=()
 REMEDIES=()
 FAILED=0
 
-# Network-touching calls (gh/acli) get a hard cap so a stalled API call
+# Network-touching calls (gh/jira.sh) get a hard cap so a stalled API call
 # can't hang the whole healthcheck. No-op where coreutils timeout is
 # missing (stock macOS).
 TMOUT_CMD=""
@@ -110,7 +110,7 @@ print_report() {
 # Jira account URL/email + token the skills depend on. It's gitignored, so
 # a linked worktree (which shares tracked files only) is born without it.
 # The copy logic itself lives in exactly one place, ensure_local_env.sh —
-# every skill already calls it before jira_acli_login.sh, so by the time
+# every skill already calls it before its first jira.sh call, so by the time
 # statuscheck.sh runs here it's normally a no-op; delegate to it (rather
 # than duplicating the copy) so a standalone run of this script still
 # self-heals the same way. WT_ROOT/IS_WORKTREE computed here are reused by
@@ -161,7 +161,7 @@ fi
 
 # --- platform (single source of truth for "am I on Windows") --------------
 # Reports the OS and, on Windows, verifies the runtime the Windows dispatch
-# path needs: PowerShell 5.1+ (`pwsh` OR `powershell`), acli/gh, and the
+# path needs: PowerShell 5.1+ (`pwsh` OR `powershell`), gh, and the
 # win/*.ps1 ports. Each SKILL.md's dispatch
 # convention keys off this row — POSIX runs the bash scripts here, windows runs
 # scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
@@ -200,16 +200,17 @@ if [ "$OS" = "windows" ]; then
       *) [ "$PS_VER" -ge 5 ] || MISSING="$MISSING PowerShell(v$PS_VER<5)" ;;
     esac
   fi
-  command -v acli >/dev/null 2>&1 || MISSING="$MISSING acli"
-  command -v gh   >/dev/null 2>&1 || MISSING="$MISSING gh"
-  for s in statuscheck ensure_local_env jira_acli_login get_assignee_email check_assignee; do
+  # jira.ps1 uses native Invoke-WebRequest + ConvertFrom-Json, so the Windows
+  # path needs no acli/curl/jq — only gh (for 'gh pr create') and the ports.
+  command -v gh >/dev/null 2>&1 || MISSING="$MISSING gh"
+  for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
     [ -f "$WIN_DIR/$s.ps1" ] || MISSING="$MISSING win/$s.ps1"
   done
   if [ -n "$MISSING" ]; then
     row platform FAIL "os=windows$OS_FORCED — missing:$MISSING" \
-      "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $RERUN."
+      "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + gh and ensure the win/ ports are present, then $RERUN."
   else
-    row platform OK "os=windows$OS_FORCED — PowerShell $PS_VER ($PS_RUNTIME) + acli + gh + win/ ports present (Windows dispatch path ready)"
+    row platform OK "os=windows$OS_FORCED — PowerShell $PS_VER ($PS_RUNTIME) + gh + win/ ports present (Windows dispatch path ready)"
   fi
 else
   row platform INFO "os=$OS$OS_FORCED — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
@@ -328,8 +329,8 @@ fi
 # logout is load-bearing: a bare `gh auth login` does not reliably replace an
 # already-stored keyring token, so a stale PR-read-only PAT from the developer's
 # own session could otherwise survive and 403 at `gh pr create` mid-run, after
-# the work is done (JST-143). This mirrors jira_acli_login's always-logout-then-
-# login rule. gh uses ONE shared PAT (not a per-role identity like acli), so this
+# the work is done (JST-143). gh uses ONE shared PAT (not a per-role Jira
+# identity), so this
 # role-agnostic healthcheck — which every skill already runs before any work — is
 # the right home for it: no per-skill wiring needed. GITHUB_PAT_TOKEN is a secret,
 # machine-specific value → gitignored jira-sdlc-tools.local.env only (never the
@@ -380,33 +381,38 @@ else
   fi
 fi
 
-# --- acli auth (needed by every 'acli jira ...' call) ---------------------
-ACLI_OK=""
-if ! command -v acli >/dev/null 2>&1; then
-  row acli_auth FAIL "acli (Atlassian CLI) is not installed" \
-    "install acli and run the one-time login (skills/_shared/jira-acli-reference.md §0, using the jira-sdlc-tools.local.env values), then $RERUN."
+# --- Jira auth (needed by every 'jira.sh …' call) -------------------------
+# Per-request Basic auth via `jira.sh whoami` (GET /myself): one live call, no
+# global login state and no cache. This bare, role-agnostic probe verifies the
+# DEFAULT credential (JIRA_ACCOUNT_EMAIL:JIRA_TOKEN) reaches the site; per-role
+# identity and the ownership gate stay in the skill (check_assignee --role).
+JIRA_SH="$PLAT_SCRIPT_DIR/jira.sh"
+JIRA_OK=""
+if ! command -v curl >/dev/null 2>&1; then
+  row jira_auth FAIL "curl is required by jira.sh but not installed" \
+    "install curl and jq, then $RERUN."
+elif ! command -v jq >/dev/null 2>&1; then
+  row jira_auth FAIL "jq is required by jira.sh but not installed" \
+    "install jq and curl, then $RERUN."
+elif WHOAMI_JSON=$($TMOUT_CMD bash "$JIRA_SH" whoami 2>/dev/null) && [ -n "$WHOAMI_JSON" ]; then
+  WHO=$(printf '%s' "$WHOAMI_JSON" | jq -r '.emailAddress // .displayName // .accountId // empty' 2>/dev/null)
+  JIRA_OK=1
+  row jira_auth OK "authenticated as ${WHO:-unknown} (GET /myself)"
 else
-  ACLI_LINE=$($TMOUT_CMD acli jira auth status 2>&1 | grep -m1 '✓ Authenticated' || true)
-  if [ -n "$ACLI_LINE" ]; then
-    ACLI_OK=1
-    row acli_auth OK "$ACLI_LINE (cached status — real reachability is the jira_project row below)"
-  else
-    row acli_auth FAIL "acli is installed but not authenticated with Jira" \
-      "run the one-time acli login (skills/_shared/jira-acli-reference.md §0, using the jira-sdlc-tools.local.env values), then $RERUN."
-  fi
+  row jira_auth FAIL "the default Jira credential doesn't authenticate — 'jira whoami' failed (stale/invalid JIRA_TOKEN, or unreachable site)" \
+    "set a working JIRA_ACCOUNT_EMAIL + JIRA_TOKEN pair (the per-request Basic default) in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
 fi
 
-# --- Jira project reachable (whole-word match avoids PROJ matching PROJ2;
-# a pagination flag is required — bare --json errors) -----------------------
-if [ -n "$ACLI_OK" ] && [ -n "$PROJECT_KEY" ]; then
-  if $TMOUT_CMD acli jira project list --paginate --json 2>/dev/null | grep -qw "$PROJECT_KEY"; then
+# --- Jira project reachable ('jira.sh project exists' → GET /project/search) -
+if [ -n "$JIRA_OK" ] && [ -n "$PROJECT_KEY" ]; then
+  if $TMOUT_CMD bash "$JIRA_SH" project exists "$PROJECT_KEY" >/dev/null 2>&1; then
     row jira_project OK "project $PROJECT_KEY reachable on the authenticated site"
   else
-    row jira_project FAIL "project '$PROJECT_KEY' not found via 'acli jira project list' (or the call timed out)" \
-      "if acli_auth is OK but this FAILs, the stored credential is stale (auth status caches) — 'acli jira auth logout' then re-login per §0; else check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site/board, whether this account was granted access to the board — or retry if Jira was just slow."
+    row jira_project FAIL "project '$PROJECT_KEY' not visible to the default account via 'jira project exists' (or the call timed out)" \
+      "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
   fi
 else
-  row jira_project WARN "skipped (acli not authenticated or PROJECT-KEY unset — see rows above)"
+  row jira_project WARN "skipped (jira_auth failed or PROJECT-KEY unset — see rows above)"
 fi
 
 # --- context rows (never block) -------------------------------------------
