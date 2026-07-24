@@ -37,12 +37,42 @@ function Get-Yaml1 {  # first `key: value` from acli's config
     return $null
 }
 
-$Me = Get-Yaml1 'email'
 # accountId is the identifier that actually works. Jira only exposes
 # `emailAddress` on the assignee object for YOUR OWN account — for anyone else
 # the field is absent, so an email comparison can never distinguish "assigned
 # to someone else" from "unassigned". Compare on accountId instead.
-$MyId = Get-Yaml1 'account_id'
+#
+# --- resolve the ACTIVE account across BOTH acli config shapes ---------------
+# acli's jira_config.yaml comes two ways (see the bash twin for the full note):
+#   * flat / single-account: one top-level account_id/email — first match is it.
+#   * multi-profile: a `profiles:` SEQUENCE plus a single
+#     `current_profile: <cloud_id>:<account_id>` naming the active one; the FIRST
+#     account_id is then the earliest-logged-in account, not the active one.
+# Prefer current_profile when present (authoritative right after
+# jira_acli_login's logout+login); fall back to first-match for the flat shape.
+# One active identity per shape — never a match against "either" candidate,
+# which would let this session act on an issue assigned to a DIFFERENT account.
+$CurrentProfile = Get-Yaml1 'current_profile'
+if ($CurrentProfile) {
+    # `<cloud_id>:<account_id>` — cloud_id has no colon and the account_id is
+    # `<digits>:<uuid>`, so the account_id is everything after the first colon.
+    $MyId = $CurrentProfile.Substring($CurrentProfile.IndexOf(':') + 1)
+    # Email of the active profile: the `email:` in the block whose `account_id:`
+    # equals $MyId (account_id precedes email within a block). Cosmetic — used
+    # only in messages / the assign fixup — so a miss falls back to first email.
+    $Me = $null
+    $cur = $null
+    foreach ($line in Get-Content -LiteralPath $AcliCfg) {
+        if ($line -match '^\s*account_id:\s*(.*)$') { $cur = $Matches[1].Trim() }
+        elseif ($line -match '^\s*email:\s*(.*)$') {
+            if ($cur -eq $MyId) { $Me = $Matches[1].Trim(); break }
+        }
+    }
+    if (-not $Me) { $Me = Get-Yaml1 'email' }
+} else {
+    $MyId = Get-Yaml1 'account_id'
+    $Me   = Get-Yaml1 'email'
+}
 if (-not $MyId) {
     Die "check_assignee: acli reports no active account — run jira_acli_login.ps1 <role> first."
 }

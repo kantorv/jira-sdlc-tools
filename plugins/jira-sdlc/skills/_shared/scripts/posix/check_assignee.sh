@@ -38,14 +38,47 @@ _yaml1() {  # first `key: value` from acli's config
     | head -1 | sed -e 's/^[^:]*:[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
-ME=$(_yaml1 email)
 # accountId is the identifier that actually works. Jira only exposes
 # `emailAddress` on the assignee object for YOUR OWN account — for anyone else
 # the field is absent entirely (only accountId + displayName come back). So an
 # email comparison can confirm a match but can never distinguish "assigned to
 # someone else" from "unassigned". acli records our own account_id on login, and
 # every assignee object carries accountId, so compare on that.
-MY_ID=$(_yaml1 account_id)
+#
+# --- resolve the ACTIVE account across BOTH acli config shapes ---------------
+# acli's jira_config.yaml comes two ways, and telling them apart is the whole
+# fix here:
+#   * flat / single-account: one top-level `account_id:`/`email:`. First match
+#     is the active identity because there's only one.
+#   * multi-profile: `profiles:` is a SEQUENCE (one block per logged-in account,
+#     in login order) plus a single `current_profile: <cloud_id>:<account_id>`
+#     pointer naming the active one. The FIRST `account_id:` is then just the
+#     earliest-logged-in account, NOT the active one — so the old first-match
+#     read silently returns the wrong profile the moment a second account has
+#     ever been added to the store (no acli upgrade required to trigger it).
+# Prefer current_profile when present (authoritative right after
+# jira_acli_login's logout+login); fall back to first-match for the flat shape.
+# We resolve ONE active identity per shape — we do NOT accept a match against
+# "either" candidate, which would let this session act on an issue assigned to a
+# DIFFERENT stored account and defeat the gate.
+CURRENT_PROFILE=$(_yaml1 current_profile)
+if [ -n "$CURRENT_PROFILE" ]; then
+  # `<cloud_id>:<account_id>` — cloud_id has no colon and the account_id is
+  # `<digits>:<uuid>`, so the account_id is everything after the first colon.
+  MY_ID=${CURRENT_PROFILE#*:}
+  # Email of the active profile: the `email:` in the block whose `account_id:`
+  # equals MY_ID (account_id precedes email within a block). Cosmetic — used
+  # only in messages / the assign fixup — so a miss falls back to first email.
+  ME=$(awk -v id="$MY_ID" '
+    /^[[:space:]]*account_id:/ { cur=$0; sub(/^[^:]*:[[:space:]]*/,"",cur) }
+    /^[[:space:]]*email:/      { e=$0; sub(/^[^:]*:[[:space:]]*/,"",e);
+                                 if (cur==id) { print e; exit } }
+  ' "$ACLI_CFG")
+  [ -n "$ME" ] || ME=$(_yaml1 email)
+else
+  MY_ID=$(_yaml1 account_id)
+  ME=$(_yaml1 email)
+fi
 [ -n "$MY_ID" ] || die "check_assignee: acli reports no active account — run jira_acli_login.sh <role> first."
 
 SITE=$(_yaml1 site)
