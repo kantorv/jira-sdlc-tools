@@ -2,16 +2,21 @@
 
 > **Stub — TBD.** [STEP-BY-STEP.md](STEP-BY-STEP.md) links here for the note
 > on Jira token types. Until this page is written, token guidance lives in
-> [JIRA-ACLI.md](JIRA-ACLI.md) and
+> [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+> §5 and
 > [github/GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
 
 ## What belongs here
 
-- **Which Jira token to use, and why.** Granular per-issue scopes are
-  rejected by `acli`; a scoped token needs the coarse `read:jira-work` +
-  `write:jira-work`. Resolve the wording against
-  [STEP-BY-STEP.md](STEP-BY-STEP.md) and the root README's Tokens table,
-  which currently describe this differently.
+- **Which Jira token to use, and why.** A classic (unscoped) token is the
+  simplest and always works. A **scoped** token needs the three *coarse*
+  scopes `read:jira-user` + `read:jira-work` + `write:jira-work`; the
+  granular per-resource ones (`read:issue:jira` and friends) look right and
+  fail with `401 "scope does not match"`, because a single `GET /issue`
+  requires a whole bundle of them at once. Full detail in
+  [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+  §5. Resolve the wording against [STEP-BY-STEP.md](STEP-BY-STEP.md) and the
+  root README's Tokens table, which currently describe this differently.
 - **GitHub PAT scope** — fine-grained, Contents + Pull requests read/write.
 - **Where secrets live:** `jira-sdlc-tools.local.env` is the untracked,
   per-machine file; `jira-sdlc-tools.env` is committed and must hold no

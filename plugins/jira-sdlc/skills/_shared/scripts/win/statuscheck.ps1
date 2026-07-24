@@ -149,7 +149,7 @@ if ($OS -eq 'windows') {
     # Name the runtime so this row matches statuscheck.sh's ($PS_RUNTIME) exactly.
     $psName = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
     # jira.ps1 uses native Invoke-WebRequest + ConvertFrom-Json, so the Windows
-    # path needs no acli/curl/jq — only gh (for 'gh pr create') and the ports.
+    # path needs only gh (for 'gh pr create') and the ports.
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { $missing += ' gh' }
     foreach ($s in 'statuscheck', 'ensure_local_env', 'get_assignee_email', 'check_assignee', 'jira') {
         if (-not (Test-Path -LiteralPath (Join-Path $winDir "$s.ps1"))) { $missing += " win/$s.ps1" }

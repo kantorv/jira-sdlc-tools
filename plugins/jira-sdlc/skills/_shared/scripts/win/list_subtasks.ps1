@@ -1,7 +1,5 @@
-# acli-list-subtasks.ps1 — Windows (PowerShell 5.1+) twin of acli-list-subtasks.sh.
-#
-# NOTE: the name is kept for compatibility, but this no longer uses acli — it
-# wraps `jira.ps1 issue view <KEY> --fields subtasks,issuetype` (REST v3), the
+# list_subtasks.ps1 — Windows (PowerShell 5.1+) twin of list_subtasks.sh.
+# Wraps `jira.ps1 issue view <KEY> --fields subtasks,issuetype` (REST v3), the
 # native Invoke-WebRequest port. Mirrors the bash helper's flags, output, and
 # exit codes; parses the response with ConvertFrom-Json (no jq needed).
 #
@@ -11,8 +9,8 @@
 # $env:PROJECT_KEY); the project is a printed label only, never sent to the API.
 #
 # Usage:
-#   pwsh -File acli-list-subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]
-#   (positional works too: pwsh -File acli-list-subtasks.ps1 <PARENT-KEY> [-Json])
+#   pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]
+#   (positional works too: pwsh -File list_subtasks.ps1 <PARENT-KEY> [-Json])
 #
 # Exit 0      — listed sub-tasks (or reported "none").
 # Exit 1      — -Parent missing, or the response wasn't JSON.
@@ -21,8 +19,8 @@
 param([string]$Parent, [string]$Role = '', [string]$EnvPath = './jira-sdlc-tools.env', [switch]$Json)
 
 if (-not $Parent) {
-    [Console]::Error.WriteLine('acli-list-subtasks: missing required -Parent <PARENT-KEY>')
-    [Console]::Error.WriteLine('usage: pwsh -File acli-list-subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]')
+    [Console]::Error.WriteLine('list_subtasks: missing required -Parent <PARENT-KEY>')
+    [Console]::Error.WriteLine('usage: pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]')
     exit 1
 }
 
@@ -34,7 +32,7 @@ if (Get-Command pwsh -ErrorAction SilentlyContinue) {
     $psExe = 'powershell'
 }
 if (-not $psExe) {
-    [Console]::Error.WriteLine('acli-list-subtasks: no PowerShell runtime (pwsh/powershell) found to run jira.ps1.')
+    [Console]::Error.WriteLine('list_subtasks: no PowerShell runtime (pwsh/powershell) found to run jira.ps1.')
     exit 1
 }
 
@@ -66,7 +64,7 @@ $raw = $out | Out-String
 try {
     $data = $raw | ConvertFrom-Json
 } catch {
-    [Console]::Error.WriteLine('acli-list-subtasks: jira.ps1 issue view output had no JSON object')
+    [Console]::Error.WriteLine('list_subtasks: jira.ps1 issue view output had no JSON object')
     exit 1
 }
 

@@ -10,9 +10,9 @@ This is the flow implemented in **`statuscheck.sh`** (and its Windows twin
 `statuscheck.ps1`) — the pre-flight healthcheck every skill runs before it
 touches anything. It's the healthcheck's job rather than a per-skill step
 because `gh` uses one shared PAT (per-role GitHub identities are out of scope,
-below), so — unlike the per-role `acli` login, which lives in each skill's
-credential block — a single role-agnostic login in the shared healthcheck
-covers every skill.
+below), so — unlike Jira, where `jira.sh` carries a per-role credential on
+every single request and there is no login to share in the first place — a
+single role-agnostic login in the shared healthcheck covers every skill.
 
 ## The setting: `GITHUB_PAT_TOKEN`
 
@@ -66,8 +66,8 @@ source jira-sdlc-tools.local.env \
   && gh auth status
 ```
 
-The logout is the point: like `acli`, a second `gh auth login` does not reliably
-overwrite an already-stored credential, so without it a stale (e.g. read-only)
+The logout is the point: a second `gh auth login` does not reliably overwrite
+an already-stored credential, so without it a stale (e.g. read-only)
 token could survive and only surface as a 403 at `gh pr create` — after the work
 is already implemented, committed, and pushed (JST-143). Logging out first
 guarantees `GITHUB_PAT_TOKEN` is the active token before any work begins.

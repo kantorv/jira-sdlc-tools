@@ -105,7 +105,6 @@ skills/
 │   ├── SKILL.md
 │   └── agents/openai.yml
 └── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
-    ├── jira-acli-reference.md
     ├── jira-api-reference.md
     ├── project-config.md
     ├── scripts/
@@ -142,7 +141,7 @@ what each skill does at every step, is in
 
 | Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
 |---|---|---|---|---|
-| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `acli … transition`, or drag the card |
+| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `jira.sh issue transition <KEY> --to …`, or drag the card |
 | **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
 | **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
 | **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |

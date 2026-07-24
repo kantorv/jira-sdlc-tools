@@ -1,8 +1,7 @@
-# acli-create-parent-and-subtasks.ps1 — Windows (PowerShell 5.1+) twin of
-# acli-create-parent-and-subtasks.sh.
+# create_parent_and_subtasks.ps1 — Windows (PowerShell 5.1+) twin of
+# create_parent_and_subtasks.sh.
 #
-# NOTE: the name is kept for compatibility, but this no longer uses acli — it
-# wraps `jira.ps1 issue create` (REST v3), the native Invoke-WebRequest port.
+# Wraps `jira.ps1 issue create` (REST v3), the native Invoke-WebRequest port.
 # See ../jira-api-reference.md.
 #
 # Create a Jira parent work item plus N sub-tasks, driven by a manifest.
@@ -16,7 +15,7 @@
 #   <name>.md      — the sub-task body (one file per manifest row name)
 #
 # Usage:
-#   pwsh -File acli-create-parent-and-subtasks.ps1 `
+#   pwsh -File create_parent_and_subtasks.ps1 `
 #     -ParentSummary "..." -ParentBody ./parent.md -SubtasksDir ./sub `
 #     [-ParentType Story] [-SubtaskType Subtask] `
 #     [-Project PROJ] [-Role assigner] [-KeysOut ./keys.tsv] [-DryRun]
@@ -42,7 +41,7 @@ if (Get-Command pwsh -ErrorAction SilentlyContinue) {
 } elseif (Get-Command powershell -ErrorAction SilentlyContinue) {
     $psExe = 'powershell'
 }
-if (-not $psExe) { [Console]::Error.WriteLine('acli-create-parent-and-subtasks: no PowerShell runtime (pwsh/powershell) found to run jira.ps1.'); exit 1 }
+if (-not $psExe) { [Console]::Error.WriteLine('create_parent_and_subtasks: no PowerShell runtime (pwsh/powershell) found to run jira.ps1.'); exit 1 }
 
 # --- resolve project key from jira-sdlc-tools.env if not given ---------------
 if (-not $Project) {

@@ -80,8 +80,10 @@ Any account's token works; the transition shows up in the issue history as
 
 If you create a **scoped** token, give it the coarse `read:jira-work` and
 `write:jira-work` scopes. The granular per-issue scopes look like the right
-answer and fail with *"scope does not match"* — the same trap `acli` hits
-(see [JIRA-ACLI.md](JIRA-ACLI.md)).
+answer and fail with *"scope does not match"* — the same trap the skills'
+own Jira client hits (see
+[../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+§5).
 
 ### 3. Add three repository secrets
 
@@ -214,4 +216,5 @@ rows, is in [JIRA-STATES.md](JIRA-STATES.md).
 - [CI.md](CI.md) — every workflow in this repo, including the release path
 - [INSTALLING-GITHUB-FOR-JIRA.md](INSTALLING-GITHUB-FOR-JIRA.md) — the app
   alternative to these workflows
-- [JIRA-ACLI.md](JIRA-ACLI.md) — the token/scope trap, from the CLI side
+- [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+  §5 — token types and the scope trap, from the skills' side

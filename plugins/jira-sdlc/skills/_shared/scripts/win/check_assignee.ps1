@@ -5,9 +5,10 @@
 #   --role defaults to executor (its sole caller is the executor's ownership
 #   gate) and is also read from $env:JIRA_ROLE; ISSUE-KEY defaults to the
 #   branch-derived key. Identity comes from `jira.ps1 whoami` (GET /myself) —
-#   per-request Basic auth, no acli, no jira_config.yaml. That removes the
-#   multi-profile parse that used to false-negative once a second account was in
-#   acli's store (JST-146): "who am I" is now the token in hand.
+#   per-request Basic auth, no config file to parse. Because the account is
+#   chosen by --role rather than by switching a stored profile, there is no
+#   multi-profile state to fall out of sync (JST-146): "who am I" is now the
+#   token in hand.
 #
 # jira.ps1 calls `exit`, so it runs in its OWN pwsh process (never `&` in-process,
 # which would exit this script too).

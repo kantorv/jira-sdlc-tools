@@ -279,17 +279,15 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
         │   └── _shared/
-        │       ├── jira-reference.md        # thin pointer to the REST client reference
         │       ├── jira-api-reference.md    # direct REST API — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       ├── templates/
         │       │   └── review-report.md     # jira-task-reviewer's report template + outcome catalogue
         │       └── scripts/
-        │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest (jira.sh wrapper)
-        │           └── acli-list-subtasks.sh               # list a parent's sub-tasks (jira.sh wrapper)
+        │           ├── create_parent_and_subtasks.sh  # seed a parent + sub-tasks from a manifest (jira.sh wrapper)
+        │           └── list_subtasks.sh               # list a parent's sub-tasks (jira.sh wrapper)
         ├── docs/
         │   ├── examples/
-        │   │   └── acli-list-subtasks.py  # original python version, kept for reference
         │   ├── JIRA-REST.md          # detailed REST client companion — rationale + commands no skill invokes
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md

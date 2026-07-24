@@ -6,7 +6,8 @@ name: Reviewer Skill on PR (Smoke Test)
 # jira-sdlc skills are discoverable. It does NOT run the reviewer skill to
 # completion and posts no review to Jira or GitHub — discovery only. If a
 # real reviewer run is wanted later, that needs a worktree checkout plus
-# acli/gh auth, which is out of scope here.
+# gh auth and the Jira credentials in jira-sdlc-tools.local.env, which is
+# out of scope here.
 #
 # The existing workflow_dispatch-only reviewer.yml demo is left untouched.
 

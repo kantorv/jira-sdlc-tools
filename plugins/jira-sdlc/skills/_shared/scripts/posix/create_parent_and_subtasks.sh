@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# acli-create-parent-and-subtasks.sh
+# create_parent_and_subtasks.sh
 #
-# NOTE: the name is kept for compatibility, but this no longer uses acli — it
-# wraps `jira.sh issue create` (REST v3). See ../jira-api-reference.md.
+# Wraps `jira.sh issue create` (REST v3). See ../jira-api-reference.md.
 #
 # Create a Jira parent work item plus N sub-tasks, driven by a manifest.
 # Bundled as a reusable form of the "turn a review into tracked sub-tasks"
@@ -19,7 +18,7 @@
 #   <name>.md      — the sub-task body (one file per manifest row name)
 #
 # Usage:
-#   acli-create-parent-and-subtasks.sh \
+#   create_parent_and_subtasks.sh \
 #     --parent-summary "..." \
 #     --parent-body ./parent.md \
 #     --subtasks-dir ./sub \

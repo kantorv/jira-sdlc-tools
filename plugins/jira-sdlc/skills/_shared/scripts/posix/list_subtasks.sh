@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# acli-list-subtasks.sh — list a Jira parent's sub-tasks.
-#
-# NOTE: the name is kept for compatibility, but this no longer uses acli — it
-# wraps `jira.sh issue view <KEY> --fields subtasks,issuetype` (REST v3). See
+# list_subtasks.sh — list a Jira parent's sub-tasks. Wraps `jira.sh issue
+# view <KEY> --fields subtasks,issuetype` (REST v3). See
 # ../jira-api-reference.md.
 #
 # `issue view` without an explicit field list omits `subtasks`, so this requests
@@ -15,7 +13,7 @@
 # it's printed for confirmation, never sent to the API.
 #
 # Usage:
-#   acli-list-subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]
+#   list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]
 #
 # Exit 0      — listed sub-tasks (or reported "none").
 # Exit 1      — jq missing, --parent missing, or the response wasn't JSON.
@@ -25,7 +23,7 @@ set -u
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
-command -v jq >/dev/null 2>&1 || die "acli-list-subtasks: jq is required but not installed."
+command -v jq >/dev/null 2>&1 || die "list_subtasks: jq is required but not installed."
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
@@ -40,13 +38,13 @@ while [ $# -gt 0 ]; do
     --role)   ROLE="${2:-}"; shift 2 ;;
     --env)    ENV_PATH="${2:-}"; shift 2 ;;
     --json)   JSON_OUT=1; shift ;;
-    *) die "acli-list-subtasks: unknown argument '$1'
-usage: acli-list-subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]" ;;
+    *) die "list_subtasks: unknown argument '$1'
+usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]" ;;
   esac
 done
 
-[ -n "$PARENT" ] || die "acli-list-subtasks: missing required --parent <PARENT-KEY>
-usage: acli-list-subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]"
+[ -n "$PARENT" ] || die "list_subtasks: missing required --parent <PARENT-KEY>
+usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]"
 
 # --- resolve PROJECT-KEY (hyphen OR underscore form) ------------------------
 # PROJECT-KEY has a hyphen, so `source` can't read it — grep it out. Precedence:
@@ -65,7 +63,7 @@ PROJ_LABEL=""
 [ -n "$PROJECT" ] && PROJ_LABEL="[$PROJECT] "
 
 # --- fetch the parent + its sub-tasks via jira.sh ----------------------------
-# jira.sh emits clean JSON (no leading noise, unlike acli), so parse it directly.
+# jira.sh emits clean JSON straight on stdout, so parse it directly.
 ERR_FILE=$(mktemp)
 trap 'rm -f "$ERR_FILE"' EXIT
 if [ -n "$ROLE" ]; then
@@ -78,7 +76,7 @@ if [ "$CODE" -ne 0 ]; then
   printf '%s\n' "$(cat "$ERR_FILE")" >&2
   exit "$CODE"
 fi
-jq -e . >/dev/null 2>&1 <<<"$JSON" || die "acli-list-subtasks: jira.sh issue view output had no JSON object"
+jq -e . >/dev/null 2>&1 <<<"$JSON" || die "list_subtasks: jira.sh issue view output had no JSON object"
 
 if [ "$JSON_OUT" -eq 1 ]; then
   jq --arg parent "$PARENT" '
