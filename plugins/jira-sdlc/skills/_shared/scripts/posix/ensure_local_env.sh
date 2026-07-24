@@ -4,10 +4,10 @@
 #
 # A linked worktree shares only tracked files with its main checkout, so it
 # is born WITHOUT jira-sdlc-tools.local.env (gitignored — it holds machine-
-# local secrets). Every skill must repair that before jira_acli_login.sh
-# runs, or login dies on a worktree that was never given the file in the
-# first place. Call this FIRST in each skill's step 1, before
-# jira_acli_login.sh and statuscheck.sh — this is the ONLY place the copy
+# local secrets). Every skill must repair that before the jira.sh calls run,
+# or the per-request auth has no role credential on a worktree that was never
+# given the file in the first place. Call this FIRST in each skill's step 1,
+# before statuscheck.sh — this is the ONLY place the copy
 # logic lives; statuscheck.sh delegates here too for its env_local /
 # env_local_ignored rows rather than duplicating it.
 #

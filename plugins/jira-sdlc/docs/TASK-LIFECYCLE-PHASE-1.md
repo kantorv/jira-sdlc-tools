@@ -33,8 +33,7 @@ sequenceDiagram
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
-    Assigner->>JIRA: jira_acli_login.sh assigner<br/>(idempotent — no-op if already it)
-    JIRA-->>Assigner: acli is now the assigner account
+    Assigner->>JIRA: get_assignee_email.sh (resolve executor email)
     Note right of Assigner: login fails → stop.<br/>Everything below is now filed BY the assigner<br/>(Jira sets creator + reporter from it)
     Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
     Assigner->>GIT: read current branch (base? feature/hotfix? other?)
@@ -89,7 +88,7 @@ sequenceDiagram
   Everything else (investigating the codebase, deciding scope) stays
   inside the assigner.
 - **Two identities, and they are not the same one** — the assigner
-  **logs in as itself** (`jira_acli_login.sh assigner`) before anything
+  **authenticates as itself** (per-request `--role assigner`) before anything
   else, so Jira records it as the `creator` and `reporter` of every issue
   here — both are derived from the authenticated account, no flag needed.
   But each issue is **assigned to the executor** (`get_assignee_email.sh`

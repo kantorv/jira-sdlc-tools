@@ -18,10 +18,9 @@ of helpers the bundled scripts shell out to.
       `GITHUB_PAT_TOKEN` from your local env file.
       [cli.github.com](https://cli.github.com/) ·
       [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md)
-- [ ] **`acli`** (Atlassian CLI) — issues, comments, transitions.
+- [ ] **`curl` / `Invoke-RestMethod`** — issues, comments, transitions (via `jira.sh` / `jira.ps1`).
       Authenticates with `JIRA_TOKEN`.
-      [install acli](https://developer.atlassian.com/cloud/acli/guides/install-acli/) ·
-      [JIRA-ACLI.md](JIRA-ACLI.md)
+      [JIRA-REST.md](JIRA-REST.md)
 
 Helper tools — which ones depends on your OS:
 
@@ -95,10 +94,8 @@ git --version; gh --version; acli --version; $PSVersionTable.PSVersion
       the board fails the transition at runtime, not at setup.
 - [ ] **You have a Jira API token.** Create it at
       [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
-      Use a **plain API token** — `acli` rejects granular per-issue scopes with
-      *"scope does not match"*. If you must use a scoped token, give it the
-      coarse `read:jira-work` and `write:jira-work`. Detail:
-      [JIRA-ACLI.md](JIRA-ACLI.md).
+      Use a **plain API token** — Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) rejects scoped tokens. If you must use a scoped token via the REST gateway, see
+      [JIRA-REST.md](JIRA-REST.md) for the required scopes and URL changes.
 - [ ] *(Optional)* **Per-role Jira accounts** — separate emails/tokens for the
       assigner, executor and reviewer, so the board shows who did what. Leave
       them commented out to run everything as one account.
@@ -210,7 +207,7 @@ onto this checklist:
 | `env_local` | `jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
 | `gh_auth` | `GITHUB_PAT_TOKEN` works — `gh` is authenticated |
-| `acli_auth` | `JIRA_TOKEN` works — `acli` is authenticated |
+| `jira_auth` | `JIRA_TOKEN` works — `jira.sh` is authenticated |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
 | `worktrees_dir` | `WORKTREES_DIR` exists (WARN only — the assigner creates it) |
