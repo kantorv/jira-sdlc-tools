@@ -58,7 +58,7 @@ EOF
 # ─── Layer 1: config resolution ─────────────────────────────────────────────
 
 # Same `NAME = value` parser + local-overrides-team precedence as
-# jira_acli_login.sh / statuscheck.sh. Keep in sync; don't invent a second one.
+# statuscheck.sh. Keep in sync; don't invent a second one.
 _cfg_dir=""
 _cfg() {
   local f v

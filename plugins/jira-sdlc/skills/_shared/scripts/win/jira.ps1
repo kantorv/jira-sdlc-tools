@@ -70,7 +70,7 @@ function Get-GitTop {
 }
 
 # Same `NAME = value` parser + local-overrides-team precedence as jira.sh's _cfg
-# (and jira_acli_login.ps1 / statuscheck.ps1). Last match in a file wins.
+# (and statuscheck.ps1). Last match in a file wins.
 function Get-Cfg {
     param([string]$Name)
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
