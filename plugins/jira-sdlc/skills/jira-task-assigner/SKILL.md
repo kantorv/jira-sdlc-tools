@@ -74,9 +74,11 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
 ```
 
-(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill outside a
-plugin session — the script lives at `../_shared/scripts/posix/statuscheck.sh`
-relative to this skill's directory.) It resolves `<PROJECT-KEY>` and
+(If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill on a non-Claude
+client — resolve it against the platform's provided/default skills folder (the
+folder it loads these skills from; each non-Claude client is expected to have
+this set), keeping `../_shared/scripts/posix/statuscheck.sh` relative to this
+skill's directory as the default; see INTEGRATIONS.md.) It resolves `<PROJECT-KEY>` and
 `<DEFAULT_BASE_BRANCH>` from the env files itself, so you don't
 pre-resolve tokens for this section.
 
@@ -196,8 +198,11 @@ the script's stderr and **stop**.
 ```bash
 ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_assignee_email.sh") || exit 1
 ```
-(If `CLAUDE_PLUGIN_ROOT` isn't set, it lives at
-`../_shared/scripts/posix/get_assignee_email.sh` relative to this skill.)
+(If `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
+provided/default skills folder (the folder it loads these skills from; each
+non-Claude client is expected to have this set), keeping
+`../_shared/scripts/posix/get_assignee_email.sh` relative to this skill as the
+default; see INTEGRATIONS.md.)
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
    - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
