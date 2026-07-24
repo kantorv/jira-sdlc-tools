@@ -19,6 +19,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Quick start](#quick-start)
 - [How the three skills relate](#how-the-three-skills-relate)
 - [Core concepts](#core-concepts)
+  - [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Repository layout](#repository-layout)
@@ -126,6 +127,11 @@ self-contained single task, or one sub-task of a split) gets its own
 `git worktree`, so multiple executors — separate terminals, or separate
 subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
+Worktrees isolate the *source tree*, but not anything the running app
+touches outside it (a database, cache, storage, or port) — see
+[Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+for how to decide, per external asset, whether each worktree's instance
+shares it or gets its own.
 
 **What the assigner creates.** The assigner runs only from your base
 branch — invoke it from an existing feature/hotfix branch and it stops,
@@ -182,17 +188,14 @@ relying on opaque GitHub-for-Jira transition rules:
 ## Prerequisites
 
 - **Claude Code**, a version with plugin support.
-- **The official Atlassian CLI (`acli`)** — the primary CLI these skills
-  drive Jira through; the lean shared reference
-  (`skills/_shared/jira-acli-reference.md`) documents the exact flag
-  behavior the skills invoke, with a detailed companion
-  (`docs/JIRA-ACLI.md`) for rationale, discovery procedures, and every
-  command no skill invokes. Authenticated once against your
-  Jira Cloud instance with `acli jira auth login` using the
-  `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
-  from `jira-sdlc-tools.local.env` (see
-  [Configuration](#configuration)). `acli` stores the credentials, so no
-  per-command token prefix.
+- **A bundled REST client (`jira.sh` / `jira.ps1`)** — the primary script these skills
+  drive Jira through. It wraps `curl` (POSIX) or `Invoke-RestMethod` (Windows)
+  and authenticates per-request. The shared reference (`skills/_shared/jira-api-reference.md`)
+  documents the API endpoints and the exact `jira.sh` flag behavior the skills invoke,
+  with a detailed companion (`docs/JIRA-REST.md`) for rationale and discovery procedures.
+  It reads the `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
+  from `jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
+  there is no interactive login step to run first.
 
 - **GitHub CLI (`gh`)**, authenticated.
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
@@ -276,18 +279,18 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
         │   └── _shared/
-        │       ├── jira-acli-reference.md   # official Atlassian CLI (acli) — lean call-site reference (detailed companion: docs/JIRA-ACLI.md)
-        │       ├── jira-api-reference.md    # direct REST API (no acli) — verified curl examples
+        │       ├── jira-reference.md        # thin pointer to the REST client reference
+        │       ├── jira-api-reference.md    # direct REST API — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       ├── templates/
         │       │   └── review-report.md     # jira-task-reviewer's report template + outcome catalogue
         │       └── scripts/
-        │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest
-        │           └── acli-list-subtasks.sh               # list a parent's sub-tasks via acli view --json
+        │           ├── acli-create-parent-and-subtasks.sh  # seed a parent + sub-tasks from a manifest (jira.sh wrapper)
+        │           └── acli-list-subtasks.sh               # list a parent's sub-tasks (jira.sh wrapper)
         ├── docs/
         │   ├── examples/
         │   │   └── acli-list-subtasks.py  # original python version, kept for reference
-        │   ├── JIRA-ACLI.md          # detailed acli companion — rationale + commands no skill invokes (lean ref: skills/_shared/jira-acli-reference.md)
+        │   ├── JIRA-REST.md          # detailed REST client companion — rationale + commands no skill invokes
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
         │   ├── JIRA-STATES.md     # who moves a card to which state, and when
@@ -324,7 +327,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one; see the one-time `acli jira auth login` in the config reference)
+- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one)
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
@@ -334,42 +337,26 @@ Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's
 
 Create the token at
 [`id.atlassian.com` → Security → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
-Atlassian offers two kinds, and the choice matters because `acli` and a
-raw REST call don't accept them the same way:
+Atlassian offers two kinds, and the choice matters because Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) handles them differently than the `api.atlassian.com` gateway:
 
 - **Classic, unscoped — "Create API token".** *Always works*, everywhere:
-  with `acli` (what the three skills drive Jira through) and with every
+  with `jira.sh` (what the three skills drive Jira through) and with every
   REST endpoint. It carries the full Jira permissions of the account it
   belongs to, so scope it down by restricting **that account's project
-  role/permissions**, not the token. **This is the one to use for
-  `JIRA_TOKEN`** — `acli` cannot operate with a scoped token (see below).
+  role/permissions**, not the token. **This is the recommended token for
+  `JIRA_TOKEN`**.
 
 - **Scoped — "Create API token with scopes".** Least privilege, but with
   a hard constraint: a scoped token is **rejected by Basic auth on the
-  `*.atlassian.net` site domain**, so `acli`'s Jira operations fail with
-  it (its login may still succeed, then every `workitem` call errors). It
-  only works when you call the REST API directly through the
-  **`https://api.atlassian.com/ex/jira/<cloudId>` gateway** — which is how
-  the direct-REST transition workflows
-  (`.github/workflows/jira_issue_transition_*.yml`) authenticate. For that
-  transition flow the least-privilege set is exactly three **coarse**
-  scopes:
+  `*.atlassian.net` site domain**. It only works when you call the REST API
+  directly through the **`https://api.atlassian.com/ex/jira/<cloudId>` gateway**.
+  Since `jira.sh` now supports gateway URLs directly, you *can* use a scoped token,
+  but you must set `JIRA_ACCOUNT_URL` in your `.env` to the full gateway base
+  (`api.atlassian.com/ex/jira/<cloudId>`) instead of your `.atlassian.net` domain,
+  and you must grant a wide array of coarse scopes (e.g. `read:jira-work`,
+  `write:jira-work`, `read:jira-user`) to cover the API surface the skills touch.
 
-  | Scope | Grants |
-  |---|---|
-  | `read:jira-user` | identity check at login |
-  | `read:jira-work` | read an issue's status + list its transitions |
-  | `write:jira-work` | perform the transition |
-
-  Avoid the *granular* per-resource scopes (`read:issue:jira`,
-  `read:issue.transition:jira`, …): `GET issue` requires a whole bundle of
-  them at once, and any missing member fails with
-  `Unauthorized; scope does not match`. The three coarse scopes above sidestep
-  that entirely.
-
-In short: **classic token for the `acli`-driven skills; a 3-scope token
-only if you specifically want least privilege for the REST-gateway
-transition workflows.**
+In short: **classic token for straightforward setup; a scoped token via the REST gateway if you specifically require least privilege.**
 
 ## Usage walkthrough
 
@@ -464,11 +451,9 @@ Deliberately never automated, regardless of how routine a run looks:
 
 - **Merging the parent branch into its base.** Always a manual step for
   a human — the reviewer only ever prepares and approves that PR.
-- **`acli jira workitem delete --key <KEY> --yes`.** The skills hand back
+- **`jira.sh issue delete <KEY> --yes`.** The skills hand back
   a ready-to-paste command instead of running it, even for throwaway
-  issues created in the same session. (Unlike `jira-cli`'s `delete`,
-  acli's accepts `--yes` and *can* run unattended — so the guardrail
-  against auto-deleting matters more, not less.)
+  issues created in the same session.
 - **Resolving an ambiguous branch match.** Zero or multiple branches
   matching a key means the skill asks, rather than guessing which one
   you meant.
@@ -497,6 +482,13 @@ Deliberately never automated, regardless of how routine a run looks:
   required at the one step that's never automated (the final merge) —
   treat the automated review as a strong first pass, not a replacement
   for your own team's standards.
+- Worktrees give each issue its own **source tree**, not its own
+  **running app instance**. Anything the app touches outside its source
+  (a database, cache, storage, queue, or port) is shared across worktrees
+  by default and can collide when several run at once — see
+  [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  for the per-asset share-vs-isolate decision (and the Django database
+  worked example).
 
 ## First-run verification checklist
 
@@ -504,20 +496,17 @@ A few things the skills themselves flag as "confirm once against real
 output" rather than assume — worth running deliberately before your first
 real task, not discovering mid-failure:
 
-- [ ] `acli jira workitem view <any-existing-key> --json --fields 'summary,description,issuetype,status,parent,subtasks'`
-      (the review-fetch field list; source of truth: `skills/_shared/jira-acli-reference.md` §3) —
-      confirm `fields.subtasks` is shaped the way the skills expect (the
-      default `--json` omits `subtasks`/`parent`/`comment`, so this
-      list names `subtasks` explicitly; it's an array of objects with
+- [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue view <any-existing-key> --fields 'summary,description,issuetype,status,parent,subtasks'`
+      (the review-fetch field list; source of truth: `skills/_shared/jira-api-reference.md` §10) —
+      confirm `fields.subtasks` is shaped the way the skills expect (an array of objects with
       a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
       `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-sdlc-tools.env`.
-- [ ] `acli jira workitem comment create --help` — the skills write
+- [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue comment add --help` — the skills write
       multi-line comments to a temp file and post with `--body-file <real file>`.
-      Confirm that form works (acli reads the body from a real file path
-      only — stdin is not supported).
-- [ ] Browse URL — acli has no `open` subcommand. The skills build the
+      Confirm that form works.
+- [ ] Browse URL — The skills build the
       issue link as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` from the
       `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
 
@@ -580,7 +569,7 @@ name — not PR labels or commit messages — drives the version bump).
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
-`jira-acli-reference.md` §7 accordingly — the skills follow whatever
+`jira-api-reference.md` §12 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
 
 ## Contributing
@@ -599,10 +588,7 @@ concrete before/after scenario in the PR description goes a long way.
 
 ## Acknowledgments
 
-- The official **Atlassian CLI (`acli`)** — the primary CLI these skills
-  are now written against; stores credentials after a one-time login and
-  handles sub-task `--parent` correctly on this project.
-- [`Introducing the Atlassian Command Line Interface (ACLI) for Jira`](https://www.atlassian.com/blog/jira/atlassian-command-line-interface) — Official documentation
+- The **Jira REST API** — which the bundled `jira.sh` client targets directly.
 - [GitHub-for-Jira](https://github.com/github/github-for-jira) — automatic
   branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).

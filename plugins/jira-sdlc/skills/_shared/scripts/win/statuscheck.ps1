@@ -8,7 +8,7 @@
 #   The issue key is normally derived from the branch and reported in the
 #   `issue_key` row; passing an issue-key-shaped ISSUE-KEY (PROJ-123) makes the
 #   script compare it itself. A positional arg that is NOT issue-key-shaped —
-#   e.g. a role name like "reviewer" carried over from jira_acli_login — is
+#   e.g. a role name like "reviewer" passed by mistake — is
 #   ignored, not compared. statuscheck takes no role argument.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from jira-sdlc-tools.env +
@@ -70,8 +70,8 @@ $Br = if ($Br) { ([string]$Br).Trim() } else { '' }
 $BrTail = $Br -replace '^[^/]*/', ''
 $BrKey  = if ($BrTail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
 # Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
-# value — most often a role name like "reviewer" carried over by mistake from the
-# preceding `jira_acli_login <role>` call — is NOT an issue key: ignore it and fall
+# value — most often a role name like "reviewer" passed by mistake — is NOT an
+# issue key: ignore it and fall
 # back to the branch-derived key, exactly as the no-arg path does, instead of
 # FAILing issue_key against it. statuscheck itself takes no role argument.
 $KeyArgIgnored = ''
@@ -146,16 +146,19 @@ if ($OS -eq 'windows') {
     $winDir = $PSScriptRoot
     $missing = ''
     $major = $PSVersionTable.PSVersion.Major   # 5.1+ acceptable — scripts are compatible with both
-    if (-not (Get-Command acli -ErrorAction SilentlyContinue)) { $missing += ' acli' }
-    if (-not (Get-Command gh   -ErrorAction SilentlyContinue)) { $missing += ' gh' }
-    foreach ($s in 'statuscheck', 'ensure_local_env', 'jira_acli_login', 'get_assignee_email', 'check_assignee') {
+    # Name the runtime so this row matches statuscheck.sh's ($PS_RUNTIME) exactly.
+    $psName = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
+    # jira.ps1 uses native Invoke-WebRequest + ConvertFrom-Json, so the Windows
+    # path needs no acli/curl/jq — only gh (for 'gh pr create') and the ports.
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { $missing += ' gh' }
+    foreach ($s in 'statuscheck', 'ensure_local_env', 'get_assignee_email', 'check_assignee', 'jira') {
         if (-not (Test-Path -LiteralPath (Join-Path $winDir "$s.ps1"))) { $missing += " win/$s.ps1" }
     }
     if ($missing) {
         Add-Row platform FAIL "os=windows$OsForced — missing:$missing" `
-            "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + acli + gh and ensure the win/ ports are present, then $Rerun."
+            "on Windows the skills dispatch to pwsh/powershell scripts/win/*.ps1 — install PowerShell 5.1+ + gh and ensure the win/ ports are present, then $Rerun."
     } else {
-        Add-Row platform OK "os=windows$OsForced — PowerShell $major + acli + gh + win/ ports present (Windows dispatch path ready)"
+        Add-Row platform OK "os=windows$OsForced — PowerShell $major ($psName) + gh + win/ ports present (Windows dispatch path ready)"
     }
 } else {
     Add-Row platform INFO "os=$OS$OsForced — POSIX path: skills run the bash scripts in _shared/scripts/posix/"
@@ -259,15 +262,21 @@ if ($KeyArg) {
 }
 
 # --- gh auth (needed by 'gh pr create') --------------------------------------
-# Log gh in from a persistent PAT session at the very start of the run, so the
-# whole conversation holds this session (no per-command token prefix, no
-# logout). GITHUB_PAT_TOKEN is a secret, machine-specific value → it lives only
-# in the gitignored jira-sdlc-tools.local.env (never the tracked
-# jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token → FAIL with
-# a remedy, and the skill stops like any other FAIL row. Accepted tradeoff: this
-# writes the OS-user-global gh config, so it overwrites the developer's own gh
-# session and is not logged out afterward — see plugins/jira-sdlc/docs/github/
-# (JST-126).
+# Log gh in from a persistent PAT session at the very start of the run — logout
+# FIRST, then login (see statuscheck.sh for the full rationale): a bare
+# `gh auth login` does not reliably replace an already-stored keyring token, so
+# without the logout a stale PR-read-only PAT could survive and 403 at
+# `gh pr create` mid-run (JST-143). gh uses ONE shared PAT (not a per-role Jira
+# identity), so this role-agnostic healthcheck — run by every skill
+# before any work — is the right home for it, no per-skill wiring needed.
+# GITHUB_PAT_TOKEN is a secret, machine-specific value → gitignored
+# jira-sdlc-tools.local.env only. Missing token → FAIL with a remedy, and the
+# skill stops like any other FAIL row. A login that runs but FAILs (non-zero
+# exit — an expired or revoked PAT, etc.) also FAILs, relaying gh's first stderr
+# line (token redacted) rather than falling through to a generic "no session" —
+# so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
+# writes the OS-user-global gh config, overwriting the developer's own gh session
+# and not restoring it afterward — see plugins/jira-sdlc/docs/github/ (JST-126/145).
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
         "install it (https://cli.github.com), then $Rerun."
@@ -280,45 +289,77 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         Add-Row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" `
             "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $Rerun."
     } else {
-        $ghPat | & gh auth login --with-token 2>&1 | Out-Null
-        $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
-            Select-Object -First 1) -replace '^[^L]*', ''
-        if ($ghLine) {
-            Add-Row gh_auth OK "$ghLine (PAT session login)"
+        # logout FIRST — see header; non-fatal if there's nothing to log out.
+        & gh auth logout --hostname github.com 2>&1 | Out-Null
+        # Login: capture gh's stderr. gh never echoes the token on error, but we
+        # redact it anyway (issue NOTES) before relaying. A FAILED login now FAILs
+        # the row with gh's own first error line instead of falling through to the
+        # generic "no session" FAIL — so a real auth failure (expired/revoked PAT,
+        # etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
+        # stderr; only then do we run 'gh auth status' for the account line.
+        $loginErr = ($ghPat | & gh auth login --with-token 2>&1 | Out-String)
+        if ($LASTEXITCODE -eq 0) {
+            $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
+                Select-Object -First 1) -replace '^[^L]*', ''
+            if ($ghLine) {
+                Add-Row gh_auth OK "$ghLine (PAT session login)"
+            } else {
+                Add-Row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" `
+                    "gh reported a successful login but no active session — inspect 'gh auth status' by hand, then $Rerun."
+            }
         } else {
-            Add-Row gh_auth FAIL "gh auth login --with-token with GITHUB_PAT_TOKEN did not produce an authenticated session" `
-                "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT, then $Rerun."
+            $redacted = if ($ghPat) { $loginErr -replace [regex]::Escape($ghPat), '[REDACTED]' } else { $loginErr }
+            $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
+            if (-not $err) { $err = '(no stderr from gh)' }
+            Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
+                "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
         }
     }
 }
 
-# --- acli auth (needed by every 'acli jira ...' call) ------------------------
-$AcliOk = $false
-if (-not (Get-Command acli -ErrorAction SilentlyContinue)) {
-    Add-Row acli_auth FAIL "acli (Atlassian CLI) is not installed" `
-        "install acli and run the one-time login (skills/_shared/jira-acli-reference.md §0, using the jira-sdlc-tools.local.env values), then $Rerun."
+# --- Jira auth (needed by every 'jira.ps1 …' call) ---------------------------
+# Per-request Basic auth via `jira.ps1 whoami` (GET /myself): one live call, no
+# global login state and no cache. This bare, role-agnostic probe verifies the
+# DEFAULT credential (JIRA_ACCOUNT_EMAIL:JIRA_TOKEN) reaches the site; per-role
+# identity and the ownership gate stay in the skill (check_assignee --role).
+$JiraOk = $false
+$jiraPs = Join-Path $PSScriptRoot 'jira.ps1'
+$psExe  = $null
+if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+    $psExe = 'pwsh'
+} elseif (Get-Command powershell -ErrorAction SilentlyContinue) {
+    $psExe = 'powershell'
+}
+if (-not $psExe) {
+    Add-Row jira_auth FAIL "no PowerShell runtime (pwsh/powershell) found to run jira.ps1" `
+        "install PowerShell 5.1+, then $Rerun."
 } else {
-    $acliLine = ((& acli jira auth status 2>&1) | Where-Object { $_ -match '✓ Authenticated' } | Select-Object -First 1)
-    if ($acliLine) {
-        $AcliOk = $true
-        Add-Row acli_auth OK "$acliLine (cached status — real reachability is the jira_project row below)"
+    $whoami = ((& $psExe -NoProfile -File $jiraPs whoami 2>$null) | Out-String)
+    if ($LASTEXITCODE -eq 0 -and $whoami.Trim()) {
+        $who = ''
+        try {
+            $o = $whoami | ConvertFrom-Json
+            $who = if ($o.emailAddress) { $o.emailAddress } elseif ($o.displayName) { $o.displayName } else { $o.accountId }
+        } catch { }
+        $JiraOk = $true
+        Add-Row jira_auth OK "authenticated as $(if ($who) { $who } else { 'unknown' }) (GET /myself)"
     } else {
-        Add-Row acli_auth FAIL "acli is installed but not authenticated with Jira" `
-            "run the one-time acli login (skills/_shared/jira-acli-reference.md §0, using the jira-sdlc-tools.local.env values), then $Rerun."
+        Add-Row jira_auth FAIL "the default Jira credential doesn't authenticate — 'jira whoami' failed (stale/invalid JIRA_TOKEN, or unreachable site)" `
+            "set a working JIRA_ACCOUNT_EMAIL + JIRA_TOKEN pair (the per-request Basic default) in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
     }
 }
 
-# --- Jira project reachable --------------------------------------------------
-if ($AcliOk -and $ProjectKey) {
-    $projOut = (& acli jira project list --paginate --json 2>$null) | Out-String
-    if ($projOut -match "\b$([regex]::Escape($ProjectKey))\b") {
+# --- Jira project reachable ('jira.ps1 project exists' → GET /project/search) -
+if ($JiraOk -and $ProjectKey) {
+    & $psExe -NoProfile -File $jiraPs project exists $ProjectKey *> $null
+    if ($LASTEXITCODE -eq 0) {
         Add-Row jira_project OK "project $ProjectKey reachable on the authenticated site"
     } else {
-        Add-Row jira_project FAIL "project '$ProjectKey' not found via 'acli jira project list' (or the call timed out)" `
-            "if acli_auth is OK but this FAILs, the stored credential is stale (auth status caches) — 'acli jira auth logout' then re-login per §0; else check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site/board, whether this account was granted access to the board — or retry if Jira was just slow."
+        Add-Row jira_project FAIL "project '$ProjectKey' not visible to the default account via 'jira project exists' (or the call timed out)" `
+            "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
     }
 } else {
-    Add-Row jira_project WARN "skipped (acli not authenticated or PROJECT-KEY unset — see rows above)"
+    Add-Row jira_project WARN "skipped (jira_auth failed or PROJECT-KEY unset — see rows above)"
 }
 
 # --- context rows (never block) ----------------------------------------------
