@@ -9,9 +9,10 @@
 #         (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>), as statuscheck.sh does.
 #
 # Identity comes from `jira.sh --role <role> whoami` (GET /myself) — per-request
-# Basic auth, no acli, no stored login, no jira_config.yaml. This is what removes
-# the multi-profile parse that used to false-negative the moment a second account
-# was in acli's store (JST-146): "who am I" is now the token in hand.
+# Basic auth, no stored login, no config file to parse. Because the account is
+# chosen by --role rather than by switching a stored profile, there is no
+# multi-profile state to fall out of sync (JST-146): "who am I" is now the
+# token in hand.
 #
 # Anything other than "assigned to me" is a halt: unassigned, assigned to someone
 # else, an unreadable issue. There is no partial pass.

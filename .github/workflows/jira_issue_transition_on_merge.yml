@@ -66,7 +66,8 @@ jobs:
             exit 0
           fi
 
-          # acli resolved status name → transition id for us; do it explicitly.
+          # The REST API only accepts a transition id, not a status name, so
+          # resolve it explicitly here.
           TID=$(api "$BASE/issue/$KEY/transitions" \
             | jq -r --arg t "$TARGET" 'first(.transitions[] | select(.to.name == $t) | .id) // empty')
           if [ -z "$TID" ]; then

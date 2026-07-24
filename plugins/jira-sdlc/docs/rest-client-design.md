@@ -1,5 +1,13 @@
 # Design: a bash Jira REST client (`jira.sh`)
 
+> **Historical record — this design has been implemented.** `jira.sh` and its
+> `jira.ps1` twin ship in `skills/_shared/scripts/`, and the `acli` usage
+> discussed below is gone from the toolkit. Keep reading it for *why* the
+> client has the shape it has; where it and the shipped code disagree, the
+> code and
+> [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
+> §9 win.
+
 A design for a small, extensible shell client that replaces the toolkit's
 `acli` usage with direct calls to the Jira Cloud REST API v3. This is a
 **design doc, not an implementation** — it fixes the shape before any code

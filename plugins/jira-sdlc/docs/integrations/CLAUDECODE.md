@@ -20,7 +20,7 @@ about getting it loaded.
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see [project-config.md](../../skills/_shared/project-config.md) for the one-time `acli jira auth login`
+- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - Claude Code itself, in any of its surfaces (CLI, desktop app, or the IDE extension — the extension is what Cursor and Antigravity re-use, see [CURSOR.md](CURSOR.md) and [ANTIGRAVITY.md](ANTIGRAVITY.md))
