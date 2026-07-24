@@ -11,10 +11,10 @@ name: Reviewer Skill on PR (Smoke Test)
 # The existing workflow_dispatch-only reviewer.yml demo is left untouched.
 
 on:
+  workflow_dispatch:
   pull_request:
     types:
       - opened
-      - reopened
 
 jobs:
   reviewer-smoke:
