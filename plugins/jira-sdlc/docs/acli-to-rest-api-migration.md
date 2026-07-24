@@ -1,5 +1,13 @@
 # acli → REST API migration
 
+> **Historical record — the migration this describes is done.** The toolkit
+> no longer invokes `acli` anywhere; the calls mapped below shipped as the
+> `jira.sh` / `jira.ps1` client. It is kept for the two things recorded
+> nowhere else: the per-command mapping, and the HTTP status codes verified
+> live against a real Jira Cloud site. Read it as history, not as
+> instructions — the live operational reference is
+> [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md).
+
 A one-stop map from every `acli` call this toolkit invokes to a plain
 `curl` call against the **Jira Cloud REST API v3**, so a skill (or a
 GitHub Actions runner, or anyone without `acli` installed) can do the same
@@ -7,10 +15,11 @@ work with nothing but `curl` + `jq`.
 
 This is the *bridge* doc. The two references it sits between:
 
-- [`../skills/_shared/jira-reference.md`](../skills/_shared/jira-reference.md)
-  — formerly `jira-acli-reference.md`, the lean `acli` call surface the skills
-  used *before* this migration (the **from** side); now a thin pointer, since
-  the cutover is done.
+- `jira-acli-reference.md` — the lean `acli` call surface the skills used
+  *before* this migration (the **from** side). **That file no longer
+  exists**: it was retired with the cutover. The `§N` citations to it below
+  are kept so the mapping still reads, each with its current
+  `jira-api-reference.md` equivalent alongside.
 - [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
   — the verified REST call shapes: cloud-id resolution, the auth helper,
   token types/scopes, people fields, bulk updates (the **to** side).
@@ -53,8 +62,10 @@ api() { curl -sSfL -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H "Accept: application/
 
 The single biggest change isn't any one command — it's that **REST auth is
 per-request, so there is no stored credential and no global auth state**.
-That erases a whole machinery the skills carry today (see
-`jira-acli-reference.md` §0 and `jira_acli_login.sh`):
+That erases a whole machinery the skills carried before the cutover (the
+retired `jira-acli-reference.md` §0, and `jira_acli_login.sh`); what stands
+in its place is [`jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
+§9, per-request `--role` auth:
 
 | acli behaviour (gone under REST) | Why it existed | REST replacement |
 |---|---|---|
@@ -152,7 +163,7 @@ api "$BASE/project/search?query=<PROJECT-KEY>" | jq -e '.values[].key | select(.
 ### 3.3 View an issue with a field list
 
 ```bash
-# executor fetch-with-comments (jira-acli-reference §3):
+# executor fetch-with-comments (retired jira-acli-reference §3 — now jira-api-reference.md §10):
 api "$BASE/issue/<KEY>?fields=summary,description,issuetype,status,parent,subtasks,comment"
 # reviewer review-fetch (no comments):
 api "$BASE/issue/<KEY>?fields=summary,description,issuetype,status,parent,subtasks"
@@ -196,7 +207,8 @@ grepping `acli`'s "✓ Work item … created" line.
 **Sub-task**: same call, `"issuetype":{"name":"Subtask"}` plus
 `"parent":{"key":"<PARENT-KEY>"}`. This is the direct analogue of `acli
 --parent`, and — unlike `jira-cli`, which silently drops the parent
-(jira-acli-reference §2) — the REST `fields.parent.key` is honoured
+(recorded in the retired jira-acli-reference §2) — the REST
+`fields.parent.key` is honoured
 (`201`, sub-task shows under the parent's `subtasks`). So the original
 reason `acli` was preferred over `jira-cli` for sub-tasks doesn't reappear
 under REST.
@@ -224,7 +236,9 @@ curl -sS -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" \
 ```
 
 The `--body-file -`/stdin breakage and the backtick-in-quoted-`--body`
-shell hazard (jira-acli-reference §6) both **vanish** — the body is JSON in
+shell hazard (retired jira-acli-reference §6; the comment mechanics that
+survived are [`jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
+§11) both **vanish** — the body is JSON in
 `--data`, not a shell-parsed string, and text goes in via `--data @file`.
 The machine-recoverable markers (`PR target branch: …`, `Task memory
 (jira-task-executor)`) are just text inside the ADF `text` node, so the
@@ -285,7 +299,9 @@ POST is already non-interactive. Verified round-trip: `To Do` → id 21 →
 ```bash
 curl -sS -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -X DELETE "$BASE/issue/<KEY>"        # 204
 ```
-The `jira-acli-reference.md` §8 agent rule carries over unchanged: **never
+The agent rule from the retired `jira-acli-reference.md` §8 carries over
+unchanged (now
+[`jira-api-reference.md`](../skills/_shared/jira-api-reference.md) §9): **never
 delete unless the user asked for that exact key in this message.** To delete
 a parent that still has sub-tasks, either delete the sub-tasks first (as
 verified here) or add `?deleteSubtasks=true`.
