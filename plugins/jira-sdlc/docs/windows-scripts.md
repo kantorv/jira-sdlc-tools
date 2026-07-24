@@ -27,21 +27,20 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 
 | Script | Path | Summary | Called by |
 |---|---|---|---|
-| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+acli auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
+| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+Jira auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
 | `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (which is born without it); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
 | `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL` → `JIRA_ACCOUNT_EMAIL` fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
 | `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `jira.ps1` authenticates as? Compares **accountId** (not email — email is hidden on others' assignee objects). Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
-| `acli-list-subtasks` | `skills/_shared/scripts/win/acli-list-subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-api-reference.md` §10 |
+| `list_subtasks` | `skills/_shared/scripts/win/list_subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `skills/_shared/jira-api-reference.md` §10 |
 
-> **Note on `acli-list-subtasks`:** its POSIX sibling is now
-> `skills/_shared/scripts/posix/acli-list-subtasks.sh` — a bash original like
-> the other five, in the normal bash↔ps1 parity loop (the old python version
-> is kept for reference at `docs/examples/acli-list-subtasks.py`, outside the
-> active toolset). One asymmetry remains: the bash twin requires `jq` to
-> address the nested per-sub-task fields reliably (see the script's own
-> comment), while the `.ps1` port still needs neither `python3` nor `jq` (see
-> "No python, no jq" below) — so on a `jq`-less POSIX box, the `.ps1` port run
-> under `pwsh` is still the one that works.
+> **Note on `list_subtasks`:** its POSIX sibling is
+> `skills/_shared/scripts/posix/list_subtasks.sh` — a bash original like
+> the other five, in the normal bash↔ps1 parity loop. One asymmetry remains:
+> the bash twin requires `jq` to address the nested per-sub-task fields
+> reliably (see the script's own comment), while the `.ps1` port still needs
+> neither `python3` nor `jq` (see "No python, no jq" below) — so on a
+> `jq`-less POSIX box, the `.ps1` port run under `pwsh` is still the one that
+> works.
 
 ## PowerShell 5.1 + 7 compatibility (load-bearing)
 
@@ -88,13 +87,13 @@ and were live-run on a real Windows 11 box against a real Jira instance under:
 
 `statuscheck.ps1` reports `PowerShell 5 + …` or `PowerShell 7 + …` under the
 respective runtime; `check_assignee.ps1` and
-`acli-list-subtasks.ps1` were exercised live against Jira under both.
+`list_subtasks.ps1` were exercised live against Jira under both.
 
 ## One gotcha to never undo
 
 ### 1. No python, no jq — the ports are dependency-free
 
-The `win/*.ps1` ports parse `acli`'s `--json` output (and, for `acli-list-subtasks`,
+The `win/*.ps1` ports parse `jira.ps1`'s JSON output (and, for `list_subtasks`,
 the subtask list) with PowerShell's **built-in `ConvertFrom-Json`** — they need
 neither `python3` nor `jq`. This matters on default Windows 11, where `python3`
 on PATH is an "App Execution Alias" stub (prints a Microsoft Store nag, exits
@@ -111,8 +110,8 @@ side-step it.
   twin must stay in sync" — the parity contract, the `STATUSCHECK_FORCE_OS`-forced
   bash↔pwsh diff loop, and the residual Windows-only surface a Linux+pwsh diff
   can't reproduce.
-- `skills/_shared/jira-acli-reference.md` §10 — `acli-list-subtasks.sh` /
-  `acli-create-parent-and-subtasks.sh` operator helpers (the ps1 twin is the
+- `skills/_shared/jira-api-reference.md` §10 — `list_subtasks.sh` /
+  `create_parent_and_subtasks.sh` operator helpers (the ps1 twin is the
   Windows form of the former).
 - `skills/_shared/project-config.md` — the `jira-sdlc-tools.env` /
   `jira-sdlc-tools.local.env` variables the ports resolve (PROJECT-KEY,
