@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the official Atlassian CLI (acli). Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf.
+description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -20,7 +20,7 @@ project. Given a task description from the user ($ARGUMENTS):
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
 - **Branch prefix** — the prefix follows the **base branch, not the
-  issue type** (`../_shared/jira-acli-reference.md` §7; SDLC.md §2). The
+  issue type** (`../_shared/jira-api-reference.md` §12; SDLC.md §2). The
   assigner only ever branches from `<DEFAULT_BASE_BRANCH>`
   (`development`), so every branch it creates is a **`feature/`** branch,
   regardless of issue type: `feature/` covers all planned work —
@@ -45,29 +45,29 @@ below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
 chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `jira_acli_login`, which takes a role argument, **statuscheck itself
+unlike `check_assignee`, which takes a `--role` argument, **statuscheck itself
 takes no role or issue-key argument — run it bare** on both POSIX and Windows;
 a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
 for an issue key, but don't add one.
 
-**Make sure local credentials exist, then log in as the assigner — run
-both FIRST, before the healthcheck.** Both are safe to run every time
-(`ensure_local_env` no-ops when the file already exists; `jira_acli_login`
-always logs out then back in as the role, so a stale token can't survive),
-so run them unconditionally. On non-zero from either, relay its stderr and
-**stop**.
+**Make sure local credentials exist — run FIRST, before the healthcheck.**
+`ensure_local_env` no-ops when the file already exists, so run it
+unconditionally; on non-zero, relay its stderr and **stop**. There is no
+login step: `jira.sh` authenticates **per-request as `--role assigner`**
+(`../_shared/jira-api-reference.md` §9), so there is no account to become —
+every issue create below carries `--role assigner` and picks up the assigner
+credential on that one call.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/jira_acli_login.sh" assigner || exit 1
 ```
 
 Then run the shared pre-flight healthcheck. It
 gathers every environment fact this skill depends on — git repo, the two
-env files + their gitignore state, `acli` auth, Jira project
-reachability, `gh` auth — in one pass and prints a markdown table,
-replacing the older per-check prose. Override the rerun hint so its
-remedies name this skill:
+env files + their gitignore state, Jira auth (the default credential —
+`jira.sh whoami`), Jira project reachability, `gh` auth — in one pass and
+prints a markdown table, replacing the older per-check prose. Override the
+rerun hint so its remedies name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
@@ -99,7 +99,7 @@ per-issue worktree), the opposite reading from the executor/reviewer:
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; a linked-worktree reading is a stop condition (see "Reading the result" below) |
-| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-acli-reference.md` §7) vs. neither. **The assigner requires the base branch**; step 2 consumes this row and resolves the other two readings |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **The assigner requires the base branch**; step 2 consumes this row and resolves the other two readings |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
 Because no issue exists yet, `branch_project`, `issue_key`, and
@@ -109,8 +109,10 @@ though the assigner only pushes branches and never opens PRs itself — a
 green row confirms the creds the executor will later need for
 `gh pr create`. The remaining rows FAIL if broken but need no per-role
 interpretation: `git_repo`, `env_config`, `env_local`,
-`env_local_ignored`, `acli_auth` (every `acli jira …` call in steps 6–7),
-`jira_project`, plus context `base_branch` (INFO) and `working_tree`
+`env_local_ignored`, `jira_auth` (the default credential authenticates —
+`jira.sh whoami`; every `jira.sh` call in steps 6–7 uses `--role assigner`,
+which falls back to the default pair), `jira_project`, plus context
+`base_branch` (INFO) and `working_tree`
 (INFO, or WARN when the tree is dirty — that doesn't block, but mention
 it to the user before branching from a dirty base checkout).
 
@@ -206,8 +208,8 @@ default; see INTEGRATIONS.md.)
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>`. (If single-step, this is your only issue).
    - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
-     `acli jira workitem create` call. One flag does it (no separate
-     `workitem assign`).
+     `jira.sh --role assigner issue create` call. One flag does it (no separate
+     `issue assign`).
 2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
 3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
 4. **Always create a parent worktree:**
@@ -219,11 +221,11 @@ The top-level issue is your only issue. You are done creating issues.
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
-Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue — resolved once in 6A above, passed on every `workitem create` here.
+Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue — resolved once in 6A above, passed on every `issue create` here.
 
 For each sub-task `→ <SUBTASK-KEY>`:
  1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-    (sub-tasks use the same `feature/` prefix as the parent — the nesting rule in `../_shared/jira-acli-reference.md` §7)
+    (sub-tasks use the same `feature/` prefix as the parent — the nesting rule in `../_shared/jira-api-reference.md` §12)
  2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
  3. Leave a PR-target comment on the sub-task (format below).
 
@@ -238,48 +240,41 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 
 In the multistep path, after creating all sub-tasks, also post the single-step-format comment on the **parent issue** — its PR targets `<BASE_BRANCH>` — so the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
 
-**CLI mechanics — things to never forget:**
-- **Auth**: `acli` stores credentials after a one-time
-  `acli jira auth login` (see `../_shared/jira-acli-reference.md` §0). No
-  per-command token prefix — run commands bare. (Step 1's healthcheck
-  above already verified auth.)
+**Client mechanics — things to never forget** (`jira.sh` on POSIX /
+`jira.ps1` on Windows; full command surface in `../_shared/jira-api-reference.md`
+§9; the steps write `jira.sh <cmd>` for brevity — actually invoke it as
+`bash "$S/jira.sh" <cmd>` where `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`):
+- **Auth**: no login step — every call carries `--role assigner` and
+  authenticates per-request on the assigner credential (`../_shared/jira-api-reference.md`
+  §9). (Step 1's healthcheck already verified the default credential auths.)
 - **Project health check**: already verified by step 1's healthcheck. (If
   you're picking up from a re-run and skipped step 1, run
-  `acli jira project list --paginate --json | grep -w <PROJECT-KEY>`
-  first.)
+  `jira.sh --role assigner project exists <PROJECT-KEY>` first — exit 0 means
+  visible.)
 - **Create issue**:
-  `acli jira workitem create --project "<PROJECT-KEY>" --type "Task" --summary "..." --description-file <file> --assignee "$ASSIGNEE_EMAIL"`
-  Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"` (acli's
-  `--parent` actually works on this project — see
-  `../_shared/jira-acli-reference.md` §2 for the gotcha it fixes) and
-  carry the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue.
-  Capture the returned key with `--json` (parse `key`), or grep it out of
-  the text output (embedded in the returned browse URL). **Always pass
+  `jira.sh --role assigner issue create --project "<PROJECT-KEY>" --type "Task" --summary "..." --desc-file <file> --assignee "$ASSIGNEE_EMAIL"`
+  Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"`.
+  `create` **prints the new key on stdout** — capture it directly (`KEY=$(jira.sh
+  … issue create …)`); there is no browse URL to parse. **Always pass
   `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
   sub-task — resolved once at the top of 6A. One flag does it on create; do
-  not issue a separate `workitem assign`.
-- `--yes` is **not** universal — `workitem create` and `comment create`
-  reject it (`✗ Error: unknown flag: --yes`; they're non-interactive by
-  default), so don't add `--yes` to either; `edit` / `transition` /
-  `assign` / `delete` / `link create` / `create-bulk` do take it. See
-  `../_shared/jira-acli-reference.md` §8 for the full `--yes` surface.
+  not issue a separate `issue assign`.
 - Quote `"Subtask"` exactly (no hyphen — this project's real type name,
-  confirmed in `../_shared/jira-acli-reference.md` §1).
-- **Comment**: single-line —
-  `acli jira workitem comment create --key <KEY> --body "<text>"`.
-  Multi-line — write a temp file and use `--body-file <file>`
-  (`--body-file -` / stdin does **not** work; see
-  `../_shared/jira-acli-reference.md` §6).
-- **Delete caveat**: `acli jira workitem delete --key <KEY> --yes`
-  accepts `--yes`, so it *can* run unattended — but still never
-  auto-delete; hand back the ready-to-paste command for the human to run
-  (see `../_shared/jira-acli-reference.md` §8).
+  confirmed in `../_shared/jira-api-reference.md` §10).
+- **Comment**: no inline body — write a temp file and pass `--body-file <file>`:
+  `jira.sh --role assigner issue comment add <KEY> --body-file <file>`. Plain
+  text is stored as ADF, one paragraph per non-blank line; for real structure
+  build an ADF `doc` and use `--adf-file` (see `../_shared/jira-api-reference.md`
+  §11).
+- **Delete caveat**: `jira.sh issue delete <KEY> [--with-subtasks]` runs
+  unattended (no confirmation prompt), so still never auto-delete; hand back
+  the ready-to-paste command for the human to run.
 - Put investigation findings + acceptance criteria in the issue
-  description (use `--description-file <file>` for anything beyond a
-  sentence). `--description` / `--description-file` accept **plain text
-  or ADF, not markdown** — a markdown body is stored verbatim as one
-  plain-text paragraph (`##` / `-` show literally); see
-  `../_shared/jira-acli-reference.md` §2.
+  description (use `--desc-file <file>` for anything beyond a sentence).
+  `--desc-file` stores **plain text as ADF, one paragraph per non-blank
+  line** — a markdown body shows its syntax literally (`##` / `-`); for real
+  structure build an ADF `doc` and pass `--adf-file` (see
+  `../_shared/jira-api-reference.md` §11).
 - Make sure the branch you're branching *from* is committed/pushed
   before branching.
 
@@ -287,7 +282,7 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
 
 List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
 
-Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `acli jira workitem comment create --key <PARENT-KEY> --body-file <file>` rather than an inline quoted `--body` string (see `../_shared/jira-acli-reference.md` §6 — `--body-file -` / stdin does not work).
+Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `jira.sh --role assigner issue comment add <PARENT-KEY> --body-file <file>` (there is no inline body — the body always comes from a file; see `../_shared/jira-api-reference.md` §11).
 
 ## 8. Don't start implementation work, but do leave worktrees ready
 
@@ -303,8 +298,9 @@ these skills as loose files rather than as a plugin). Merging the parent
 branch back into its own base once all sub-tasks land is likewise out of
 scope for this skill.
 
-Reference: `../_shared/jira-acli-reference.md` has the full command syntax,
-confirmed issue type names, and git/branch conventions. The
+Reference: `../_shared/jira-api-reference.md` is the operational + REST
+reference — the `jira.sh` command surface, confirmed issue type names, and
+git/branch conventions this skill depends on. The
 `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
 (machine-specific) files in the project root have this repo's specific
 values for every `<TOKEN>` used above.
