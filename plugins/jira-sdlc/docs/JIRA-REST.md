@@ -220,7 +220,7 @@ fetches all), `-f/--fields` (default `issuetype,key,assignee,priority,status,sum
 On comment-heavy issues `--fields '*all'` is almost entirely `comment`
 bytes — the canonical lists in the lean file are the narrow,
 purpose-fitted replacement. (Helper scripts narrow further to just the
-fields they parse — `jira.sh-list-subtasks.sh` requests only
+fields they parse — `list_subtasks.sh` requests only
 `subtasks,issuetype`; see §10.)
 
 ### Checking an issue's type and parent
@@ -355,20 +355,19 @@ The `scripts/` directory next to the lean reference
 seeding issues from a review. These are **human-run helpers, not
 invoked by any skill.**
 
-- [`scripts/posix/jira.sh-create-parent-and-subtasks.sh`](../skills/_shared/scripts/posix/jira.sh-create-parent-and-subtasks.sh)
+- [`scripts/posix/create_parent_and_subtasks.sh`](../skills/_shared/scripts/posix/create_parent_and_subtasks.sh)
   — create a parent work item plus N sub-tasks from a directory of body
   files, driven by a `manifest.tsv`. This is the "turn a review into
   tracked sub-tasks" helper: write one `.md` per finding, list them in
   the manifest, run the script.
-- [`scripts/posix/jira.sh-list-subtasks.sh`](../skills/_shared/scripts/posix/jira.sh-list-subtasks.sh)
+- [`scripts/posix/list_subtasks.sh`](../skills/_shared/scripts/posix/list_subtasks.sh)
   — given a parent key, print every sub-task's key + summary by parsing
   `jira.sh workitem view <PARENT> --json --fields 'subtasks,issuetype'`
   (the only fields it parses — narrower than the §3 canonical lists; the
   default `--json` omits `subtasks`, which is easy to miss — see §3).
   Requires `jq` (the payload is an array of sub-task objects with their
   own nested `fields.summary`, which a whole-file grep can't reliably
-  address). The original python version is kept for reference at
-  [`docs/examples/jira.sh-list-subtasks.py`](examples/jira.sh-list-subtasks.py).
+  address).
 
 Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in
 the project root (override with `--project` or the `PROJECT_KEY` env
@@ -381,14 +380,14 @@ echo "C1 summary" > /tmp/review/parent-summary.txt
 printf 'c1\tC1: fix branch-context duplication\n' > /tmp/review/sub/manifest.tsv
 echo "## Problem\n..." > /tmp/review/sub/c1.md
 # (add one manifest row + one .md per finding)
-jira.sh-create-parent-and-subtasks.sh \
+create_parent_and_subtasks.sh \
   --parent-summary "$(cat /tmp/review/parent-summary.txt)" \
   --parent-body /tmp/review/parent.md \
   --subtasks-dir /tmp/review/sub \
   --parent-type Story
 
 # List what landed under the parent:
-jira.sh-list-subtasks.sh --parent <PARENT-KEY>
+list_subtasks.sh --parent <PARENT-KEY>
 ```
 
 ---

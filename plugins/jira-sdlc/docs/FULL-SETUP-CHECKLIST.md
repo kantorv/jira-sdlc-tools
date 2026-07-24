@@ -30,7 +30,7 @@ Helper tools — which ones depends on your OS:
       [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows)
 - [ ] **Linux / macOS: `jq`** — the scripts are bash, which can't parse JSON on
       its own. `check_assignee` uses it as its fast path (falling back to
-      `grep`/`sed`), and the `acli-list-subtasks` helper requires it outright.
+      `grep`/`sed`), and the `list_subtasks` helper requires it outright.
       [jqlang.github.io/jq](https://jqlang.github.io/jq/download/)
 - [ ] **Linux / macOS: `python3`** — recommended (required by the
       [lab channel](../../../README.md#lab-channel)).
@@ -39,7 +39,7 @@ Helper tools — which ones depends on your OS:
 Verify in one go — **macOS / Linux**:
 
 ```bash
-git --version && gh --version && acli --version && jq --version
+git --version && gh --version && jq --version
 python3 --version   # lab channel only
 ```
 
@@ -47,7 +47,7 @@ python3 --version   # lab channel only
 ports parse JSON natively:
 
 ```powershell
-git --version; gh --version; acli --version; $PSVersionTable.PSVersion
+git --version; gh --version; $PSVersionTable.PSVersion
 ```
 
 `&&` stops at the first missing tool, naming exactly what to install; PowerShell's

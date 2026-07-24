@@ -221,15 +221,20 @@ sequenceDiagram
   Every merged-state exit posts the step-6 report only — GitHub-for-Jira
   already handled `<STATUS_DONE>`, so there is no wrap-up to take and step 7
   has nothing to offer.
-- **The reviewer logs in as itself first** — `jira_acli_login.sh reviewer`,
-  before any read or write, so every canonical report and every reject-path
-  transition below is attributed to the reviewer's Jira account rather than
-  to whoever was logged in last (acli's credential store is machine-global,
-  so that could be the executor from phase 2). The call is idempotent — a
-  no-op when acli is already the reviewer — so it runs unconditionally. Note
-  this is the reviewer's **Jira** identity; its **GitHub** identity is a
-  separate thing, and the one that matters for the idempotency check below.
-  See [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md).
+- **The reviewer carries its own Jira identity on every call** — there is no
+  login step to run first. `jira.sh` / `jira.ps1` authenticates
+  **per-request** as `--role reviewer`, picking that role's `email:token`
+  pair out of `jira-sdlc-tools.local.env` for the one call, so every
+  canonical report and every reject-path transition below is attributed to
+  the reviewer's Jira account. Nothing is stored and no account is "active",
+  which is why a reviewer run can overlap a phase-2 executor run without
+  either one displacing the other's credentials. Note this is the reviewer's
+  **Jira** identity; its **GitHub** identity is a separate thing, and the one
+  that matters for the idempotency check below. See
+  [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md)
+  and
+  [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
+  §9.
 - **Idempotent review (step 3a)** — before every PR review — the
   single-step PR, each multistep sub-task PR, and the aggregate parent PR
   (5b) — the reviewer checks whether *its own* GitHub identity already left

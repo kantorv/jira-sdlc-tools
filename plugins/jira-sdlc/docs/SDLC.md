@@ -7,7 +7,7 @@
 > document to match yours, then update `<DEFAULT_BASE_BRANCH>` in
 > `jira-sdlc-tools.env` in the project root (see `../skills/_shared/project-config.md`)
 > and the branch-prefix rules in
-> `jira-task-assigner` and `jira-acli-reference.md` §7 to match.
+> `jira-task-assigner` and `jira-api-reference.md` §12 to match.
 
 # Software Development Life Cycle (SDLC) & Branching Strategy
 

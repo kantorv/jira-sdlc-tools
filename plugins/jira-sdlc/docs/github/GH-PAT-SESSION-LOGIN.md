@@ -10,9 +10,9 @@ This is the flow implemented in **`statuscheck.sh`** (and its Windows twin
 `statuscheck.ps1`) — the pre-flight healthcheck every skill runs before it
 touches anything. It's the healthcheck's job rather than a per-skill step
 because `gh` uses one shared PAT (per-role GitHub identities are out of scope,
-below), so — unlike the per-role `acli` login, which lives in each skill's
-credential block — a single role-agnostic login in the shared healthcheck
-covers every skill.
+below), so — unlike Jira, where `jira.sh` carries a per-role credential on
+every single request and there is no login to share in the first place — a
+single role-agnostic login in the shared healthcheck covers every skill.
 
 ## The setting: `GITHUB_PAT_TOKEN`
 
@@ -66,8 +66,8 @@ source jira-sdlc-tools.local.env \
   && gh auth status
 ```
 
-The logout is the point: like `acli`, a second `gh auth login` does not reliably
-overwrite an already-stored credential, so without it a stale (e.g. read-only)
+The logout is the point: a second `gh auth login` does not reliably overwrite
+an already-stored credential, so without it a stale (e.g. read-only)
 token could survive and only surface as a 403 at `gh pr create` — after the work
 is already implemented, committed, and pushed (JST-143). Logging out first
 guarantees `GITHUB_PAT_TOKEN` is the active token before any work begins.
@@ -79,6 +79,32 @@ conversation** — subsequent `gh` calls (notably `gh pr create`) just use it. T
 **The opening logout is the only teardown.** It drops whatever `gh` session was
 there so a stale token can't linger; nothing logs back out at the *end* of the
 run, so the `GITHUB_PAT_TOKEN` session persists for the whole conversation.
+
+### Windows caveat: the token is fed to `gh` from a file, not a pipe
+
+The `echo … | gh auth login --with-token` shape above is what `statuscheck.sh`
+does on POSIX. `statuscheck.ps1` deliberately does **not** mirror it: Windows
+PowerShell 5.1 prepends a UTF-8 BOM (`EF BB BF`) when a string is piped into a
+native command, so `gh` receives BOM + token, forwards that to GitHub, and gets
+a legitimate `HTTP 401: Bad credentials` — **for a completely valid PAT**
+(JST-171). pwsh 7 does not do this, so the same token works there and fails
+under 5.1, which is the confusing part.
+
+If you hit this, the symptom is a `gh_auth` `FAIL` row reading
+`gh auth login --with-token failed: … HTTP 401: Bad credentials`, whose remedy
+line tells you to check the token. **Regenerating the PAT will not help** — a
+fresh token fails identically. Check the runtime instead.
+
+The Windows port therefore writes the token to a GUID-named temp file with an
+explicitly BOM-free encoder and lets `cmd` redirect stdin from it, removing the
+file in a `finally` block so no plaintext token survives a failed login either.
+Nothing settable fixes the pipe on 5.1 — `$OutputEncoding` and
+`[Console]::OutputEncoding` are not consulted, and .NET Framework builds the
+`StandardInput` writer from `[Console]::OutputEncoding` and emits its preamble
+(`ProcessStartInfo.StandardInputEncoding`, which would override it, is .NET
+Core only). Setting `GH_TOKEN` instead is not an option here either: it lives
+only in the current process, whereas this login has to persist a session that
+the executor's later `gh pr create` — a separate process — depends on.
 
 ## Halt on a missing token
 
