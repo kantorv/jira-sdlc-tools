@@ -250,7 +250,7 @@ Keeping these out preserves the "transport, not judgment" line (constraint
 #2) and keeps the pwsh twin small:
 
 - **PR-base resolution / parent-branch search** — git + skill prose, not
-  Jira (jira-acli-reference §12).
+  Jira (jira-api-reference §13).
 - **The assignee-ownership gate** — the client exposes `whoami` and
   `view …?fields=assignee`; the accountId comparison and the decision to
   *stop* belong to the skill.
@@ -258,7 +258,7 @@ Keeping these out preserves the "transport, not judgment" line (constraint
   caller's call; a client that silently retries hides state from the model.
 - **Skill-specific field lists as defaults** — `--fields` is passed
   explicitly; the canonical fetch-with-comments / review-fetch lists stay
-  named in jira-acli-reference §3 (single source of truth), not baked in
+  named in jira-api-reference §10 (single source of truth), not baked in
   here.
 
 ---

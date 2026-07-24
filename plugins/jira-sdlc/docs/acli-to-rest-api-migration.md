@@ -7,8 +7,10 @@ work with nothing but `curl` + `jq`.
 
 This is the *bridge* doc. The two references it sits between:
 
-- [`../skills/_shared/jira-acli-reference.md`](../skills/_shared/jira-acli-reference.md)
-  — the lean `acli` call surface the skills use today (the **from** side).
+- [`../skills/_shared/jira-reference.md`](../skills/_shared/jira-reference.md)
+  — formerly `jira-acli-reference.md`, the lean `acli` call surface the skills
+  used *before* this migration (the **from** side); now a thin pointer, since
+  the cutover is done.
 - [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md)
   — the verified REST call shapes: cloud-id resolution, the auth helper,
   token types/scopes, people fields, bulk updates (the **to** side).
