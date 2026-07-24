@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# jira.sh — direct Jira Cloud REST v3 client; the acli replacement.
+# jira.sh — direct Jira Cloud REST v3 client.
 #
 # Design & rationale:  ../../../../docs/rest-client-design.md
 # Live-verified call shapes + status codes:  ../../../../docs/acli-to-rest-api-migration.md
@@ -12,7 +12,8 @@
 #
 # Auth is per-request Basic (no login, no stored credential, no global state):
 # --role picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call uses, falling back
-# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. This replaces the whole jira_acli_login layer.
+# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. Every credential swap stays request-scoped
+# instead of touching any persisted, global login state.
 #
 # Output contract:  read ops print raw JSON on stdout (caller jq's it); write ops
 # print nothing on success (REST returns 204, empty). Errors → stderr.

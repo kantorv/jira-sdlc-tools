@@ -1,4 +1,4 @@
-# jira.ps1 — Windows (PowerShell 5.1+) twin of jira.sh; the acli replacement.
+# jira.ps1 — Windows (PowerShell 5.1+) twin of jira.sh.
 #
 # Contract pair with ../posix/jira.sh: same arguments, same stdout, same exit
 # codes, same "jira: …" stderr. Edit one port, edit the other (AGENTS.md).
@@ -14,7 +14,8 @@
 #
 # Auth is per-request Basic (no login, no stored credential, no global state):
 # --role picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call uses, falling back
-# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. This replaces the whole jira_acli_login layer.
+# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. Every credential swap stays request-scoped
+# instead of touching any persisted, global login state.
 #
 # Output contract:  read ops print raw JSON on stdout (caller parses it); write ops
 # print nothing on success (REST returns 204, empty). Errors → stderr.

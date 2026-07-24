@@ -201,7 +201,7 @@ if [ "$OS" = "windows" ]; then
     esac
   fi
   # jira.ps1 uses native Invoke-WebRequest + ConvertFrom-Json, so the Windows
-  # path needs no acli/curl/jq — only gh (for 'gh pr create') and the ports.
+  # path needs only gh (for 'gh pr create') and the ports.
   command -v gh >/dev/null 2>&1 || MISSING="$MISSING gh"
   for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
     [ -f "$WIN_DIR/$s.ps1" ] || MISSING="$MISSING win/$s.ps1"
