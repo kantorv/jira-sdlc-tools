@@ -26,8 +26,7 @@ Alternative proxies).
 
 ## Prerequisites
 
-- `acli` (Atlassian CLI) authenticated — see `jira-sdlc-tools.env` in your marketplace **root**
-  (not the plugin root)
+- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
 - `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project root** — see
   [project-config.md](../../skills/_shared/project-config.md)
@@ -180,7 +179,8 @@ plugin namespace is unchanged because the runtime *is* Claude Code:
   phrasing is wrong; the skills reader is Claude Code. Repeating here so the next run doesn't
   re-derive it.
 - **Model fidelity is the dominant practical risk.** These skills are agentic — they shell out to
-  `acli`, `gh`, `git`, and the bash/PowerShell scripts under `skills/_shared/scripts/`, follow
+  `gh`, `git`, `curl`, and the bash/PowerShell scripts under `skills/_shared/scripts/` (including
+  `jira.sh`/`jira.ps1`, the REST client), follow
   multi-step prose runbooks, and resolve `<TOKEN>`s and PR-base branches. Their correctness depends
   on the backing model's tool-calling reliability and instruction-following, not on the proxy. A
   NIM-served model that calls tools unreliably, drifts on the script-dispatch rules, or backslides on
@@ -188,7 +188,7 @@ plugin namespace is unchanged because the runtime *is* Claude Code:
   how any specific NIM model (e.g. Nemotron) actually performs these skills end-to-end — that needs a
   real NIM + fcc run per the issue, and is out of scope for this draft.
 - **The skills assume the same toolchain as the standard setup.** fcc proxies model calls only; it
-  does not provide or sandbox `acli` / `gh` / `git` / `python3` / `pwsh`. Those must be installed and
+  does not provide or sandbox `curl` / `gh` / `git` / `python3` / `pwsh`. Those must be installed and
   on PATH in the environment the `fcc-claude` session runs in — same prerequisites as the Claude Code
   integration. Any sandboxing fcc applies is limited to model I/O, not the skill scripts, so
   tool-availability limits belong here.
