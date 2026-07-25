@@ -143,8 +143,8 @@ jobs:
           # double-quote on the array element) that this file fixes, not copies;
           # the corrected form is a properly quoted string "$(pwd)/...".
           cat > ~/.kimi-code/config.toml <<EOF
-          #default_model = "nvidia/z-ai/glm-5.2"
-          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+          default_model = "nvidia/z-ai/glm-5.2"
+          #default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
@@ -193,22 +193,34 @@ jobs:
         run: kimi doctor config
 
 
+      - name: Fetch PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr diff "$PR_NUMBER" --color=never > /tmp/pr.diff
+          echo "Diff size: $(wc -c < /tmp/pr.diff) bytes"
+
+
+
 
       - name: AI Code Review
+        timeout-minutes: 10
         env:
-          PR_NUMBER: ${{ env.PR_NUMBER }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Intentionally NO GH_TOKEN here
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
+          set -euo pipefail
           cat > /tmp/review-prompt.txt << 'PROMPT_EOF'
           You are a senior software engineer performing a thorough code review of a pull request.
 
           ## Instructions
-          1. Get the final combined diff (not individual commits) by running:
-            gh pr diff $PR_NUMBER --color=never
-
+          1. The complete unified diff of the PR is provided below between the markers.
           2. Analyze only the changes in the diff. Do not review unrelated files.
-
           3. Produce a clear, actionable review and write it to /tmp/report.md.
+             Do NOT attempt to call any external tools or post the review yourself.
 
           ## Review criteria (priority order)
           - Correctness & logic bugs
@@ -222,7 +234,7 @@ jobs:
 
           ## Output format for /tmp/report.md
 
-          # Code Review – PR #$PR_NUMBER
+          # Code Review – PR #PR_NUMBER_PLACEHOLDER
 
           ## Summary
           2–4 sentence high-level assessment.
@@ -246,18 +258,56 @@ jobs:
           - Do not invent issues that aren't in the diff.
           - Do not comment on pure formatting/style.
           - Keep the report concise (under ~300 lines).
-
-          After writing /tmp/report.md, post it with:
-          gh pr review $PR_NUMBER --comment --body-file /tmp/report.md
           PROMPT_EOF
 
-          # Expand the PR number
-          sed -i "s/\$PR_NUMBER/${PR_NUMBER}/g" /tmp/review-prompt.txt
+          # Safe substitution (PR number is always numeric)
+          sed -i "s|PR_NUMBER_PLACEHOLDER|${PR_NUMBER}|g" /tmp/review-prompt.txt
 
-          echo "=== Prompt ready ==="
-          kimi -p "$(cat /tmp/review-prompt.txt)"
+          {
+            cat /tmp/review-prompt.txt
+            echo
+            echo "----- BEGIN PR DIFF -----"
+            cat /tmp/pr.diff
+            echo "----- END PR DIFF -----"
+          } > /tmp/full-prompt.txt
+
+          # Prefer file/stdin if the CLI supports it; fall back to -p
+          if kimi -p @/tmp/full-prompt.txt 2>/dev/null; then
+            :
+          else
+            kimi -p "$(cat /tmp/full-prompt.txt)"
+          fi
+
+          test -s /tmp/report.md || {
+            echo "::error::Kimi did not produce /tmp/report.md"
+            exit 1
+          }
 
 
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_NUMBER" --comment --body-file /tmp/report.md
+          echo "Review posted on PR #$PR_NUMBER"
+
+
+      - name: Verify review was posted
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          # Simple existence check (latest comment body contains our marker)
+          COUNT=$(gh pr view "$PR_NUMBER" --json comments \
+            --jq '[.comments[] | select(.body | contains("Code Review – PR #"))] | length')
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No review comment found on PR #$PR_NUMBER"
+            exit 1
+          fi
+          echo "Verified: review comment is present"
 
 
 
