@@ -89,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PR_NUM=$(gh pr list --commit ${{ github.sha }} --json number --jq '.[0].number')
+          PR_NUM=$(gh pr list --search "$GITHUB_SHA" --json number --jq '.[0].number')
           # PROMPT="gh pr review $PR_NUM --comment --body-file /tmp/JST-174-report.md"
           OUTPUT=$(kimi -p "check the diff, create comment file: /tmp/code-check-report.md, post a pr comment: gh pr review $PR_NUM --comment --body-file /tmp/code-check-report.md")
           echo "$OUTPUT"
