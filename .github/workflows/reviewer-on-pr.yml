@@ -55,6 +55,9 @@ jobs:
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
     # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v6
