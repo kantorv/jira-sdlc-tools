@@ -7,7 +7,13 @@
 # check as a separate prose step.
 #
 # Usage:
-#   bash statuscheck.sh [ISSUE-KEY]
+#   bash statuscheck.sh --role assigner|executor|reviewer [ISSUE-KEY]
+#
+#   --role is REQUIRED and names the CALLING skill's role: auth is role-scoped
+#   (there is no default credential), so the jira_auth / jira_project rows can
+#   only probe a credential once they know whose it is. A missing or unknown
+#   role is a usage error (exit 2, no table) rather than a guess at someone
+#   else's identity.
 #
 #   The current issue key is normally derived from the branch name
 #   (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>) and reported in the
@@ -15,10 +21,10 @@
 #   asked to run. Passing an issue-key-shaped ISSUE-KEY (PROJ-123) explicitly
 #   makes the script do that comparison itself instead (`issue_key` FAILs on
 #   mismatch). A positional argument that is NOT issue-key-shaped — e.g. a role
-#   name like "reviewer" passed by mistake — is
+#   name passed positionally instead of via --role — is
 #   ignored, not compared: the branch-derived key is used exactly as in the
-#   no-arg case. statuscheck takes no role argument. Neither jira-task-executor
-#   nor jira-task-reviewer pass one anymore — both take no issue-key argument,
+#   no-key case. Neither jira-task-executor
+#   nor jira-task-reviewer pass a key — both take no issue-key argument,
 #   so the branch is their sole source of truth for the key.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
@@ -26,21 +32,23 @@
 # (local overrides team; see ../project-config.md). The files use
 # `NAME = value` lines, so they are parsed, not sourced.
 #
-# Exit code: 0 = all required checks OK; 1 = at least one FAIL row.
+# Exit code: 0 = all required checks OK; 1 = at least one FAIL row;
+#            2 = usage error (bad/missing --role) — printed on stderr, no table.
 # Row statuses:
 #   OK   — required and passing
 #   FAIL — required and broken; a remedy line is printed under the table
 #   WARN — suspicious but not blocking
 #   INFO — context only; never affects the exit code
 #
-# Role-agnostic by design: the `worktree` and `branch` rows are context
-# INFO — the script reports what it sees (linked worktree vs. main
+# Role-agnostic JUDGEMENT, role-scoped AUTH: --role decides which credential
+# the jira rows probe, and nothing else. The `worktree` and `branch` rows stay
+# context INFO — the script reports what it sees (linked worktree vs. main
 # checkout; base branch vs. feature/hotfix issue branch vs. other) but does
 # NOT decide whether that context is right for whoever ran it. Each skill
 # judges that in prose after reading the table, so one script serves the
 # assigner (main checkout on the base branch), the executor, and the
-# reviewer (a linked worktree on an issue branch) without ever knowing
-# which role is calling. Genuinely role-independent failures (missing git
+# reviewer (a linked worktree on an issue branch) with no per-role branching
+# beyond the credential. Genuinely role-independent failures (missing git
 # repo / env files, wrong-project branch, unauthenticated CLIs, unreachable
 # project) still FAIL and set the exit code.
 #
@@ -51,17 +59,36 @@
 
 set -u
 
-KEY_ARG="${1:-}"
+# --- args: required --role, optional ISSUE-KEY -------------------------------
+# Same parsing shape as check_assignee.sh, but the role has no default: it
+# selects the credential the jira rows authenticate with, and guessing wrong
+# would report someone else's identity as if it were the caller's.
+ROLE="${JIRA_ROLE:-}"
+KEY_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --role)   ROLE="${2:-}"; shift 2 ;;
+    --role=*) ROLE="${1#--role=}"; shift ;;
+    *)        KEY_ARG="$1"; shift ;;
+  esac
+done
+case "$ROLE" in
+  assigner|executor|reviewer) ;;
+  "") printf '%s\n' "statuscheck: --role is required — one of assigner|executor|reviewer" >&2; exit 2 ;;
+  *)  printf '%s\n' "statuscheck: role must be assigner|executor|reviewer (got '$ROLE')" >&2; exit 2 ;;
+esac
+ROLE_UC=$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')
+
 # Derive the issue key from the branch up front: branch tail is
 # <KEY>-<slug>, so the leading <PROJ>-<n> is the key.
 BR=$(git branch --show-current 2>/dev/null || true)
 BR_TAIL=${BR#*/}
 BR_KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
 # Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
-# value — most often a role name like "reviewer" passed by mistake — is NOT an
-# issue key: ignore it and fall
-# back to the branch-derived key, exactly as the no-arg path does, instead of
-# FAILing issue_key against it. statuscheck itself takes no role argument.
+# value — most often a role name passed positionally instead of via --role — is
+# NOT an issue key: ignore it and fall
+# back to the branch-derived key, exactly as the no-key path does, instead of
+# FAILing issue_key against it.
 KEY_ARG_IGNORED=""
 if [ -n "$KEY_ARG" ] && ! printf '%s' "$KEY_ARG" | grep -qE '^[A-Za-z][A-Za-z0-9]*-[0-9]+$'; then
   KEY_ARG_IGNORED="$KEY_ARG"
@@ -318,9 +345,9 @@ if [ -n "$KEY_ARG" ]; then
       "cd into $KEY_ARG's own worktree/branch and $RERUN — or get explicit user confirmation before proceeding here."
   fi
 elif [ -n "$BR_KEY" ]; then
-  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
+  row issue_key OK "$BR_KEY (derived from branch — confirm it matches the issue you were asked to run)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — the role goes in --role, and the key comes from the branch)}"
 else
-  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — statuscheck takes no role/issue-key argument)}"
+  row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — the role goes in --role, and the key comes from the branch)}"
 fi
 
 # --- gh auth (needed by 'gh pr create') ----------------------------------
@@ -334,7 +361,7 @@ fi
 # role-agnostic healthcheck — which every skill already runs before any work — is
 # the right home for it: no per-skill wiring needed. GITHUB_PAT_TOKEN is a secret,
 # machine-specific value → gitignored jira-sdlc-tools.local.env only (never the
-# tracked jira-sdlc-tools.env), same treatment as JIRA_TOKEN. Missing token →
+# tracked jira-sdlc-tools.env), same treatment as the Jira role tokens. Missing token →
 # FAIL with a remedy, and the skill stops like any other FAIL row. A login that
 # runs but FAILs (non-zero exit — an expired or revoked PAT, etc.) also FAILs,
 # relaying gh's first stderr line (token redacted) rather than falling through to
@@ -382,10 +409,10 @@ else
 fi
 
 # --- Jira auth (needed by every 'jira.sh …' call) -------------------------
-# Per-request Basic auth via `jira.sh whoami` (GET /myself): one live call, no
-# global login state and no cache. This bare, role-agnostic probe verifies the
-# DEFAULT credential (JIRA_ACCOUNT_EMAIL:JIRA_TOKEN) reaches the site; per-role
-# identity and the ownership gate stay in the skill (check_assignee --role).
+# Per-request Basic auth via `jira.sh --role <caller> whoami` (GET /myself): one
+# live call, no global login state and no cache. Auth is role-scoped, so this
+# probes the CALLING role's own credential — the identity every later call in
+# this run will use. The ownership gate stays in the skill (check_assignee --role).
 JIRA_SH="$PLAT_SCRIPT_DIR/jira.sh"
 JIRA_OK=""
 if ! command -v curl >/dev/null 2>&1; then
@@ -394,21 +421,21 @@ if ! command -v curl >/dev/null 2>&1; then
 elif ! command -v jq >/dev/null 2>&1; then
   row jira_auth FAIL "jq is required by jira.sh but not installed" \
     "install jq and curl, then $RERUN."
-elif WHOAMI_JSON=$($TMOUT_CMD bash "$JIRA_SH" whoami 2>/dev/null) && [ -n "$WHOAMI_JSON" ]; then
+elif WHOAMI_JSON=$($TMOUT_CMD bash "$JIRA_SH" --role "$ROLE" whoami 2>/dev/null) && [ -n "$WHOAMI_JSON" ]; then
   WHO=$(printf '%s' "$WHOAMI_JSON" | jq -r '.emailAddress // .displayName // .accountId // empty' 2>/dev/null)
   JIRA_OK=1
-  row jira_auth OK "authenticated as ${WHO:-unknown} (GET /myself)"
+  row jira_auth OK "$ROLE authenticated as ${WHO:-unknown} (GET /myself)"
 else
-  row jira_auth FAIL "the default Jira credential doesn't authenticate — 'jira whoami' failed (stale/invalid JIRA_TOKEN, or unreachable site)" \
-    "set a working JIRA_ACCOUNT_EMAIL + JIRA_TOKEN pair (the per-request Basic default) in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
+  row jira_auth FAIL "the $ROLE Jira credential doesn't authenticate — 'jira --role $ROLE whoami' failed (unset/stale/invalid pair, or unreachable site)" \
+    "set a working JIRA_${ROLE_UC}_EMAIL + JIRA_${ROLE_UC}_TOKEN pair in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
 fi
 
 # --- Jira project reachable ('jira.sh project exists' → GET /project/search) -
 if [ -n "$JIRA_OK" ] && [ -n "$PROJECT_KEY" ]; then
-  if $TMOUT_CMD bash "$JIRA_SH" project exists "$PROJECT_KEY" >/dev/null 2>&1; then
+  if $TMOUT_CMD bash "$JIRA_SH" --role "$ROLE" project exists "$PROJECT_KEY" >/dev/null 2>&1; then
     row jira_project OK "project $PROJECT_KEY reachable on the authenticated site"
   else
-    row jira_project FAIL "project '$PROJECT_KEY' not visible to the default account via 'jira project exists' (or the call timed out)" \
+    row jira_project FAIL "project '$PROJECT_KEY' not visible to the $ROLE account via 'jira project exists' (or the call timed out)" \
       "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
   fi
 else

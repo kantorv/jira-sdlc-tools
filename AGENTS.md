@@ -204,7 +204,10 @@ for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
-done   # pass an issue-key arg to check_assignee; a subcommand (e.g. whoami) to jira
+done   # add the args each one needs: --role <role> to statuscheck; --role <role>
+       # plus an issue key to check_assignee; --role <role> and a subcommand
+       # (e.g. whoami) to jira. All three now REQUIRE --role — auth is
+       # role-scoped, with no default credential.
 ```
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the

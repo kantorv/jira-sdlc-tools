@@ -15,6 +15,10 @@
 # Usage:
 #   list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]
 #
+# --role defaults to assigner (as create_parent_and_subtasks.sh does): reading a
+# parent's sub-tasks is the assigner's job, and jira.sh has no default
+# credential to fall back to.
+#
 # Exit 0      — listed sub-tasks (or reported "none").
 # Exit 1      — jq missing, --parent missing, or the response wasn't JSON.
 # Exit <code> — the `jira.sh issue view` call failed (its stderr is relayed).
@@ -28,7 +32,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
 PARENT=""
-ROLE=""
+ROLE="assigner"
 ENV_PATH="./jira-sdlc-tools.env"
 JSON_OUT=0
 
@@ -66,11 +70,7 @@ PROJ_LABEL=""
 # jira.sh emits clean JSON straight on stdout, so parse it directly.
 ERR_FILE=$(mktemp)
 trap 'rm -f "$ERR_FILE"' EXIT
-if [ -n "$ROLE" ]; then
-  JSON=$(bash "$JIRA_SH" --role "$ROLE" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
-else
-  JSON=$(bash "$JIRA_SH" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
-fi
+JSON=$(bash "$JIRA_SH" --role "$ROLE" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
 CODE=$?
 if [ "$CODE" -ne 0 ]; then
   printf '%s\n' "$(cat "$ERR_FILE")" >&2

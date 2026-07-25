@@ -12,11 +12,15 @@
 #   pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]
 #   (positional works too: pwsh -File list_subtasks.ps1 <PARENT-KEY> [-Json])
 #
+# -Role defaults to assigner (as create_parent_and_subtasks.ps1 does): reading a
+# parent's sub-tasks is the assigner's job, and jira.ps1 has no default
+# credential to fall back to.
+#
 # Exit 0      — listed sub-tasks (or reported "none").
 # Exit 1      — -Parent missing, or the response wasn't JSON.
 # Exit <code> — the `jira.ps1 issue view` call failed (its stderr is relayed).
 
-param([string]$Parent, [string]$Role = '', [string]$EnvPath = './jira-sdlc-tools.env', [switch]$Json)
+param([string]$Parent, [string]$Role = 'assigner', [string]$EnvPath = './jira-sdlc-tools.env', [switch]$Json)
 
 if (-not $Parent) {
     [Console]::Error.WriteLine('list_subtasks: missing required -Parent <PARENT-KEY>')
@@ -51,9 +55,8 @@ $ProjLabel = if ($Project) { "[$Project] " } else { '' }
 
 # --- fetch the parent + its sub-tasks via jira.ps1 ---------------------------
 # jira.ps1 runs in its OWN process (it calls `exit`). Clean JSON on stdout.
-$argv = @('-NoProfile', '-File', $jiraPs)
-if ($Role) { $argv += @('--role', $Role) }
-$argv += @('issue', 'view', $Parent, '--fields', 'subtasks,issuetype')
+$argv = @('-NoProfile', '-File', $jiraPs, '--role', $Role,
+          'issue', 'view', $Parent, '--fields', 'subtasks,issuetype')
 $out  = (& $psExe @argv 2>&1)
 $code = $LASTEXITCODE
 if ($code -ne 0) {

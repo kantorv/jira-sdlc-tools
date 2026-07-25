@@ -21,8 +21,8 @@ pull requests on this repo.
 
 It is a **secret, machine-specific** value, so it lives **only** in the
 gitignored `jira-sdlc-tools.local.env` — never in the tracked, team-shared
-`jira-sdlc-tools.env`. This is the same treatment `JIRA_TOKEN` /
-`JIRA_*_TOKEN` get: real credentials never enter git history.
+`jira-sdlc-tools.env`. This is the same treatment the Jira role tokens
+(`JIRA_*_TOKEN`) get: real credentials never enter git history.
 
 `jira-sdlc-tools.local.env.example` carries a **placeholder** entry
 (`GITHUB_PAT_TOKEN="XXXXXXXXXXXXXXXXXX"`) so a new checkout knows the variable
