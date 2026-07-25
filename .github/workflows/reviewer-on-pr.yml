@@ -192,70 +192,74 @@ jobs:
       - name: Validate config.toml
         run: kimi doctor config
 
-      - name: AI review
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > /tmp/review-prompt.txt << 'EOF'
-              You are a senior software engineer performing a thorough code review of a pull request.
 
-              ## Instructions
-              1. Get the final combined diff (not individual commits) by running:
-                gh pr diff $PR_NUMBER --color=never
 
-              2. Analyze only the changes in the diff. Do not review unrelated files.
-
-              3. Produce a clear, actionable review and write it to /tmp/report.md.
-
-              ## Review criteria (priority order)
-              - Correctness & logic bugs
-              - Security issues / data exposure / injection risks
-              - Error handling & edge cases
-              - Performance / resource leaks
-              - Breaking changes or API compatibility
-              - Test coverage gaps for the new code
-              - Code clarity, naming, and maintainability
-              - Style/convention only if it meaningfully hurts readability
-
-              ## Output format for /tmp/report.md
-
-              # Code Review – PR #$PR_NUMBER
-
-              ## Summary
-              2–4 sentence high-level assessment.
-
-              ## Critical Issues
-              - Real bugs / security problems that must be fixed.
-              - For each: file + location + why it matters + suggested fix.
-
-              ## Suggestions
-              - Concrete improvements that are not blockers.
-
-              ## Positive Notes
-              - Brief mention of things done well.
-
-              ## Verdict
-              Approve / Request Changes / Comment only
-              (one-line justification)
-
-              ## Rules
-              - Be specific. Reference actual changed lines.
-              - Do not invent issues that aren't in the diff.
-              - Do not comment on pure formatting/style.
-              - Keep the report concise (under ~300 lines).
-
-              After writing /tmp/report.md, post it with:
-              gh pr review $PR_NUMBER --comment --body-file /tmp/report.md
-              EOF
-
-          # Expand the variable inside the prompt
-          sed -i "s/\$PR_NUMBER/$PR_NUMBER/g" /tmp/review-prompt.txt
-
-          kimi -p "$(cat /tmp/review-prompt.txt)"
-          echo "$OUTPUT"
-
+      - name: AI Code Review
         env:
+          PR_NUMBER: ${{ env.PR_NUMBER }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > /tmp/review-prompt.txt << 'PROMPT_EOF'
+          You are a senior software engineer performing a thorough code review of a pull request.
+
+          ## Instructions
+          1. Get the final combined diff (not individual commits) by running:
+            gh pr diff $PR_NUMBER --color=never
+
+          2. Analyze only the changes in the diff. Do not review unrelated files.
+
+          3. Produce a clear, actionable review and write it to /tmp/report.md.
+
+          ## Review criteria (priority order)
+          - Correctness & logic bugs
+          - Security issues / data exposure / injection risks
+          - Error handling & edge cases
+          - Performance / resource leaks
+          - Breaking changes or API compatibility
+          - Test coverage gaps for the new code
+          - Code clarity, naming, and maintainability
+          - Style/convention only if it meaningfully hurts readability
+
+          ## Output format for /tmp/report.md
+
+          # Code Review – PR #$PR_NUMBER
+
+          ## Summary
+          2–4 sentence high-level assessment.
+
+          ## Critical Issues
+          - Real bugs / security problems that must be fixed.
+          - For each: file + location + why it matters + suggested fix.
+
+          ## Suggestions
+          - Concrete improvements that are not blockers.
+
+          ## Positive Notes
+          - Brief mention of things done well.
+
+          ## Verdict
+          Approve / Request Changes / Comment only
+          (one-line justification)
+
+          ## Rules
+          - Be specific. Reference actual changed lines.
+          - Do not invent issues that aren't in the diff.
+          - Do not comment on pure formatting/style.
+          - Keep the report concise (under ~300 lines).
+
+          After writing /tmp/report.md, post it with:
+          gh pr review $PR_NUMBER --comment --body-file /tmp/report.md
+          PROMPT_EOF
+
+          # Expand the PR number
+          sed -i "s/\$PR_NUMBER/${PR_NUMBER}/g" /tmp/review-prompt.txt
+
+          echo "=== Prompt ready ==="
+          kimi -p "$(cat /tmp/review-prompt.txt)"
+
+
+
+
 
       - name: Upload report
         if: failure()
