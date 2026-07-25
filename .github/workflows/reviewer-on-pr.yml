@@ -143,8 +143,8 @@ jobs:
           # double-quote on the array element) that this file fixes, not copies;
           # the corrected form is a properly quoted string "$(pwd)/...".
           cat > ~/.kimi-code/config.toml <<EOF
-          default_model = "nvidia/z-ai/glm-5.2"
-          #default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+          #default_model = "nvidia/z-ai/glm-5.2"
+          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
@@ -196,60 +196,62 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(kimi -p "
-            You are a senior software engineer performing a thorough code review of a pull request.
+          cat > /tmp/review-prompt.txt << 'EOF'
+              You are a senior software engineer performing a thorough code review of a pull request.
 
-            ## Instructions
-            1. Get the **final combined diff** (not individual commits) by running:
-              \`gh pr diff $PR_NUMBER --color=never\`
+              ## Instructions
+              1. Get the final combined diff (not individual commits) by running:
+                gh pr diff $PR_NUMBER --color=never
 
-            2. Analyze **only the changes** in the diff. Do not review unrelated files.
+              2. Analyze only the changes in the diff. Do not review unrelated files.
 
-            3. Produce a clear, actionable review and write it to \`/tmp/report.md\`.
+              3. Produce a clear, actionable review and write it to /tmp/report.md.
 
-            ## Review criteria (prioritize in this order)
-            - Correctness & logic bugs
-            - Security issues / data exposure / injection risks
-            - Error handling & edge cases
-            - Performance / resource leaks
-            - Breaking changes or API compatibility
-            - Test coverage gaps for the new code
-            - Code clarity, naming, and maintainability
-            - Obvious style/convention violations (only if they hurt readability)
+              ## Review criteria (priority order)
+              - Correctness & logic bugs
+              - Security issues / data exposure / injection risks
+              - Error handling & edge cases
+              - Performance / resource leaks
+              - Breaking changes or API compatibility
+              - Test coverage gaps for the new code
+              - Code clarity, naming, and maintainability
+              - Style/convention only if it meaningfully hurts readability
 
-            ## Output format for /tmp/report.md
-            Use this exact structure:
+              ## Output format for /tmp/report.md
 
-            # Code Review – PR #$PR_NUMBER
+              # Code Review – PR #$PR_NUMBER
 
-            ## Summary
-            2–4 sentence high-level assessment (overall quality + main risks).
+              ## Summary
+              2–4 sentence high-level assessment.
 
-            ## Critical Issues
-            - List only real bugs, security problems, or things that must be fixed before merge.
-            - For each item: file + approximate location + why it matters + suggested fix.
+              ## Critical Issues
+              - Real bugs / security problems that must be fixed.
+              - For each: file + location + why it matters + suggested fix.
 
-            ## Suggestions
-            - Improvements that would make the code better but are not blockers.
-            - Keep them concrete and actionable.
+              ## Suggestions
+              - Concrete improvements that are not blockers.
 
-            ## Positive Notes
-            - Briefly mention anything done particularly well (good structure, clear naming, solid tests, etc.).
+              ## Positive Notes
+              - Brief mention of things done well.
 
-            ## Verdict
-            One of: **Approve** / **Request Changes** / **Comment only**  
-            (with a one-line justification)
+              ## Verdict
+              Approve / Request Changes / Comment only
+              (one-line justification)
 
-            ## Rules
-            - Be specific. Quote or refer to the actual changed lines when possible.
-            - Prefer short, direct language.
-            - Do not invent issues that aren't in the diff.
-            - Do not comment on formatting/style unless it meaningfully hurts readability.
-            - Keep the whole report under ~400 lines.
+              ## Rules
+              - Be specific. Reference actual changed lines.
+              - Do not invent issues that aren't in the diff.
+              - Do not comment on pure formatting/style.
+              - Keep the report concise (under ~300 lines).
 
-            After writing the file, post it as a PR review comment with:
-            \`gh pr review $PR_NUMBER --comment --body-file /tmp/report.md\`
-            ")
+              After writing /tmp/report.md, post it with:
+              gh pr review $PR_NUMBER --comment --body-file /tmp/report.md
+              EOF
+
+          # Expand the variable inside the prompt
+          sed -i "s/\$PR_NUMBER/$PR_NUMBER/g" /tmp/review-prompt.txt
+
+          kimi -p "$(cat /tmp/review-prompt.txt)"
           echo "$OUTPUT"
 
         env:
