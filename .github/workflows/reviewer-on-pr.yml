@@ -78,6 +78,7 @@ jobs:
 
       - name: Verify installation
         run: |
+          source /home/runner/.bashrc 
           kimi --version
           echo "Configuration (~/.kimi-code/config.toml):"
           cat ~/.kimi-code/config.toml
