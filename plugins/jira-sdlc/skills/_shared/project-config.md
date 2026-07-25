@@ -1,8 +1,10 @@
 # Project configuration reference
 
 This file describes every variable used in `jira-sdlc-tools.env` and
-`jira-sdlc-tools.local.env` (the `.env` files in the project root). All
-project-specific values live in these two files — nothing else under `skills/`
+`jira-sdlc-tools.local.env`. Both live in a **`.jst/` folder at the project
+root** — `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` — and
+that is the only location the skills read; a leftover copy at the root itself
+is ignored. All project-specific values live in these two files — nothing else under `skills/`
 should need editing after they're filled in.
 
 Each skill's "Conventions used below" section names the tokens it needs
@@ -14,14 +16,18 @@ describe what each variable means.
 
 | File | Purpose | Committed? |
 |------|---------|------------|
-| `jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
-| `jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` |
+| `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
+| `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` as `.jst/jira-sdlc-tools.local.env` |
 
 Both files are sourced by tools that need them. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
 define the same variable (though they define disjoint sets by convention).
 
-## Required (in `jira-sdlc-tools.env`)
+Every skill's pre-flight healthcheck (`statuscheck`) has a `jst_dir` row that
+FAILs — before any other check runs — when `.jst/` is missing, so a checkout
+without it halts rather than running half-configured.
+
+## Required (in `.jst/jira-sdlc-tools.env`)
 
 | Token | What it is | Example |
 |---|---|---|
@@ -33,7 +39,7 @@ define the same variable (though they define disjoint sets by convention).
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state on its own: `jira-task-reviewer` step 7 offers it for approved issues at the end of a run and moves only what you approve; otherwise it is handled by automation or a manual `jira.sh issue transition <KEY> --to "<STATUS_DONE>"`. Must match your workflow's real status name exactly. | `Done` |
 
-## Required (in `jira-sdlc-tools.local.env`)
+## Required (in `.jst/jira-sdlc-tools.local.env`)
 
 | Token | What it is | Example |
 |---|---|---|
@@ -62,7 +68,7 @@ per-request, different roles can run **concurrently** as different identities
 with no shared, machine-global "active account" to race over — the reason the
 earlier login-based model was replaced.
 
-## Required — per-role Jira accounts (in `jira-sdlc-tools.local.env`)
+## Required — per-role Jira accounts (in `.jst/jira-sdlc-tools.local.env`)
 
 Each skill runs as its **own** Jira account, so the board shows who did
 what: the assigner filed it, the executor implemented it, the reviewer
@@ -122,7 +128,7 @@ can't race.
 
 The README's usage walkthrough assumes these filled-in files:
 
-**`jira-sdlc-tools.env` (committed):**
+**`.jst/jira-sdlc-tools.env` (committed):**
 ```
 PROJECT-KEY           = PROJ
 DEFAULT_BASE_BRANCH   = development
@@ -133,7 +139,7 @@ STATUS_IN_REVIEW      = In Review
 STATUS_DONE           = Done
 ```
 
-**`jira-sdlc-tools.local.env` (gitignored):**
+**`.jst/jira-sdlc-tools.local.env` (gitignored):**
 ```
 WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net

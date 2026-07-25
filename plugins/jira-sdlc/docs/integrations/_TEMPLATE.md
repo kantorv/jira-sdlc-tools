@@ -19,7 +19,7 @@
 ## Prerequisites
 
 <!-- Standard prereqs shared with every integration: Jira auth (per-request
-     Basic auth from `jira-sdlc-tools.local.env`, no login step — LINK to
+     Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step — LINK to
      [`../../skills/_shared/jira-api-reference.md`](../../skills/_shared/jira-api-reference.md)
      §9 for the auth model), `gh` (GitHub CLI) authenticated, and the two
      project-root env files (LINK to

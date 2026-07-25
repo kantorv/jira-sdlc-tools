@@ -20,9 +20,9 @@ about getting it loaded.
 
 ## Prerequisites
 
-- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - Claude Code itself, in any of its surfaces (CLI, desktop app, or the IDE extension — the extension is what Cursor and Antigravity re-use, see [CURSOR.md](CURSOR.md) and [ANTIGRAVITY.md](ANTIGRAVITY.md))
 - **Methods 2 and 3 only** — a local clone of `kantorv/jira-sdlc-tools`
 
@@ -43,7 +43,7 @@ about getting it loaded.
    ```
    /plugin marketplace add </ABSOLUTE/PATH/TO/MARKETPLACE/ROOT>
    ```
-3. Fill in `jira-sdlc-tools.env` in your project root.
+3. Fill in `.jst/jira-sdlc-tools.env` in your project root.
 4. The three skills are available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, `/jira-sdlc:jira-task-reviewer`.
 

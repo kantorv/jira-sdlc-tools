@@ -20,11 +20,11 @@ A fine-grained GitHub Personal Access Token, scoped to let `gh pr create` open
 pull requests on this repo.
 
 It is a **secret, machine-specific** value, so it lives **only** in the
-gitignored `jira-sdlc-tools.local.env` — never in the tracked, team-shared
-`jira-sdlc-tools.env`. This is the same treatment the Jira role tokens
+gitignored `.jst/jira-sdlc-tools.local.env` — never in the tracked, team-shared
+`.jst/jira-sdlc-tools.env`. This is the same treatment the Jira role tokens
 (`JIRA_*_TOKEN`) get: real credentials never enter git history.
 
-`jira-sdlc-tools.local.env.example` carries a **placeholder** entry
+`.jst/jira-sdlc-tools.local.env.example` carries a **placeholder** entry
 (`GITHUB_PAT_TOKEN="XXXXXXXXXXXXXXXXXX"`) so a new checkout knows the variable
 exists; you replace the placeholder with your own token in your local, untracked
 `jira-sdlc-tools.local.env`.
@@ -60,7 +60,7 @@ At the start of the run, the `gh_auth` check resolves `GITHUB_PAT_TOKEN` from
 in with the token — equivalent to:
 
 ```bash
-source jira-sdlc-tools.local.env \
+source .jst/jira-sdlc-tools.local.env \
   && gh auth logout --hostname github.com \
   && echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token \
   && gh auth status

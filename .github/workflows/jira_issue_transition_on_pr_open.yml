@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Mirrors STATUS_IN_REVIEW / STATUS_DONE from jira-sdlc-tools.env.
+          # Mirrors STATUS_IN_REVIEW / STATUS_DONE from .jst/jira-sdlc-tools.env.
           TARGET="In Review"
           DONE="Done"
 
