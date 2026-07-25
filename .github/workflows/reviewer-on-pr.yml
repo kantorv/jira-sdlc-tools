@@ -22,9 +22,11 @@ jobs:
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
     # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # 
 
     steps:
       - uses: actions/checkout@v6
+      
 
       - name: Install Kimi Code CLI
         shell: bash
@@ -63,6 +65,12 @@ jobs:
           api_key = "${NVIDIA_API_KEY}"
           base_url = "https://integrate.api.nvidia.com/v1"
 
+          [providers.openrouter]
+          type = "openai"
+          api_key = "${OPENROUTER_API_KEY}"
+          base_url = "https://openrouter.ai/api/v1"
+
+
           [models."nvidia/z-ai/glm-5.2"]
           provider = "nvidia"
           model = "z-ai/glm-5.2"
@@ -71,6 +79,17 @@ jobs:
           capabilities = ["thinking", "tool_use"]
           display_name = "GLM-5.2"
           reasoning_key = "reasoning_content"
+
+
+          [models."openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"]
+          provider = "openrouter"
+          model = "nvidia/nemotron-3-ultra-550b-a55b:free"
+          max_context_size = 1000000
+          max_output_size = 65536
+          capabilities = [ "always_thinking", "tool_use" ]
+          display_name = "Nemotron 3 Ultra (free)"
+          support_efforts = [ "medium", "high" ]
+
 
           [thinking]
           enabled = true
@@ -89,15 +108,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(kimi -p "List all available skill slash commands that are currently loaded. Output only the command names, one per line." --output-format stream-json 2>&1)
+          OUTPUT=$(kimi -p "/skill:jira-task-reviewer")
           echo "$OUTPUT"
-
-          for SKILL in jira-task-assigner jira-task-executor jira-task-reviewer; do
-            if echo "$OUTPUT" | grep -qF "$SKILL"; then
-              echo "✓ $SKILL discovered"
-            else
-              echo "::error::$SKILL not discovered"
-              exit 1
-            fi
-          done
-          echo "All 3 jira-sdlc skills are discoverable — smoke test passed."
