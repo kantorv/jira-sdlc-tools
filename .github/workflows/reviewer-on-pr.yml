@@ -26,11 +26,36 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Kimi Code CLI
-        shell: bash
+
+      # 1. Resolve the latest version to use as cache key
+      - name: Resolve Kimi Code version
+        id: kimi-version
+        run: |
+          VERSION=$(curl -fsSL https://code.kimi.com/kimi-code/latest)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Latest Kimi Code version: $VERSION"
+
+      # 2. Restore cache
+      - name: Cache Kimi Code CLI
+        id: cache-kimi
+        uses: actions/cache@v4
+        with:
+          path: ~/.kimi-code
+          key: kimi-code-${{ runner.os }}-${{ steps.kimi-version.outputs.version }}
+          restore-keys: |
+            kimi-code-${{ runner.os }}-
+
+      # 3. Install only on cache miss
+      - name: Install Kimi Code
+        if: steps.cache-kimi.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
-          echo "$HOME/.kimi-code/bin" >> "$GITHUB_PATH"
+
+
+
+      # 4. Always add to PATH for this and subsequent steps
+      - name: Add Kimi to PATH
+        run: echo "$HOME/.kimi-code/bin" >> "$GITHUB_PATH"
 
       - name: Write Kimi Code config.toml
         shell: bash
