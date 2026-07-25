@@ -196,13 +196,67 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(kimi -p "you're goingt to review changed code. Run: \`gh pr diff $PR_NUMBER --patch\`, then create report file in /tmp/report.md.  then comment on this PR:    \`gh pr review --comment --body-file /tmp/report.md\` ")
+          OUTPUT=$(kimi -p "
+            You are a senior software engineer performing a thorough code review of a pull request.
+
+            ## Instructions
+            1. Get the **final combined diff** (not individual commits) by running:
+              \`gh pr diff $PR_NUMBER --color=never\`
+
+            2. Analyze **only the changes** in the diff. Do not review unrelated files.
+
+            3. Produce a clear, actionable review and write it to \`/tmp/report.md\`.
+
+            ## Review criteria (prioritize in this order)
+            - Correctness & logic bugs
+            - Security issues / data exposure / injection risks
+            - Error handling & edge cases
+            - Performance / resource leaks
+            - Breaking changes or API compatibility
+            - Test coverage gaps for the new code
+            - Code clarity, naming, and maintainability
+            - Obvious style/convention violations (only if they hurt readability)
+
+            ## Output format for /tmp/report.md
+            Use this exact structure:
+
+            # Code Review – PR #$PR_NUMBER
+
+            ## Summary
+            2–4 sentence high-level assessment (overall quality + main risks).
+
+            ## Critical Issues
+            - List only real bugs, security problems, or things that must be fixed before merge.
+            - For each item: file + approximate location + why it matters + suggested fix.
+
+            ## Suggestions
+            - Improvements that would make the code better but are not blockers.
+            - Keep them concrete and actionable.
+
+            ## Positive Notes
+            - Briefly mention anything done particularly well (good structure, clear naming, solid tests, etc.).
+
+            ## Verdict
+            One of: **Approve** / **Request Changes** / **Comment only**  
+            (with a one-line justification)
+
+            ## Rules
+            - Be specific. Quote or refer to the actual changed lines when possible.
+            - Prefer short, direct language.
+            - Do not invent issues that aren't in the diff.
+            - Do not comment on formatting/style unless it meaningfully hurts readability.
+            - Keep the whole report under ~400 lines.
+
+            After writing the file, post it as a PR review comment with:
+            \`gh pr review $PR_NUMBER --comment --body-file /tmp/report.md\`
+            ")
           echo "$OUTPUT"
 
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload report
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: pr-report
