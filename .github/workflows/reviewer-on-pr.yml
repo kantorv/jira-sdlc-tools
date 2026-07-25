@@ -311,9 +311,39 @@ jobs:
 
 
 
-      - name: Upload report
-        if: failure()
-        uses: actions/upload-artifact@v7
+      # - name: Upload report
+      #   if: failure()
+      #   uses: actions/upload-artifact@v7
+      #   with:
+      #     name: pr-report
+      #     path: /tmp/report.md
+      
+      - name: Locate newest Kimi session directory
+        id: kimi_session
+        run: |
+          set -euo pipefail
+          SESSIONS_ROOT="${HOME}/.kimi-code/sessions"
+
+          SESSION_DIR=$(find "$SESSIONS_ROOT" -maxdepth 1 -type d \
+            -name '*session_*' -printf '%T@ %p\n' 2>/dev/null \
+            | sort -n | tail -1 | cut -d' ' -f2-)
+
+          if [ -z "${SESSION_DIR}" ] || [ ! -d "${SESSION_DIR}" ]; then
+            echo "::error::No session directories found under ${SESSIONS_ROOT}"
+            ls -la "$SESSIONS_ROOT" || true
+            exit 1
+          fi
+
+          BASENAME=$(basename "$SESSION_DIR")
+          echo "Newest session: ${SESSION_DIR}"
+          echo "path=${SESSION_DIR}" >> "$GITHUB_OUTPUT"
+          echo "name=${BASENAME}"   >> "$GITHUB_OUTPUT"
+
+
+      - name: Upload Kimi session as artifact
+        uses: actions/upload-artifact@v7   # or @v7 if that is what your repo uses
         with:
-          name: pr-report
-          path: /tmp/report.md
+          name: kimi-session-${{ steps.kimi_session.outputs.name }}
+          path: ${{ steps.kimi_session.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
