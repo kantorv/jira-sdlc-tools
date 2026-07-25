@@ -95,9 +95,9 @@ sequenceDiagram
   → `--assignee` on every create, top-level *and* sub-task), because the
   executor is who will pick it up — and phase 2 *refuses* an issue that
   isn't assigned to it. So the board reads correctly end to end: filed by
-  the assigner, owned by the executor. With no per-role accounts
-  configured, both resolve to the default account and nothing else
-  changes. See
+  the assigner, owned by the executor. Both identities come from that role's
+  own required credential pair — there is no default account either can fall
+  back to. See
   [`../skills/_shared/project-config.md`](../skills/_shared/project-config.md).
 - **Investigate + clarify loop** — the only place the user is asked
   anything by `jira-task-assigner`; questions persist until scope,

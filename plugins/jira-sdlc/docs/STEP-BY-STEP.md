@@ -15,9 +15,10 @@ short, ordered version.
 2. **Have a git repository and a Jira account with a board created.**
    [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md) is a great, recommended
    integration — but it is **not** required.
-3. **Generate your tokens:** a **granular** `GITHUB_PAT` and a **classic**
-   `JIRA_TOKEN` (see the note in [SECURITY.md](SECURITY.md) on why the Jira
-   token must be classic).
+3. **Generate your tokens:** a **granular** `GITHUB_PAT`, and a **classic**
+   Jira API token for each of the three roles — assigner, executor, reviewer
+   (see the note in [SECURITY.md](SECURITY.md) on why the Jira tokens must be
+   classic).
 4. **Define your main repository and worktrees dir in the settings**, e.g.:
    ```
    WORKTREES_DIR=/home/lalala/src/skills-dev/JST-worktrees
@@ -31,7 +32,7 @@ call. `_edge/tenant_info` is unauthenticated and gives you the cloud id;
 `/myself` is the part that proves the token:
 ```bash
 CLOUD_ID=$(curl -fsSL "https://$JIRA_ACCOUNT_URL/_edge/tenant_info" | jq -r .cloudId)
-curl -sS -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" \
+curl -sS -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H "Accept: application/json" \
   "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/myself" | jq -r .emailAddress
 ```
 Getting your own email back means the pair works. The Section 4 healthcheck
@@ -48,24 +49,22 @@ echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 WORKTREES_DIR=/path/to/worktrees/PROJ-worktrees
 
 JIRA_ACCOUNT_URL=your-jira-site.atlassian.net
-JIRA_ACCOUNT_EMAIL=yourmail@example.com
-JIRA_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
-# Optional — one Jira account per role, so the board shows who did what.
-# Each falls back to the default pair above; configure none and everything
-# still works, owned by that one account.
-#JIRA_ASSIGNER_EMAIL=assigner@example.com
-#JIRA_ASSIGNER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
-#JIRA_EXECUTOR_EMAIL=executor@example.com
-#JIRA_EXECUTOR_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
-#JIRA_REVIEWER_EMAIL=reviewer@example.com
-#JIRA_REVIEWER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+# Required — one Jira account per role, so the board shows who did what.
+# All six values, no default pair behind them; point all three at the same
+# Atlassian account if you'd rather not split them.
+JIRA_ASSIGNER_EMAIL=assigner@example.com
+JIRA_ASSIGNER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+JIRA_EXECUTOR_EMAIL=executor@example.com
+JIRA_EXECUTOR_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+JIRA_REVIEWER_EMAIL=reviewer@example.com
+JIRA_REVIEWER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
 GITHUB_PAT_TOKEN="XXXXXXXXXXXXX"
 ```
 
-`JIRA_TOKEN` is the token **value**, not a path to a file holding it. Every
-variable above is described in
+Each `JIRA_<ROLE>_TOKEN` is the token **value**, not a path to a file holding
+it. Every variable above is described in
 [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
 
 ## Section 2. GitHub repository preparation
@@ -201,14 +200,15 @@ logins, your settings, and the platform in one pass:
 [`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
-bash statuscheck.sh
+bash statuscheck.sh --role executor   # --role is required: assigner|executor|reviewer
 ```
 
 **Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
 [`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
-pwsh -File statuscheck.ps1        # PowerShell 7+
-powershell -File statuscheck.ps1  # PowerShell 5.1
+# --role is required: assigner|executor|reviewer
+pwsh -File statuscheck.ps1 --role executor        # PowerShell 7+
+powershell -File statuscheck.ps1 --role executor  # PowerShell 5.1
 ```
 
