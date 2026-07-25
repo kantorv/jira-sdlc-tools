@@ -193,11 +193,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(kimi -p "how much is 3 + 7?")
-          #PR_NUM=$(gh pr list --search "$GITHUB_SHA" --json number --jq '.[0].number')
-          # PROMPT="gh pr review $PR_NUM --comment --body-file /tmp/JST-174-report.md"
-          #OUTPUT=$(kimi -p "check the diff, create comment file: /tmp/code-check-report.md, post a pr comment: gh pr review $PR_NUM --comment --body-file /tmp/code-check-report.md")
+          OUTPUT=$(kimi -p "you're goingt to review changed code. Run: \`gh pr diff $PR_NUMBER --patch\`, then create report file in /tmp/report.md.  then comment on this PR:    \`gh pr review --comment --body-file /tmp/report.md\` ")
           echo "$OUTPUT"
 
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload report
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-report
+          path: /tmp/report.md
