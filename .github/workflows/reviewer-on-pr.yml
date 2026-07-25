@@ -20,7 +20,7 @@ jobs:
     # draft PR into main) and other non-issue head branches carry no Jira key,
     # so gating here skips them instead of spinning up a runner for a no-op.
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
-    if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+    # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
 
     steps:
