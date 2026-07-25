@@ -143,8 +143,8 @@ jobs:
           # double-quote on the array element) that this file fixes, not copies;
           # the corrected form is a properly quoted string "$(pwd)/...".
           cat > ~/.kimi-code/config.toml <<EOF
-          default_model = "nvidia/z-ai/glm-5.2"
-          #default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+          #default_model = "nvidia/z-ai/glm-5.2"
+          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
