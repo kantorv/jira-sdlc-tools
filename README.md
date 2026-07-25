@@ -133,7 +133,7 @@ walks the same ground in the order you actually do it.
 ## Jira states - who can move a card
 
 The four statuses are configurable — `<STATUS_*>` below are the tokens you map
-onto your board's real names in `jira-sdlc-tools.env`. Full detail, including
+onto your board's real names in `.jst/jira-sdlc-tools.env`. Full detail, including
 what each skill does at every step, is in
 **[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
 
@@ -210,8 +210,9 @@ jira-sdlc-tools/
 │       ├── docs/
 │       ├── LICENSE
 │       └── README.md           # full plugin documentation
-├── jira-sdlc-tools.env         # template — team-shared settings (committed)
-├── jira-sdlc-tools.local.env.example  # template — machine-specific settings (gitignored)
+├── .jst/                       # settings folder — the only location the skills read
+│   ├── jira-sdlc-tools.env     # template — team-shared settings (committed)
+│   └── jira-sdlc-tools.local.env.example  # template — machine-specific (gitignored)
 ├── AGENTS.md                   # repo-wide instructions for AI coding agents
 ├── CLAUDE.md                   # imports AGENTS.md + Claude Code–specific notes
 ├── LICENSE
@@ -258,7 +259,7 @@ LLM agent plus two JSON manifests, not compiled code. See
 [`AGENTS.md`](AGENTS.md) for what actually counts as validating a
 change. Note too that this toolkit repo isn't a valid target for its
 own skills — you'll need a separate application repo, with its own
-`jira-sdlc-tools.env`, to actually exercise one against.
+`.jst/jira-sdlc-tools.env`, to actually exercise one against.
 
 ### Run your own
 

@@ -28,7 +28,7 @@
 #   so the branch is their sole source of truth for the key.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
-# jira-sdlc-tools.env + jira-sdlc-tools.local.env in the repo root
+# .jst/jira-sdlc-tools.env + .jst/jira-sdlc-tools.local.env under the repo root
 # (local overrides team; see ../project-config.md). The files use
 # `NAME = value` lines, so they are parsed, not sourced.
 #
@@ -132,17 +132,6 @@ print_report() {
   fi
 }
 
-# --- mandatory jira-sdlc-tools.local.env gate (runs before any other check) -
-# jira-sdlc-tools.local.env is mandatory in every checkout — it holds the
-# Jira account URL/email + token the skills depend on. It's gitignored, so
-# a linked worktree (which shares tracked files only) is born without it.
-# The copy logic itself lives in exactly one place, ensure_local_env.sh —
-# every skill already calls it before its first jira.sh call, so by the time
-# statuscheck.sh runs here it's normally a no-op; delegate to it (rather
-# than duplicating the copy) so a standalone run of this script still
-# self-heals the same way. WT_ROOT/IS_WORKTREE computed here are reused by
-# the git_repo block below. The main checkout's own missing-file case is
-# still handled in the env_local section (FAIL + continue), unchanged.
 WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 IS_WORKTREE=""
 # A linked worktree's .git is a *file* (pointer into the main repo's
@@ -150,19 +139,48 @@ IS_WORKTREE=""
 if [ -n "$WT_ROOT" ] && [ -f "$WT_ROOT/.git" ]; then
   IS_WORKTREE=1
 fi
+
+# --- mandatory .jst/ gate (runs before every other check) -------------------
+# Both settings files live in <repo-root>/.jst/, and nothing reads a
+# root-level copy — so a missing .jst/ means no config at all, for every
+# role. Check it before the local.env gate below: that gate copies a file
+# *into* .jst/, and without this row a missing folder would surface as a
+# confusing "can't copy local.env" instead of the real cause.
+if [ -n "$WT_ROOT" ]; then
+  if [ -d "$WT_ROOT/.jst" ]; then
+    row jst_dir OK "$WT_ROOT/.jst"
+  else
+    row jst_dir FAIL "settings folder $WT_ROOT/.jst not found — the skills read their config only from there" \
+      "create .jst/ in the project root holding jira-sdlc-tools.env (team-shared, tracked) and jira-sdlc-tools.local.env (machine-specific, gitignored) — see skills/_shared/project-config.md — then $RERUN."
+    print_report
+    exit 1
+  fi
+fi
+
+# --- mandatory .jst/jira-sdlc-tools.local.env gate (before any other check) -
+# .jst/jira-sdlc-tools.local.env is mandatory in every checkout — it holds the
+# Jira account URL/email + token the skills depend on. It's gitignored, so
+# a linked worktree (which shares tracked files only) is born without it.
+# The copy logic itself lives in exactly one place, ensure_local_env.sh —
+# every skill already calls it before its first jira.sh call, so by the time
+# statuscheck.sh runs here it's normally a no-op; delegate to it (rather
+# than duplicating the copy) so a standalone run of this script still
+# self-heals the same way. WT_ROOT/IS_WORKTREE computed above are reused by
+# the git_repo block below. The main checkout's own missing-file case is
+# still handled in the env_local section (FAIL + continue), unchanged.
 ENV_LOCAL_COPIED=""
 ENV_LOCAL_COPIED_FROM=""
 if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
-  [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
+  [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   if ! bash "$SCRIPT_DIR/ensure_local_env.sh" >/dev/null 2>&1; then
-    row env_local FAIL "mandatory jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
-      "create jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
+    row env_local FAIL "mandatory .jst/jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
+      "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
     print_report
     exit 1
   fi
-  if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/jira-sdlc-tools.local.env" ]; then
+  if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ]; then
     ENV_LOCAL_COPIED=1
     GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
     ENV_LOCAL_COPIED_FROM=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
@@ -244,7 +262,9 @@ else
 fi
 
 # --- project config ------------------------------------------------------
-CFG_DIR="${WT_ROOT:-$PWD}"
+# Both settings files live in <repo-root>/.jst/ — the only location read.
+CFG_ROOT="${WT_ROOT:-$PWD}"
+CFG_DIR="$CFG_ROOT/.jst"
 cfg() { # cfg <NAME-PATTERN> -> value; jira-sdlc-tools.local.env overrides .env
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
@@ -263,15 +283,15 @@ BASE_BRANCH=$(cfg DEFAULT_BASE_BRANCH || true)
 PRODUCTION_BRANCH=$(cfg PRODUCTION_BRANCH || true)
 if [ ! -f "$CFG_DIR/jira-sdlc-tools.env" ]; then
   row env_config FAIL "jira-sdlc-tools.env not found in $CFG_DIR" \
-    "create jira-sdlc-tools.env in the project root (variables described in skills/_shared/project-config.md), then $RERUN."
+    "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $RERUN."
 elif [ -z "$PROJECT_KEY" ]; then
   row env_config FAIL "jira-sdlc-tools.env found but PROJECT-KEY is unset" \
-    "add PROJECT-KEY to jira-sdlc-tools.env (see skills/_shared/project-config.md), then $RERUN."
+    "add PROJECT-KEY to .jst/jira-sdlc-tools.env (see skills/_shared/project-config.md), then $RERUN."
 else
   row env_config OK "PROJECT-KEY=$PROJECT_KEY"
 fi
 
-# jira-sdlc-tools.local.env — machine-specific, holds the Jira account
+# .jst/jira-sdlc-tools.local.env — machine-specific, holds the Jira account
 # URL/email + token the skills depend on. It is mandatory in every
 # checkout and gitignored (it points at secrets). Gitignored files aren't
 # shared with linked worktrees, so the gate above auto-copies it into a
@@ -283,20 +303,22 @@ if [ -f "$CFG_DIR/jira-sdlc-tools.local.env" ]; then
   if [ -n "$ENV_LOCAL_COPIED" ]; then
     row env_local OK "auto-copied from main repo ($ENV_LOCAL_COPIED_FROM)"
   else
-    row env_local OK "jira-sdlc-tools.local.env present"
+    row env_local OK ".jst/jira-sdlc-tools.local.env present"
   fi
-  if git -C "$CFG_DIR" ls-files --error-unmatch jira-sdlc-tools.local.env >/dev/null 2>&1; then
-    row env_local_ignored FAIL "jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" \
-      "git rm --cached jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
-  elif git -C "$CFG_DIR" check-ignore -q jira-sdlc-tools.local.env 2>/dev/null; then
+  # Run git from the repo root and name the path under .jst/ — git resolves a
+  # relative pathspec against its working directory, so the two must agree.
+  if git -C "$CFG_ROOT" ls-files --error-unmatch .jst/jira-sdlc-tools.local.env >/dev/null 2>&1; then
+    row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" \
+      "git rm --cached .jst/jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
+  elif git -C "$CFG_ROOT" check-ignore -q .jst/jira-sdlc-tools.local.env 2>/dev/null; then
     row env_local_ignored OK "gitignored (never committed)"
   else
-    row env_local_ignored FAIL "jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" \
-      "add jira-sdlc-tools.local.env to .gitignore first, then $RERUN."
+    row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" \
+      "add .jst/jira-sdlc-tools.local.env to .gitignore first, then $RERUN."
   fi
 else
   row env_local FAIL "jira-sdlc-tools.local.env not found in $CFG_DIR" \
-    "create it in the project root (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
+    "create it in the project's .jst/ folder (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
   row env_local_ignored INFO "skipped (file absent)"
 fi
 
@@ -360,8 +382,8 @@ fi
 # identity), so this
 # role-agnostic healthcheck — which every skill already runs before any work — is
 # the right home for it: no per-skill wiring needed. GITHUB_PAT_TOKEN is a secret,
-# machine-specific value → gitignored jira-sdlc-tools.local.env only (never the
-# tracked jira-sdlc-tools.env), same treatment as the Jira role tokens. Missing token →
+# machine-specific value → gitignored .jst/jira-sdlc-tools.local.env only (never
+# the tracked .jst/jira-sdlc-tools.env), same treatment as the Jira role tokens. Missing token →
 # FAIL with a remedy, and the skill stops like any other FAIL row. A login that
 # runs but FAILs (non-zero exit — an expired or revoked PAT, etc.) also FAILs,
 # relaying gh's first stderr line (token redacted) rather than falling through to
@@ -380,7 +402,7 @@ else
   GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
   if [ -z "$GH_PAT" ]; then
     row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
-      "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
+      "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
   else
     # logout FIRST — see header; non-fatal if there's nothing to log out.
     $TMOUT_CMD gh auth logout --hostname github.com >/dev/null 2>&1 || true
@@ -403,7 +425,7 @@ else
         | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
       [ "${ERR:-}" ] || ERR='(no stderr from gh)'
       row gh_auth FAIL "gh auth login --with-token failed: $ERR" \
-        "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $RERUN."
+        "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $RERUN."
     fi
   fi
 fi
@@ -427,7 +449,7 @@ elif WHOAMI_JSON=$($TMOUT_CMD bash "$JIRA_SH" --role "$ROLE" whoami 2>/dev/null)
   row jira_auth OK "$ROLE authenticated as ${WHO:-unknown} (GET /myself)"
 else
   row jira_auth FAIL "the $ROLE Jira credential doesn't authenticate — 'jira --role $ROLE whoami' failed (unset/stale/invalid pair, or unreachable site)" \
-    "set a working JIRA_${ROLE_UC}_EMAIL + JIRA_${ROLE_UC}_TOKEN pair in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
+    "set a working JIRA_${ROLE_UC}_EMAIL + JIRA_${ROLE_UC}_TOKEN pair in .jst/jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
 fi
 
 # --- Jira project reachable ('jira.sh project exists' → GET /project/search) -
@@ -436,7 +458,7 @@ if [ -n "$JIRA_OK" ] && [ -n "$PROJECT_KEY" ]; then
     row jira_project OK "project $PROJECT_KEY reachable on the authenticated site"
   else
     row jira_project FAIL "project '$PROJECT_KEY' not visible to the $ROLE account via 'jira project exists' (or the call timed out)" \
-      "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
+      "check PROJECT_KEY in .jst/jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
   fi
 else
   row jira_project WARN "skipped (jira_auth failed or PROJECT-KEY unset — see rows above)"
@@ -453,7 +475,7 @@ row production_branch INFO "PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-unset}"
 # itself live inside that directory.
 WORKTREES_DIR=$(cfg WORKTREES_DIR || true)
 if [ -z "$WORKTREES_DIR" ]; then
-  row worktrees_dir WARN "WORKTREES_DIR unset in jira-sdlc-tools(.local).env"
+  row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
 else
   WD_BASE="${WT_ROOT:-$PWD}"
   if [ -n "$IS_WORKTREE" ]; then
@@ -467,7 +489,7 @@ else
   if [ -d "$WD_PATH" ]; then
     row worktrees_dir INFO "$WD_PATH (present)"
   else
-    row worktrees_dir WARN "$WD_PATH missing — the assigner won't create it; check WORKTREES_DIR in jira-sdlc-tools.env if the convention changed"
+    row worktrees_dir WARN "$WD_PATH missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.env if the convention changed"
   fi
 fi
 

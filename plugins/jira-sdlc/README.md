@@ -60,7 +60,7 @@ Three skills, three jobs:
 /plugin install jira-sdlc@jira-sdlc-tools
 ```
 
-Create `jira-sdlc-tools.env` in the project root for your repo (see
+Create `.jst/jira-sdlc-tools.env` in the project root for your repo (see
 [Configuration](#configuration)), then:
 
 ```
@@ -171,7 +171,7 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 
 **Jira status flow across the three skills.** Each skill drives the issue's
 Kanban status explicitly with the four status names from
-`jira-sdlc-tools.env`, so board progress reflects the work without
+`.jst/jira-sdlc-tools.env`, so board progress reflects the work without
 relying on opaque GitHub-for-Jira transition rules:
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
@@ -195,7 +195,7 @@ relying on opaque GitHub-for-Jira transition rules:
   with a detailed companion (`docs/JIRA-REST.md`) for rationale and discovery procedures.
   It reads `JIRA_ACCOUNT_URL` and the three role credential pairs
   (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}`) from
-  `jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
+  `.jst/jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
   there is no interactive login step to run first.
 
 - **GitHub CLI (`gh`)**, authenticated.
@@ -206,7 +206,7 @@ relying on opaque GitHub-for-Jira transition rules:
 - **A documented way to run tests** — the executor's test step reads
   the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
   test" and "full suite" commands; they no longer live in
-  `jira-sdlc-tools.env`. If the project doesn't document them,
+  `.jst/jira-sdlc-tools.env`. If the project doesn't document them,
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
 - **A worktrees directory that already exists**, as a sibling of your
@@ -222,7 +222,7 @@ relying on opaque GitHub-for-Jira transition rules:
    /plugin marketplace add kantorv/jira-sdlc-tools
    /plugin install jira-sdlc@jira-sdlc-tools
    ```
-2. Fill in `jira-sdlc-tools.env` in the project root — see
+2. Fill in `.jst/jira-sdlc-tools.env` in the project root — see
    [Configuration](#configuration).
 3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
@@ -305,20 +305,25 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in two files in the project root:
+All project-specific values live in two files in a **`.jst/` folder at the
+project root**. That folder is the only location read — a leftover copy at the
+root itself is ignored, and every skill's healthcheck FAILs on a missing
+`.jst/` (the `jst_dir` row) before it does anything else.
 
 | File | Purpose | Committed? |
 |------|---------|------------|
-| `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
-| `jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
+| `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
+| `.jst/jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
 
 See `skills/_shared/project-config.md` for a description of each variable.
 
 Copy the templates from the marketplace root:
 ```bash
-cp /path/to/jira-sdlc-tools/jira-sdlc-tools.env .
-cp /path/to/jira-sdlc-tools/jira-sdlc-tools.local.env.example jira-sdlc-tools.local.env
-# then fill in jira-sdlc-tools.local.env with your machine-specific values
+mkdir -p .jst
+cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.env .jst/
+cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.local.env.example .jst/jira-sdlc-tools.local.env
+# then fill in .jst/jira-sdlc-tools.local.env with your machine-specific values
+echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
 ```
 
 Nothing else under `skills/` should need editing. It covers:
@@ -330,7 +335,7 @@ Nothing else under `skills/` should need editing. It covers:
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
-Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
+Open `.jst/jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
 
 ### Generating the Jira API token
 
@@ -501,7 +506,7 @@ real task, not discovering mid-failure:
       a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
-      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-sdlc-tools.env`.
+      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `.jst/jira-sdlc-tools.env`.
 - [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue comment add --help` — the skills write
       multi-line comments to a temp file and post with `--body-file <real file>`.
       Confirm that form works.
@@ -566,7 +571,7 @@ target-branch defaults, feature-flag policy, and how the release branch's
 name — not PR labels or commit messages — drives the version bump).
 
 If your branching model differs, adapt that document to match yours, then
-update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the
+update `<DEFAULT_BASE_BRANCH>` in `.jst/jira-sdlc-tools.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
 `jira-api-reference.md` §12 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.

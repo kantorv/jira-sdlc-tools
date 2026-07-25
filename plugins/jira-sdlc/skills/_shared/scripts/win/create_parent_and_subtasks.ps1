@@ -5,7 +5,7 @@
 # See ../jira-api-reference.md.
 #
 # Create a Jira parent work item plus N sub-tasks, driven by a manifest.
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with -Project or
+# Reads <PROJECT-KEY> from .jst/jira-sdlc-tools.env (override with -Project or
 # $env:PROJECT_KEY); run from within the repo/worktree — jira.ps1 resolves its
 # config from the git top-level. Creates as -Role (default assigner) so the created issues'
 # creator/reporter is that role's account.
@@ -43,21 +43,25 @@ if (Get-Command pwsh -ErrorAction SilentlyContinue) {
 }
 if (-not $psExe) { [Console]::Error.WriteLine('create_parent_and_subtasks: no PowerShell runtime (pwsh/powershell) found to run jira.ps1.'); exit 1 }
 
-# --- resolve project key from jira-sdlc-tools.env if not given ---------------
+# --- resolve project key from .jst/jira-sdlc-tools.env if not given ----------
+# Anchored at the git top-level (like jira.ps1) rather than walked up from cwd,
+# so it resolves the same from any subdirectory.
 if (-not $Project) {
-    foreach ($envfile in @('./jira-sdlc-tools.env', '../jira-sdlc-tools.env')) {
-        if (Test-Path -LiteralPath $envfile) {
-            $m = $null
-            foreach ($line in Get-Content -LiteralPath $envfile) {
-                if ($line -match '^PROJECT[-_]KEY=(.+)$') { $m = $Matches[1].Trim() }
-            }
-            if ($m) { $Project = $m; break }
+    $cfgRoot = $null
+    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $cfgRoot = ([string]$t).Trim() } } catch { }
+    if (-not $cfgRoot) { $cfgRoot = (Get-Location).Path }
+    $envfile = Join-Path $cfgRoot '.jst/jira-sdlc-tools.env'
+    if (Test-Path -LiteralPath $envfile) {
+        $m = $null
+        foreach ($line in Get-Content -LiteralPath $envfile) {
+            if ($line -match '^PROJECT[-_]KEY=(.+)$') { $m = $Matches[1].Trim() }
         }
+        if ($m) { $Project = $m }
     }
     if (-not $Project -and $env:PROJECT_KEY) { $Project = $env:PROJECT_KEY }
 }
 if (-not $Project) {
-    [Console]::Error.WriteLine('ERROR: no project key. Pass -Project or run from a dir with jira-sdlc-tools.env.')
+    [Console]::Error.WriteLine('ERROR: no project key. Pass -Project or run inside a repo with .jst/jira-sdlc-tools.env.')
     exit 1
 }
 

@@ -102,7 +102,7 @@ Make `development` the repository default so PRs target it automatically:
 gh repo edit <OWNER>/<REPO> --default-branch development
 ```
 
-Then record both in `jira-sdlc-tools.env` — the skills read these, never a
+Then record both in `.jst/jira-sdlc-tools.env` — the skills read these, never a
 hardcoded branch name:
 
 ```
@@ -132,7 +132,7 @@ exist — the assigner refuses to create it:
 mkdir -p ../myapp-worktrees
 ```
 
-Then point `WORKTREES_DIR` at it in `jira-sdlc-tools.local.env`. From here
+Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`. From here
 on, the loop is: run the assigner in this clone, then run the executor from
 inside each issue's worktree.
 
@@ -178,8 +178,8 @@ A wrong name fails here, at setup, instead of mid-run.
 
 ### 3.3 Record the project key and statuses
 
-Put all five in `jira-sdlc-tools.env` (the shared/team file — the tokens and
-paths from Section 1 live in `jira-sdlc-tools.local.env` instead):
+Put all five in `.jst/jira-sdlc-tools.env` (the shared/team file — the tokens
+and paths from Section 1 live in `.jst/jira-sdlc-tools.local.env` instead):
 
 ```
 PROJECT_KEY=PROJ

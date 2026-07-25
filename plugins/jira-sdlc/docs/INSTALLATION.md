@@ -17,7 +17,7 @@
   [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
 - Jira credentials and `gh` authentication. Jira needs no login step — the
   `jira.sh` / `jira.ps1` client authenticates per-request from the
-  `email:token` pairs in `jira-sdlc-tools.local.env`; token types and scopes
+  `email:token` pairs in `.jst/jira-sdlc-tools.local.env`; token types and scopes
   are in
   [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
   §5. For `gh`, see

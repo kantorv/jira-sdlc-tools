@@ -20,6 +20,7 @@ function Get-GitTop {
 
 $CfgDir = Get-GitTop
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+$CfgDir = Join-Path $CfgDir '.jst'
 
 function Get-Cfg {
     param([string]$Pattern)

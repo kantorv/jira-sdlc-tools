@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Mirrors STATUS_TODO / STATUS_IN_PROGRESS from jira-sdlc-tools.env.
+          # Mirrors STATUS_TODO / STATUS_IN_PROGRESS from .jst/jira-sdlc-tools.env.
           SOURCE="To Do"
           TARGET="In Progress"
 
