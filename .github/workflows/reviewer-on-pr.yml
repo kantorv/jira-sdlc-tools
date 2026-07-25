@@ -17,6 +17,10 @@ on:
 jobs:
   check_pr_exists:
     runs-on: ubuntu-latest
+    name: Check PR exists
+    outputs:
+      pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
+
     steps:
       - uses: actions/checkout@v6
 
@@ -34,10 +38,8 @@ jobs:
           # PRDATA=$(gh pr list --head  $BRANCH_NAME  --json number --jq '.')
           PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$PR_NUMBER" ]; then
-            echo "PR already exists: $PR_NUMBER"
             echo "pr_exists=1" >> $GITHUB_OUTPUT
           else
-            echo "PR not exists"
             echo "pr_exists=0" >> $GITHUB_OUTPUT
           fi
 
