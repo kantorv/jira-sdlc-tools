@@ -67,7 +67,7 @@ if ($Site) { $Site = $Site -replace '^[^/]*//', '' } else { $Site = '' }
 # distinguish "assigned to someone else" from "unassigned". Compare on accountId.
 $whoami = ((& $psExe -NoProfile -File $jiraPs --role $Role whoami 2>$null) | Out-String)
 if ($LASTEXITCODE -ne 0 -or -not $whoami.Trim()) {
-    Die "check_assignee: could not authenticate as role '$Role' — check JIRA_$($Role.ToUpper())_TOKEN (or JIRA_TOKEN) in jira-sdlc-tools.local.env."
+    Die "check_assignee: could not authenticate as role '$Role' — check JIRA_$($Role.ToUpper())_EMAIL + _TOKEN in jira-sdlc-tools.local.env."
 }
 $MyId = ''; $Me = ''
 try {

@@ -50,9 +50,9 @@ function Cfg {
 }
 $PROJECT_KEY  = Cfg 'PROJECT_KEY'
 $IN_PROGRESS  = Cfg 'STATUS_IN_PROGRESS'; if (-not $IN_PROGRESS) { $IN_PROGRESS = 'In Progress' }
-$ASSIGN_EMAIL = Cfg 'JIRA_EXECUTOR_EMAIL'; if (-not $ASSIGN_EMAIL) { $ASSIGN_EMAIL = Cfg 'JIRA_ACCOUNT_EMAIL' }
+$ASSIGN_EMAIL = Cfg 'JIRA_EXECUTOR_EMAIL'
 if (-not $PROJECT_KEY)  { [Console]::Error.WriteLine('test: PROJECT_KEY not set in jira-sdlc-tools.env'); exit 1 }
-if (-not $ASSIGN_EMAIL) { [Console]::Error.WriteLine('test: no executor/account email to assign to'); exit 1 }
+if (-not $ASSIGN_EMAIL) { [Console]::Error.WriteLine('test: JIRA_EXECUTOR_EMAIL not set — no email to assign to'); exit 1 }
 
 # --- tiny assertion framework ------------------------------------------------
 $script:PASS = 0; $script:FAIL = 0
@@ -83,6 +83,12 @@ try {
     $out = J whoami; $r = $script:RC
     Rc 'whoami exits 0' 0 $r
     Ne 'whoami returns an accountId' (Json $out).accountId
+
+    # 1b. --role is required (no default credential to fall back to) ---------
+    $savedRole = $env:JIRA_ROLE; $env:JIRA_ROLE = ''
+    & pwsh -NoProfile -File $JIRA_PS whoami *> $null
+    Rc 'whoami without --role -> 2 (usage)' 2 $LASTEXITCODE
+    $env:JIRA_ROLE = $savedRole
 
     # 2/3. project exists (positive + negative) ------------------------------
     $out = J project exists $PROJECT_KEY; Rc "project exists $PROJECT_KEY -> 0" 0 $script:RC
