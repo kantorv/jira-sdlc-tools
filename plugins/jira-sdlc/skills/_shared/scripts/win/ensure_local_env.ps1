@@ -2,7 +2,7 @@
 # Mirrors the bash contract exactly: same messages, same exit codes. See the
 # bash original for the full rationale; kept minimal on purpose.
 #
-# Ensures jira-sdlc-tools.local.env exists in this checkout before anything
+# Ensures .jst/jira-sdlc-tools.local.env exists in this checkout before anything
 # reads it. A linked worktree shares only tracked files with its main checkout,
 # so it is born WITHOUT this gitignored file; copy it in from the main checkout.
 #
@@ -28,7 +28,7 @@ if (-not $WtRoot) { exit 0 }   # not a git repo — statuscheck's git_repo row F
 $DotGit = Join-Path $WtRoot '.git'
 if (-not (Test-Path -LiteralPath $DotGit -PathType Leaf)) { exit 0 }   # main checkout — nothing to copy
 
-$LocalEnv = Join-Path $WtRoot 'jira-sdlc-tools.local.env'
+$LocalEnv = Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env'
 if (Test-Path -LiteralPath $LocalEnv) { exit 0 }   # already present — don't overwrite
 
 # .git points at "gitdir: <main>/.git/worktrees/<name>"; <main> sits three
@@ -42,18 +42,22 @@ if ($GitDir) {
     $MainRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $GitDir))
 }
 
+# The destination folder is normally already there (.jst/jira-sdlc-tools.env is
+# tracked, so checkout materialises .jst/ in a fresh worktree), but create it
+# anyway — the copy is the one path that must not depend on that.
 if ($MainRoot -and
     (Test-Path -LiteralPath (Join-Path $MainRoot '.git') -PathType Container) -and
-    (Test-Path -LiteralPath (Join-Path $MainRoot 'jira-sdlc-tools.local.env'))) {
+    (Test-Path -LiteralPath (Join-Path $MainRoot '.jst/jira-sdlc-tools.local.env'))) {
     try {
-        Copy-Item -LiteralPath (Join-Path $MainRoot 'jira-sdlc-tools.local.env') `
+        New-Item -ItemType Directory -Force -Path (Join-Path $WtRoot '.jst') -ErrorAction Stop | Out-Null
+        Copy-Item -LiteralPath (Join-Path $MainRoot '.jst/jira-sdlc-tools.local.env') `
                   -Destination $LocalEnv -ErrorAction Stop
     } catch { }
     if (Test-Path -LiteralPath $LocalEnv) {
-        Write-Output "ensure_local_env: copied jira-sdlc-tools.local.env from the main checkout ($MainRoot)."
+        Write-Output "ensure_local_env: copied .jst/jira-sdlc-tools.local.env from the main checkout ($MainRoot)."
         exit 0
     }
 }
 
-[Console]::Error.WriteLine("ensure_local_env: jira-sdlc-tools.local.env missing here and not found in the main checkout either — create it in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then rerun.")
+[Console]::Error.WriteLine("ensure_local_env: .jst/jira-sdlc-tools.local.env missing here and not found in the main checkout either — create it in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then rerun.")
 exit 1

@@ -10,9 +10,9 @@ project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
-  `<PRODUCTION_BRANCH>` — resolve these from `jira-sdlc-tools.env`
-  (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
-  project root before following the rest of this skill.
+  `<PRODUCTION_BRANCH>` — resolve these from `.jst/jira-sdlc-tools.env`
+  (team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific),
+  both under the project root, before following the rest of this skill.
 - `<WORKTREES_DIR>` — the directory where per-issue worktrees are created
   (see `../_shared/project-config.md`). It must already exist — this skill
   never `mkdir`s it; step 1's healthcheck (the `worktrees_dir` row)
@@ -302,6 +302,6 @@ scope for this skill.
 Reference: `../_shared/jira-api-reference.md` is the operational + REST
 reference — the `jira.sh` command surface, confirmed issue type names, and
 git/branch conventions this skill depends on. The
-`jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env`
-(machine-specific) files in the project root have this repo's specific
+`.jst/jira-sdlc-tools.env` (team-shared) and `.jst/jira-sdlc-tools.local.env`
+(machine-specific) files under the project root have this repo's specific
 values for every `<TOKEN>` used above.

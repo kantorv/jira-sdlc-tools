@@ -5,11 +5,11 @@
 #
 # Requires jira.ps1 working (a valid credential; ../jira-api-reference.md). Run
 # from within the repo/worktree — jira.ps1 resolves its config from the git top-level.
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with -EnvPath or
+# Reads <PROJECT-KEY> from .jst/jira-sdlc-tools.env (override with -EnvPath or
 # $env:PROJECT_KEY); the project is a printed label only, never sent to the API.
 #
 # Usage:
-#   pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]
+#   pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath <path>] [-Json]
 #   (positional works too: pwsh -File list_subtasks.ps1 <PARENT-KEY> [-Json])
 #
 # -Role defaults to assigner (as create_parent_and_subtasks.ps1 does): reading a
@@ -20,11 +20,12 @@
 # Exit 1      — -Parent missing, or the response wasn't JSON.
 # Exit <code> — the `jira.ps1 issue view` call failed (its stderr is relayed).
 
-param([string]$Parent, [string]$Role = 'assigner', [string]$EnvPath = './jira-sdlc-tools.env', [switch]$Json)
+# -EnvPath overrides the default <repo-root>/.jst/jira-sdlc-tools.env.
+param([string]$Parent, [string]$Role = 'assigner', [string]$EnvPath = '', [switch]$Json)
 
 if (-not $Parent) {
     [Console]::Error.WriteLine('list_subtasks: missing required -Parent <PARENT-KEY>')
-    [Console]::Error.WriteLine('usage: pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath ./jira-sdlc-tools.env] [-Json]')
+    [Console]::Error.WriteLine('usage: pwsh -File list_subtasks.ps1 -Parent <PARENT-KEY> [-Role <role>] [-EnvPath <path>] [-Json]')
     exit 1
 }
 
@@ -41,8 +42,15 @@ if (-not $psExe) {
 }
 
 # --- resolve PROJECT-KEY (hyphen OR underscore form) ------------------------
+# Precedence: -EnvPath, then <repo-root>/.jst/jira-sdlc-tools.env. Anchored at
+# the git top-level (like jira.ps1) rather than walked up from cwd, so it
+# resolves the same from any subdirectory.
 function Get-ProjectKey {
-    foreach ($p in @($EnvPath, 'jira-sdlc-tools.env', '../jira-sdlc-tools.env')) {
+    $root = $null
+    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $root = ([string]$t).Trim() } } catch { }
+    if (-not $root) { $root = (Get-Location).Path }
+    foreach ($p in @($EnvPath, (Join-Path $root '.jst/jira-sdlc-tools.env'))) {
+        if (-not $p) { continue }
         if (-not (Test-Path -LiteralPath $p)) { continue }
         foreach ($line in Get-Content -LiteralPath $p) {
             if ($line -match '^\s*PROJECT[-_]KEY\s*=\s*(.+)$') { return $Matches[1].Trim() }

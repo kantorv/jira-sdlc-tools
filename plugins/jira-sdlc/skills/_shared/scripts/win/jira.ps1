@@ -105,8 +105,8 @@ function Resolve-Cred {
         default    { Die $EX_USAGE "role must be executor|assigner|reviewer (got '$($script:ROLE)')" }
     }
     $email = Get-Cfg "${prefix}_EMAIL"; $token = Get-Cfg "${prefix}_TOKEN"
-    if (-not $email) { Die $EX_ERR "no email for role '$($script:ROLE)' — set ${prefix}_EMAIL in jira-sdlc-tools.local.env." }
-    if (-not $token) { Die $EX_ERR "no token for role '$($script:ROLE)' — set ${prefix}_TOKEN in jira-sdlc-tools.local.env (raw API token value, not a path)." }
+    if (-not $email) { Die $EX_ERR "no email for role '$($script:ROLE)' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env." }
+    if (-not $token) { Die $EX_ERR "no token for role '$($script:ROLE)' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)." }
     $script:CRED = "${email}:${token}"
 }
 
@@ -136,9 +136,10 @@ function Resolve-CloudId {
 function Invoke-Ready {
     $script:CFGDIR = Get-GitTop
     if (-not $script:CFGDIR) { $script:CFGDIR = (Get-Location).Path }
+    $script:CFGDIR = Join-Path $script:CFGDIR '.jst'
     $u = Get-Cfg 'JIRA_ACCOUNT_URL'
     if ($u) { $script:SITE = $u -replace '^[^/]*//', '' } else { $script:SITE = '' }
-    if (-not $script:SITE) { Die $EX_ERR 'JIRA_ACCOUNT_URL is unset in jira-sdlc-tools.local.env.' }
+    if (-not $script:SITE) { Die $EX_ERR 'JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env.' }
     Resolve-Cred
     Resolve-CloudId
     $script:BASE = "https://api.atlassian.com/ex/jira/$($script:CLOUD)/rest/api/3"

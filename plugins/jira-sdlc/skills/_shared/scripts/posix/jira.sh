@@ -89,8 +89,8 @@ _resolve_cred() {
   esac
   email=$(_cfg "${prefix}_EMAIL" || true)
   token=$(_cfg "${prefix}_TOKEN" || true)
-  [ -n "$email" ] || die "$EX_ERR" "no email for role '$_ROLE' — set ${prefix}_EMAIL in jira-sdlc-tools.local.env."
-  [ -n "$token" ] || die "$EX_ERR" "no token for role '$_ROLE' — set ${prefix}_TOKEN in jira-sdlc-tools.local.env (raw API token value, not a path)."
+  [ -n "$email" ] || die "$EX_ERR" "no email for role '$_ROLE' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env."
+  [ -n "$token" ] || die "$EX_ERR" "no token for role '$_ROLE' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)."
   _CRED="$email:$token"
 }
 
@@ -109,9 +109,9 @@ _resolve_cloud_id() {
 _ready() {
   command -v curl >/dev/null 2>&1 || die "$EX_ERR" "curl is required but not installed."
   command -v jq   >/dev/null 2>&1 || die "$EX_ERR" "jq is required but not installed."
-  _cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || true); _cfg_dir="${_cfg_dir:-$PWD}"
+  _cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || true); _cfg_dir="${_cfg_dir:-$PWD}/.jst"
   _SITE=$(_cfg JIRA_ACCOUNT_URL || true); _SITE="${_SITE#*://}"
-  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in jira-sdlc-tools.local.env."
+  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env."
   _resolve_cred
   _resolve_cloud_id
   _BASE="https://api.atlassian.com/ex/jira/$_CLOUD_ID/rest/api/3"

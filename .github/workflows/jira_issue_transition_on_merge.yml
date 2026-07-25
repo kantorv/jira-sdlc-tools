@@ -41,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Mirrors STATUS_DONE from jira-sdlc-tools.env.
+          # Mirrors STATUS_DONE from .jst/jira-sdlc-tools.env.
           TARGET="Done"
 
           # The secret may carry a scheme; the REST host needs a bare host.

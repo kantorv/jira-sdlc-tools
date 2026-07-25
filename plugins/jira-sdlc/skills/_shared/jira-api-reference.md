@@ -17,10 +17,11 @@ This file is both halves of that:
   exact shapes the `.github/workflows/jira_issue_transition_*.yml` workflows
   use.
 
-Project-specific values are `<TOKEN>`s resolved from the two config files
+Project-specific values are `<TOKEN>`s resolved from the two config files in
+the project root's **`.jst/` folder** — the only location read
 (see [`project-config.md`](project-config.md)):
 
-**`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
+**`.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored)**
 - `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped)
 - three **required** role pairs `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — an account + its API token (classic **or** scoped; see §5) per role, selected by `jira.sh --role` (§9). Each role needs BOTH its own email and its own token; there is no default account and no fallback
 
@@ -394,8 +395,8 @@ inline comment body** — comments always come from a file (§11); and `create`
 
 Ships as a contract pair: `bash …/scripts/posix/jira.sh` on Linux/macOS,
 `pwsh`/`powershell …/scripts/win/jira.ps1` on Windows (identical args, output,
-exit codes). It resolves `jira-sdlc-tools.env` / `.local.env` from the **git
-top-level**, so **run it from inside the repo/worktree**; from an unrelated
+exit codes). It resolves `.jst/jira-sdlc-tools.env` / `.jst/….local.env` from
+the **git top-level**, so **run it from inside the repo/worktree**; from an unrelated
 directory it can't find config and stops with `JIRA_ACCOUNT_URL is unset`.
 
 ## 10. Issue field lists
@@ -600,6 +601,6 @@ output. Sources, in order:
    - Zero or multiple matches → `PR_BASE` stays empty. **Stop before
      `gh pr create` and ask the user** — do not fall back to
      `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
-4. `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` — reachable **only for a
+4. `<DEFAULT_BASE_BRANCH>` from `.jst/jira-sdlc-tools.env` — reachable **only for a
    top-level issue** (empty `PARENT_KEY`), for which it is correct. Still call
    it out in the report.

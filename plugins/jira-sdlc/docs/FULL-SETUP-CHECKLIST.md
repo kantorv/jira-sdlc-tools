@@ -103,18 +103,22 @@ git --version; gh --version; $PSVersionTable.PSVersion
 
 ## Project
 
-- [ ] **`jira-sdlc-tools.env` exists in your project root** — team-shared
+- [ ] **A `.jst/` folder exists at your project root.** Both settings files
+      live inside it, and it is the only location the skills read — a copy at
+      the root itself is ignored. The healthcheck's `jst_dir` row FAILs before
+      every other check when it's missing.
+- [ ] **`.jst/jira-sdlc-tools.env` exists** — team-shared
       settings, committed. Copy
-      [`jira-sdlc-tools.env`](../../../jira-sdlc-tools.env) from this repo and
-      fill in the blanks.
-- [ ] **`jira-sdlc-tools.local.env` exists in your project root** —
+      [`.jst/jira-sdlc-tools.env`](../../../.jst/jira-sdlc-tools.env) from this
+      repo and fill in the blanks.
+- [ ] **`.jst/jira-sdlc-tools.local.env` exists** —
       machine-specific settings *and secrets*. Copy
-      [`jira-sdlc-tools.local.env.example`](../../../jira-sdlc-tools.local.env.example).
-- [ ] **`jira-sdlc-tools.local.env` is gitignored.** It holds your raw Jira
+      [`.jst/jira-sdlc-tools.local.env.example`](../../../.jst/jira-sdlc-tools.local.env.example).
+- [ ] **`.jst/jira-sdlc-tools.local.env` is gitignored.** It holds your raw Jira
       token and GitHub PAT, so committing it leaks both.
       ```bash
-      echo 'jira-sdlc-tools.local.env' >> .gitignore
-      git check-ignore -v jira-sdlc-tools.local.env   # prints the rule if ignored
+      echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
+      git check-ignore -v .jst/jira-sdlc-tools.local.env   # prints the rule if ignored
       ```
       The healthcheck's `env_local_ignored` row checks this too — but it checks
       it *after* the file already exists, so do it in this order.
@@ -123,11 +127,11 @@ git --version; gh --version; $PSVersionTable.PSVersion
 
 ## Settings files
 
-Two files, both in **your project's** root — never in this toolkit's.
-Every `<TOKEN>` in the skills resolves from them. Full per-variable reference:
+Two files, both in the `.jst/` folder at **your project's** root — never in
+this toolkit's. Every `<TOKEN>` in the skills resolves from them. Full per-variable reference:
 [project-config.md](../skills/_shared/project-config.md).
 
-**`jira-sdlc-tools.env`** — team-shared, committed:
+**`.jst/jira-sdlc-tools.env`** — team-shared, committed:
 
 ```bash
 # GITHUB SETTINGS (shared/team)
@@ -142,7 +146,7 @@ STATUS_IN_REVIEW=In Review
 STATUS_DONE=Done
 ```
 
-**`jira-sdlc-tools.local.env`** — machine-specific, **gitignored**, holds
+**`.jst/jira-sdlc-tools.local.env`** — machine-specific, **gitignored**, holds
 secrets:
 
 ```bash
@@ -195,7 +199,7 @@ powershell -File statuscheck.ps1 --role executor  # PowerShell 5.1
 ```
 
 Both are plain and dependency-free: they read config and check auth, and the
-only thing either writes is `jira-sdlc-tools.local.env`, copied into a worktree
+only thing either writes is `.jst/jira-sdlc-tools.local.env`, copied into a worktree
 from your main checkout when it's missing. If you already have the plugin
 installed, run your local copy instead of downloading:
 `bash <path-to-plugin>/skills/_shared/scripts/posix/statuscheck.sh --role executor`.
@@ -205,9 +209,10 @@ onto this checklist:
 
 | Row | Covers |
 |---|---|
+| `jst_dir` | the `.jst/` settings folder exists at the repo root |
 | `git_repo` | you're in a git repository |
-| `env_config` | `jira-sdlc-tools.env` found and parsed |
-| `env_local` | `jira-sdlc-tools.local.env` found |
+| `env_config` | `.jst/jira-sdlc-tools.env` found and parsed |
+| `env_local` | `.jst/jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
 | `gh_auth` | `GITHUB_PAT_TOKEN` works — `gh` is authenticated |
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |

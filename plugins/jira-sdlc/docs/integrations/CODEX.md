@@ -12,9 +12,9 @@ automates it.
 
 ## Prerequisites
 
-- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - `.codex/config.toml` at the repo root with network access enabled (see
   **Sandboxing** in the caveats section below — without it, every `jira.sh`
   call fails when it shells out to `curl`)
@@ -84,7 +84,7 @@ network_access = true
 > was specific to the old Atlassian CLI's `jira auth login` step — a step
 > that no longer exists:
 > `jira.sh`/`jira.ps1` authenticate per-request from
-> `jira-sdlc-tools.local.env`, with nothing to log into first. Whether a
+> `.jst/jira-sdlc-tools.local.env`, with nothing to log into first. Whether a
 > bare `jira.sh` network call (e.g. `statuscheck.sh`'s own `jira whoami`)
 > succeeds in a session that just picked up this config, or still needs a
 > fresh session, has not been re-tested against the REST client. Until it
