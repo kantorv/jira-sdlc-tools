@@ -18,7 +18,7 @@
 set -u
 
 CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
-CFG_DIR="${CFG_DIR:-$PWD}"
+CFG_DIR="${CFG_DIR:-$PWD}/.jst"
 
 cfg() {
   local f v

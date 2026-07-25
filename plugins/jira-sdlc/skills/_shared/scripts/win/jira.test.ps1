@@ -7,7 +7,7 @@
 #
 # This is an INTEGRATION test: it hits a real Jira instance and creates/deletes
 # real issues, so it is NOT a CI test — it needs live credentials in
-# jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
+# .jst/jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
 # override with $env:JIRA_TEST_ROLE.
 #
 # Usage:  pwsh -File jira.test.ps1
@@ -35,6 +35,7 @@ function NullStr { param($x) if ($null -eq $x) { 'null' } else { [string]$x } }
 $cfgDir = $null
 try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $cfgDir = ([string]$t).Trim() } } catch { }
 if (-not $cfgDir) { $cfgDir = (Get-Location).Path }
+$cfgDir = Join-Path $cfgDir '.jst'
 function Cfg {
     param([string]$Name)
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
@@ -51,7 +52,7 @@ function Cfg {
 $PROJECT_KEY  = Cfg 'PROJECT_KEY'
 $IN_PROGRESS  = Cfg 'STATUS_IN_PROGRESS'; if (-not $IN_PROGRESS) { $IN_PROGRESS = 'In Progress' }
 $ASSIGN_EMAIL = Cfg 'JIRA_EXECUTOR_EMAIL'
-if (-not $PROJECT_KEY)  { [Console]::Error.WriteLine('test: PROJECT_KEY not set in jira-sdlc-tools.env'); exit 1 }
+if (-not $PROJECT_KEY)  { [Console]::Error.WriteLine('test: PROJECT_KEY not set in .jst/jira-sdlc-tools.env'); exit 1 }
 if (-not $ASSIGN_EMAIL) { [Console]::Error.WriteLine('test: JIRA_EXECUTOR_EMAIL not set — no email to assign to'); exit 1 }
 
 # --- tiny assertion framework ------------------------------------------------

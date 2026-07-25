@@ -15,8 +15,8 @@
 #   e.g. a role name passed positionally instead of via --role — is
 #   ignored, not compared.
 #
-# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from jira-sdlc-tools.env +
-# jira-sdlc-tools.local.env (local overrides team; `NAME = value` lines, parsed
+# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from .jst/jira-sdlc-tools.env
+# + .jst/jira-sdlc-tools.local.env (local overrides team; `NAME = value` lines, parsed
 # not sourced), exactly as statuscheck.sh does.
 #
 # Exit code: 0 = all required checks OK; 1 = at least one FAIL row;
@@ -109,25 +109,42 @@ if ($KeyArg -and ($KeyArg -notmatch '^[A-Za-z][A-Za-z0-9]*-[0-9]+$')) {
 }
 if (-not $Key) { $Key = $BrKey }   # best known key, for the title/remedies
 
-# --- mandatory jira-sdlc-tools.local.env gate (runs before any other check) --
-# A linked worktree is born without the gitignored local.env; the copy logic
-# lives only in ensure_local_env.ps1, so delegate to it (run as a child PowerShell so
-# its `exit` can't terminate us) rather than duplicating the copy.
 $WtRoot = Get-GitTop
 $IsWt   = ($WtRoot -and (Test-Path -LiteralPath (Join-Path $WtRoot '.git') -PathType Leaf))
-$EnvLocalCopied     = $false
-$EnvLocalCopiedFrom = ''
+
+# --- mandatory .jst/ gate (runs before every other check) --------------------
+# Both settings files live in <repo-root>/.jst/, and nothing reads a root-level
+# copy — so a missing .jst/ means no config at all, for every role. Check it
+# before the local.env gate below: that gate copies a file *into* .jst/.
 if ($WtRoot) {
-    $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot 'jira-sdlc-tools.local.env')
-    $selfExe = if (Test-Path "$PSHOME\pwsh.exe" -PathType Leaf) { "$PSHOME\pwsh.exe" } else { "$PSHOME\powershell.exe" }
-    & $selfExe -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Add-Row env_local FAIL "mandatory jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" `
-            "create jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
+    $JstDir = Join-Path $WtRoot '.jst'
+    if (Test-Path -LiteralPath $JstDir -PathType Container) {
+        Add-Row jst_dir OK "$JstDir"
+    } else {
+        Add-Row jst_dir FAIL "settings folder $JstDir not found — the skills read their config only from there" `
+            "create .jst/ in the project root holding jira-sdlc-tools.env (team-shared, tracked) and jira-sdlc-tools.local.env (machine-specific, gitignored) — see skills/_shared/project-config.md — then $Rerun."
         Write-Report
         exit 1
     }
-    if ((-not $preExisted) -and $IsWt -and (Test-Path -LiteralPath (Join-Path $WtRoot 'jira-sdlc-tools.local.env'))) {
+}
+
+# --- mandatory .jst/jira-sdlc-tools.local.env gate (before any other check) --
+# A linked worktree is born without the gitignored local.env; the copy logic
+# lives only in ensure_local_env.ps1, so delegate to it (run as a child PowerShell so
+# its `exit` can't terminate us) rather than duplicating the copy.
+$EnvLocalCopied     = $false
+$EnvLocalCopiedFrom = ''
+if ($WtRoot) {
+    $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env')
+    $selfExe = if (Test-Path "$PSHOME\pwsh.exe" -PathType Leaf) { "$PSHOME\pwsh.exe" } else { "$PSHOME\powershell.exe" }
+    & $selfExe -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Add-Row env_local FAIL "mandatory .jst/jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" `
+            "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
+        Write-Report
+        exit 1
+    }
+    if ((-not $preExisted) -and $IsWt -and (Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env'))) {
         $EnvLocalCopied = $true
         $gd = (Get-Content -LiteralPath (Join-Path $WtRoot '.git') |
             Where-Object { $_ -match '^gitdir:\s*(.*)$' } |
@@ -192,7 +209,9 @@ if ($OS -eq 'windows') {
 }
 
 # --- project config ----------------------------------------------------------
-$CfgDir = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
+# Both settings files live in <repo-root>/.jst/ — the only location read.
+$CfgRoot = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
+$CfgDir  = Join-Path $CfgRoot '.jst'
 function Get-Cfg {  # Get-Cfg <NAME-PATTERN> -> value; local.env overrides .env
     param([string]$Pattern)
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
@@ -212,37 +231,39 @@ $BaseBranch       = Get-Cfg 'DEFAULT_BASE_BRANCH'
 $ProductionBranch = Get-Cfg 'PRODUCTION_BRANCH'
 if (-not (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.env'))) {
     Add-Row env_config FAIL "jira-sdlc-tools.env not found in $CfgDir" `
-        "create jira-sdlc-tools.env in the project root (variables described in skills/_shared/project-config.md), then $Rerun."
+        "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $Rerun."
 } elseif (-not $ProjectKey) {
     Add-Row env_config FAIL "jira-sdlc-tools.env found but PROJECT-KEY is unset" `
-        "add PROJECT-KEY to jira-sdlc-tools.env (see skills/_shared/project-config.md), then $Rerun."
+        "add PROJECT-KEY to .jst/jira-sdlc-tools.env (see skills/_shared/project-config.md), then $Rerun."
 } else {
     Add-Row env_config OK "PROJECT-KEY=$ProjectKey"
 }
 
-# --- jira-sdlc-tools.local.env -----------------------------------------------
+# --- .jst/jira-sdlc-tools.local.env ------------------------------------------
 if (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.local.env')) {
     if ($EnvLocalCopied) {
         Add-Row env_local OK "auto-copied from main repo ($EnvLocalCopiedFrom)"
     } else {
-        Add-Row env_local OK "jira-sdlc-tools.local.env present"
+        Add-Row env_local OK ".jst/jira-sdlc-tools.local.env present"
     }
-    & git -C $CfgDir ls-files --error-unmatch jira-sdlc-tools.local.env *> $null
+    # Run git from the repo root and name the path under .jst/ — git resolves a
+    # relative pathspec against its working directory, so the two must agree.
+    & git -C $CfgRoot ls-files --error-unmatch .jst/jira-sdlc-tools.local.env *> $null
     $tracked = ($LASTEXITCODE -eq 0)
-    & git -C $CfgDir check-ignore -q jira-sdlc-tools.local.env *> $null
+    & git -C $CfgRoot check-ignore -q .jst/jira-sdlc-tools.local.env *> $null
     $ignored = ($LASTEXITCODE -eq 0)
     if ($tracked) {
-        Add-Row env_local_ignored FAIL "jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" `
-            "git rm --cached jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
+        Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" `
+            "git rm --cached .jst/jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
     } elseif ($ignored) {
         Add-Row env_local_ignored OK "gitignored (never committed)"
     } else {
-        Add-Row env_local_ignored FAIL "jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" `
-            "add jira-sdlc-tools.local.env to .gitignore first, then $Rerun."
+        Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" `
+            "add .jst/jira-sdlc-tools.local.env to .gitignore first, then $Rerun."
     }
 } else {
     Add-Row env_local FAIL "jira-sdlc-tools.local.env not found in $CfgDir" `
-        "create it in the project root (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
+        "create it in the project's .jst/ folder (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
     Add-Row env_local_ignored INFO "skipped (file absent)"
 }
 
@@ -297,7 +318,7 @@ if ($KeyArg) {
 # identity), so this role-agnostic healthcheck — run by every skill
 # before any work — is the right home for it, no per-skill wiring needed.
 # GITHUB_PAT_TOKEN is a secret, machine-specific value → gitignored
-# jira-sdlc-tools.local.env only. Missing token → FAIL with a remedy, and the
+# .jst/jira-sdlc-tools.local.env only. Missing token → FAIL with a remedy, and the
 # skill stops like any other FAIL row. A login that runs but FAILs (non-zero
 # exit — an expired or revoked PAT, etc.) also FAILs, relaying gh's first stderr
 # line (token redacted) rather than falling through to a generic "no session" —
@@ -314,7 +335,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     if ($ghPat) { $ghPat = $ghPat.Trim().Trim('"').Trim("'") }
     if (-not $ghPat) {
         Add-Row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" `
-            "add GITHUB_PAT_TOKEN to jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $Rerun."
+            "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $Rerun."
     } else {
         # logout FIRST — see header; non-fatal if there's nothing to log out.
         & gh auth logout --hostname github.com 2>&1 | Out-Null
@@ -368,7 +389,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
             if (-not $err) { $err = '(no stderr from gh)' }
             Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
-                "check that GITHUB_PAT_TOKEN in jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
+                "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
         }
     }
 }
@@ -401,7 +422,7 @@ if (-not $psExe) {
         Add-Row jira_auth OK "$Role authenticated as $(if ($who) { $who } else { 'unknown' }) (GET /myself)"
     } else {
         Add-Row jira_auth FAIL "the $Role Jira credential doesn't authenticate — 'jira --role $Role whoami' failed (unset/stale/invalid pair, or unreachable site)" `
-            "set a working JIRA_${RoleUc}_EMAIL + JIRA_${RoleUc}_TOKEN pair in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
+            "set a working JIRA_${RoleUc}_EMAIL + JIRA_${RoleUc}_TOKEN pair in .jst/jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
     }
 }
 
@@ -412,7 +433,7 @@ if ($JiraOk -and $ProjectKey) {
         Add-Row jira_project OK "project $ProjectKey reachable on the authenticated site"
     } else {
         Add-Row jira_project FAIL "project '$ProjectKey' not visible to the $Role account via 'jira project exists' (or the call timed out)" `
-            "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
+            "check PROJECT_KEY in .jst/jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
     }
 } else {
     Add-Row jira_project WARN "skipped (jira_auth failed or PROJECT-KEY unset — see rows above)"
@@ -424,7 +445,7 @@ Add-Row production_branch INFO "PRODUCTION_BRANCH=$(if ($ProductionBranch) { $Pr
 
 $WorktreesDir = Get-Cfg 'WORKTREES_DIR'
 if (-not $WorktreesDir) {
-    Add-Row worktrees_dir WARN "WORKTREES_DIR unset in jira-sdlc-tools(.local).env"
+    Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
 } else {
     $wdBase = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
     if ($IsWt) {
@@ -437,7 +458,7 @@ if (-not $WorktreesDir) {
     if (Test-Path -LiteralPath $wdPath -PathType Container) {
         Add-Row worktrees_dir INFO "$wdPath (present)"
     } else {
-        Add-Row worktrees_dir WARN "$wdPath missing — the assigner won't create it; check WORKTREES_DIR in jira-sdlc-tools.env if the convention changed"
+        Add-Row worktrees_dir WARN "$wdPath missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.env if the convention changed"
     }
 }
 

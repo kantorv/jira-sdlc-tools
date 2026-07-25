@@ -7,7 +7,7 @@
 # Bundled as a reusable form of the "turn a review into tracked sub-tasks"
 # pattern used while seeding issues from a skill review.
 #
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env (team-shared) in the project root
+# Reads <PROJECT-KEY> from .jst/jira-sdlc-tools.env (team-shared) in the project root
 # (override with --project or $PROJECT_KEY). Requires jira.sh working (curl + jq
 # + a valid credential); run from within the repo/worktree — jira.sh resolves its
 # config from the git top-level. Creates as --role (default assigner) so the created
@@ -61,17 +61,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- resolve project key from jira-sdlc-tools.env (team-shared) if not given ---
+# --- resolve project key from .jst/jira-sdlc-tools.env (team-shared) if not given ---
+# Anchored at the git top-level (like jira.sh) rather than walked up from cwd,
+# so it resolves the same from any subdirectory.
 if [ -z "$PROJECT_KEY" ]; then
-  for envfile in ./jira-sdlc-tools.env ../jira-sdlc-tools.env; do
-    if [ -f "$envfile" ]; then
-      k=$(grep -E '^PROJECT[-_]KEY=' "$envfile" | tail -1 | cut -d= -f2-)
-      [ -n "$k" ] && PROJECT_KEY="$k" && break
-    fi
-  done
+  CFG_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+  envfile="$CFG_ROOT/.jst/jira-sdlc-tools.env"
+  if [ -f "$envfile" ]; then
+    k=$(grep -E '^PROJECT[-_]KEY=' "$envfile" | tail -1 | cut -d= -f2-)
+    [ -n "$k" ] && PROJECT_KEY="$k"
+  fi
 fi
 if [ -z "$PROJECT_KEY" ]; then
-  echo "ERROR: no project key. Pass --project or run from a dir with jira-sdlc-tools.env." >&2
+  echo "ERROR: no project key. Pass --project or run inside a repo with .jst/jira-sdlc-tools.env." >&2
   exit 1
 fi
 
