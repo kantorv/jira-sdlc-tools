@@ -66,7 +66,7 @@ jobs:
       - name: Resolve Kimi Code version
         id: kimi-version
         run: |
-          VERSION=$(curl -fsSL --max-time 10 https://code.kimi.com/kimi-code/latest)
+          VERSION=$(curl -fsSL  https://code.kimi.com/kimi-code/latest)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Latest Kimi Code version: $VERSION"
 
@@ -118,7 +118,7 @@ jobs:
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
           ]
-          
+
           [providers.nvidia]
           type = "openai"
           api_key = "${NVIDIA_NIM_API_KEY}"
