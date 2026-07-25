@@ -44,11 +44,12 @@ Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
 below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `check_assignee`, which takes a `--role` argument, **statuscheck itself
-takes no role or issue-key argument — run it bare** on both POSIX and Windows;
-a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
-for an issue key, but don't add one.
+chose, and can't be what you consult to dispatch statuscheck itself.
+Like `check_assignee`, **statuscheck takes a required `--role` — pass
+`--role assigner`** on both POSIX and Windows, since it authenticates *your*
+role's credential and there is no default account to fall back on. It takes
+**no issue-key argument** here; a role name reaching it positionally is ignored
+rather than mistaken for one.
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
 `ensure_local_env` no-ops when the file already exists, so run it
@@ -64,14 +65,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" ||
 
 Then run the shared pre-flight healthcheck. It
 gathers every environment fact this skill depends on — git repo, the two
-env files + their gitignore state, Jira auth (the default credential —
-`jira.sh whoami`), Jira project reachability, `gh` auth — in one pass and
+env files + their gitignore state, Jira auth (the **assigner's** credential —
+`jira.sh --role assigner whoami`), Jira project reachability, `gh` auth — in one pass and
 prints a markdown table, replacing the older per-check prose. Override the
 rerun hint so its remedies name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role assigner
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill on a non-Claude
@@ -109,9 +110,9 @@ though the assigner only pushes branches and never opens PRs itself — a
 green row confirms the creds the executor will later need for
 `gh pr create`. The remaining rows FAIL if broken but need no per-role
 interpretation: `git_repo`, `env_config`, `env_local`,
-`env_local_ignored`, `jira_auth` (the default credential authenticates —
-`jira.sh whoami`; every `jira.sh` call in steps 6–7 uses `--role assigner`,
-which falls back to the default pair), `jira_project`, plus context
+`env_local_ignored`, `jira_auth` (the **assigner's** credential authenticates —
+`jira.sh --role assigner whoami`, the same pair every `jira.sh` call in
+steps 6–7 uses), `jira_project`, plus context
 `base_branch` (INFO) and `working_tree`
 (INFO, or WARN when the tree is dirty — that doesn't block, but mention
 it to the user before branching from a dirty base checkout).
@@ -246,7 +247,7 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
 `bash "$S/jira.sh" <cmd>` where `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`):
 - **Auth**: no login step — every call carries `--role assigner` and
   authenticates per-request on the assigner credential (`../_shared/jira-api-reference.md`
-  §9). (Step 1's healthcheck already verified the default credential auths.)
+  §9). (Step 1's healthcheck already verified that this credential auths.)
 - **Project health check**: already verified by step 1's healthcheck. (If
   you're picking up from a re-run and skipped step 1, run
   `jira.sh --role assigner project exists <PROJECT-KEY>` first — exit 0 means

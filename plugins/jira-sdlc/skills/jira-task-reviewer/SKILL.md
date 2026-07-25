@@ -32,11 +32,12 @@ Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
 below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `check_assignee`, which takes a `--role` argument, **statuscheck itself
-takes no role or issue-key argument — run it bare** on both POSIX and Windows;
-a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
-for an issue key, but don't add one.
+chose, and can't be what you consult to dispatch statuscheck itself.
+Like `check_assignee`, **statuscheck takes a required `--role` — pass
+`--role reviewer`** on both POSIX and Windows, since it authenticates *your*
+role's credential and there is no default account to fall back on. It takes
+**no issue-key argument** here; a role name reaching it positionally is ignored
+rather than mistaken for one.
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
 `ensure_local_env` no-ops when the file already exists, so run it
@@ -60,7 +61,7 @@ of the executor default:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role reviewer
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
@@ -74,7 +75,8 @@ It prints one markdown table (`check | status | detail`), where status is
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero
 if any row is `FAIL`. `gh_auth` and `jira_auth` are load-bearing here
 (every verdict comment, `gh pr list` call, and Jira transition depends on
-them). The `worktree` and `branch` rows are context INFO — the shared
+them — and `jira_auth` now confirms the **reviewer's** own credential, the
+one those writes will use). The `worktree` and `branch` rows are context INFO — the shared
 script reports them for every role and never FAILs on them.
 
 Only the rows this skill reads in a role-specific way, or relies on later,

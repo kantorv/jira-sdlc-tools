@@ -66,11 +66,13 @@ Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
 below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `check_assignee`, which takes a `--role` (and an optional issue key),
-**statuscheck itself takes no role or issue-key argument — run it bare** on
-both POSIX and Windows; a stray role name (e.g. `reviewer`) reaching it is
-ignored rather than mistaken for an issue key, but don't add one.
+chose, and can't be what you consult to dispatch statuscheck itself.
+Like `check_assignee`, **statuscheck takes a required `--role` — pass
+`--role executor`** on both POSIX and Windows, since it authenticates *your*
+role's credential and there is no default account to fall back on. It takes
+**no issue-key argument** here: the branch is the sole source of truth for the
+key, and a role name reaching it positionally is ignored rather than mistaken
+for one.
 
 **Get local credentials and confirm you own the issue — run these FIRST,
 before the healthcheck.** Both are idempotent and take no decisions of their
@@ -105,7 +107,7 @@ All the checks are bundled into one script, so this is a single Bash
 call rather than a sequence of separate probes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role executor
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill on a non-Claude
@@ -140,8 +142,9 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing by `ensure_local_env.sh`, called
 before this script — see step 1 above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
-(step 10's `gh pr create`), `jira_auth` (the default credential authenticates —
-`jira.sh whoami`), `jira_project`, plus context `base_branch`, `working_tree` (WARN when
+(step 10's `gh pr create`), `jira_auth` (the **executor's** credential
+authenticates — `jira.sh --role executor whoami`), `jira_project`, plus context
+`base_branch`, `working_tree` (WARN when
 dirty), and `worktrees_dir` (WARN when missing — only the assigner acts
 on it).
 
