@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.kimi-code/bin" >> "$GITHUB_PATH"
 
       - name: Write Kimi Code config.toml
         shell: bash
@@ -78,7 +78,6 @@ jobs:
 
       - name: Verify installation
         run: |
-          source /home/runner/.bashrc 
           kimi --version
           echo "Configuration (~/.kimi-code/config.toml):"
           cat ~/.kimi-code/config.toml
