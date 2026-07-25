@@ -165,26 +165,60 @@ POST transition (id 11)  →  204   →  status: <STATUS_TODO>
 
 ## 5. Token types & scopes
 
-Create tokens at `id.atlassian.com` → Security → API tokens.
+Create tokens at `id.atlassian.com` → Security → API tokens. Two kinds come out
+of that page, and they don't behave the same here:
 
-- **Classic, unscoped** ("Create API token") — works on both hosts; carries
+- **Classic, unscoped** ("Create API token") — works on both hosts (§0); carries
   the account's full Jira permissions. Simplest; restrict via the account's
   project permissions.
-- **Scoped** ("Create API token with scopes") — least privilege, gateway
-  only. For the read-status + transition flow above, the minimal set is
-  three **coarse** scopes:
+- **Scoped** ("Create API token with scopes") — least privilege, **gateway
+  only**. Its scopes come in two flavours: **coarse** (three scopes, works) and
+  **granular** per-resource (a documented trap — see below the table).
 
-  | Scope | Grants |
-  |---|---|
-  | `read:jira-user` | `GET /myself` (identity) |
-  | `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions` |
-  | `write:jira-work` | `POST /issue/{key}/transitions` |
+Each skill authenticates as its own role (§9), so a token only ever needs to
+cover that role's own calls:
 
-  Do **not** use the *granular* per-resource scopes (`read:issue:jira`,
-  `read:issue.transition:jira`, `write:issue:jira`, …): `GET /issue`
-  requires a whole bundle of them simultaneously, and any missing member
-  returns `401 {"message":"Unauthorized; scope does not match"}`. The three
-  coarse scopes above avoid that trap.
+- **assigner** — `whoami`, `project exists`, `issue create` (which resolves
+  `--assignee` through a user search), `comment add`, `issue delete`
+- **executor** — `whoami`, `project exists`, `issue view`, `issue transition`,
+  `comment add` / `comment list`
+- **reviewer** — `whoami`, `project exists`, `issue view`, `comment add` /
+  `comment list`, `issue transition`
+
+What each token kind grants that role:
+
+| Role | Non-scoped | Scoped classic (coarse) | Scoped granular |
+|---|---|---|---|
+| **assigner** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:field:jira`, `read:issue-type:jira`, `write:issue:jira`, `write:comment:jira`, `delete:issue:jira` — **plus** whatever else `POST /issue` demands (same bundle problem) |
+| **executor** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
+| **reviewer** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
+
+**Why Non-scoped is N/A in every row**: an unscoped classic token carries the
+account's full Jira permissions, so there is no per-role scope list to give —
+you narrow it by narrowing the *account's* project permissions instead, not by
+picking scopes.
+
+**The three coarse scopes**, which are identical for all three roles because
+every role reads issues and writes something back:
+
+| Scope | Grants |
+|---|---|
+| `read:jira-user` | `GET /myself` (identity), `GET /user/search` (email → accountId) |
+| `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions`, `GET /issue/{key}/comment`, `GET /project/search` |
+| `write:jira-work` | `POST /issue`, `POST /issue/{key}/transitions`, `POST /issue/{key}/comment`, `PUT /issue/{key}/assignee`, `DELETE /issue/{key}` |
+
+⚠️ **The granular column documents a trap — it is not a recommendation.** The
+per-resource scopes are listed above because they're what you'd reach for, not
+because that configuration is known to work: `GET /issue` requires a whole
+bundle of granular read scopes *simultaneously* (`read:issue-meta:jira`,
+`read:issue-security-level:jira`, `read:issue.vote:jira`,
+`read:issue.changelog:jira`, `read:avatar:jira`, `read:status:jira`,
+`read:attachment:jira`, `read:issue-link:jira`, `read:priority:jira`, … — the
+list is long and undocumented per-endpoint), and **any missing member returns
+`401 {"message":"Unauthorized; scope does not match"}`** rather than naming what
+it wanted. Each row's granular list is therefore a starting point that will be
+incomplete. **Use the three coarse scopes** — they cover every call in the
+per-role lists above and avoid the bundle problem entirely.
 
 ## 6. People fields — `assignee` and `reporter`
 
