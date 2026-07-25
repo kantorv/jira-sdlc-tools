@@ -19,7 +19,7 @@ of helpers the bundled scripts shell out to.
       [cli.github.com](https://cli.github.com/) ·
       [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md)
 - [ ] **`curl` / `Invoke-RestMethod`** — issues, comments, transitions (via `jira.sh` / `jira.ps1`).
-      Authenticates with `JIRA_TOKEN`.
+      Authenticates per-request with the calling role's `JIRA_<ROLE>_TOKEN`.
       [JIRA-REST.md](JIRA-REST.md)
 
 Helper tools — which ones depends on your OS:
@@ -96,9 +96,10 @@ git --version; gh --version; $PSVersionTable.PSVersion
       [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
       Use a **plain API token** — Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) rejects scoped tokens. If you must use a scoped token via the REST gateway, see
       [JIRA-REST.md](JIRA-REST.md) for the required scopes and URL changes.
-- [ ] *(Optional)* **Per-role Jira accounts** — separate emails/tokens for the
-      assigner, executor and reviewer, so the board shows who did what. Leave
-      them commented out to run everything as one account.
+- [ ] **Per-role Jira accounts (required)** — an email **and** a token for each
+      of the assigner, executor and reviewer, so the board shows who did what.
+      There is no default account behind them; point all three pairs at the
+      same Atlassian account if you'd rather not split them.
 
 ## Project
 
@@ -149,22 +150,23 @@ secrets:
 WORKTREES_DIR=../myapp-worktrees
 GITHUB_PAT_TOKEN="github_pat_…"
 
-# JIRA DEFAULT SETTINGS
+# JIRA SITE
 JIRA_ACCOUNT_URL=your-site.atlassian.net
-JIRA_ACCOUNT_EMAIL=you@example.com
-JIRA_TOKEN=your-api-token-value      # the raw token, not a path to a file
 
-# PER-ROLE JIRA ACCOUNTS (optional) — omit to run as one account
-#JIRA_ASSIGNER_EMAIL=assigner@example.com
-#JIRA_ASSIGNER_TOKEN=…
-#JIRA_EXECUTOR_EMAIL=executor@example.com
-#JIRA_EXECUTOR_TOKEN=…
-#JIRA_REVIEWER_EMAIL=reviewer@example.com
-#JIRA_REVIEWER_TOKEN=…
+# PER-ROLE JIRA ACCOUNTS — all three required, each with its own email AND token
+JIRA_ASSIGNER_EMAIL=assigner@example.com
+JIRA_ASSIGNER_TOKEN=…
+JIRA_EXECUTOR_EMAIL=executor@example.com
+JIRA_EXECUTOR_TOKEN=…
+JIRA_REVIEWER_EMAIL=reviewer@example.com
+JIRA_REVIEWER_TOKEN=…
 ```
 
-One trap worth knowing: `JIRA_TOKEN` is the **raw token value**, not a path to
-a file holding it.
+Two traps worth knowing: each `JIRA_<ROLE>_TOKEN` is the **raw token value**,
+not a path to a file holding it — and there is no default account behind the
+three roles, so a role missing either half stops the run rather than falling
+back to somebody else's credential. (Pointing all three at one Atlassian
+account is fine; just fill in all six values.)
 
 ## Verify it
 
@@ -180,22 +182,23 @@ settings it reads are documented in
 [`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
-bash statuscheck.sh
+bash statuscheck.sh --role executor   # --role is required: assigner|executor|reviewer
 ```
 
 **Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
 [`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
-pwsh -File statuscheck.ps1        # PowerShell 7+
-powershell -File statuscheck.ps1  # PowerShell 5.1
+# --role is required: assigner|executor|reviewer
+pwsh -File statuscheck.ps1 --role executor        # PowerShell 7+
+powershell -File statuscheck.ps1 --role executor  # PowerShell 5.1
 ```
 
 Both are plain and dependency-free: they read config and check auth, and the
 only thing either writes is `jira-sdlc-tools.local.env`, copied into a worktree
 from your main checkout when it's missing. If you already have the plugin
 installed, run your local copy instead of downloading:
-`bash <path-to-plugin>/skills/_shared/scripts/posix/statuscheck.sh`.
+`bash <path-to-plugin>/skills/_shared/scripts/posix/statuscheck.sh --role executor`.
 
 It prints one table and exits non-zero if anything is broken. The rows that map
 onto this checklist:
@@ -207,7 +210,7 @@ onto this checklist:
 | `env_local` | `jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
 | `gh_auth` | `GITHUB_PAT_TOKEN` works — `gh` is authenticated |
-| `jira_auth` | `JIRA_TOKEN` works — `jira.sh` is authenticated |
+| `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
 | `worktrees_dir` | `WORKTREES_DIR` exists (WARN only — the assigner creates it) |

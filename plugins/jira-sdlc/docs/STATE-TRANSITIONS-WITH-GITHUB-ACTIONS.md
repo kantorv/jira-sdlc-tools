@@ -95,6 +95,10 @@ own Jira client hits (see
 | `JIRA_ACCOUNT_EMAIL` | the token owner's Atlassian email | Must be the account the token belongs to |
 | `JIRA_ISSUE_TRANSITION_TOKEN` | the API token from step 2 | |
 
+These are the **CI bot's own** repo secrets — independent of the skills' local
+per-role credentials (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` in
+`jira-sdlc-tools.local.env`), which the workflows never read.
+
 ### 4. Make the status names match your board
 
 **If you change nothing else after copying the files, change these.** The

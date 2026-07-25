@@ -22,8 +22,7 @@ Project-specific values are `<TOKEN>`s resolved from the two config files
 
 **`jira-sdlc-tools.local.env` (machine-specific, gitignored)**
 - `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped)
-- `<JIRA_ACCOUNT_EMAIL>` / `<JIRA_TOKEN>` — the default account + its API token (classic **or** scoped; see §5)
-- optional per-role pairs `JIRA_{EXECUTOR,ASSIGNER,REVIEWER}_{EMAIL,TOKEN}` — selected by `jira.sh --role` (§9); each falls back to the default pair independently
+- three **required** role pairs `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — an account + its API token (classic **or** scoped; see §5) per role, selected by `jira.sh --role` (§9). Each role needs BOTH its own email and its own token; there is no default account and no fallback
 
 `<CLOUD_ID>` is *not* configured — resolve it at runtime (see §1).
 
@@ -84,8 +83,11 @@ BASE="https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3"
 Every authenticated call is Basic auth against `$BASE`. Define once:
 
 ```bash
-api() { curl -sSfL -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" "$@"; }
+api() { curl -sSfL -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H "Accept: application/json" "$@"; }
 ```
+
+(Any of the three role pairs works — pick the one whose identity the call
+should carry. `jira.sh` does exactly this per request, §9.)
 
 `-sSfL` = silent, but show errors, **fail the process on any HTTP ≥ 400**
 (so `set -euo pipefail` catches auth/scope problems), and follow redirects.
@@ -231,7 +233,7 @@ api --get --data-urlencode "query=<EMAIL>" "$BASE/user/search" | jq -r '.[0].acc
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' -X PUT \
-  -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H 'Content-Type: application/json' \
+  -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H 'Content-Type: application/json' \
   --data '{"fields":{
              "assignee": {"accountId":"<EXECUTOR_ACCOUNT_ID>"},
              "reporter": {"accountId":"<ASSIGNER_ACCOUNT_ID>"}
@@ -275,7 +277,7 @@ wc -l < keys.txt      # sanity-check the count BEFORE writing anything
 ok=0; fail=0
 while read -r K; do
   code=$(curl -sS -o /tmp/err -w '%{http_code}' -X PUT \
-    -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H 'Content-Type: application/json' \
+    -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H 'Content-Type: application/json' \
     --data "{\"fields\":{\"assignee\":{\"accountId\":\"$EXE_ID\"},
                          \"reporter\":{\"accountId\":\"$ASG_ID\"}}}" \
     "$BASE/issue/$K")
@@ -342,19 +344,20 @@ machine-global "active account" — which is what removes the single-account
 race that a login-based CLI forced on parallel runs (the whole reason the
 executor, assigner, and reviewer can run at once as different identities).
 
-**`--role executor|assigner|reviewer`** (global; may appear anywhere in the
-args) picks which credential the call uses: it reads
-`JIRA_<ROLE>_EMAIL` / `JIRA_<ROLE>_TOKEN` from `jira-sdlc-tools.local.env`,
-each **falling back to the default `JIRA_ACCOUNT_EMAIL` / `JIRA_TOKEN`
-independently** (a role may set only its email and share the default token).
-Omit `--role` for a role-neutral call on the default pair (statuscheck's
-`jira whoami` does this). `check_assignee` passes `--role` because *who* it
-authenticates as is the thing it's checking.
+**`--role assigner|executor|reviewer`** (global; may appear anywhere in the
+args) is **required** and picks which credential the call uses: it reads
+`JIRA_<ROLE>_EMAIL` / `JIRA_<ROLE>_TOKEN` from `jira-sdlc-tools.local.env`.
+Both are required for the role you name — there is no default account, so an
+unset pair is an error rather than a silent borrow of another identity, and a
+call with no `--role` is a usage error (exit 2). Every caller therefore names
+its role: each skill passes its own, `check_assignee` passes the role whose
+ownership it's checking, and `statuscheck --role <caller>` probes that one
+role's credential in its `jira_auth` row.
 
 ### Command surface
 
 ```
-jira [--role executor|assigner|reviewer] <command>
+jira --role assigner|executor|reviewer <command>
 
   whoami                                    who this credential authenticates as (GET /myself)
   project exists  <KEY>                     is the project visible to this account?

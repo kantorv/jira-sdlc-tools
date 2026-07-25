@@ -193,8 +193,9 @@ relying on opaque GitHub-for-Jira transition rules:
   and authenticates per-request. The shared reference (`skills/_shared/jira-api-reference.md`)
   documents the API endpoints and the exact `jira.sh` flag behavior the skills invoke,
   with a detailed companion (`docs/JIRA-REST.md`) for rationale and discovery procedures.
-  It reads the `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
-  from `jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
+  It reads `JIRA_ACCOUNT_URL` and the three role credential pairs
+  (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}`) from
+  `jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
   there is no interactive login step to run first.
 
 - **GitHub CLI (`gh`)**, authenticated.
@@ -325,7 +326,7 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one)
+- The three Jira role credential pairs (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — each token the raw API token value itself, not a path to a file containing one). All three are required; auth is role-scoped with no default account
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
@@ -341,8 +342,8 @@ Atlassian offers two kinds, and the choice matters because Basic auth on the `*.
   with `jira.sh` (what the three skills drive Jira through) and with every
   REST endpoint. It carries the full Jira permissions of the account it
   belongs to, so scope it down by restricting **that account's project
-  role/permissions**, not the token. **This is the recommended token for
-  `JIRA_TOKEN`**.
+  role/permissions**, not the token. **This is the recommended token type for
+  the three role tokens**.
 
 - **Scoped — "Create API token with scopes".** Least privilege, but with
   a hard constraint: a scoped token is **rejected by Basic auth on the

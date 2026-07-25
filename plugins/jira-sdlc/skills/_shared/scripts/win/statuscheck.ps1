@@ -4,25 +4,52 @@
 # and prints the SAME markdown table + exit code as the bash original. Mirror
 # the bash logic; keep them in sync.
 #
-# Usage: powershell -File statuscheck.ps1 [ISSUE-KEY]
+# Usage: powershell -File statuscheck.ps1 --role assigner|executor|reviewer [ISSUE-KEY]
+#   --role is REQUIRED and names the CALLING skill's role: auth is role-scoped
+#   (there is no default credential), so the jira_auth / jira_project rows can
+#   only probe a credential once they know whose it is. A missing or unknown
+#   role is a usage error (exit 2, no table).
 #   The issue key is normally derived from the branch and reported in the
 #   `issue_key` row; passing an issue-key-shaped ISSUE-KEY (PROJ-123) makes the
 #   script compare it itself. A positional arg that is NOT issue-key-shaped —
-#   e.g. a role name like "reviewer" passed by mistake — is
-#   ignored, not compared. statuscheck takes no role argument.
+#   e.g. a role name passed positionally instead of via --role — is
+#   ignored, not compared.
 #
 # Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from jira-sdlc-tools.env +
 # jira-sdlc-tools.local.env (local overrides team; `NAME = value` lines, parsed
 # not sourced), exactly as statuscheck.sh does.
 #
-# Exit code: 0 = all required checks OK; 1 = at least one FAIL row.
+# Exit code: 0 = all required checks OK; 1 = at least one FAIL row;
+#            2 = usage error (bad/missing --role) — printed on stderr, no table.
 # Row statuses: OK / FAIL (remedy printed) / WARN / INFO (context only).
 #
 # STATUSCHECK_FORCE_OS overrides OS detection so the Windows platform branch
 # can be exercised on Linux/CI — statuscheck.sh honors the same override and
 # emits an identical `platform` row.
 
-param([string]$Key)
+# --- args: required --role, optional ISSUE-KEY -------------------------------
+# Manual $args parsing (not param()) so the flag is the literal `--role` the
+# bash twin takes. The role has no default: it selects the credential the jira
+# rows authenticate with, and guessing wrong would report someone else's
+# identity as if it were the caller's.
+$Role = $env:JIRA_ROLE
+$Key  = ''
+$i = 0
+while ($i -lt $args.Count) {
+    $a = [string]$args[$i]
+    if     ($a -eq '--role')     { $Role = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--role=*') { $Role = $a.Substring(7); $i += 1 }
+    else   { $Key = $a; $i += 1 }
+}
+if (-not $Role) {
+    [Console]::Error.WriteLine('statuscheck: --role is required — one of assigner|executor|reviewer')
+    exit 2
+}
+if ($Role -notin @('assigner', 'executor', 'reviewer')) {
+    [Console]::Error.WriteLine("statuscheck: role must be assigner|executor|reviewer (got '$Role')")
+    exit 2
+}
+$RoleUc = $Role.ToUpper()
 
 $KeyArg = $Key
 $Rerun  = if ($env:STATUSCHECK_RERUN) { $env:STATUSCHECK_RERUN } else { 'rerun /jira-sdlc:jira-task-executor' }
@@ -70,10 +97,10 @@ $Br = if ($Br) { ([string]$Br).Trim() } else { '' }
 $BrTail = $Br -replace '^[^/]*/', ''
 $BrKey  = if ($BrTail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
 # Only honor a positional arg that has the issue-key shape (PROJ-123). Any other
-# value — most often a role name like "reviewer" passed by mistake — is NOT an
-# issue key: ignore it and fall
-# back to the branch-derived key, exactly as the no-arg path does, instead of
-# FAILing issue_key against it. statuscheck itself takes no role argument.
+# value — most often a role name passed positionally instead of via --role — is
+# NOT an issue key: ignore it and fall
+# back to the branch-derived key, exactly as the no-key path does, instead of
+# FAILing issue_key against it.
 $KeyArgIgnored = ''
 if ($KeyArg -and ($KeyArg -notmatch '^[A-Za-z][A-Za-z0-9]*-[0-9]+$')) {
     $KeyArgIgnored = $KeyArg
@@ -253,11 +280,11 @@ if ($KeyArg) {
             "cd into $KeyArg's own worktree/branch and $Rerun — or get explicit user confirmation before proceeding here."
     }
 } elseif ($BrKey) {
-    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — statuscheck takes no role/issue-key argument)" } else { '' }
+    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — the role goes in --role, and the key comes from the branch)" } else { '' }
     Add-Row issue_key OK "$BrKey (derived from branch — confirm it matches the issue you were asked to run)$note"
 } else {
     $brShown = if ($Br) { $Br } else { 'none' }
-    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — statuscheck takes no role/issue-key argument)" } else { '' }
+    $note = if ($KeyArgIgnored) { " (ignored non-key argument '$KeyArgIgnored' — the role goes in --role, and the key comes from the branch)" } else { '' }
     Add-Row issue_key WARN "no issue key derivable from branch '$brShown' (see the branch row)$note"
 }
 
@@ -347,10 +374,10 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 # --- Jira auth (needed by every 'jira.ps1 …' call) ---------------------------
-# Per-request Basic auth via `jira.ps1 whoami` (GET /myself): one live call, no
-# global login state and no cache. This bare, role-agnostic probe verifies the
-# DEFAULT credential (JIRA_ACCOUNT_EMAIL:JIRA_TOKEN) reaches the site; per-role
-# identity and the ownership gate stay in the skill (check_assignee --role).
+# Per-request Basic auth via `jira.ps1 --role <caller> whoami` (GET /myself): one
+# live call, no global login state and no cache. Auth is role-scoped, so this
+# probes the CALLING role's own credential — the identity every later call in
+# this run will use. The ownership gate stays in the skill (check_assignee --role).
 $JiraOk = $false
 $jiraPs = Join-Path $PSScriptRoot 'jira.ps1'
 $psExe  = $null
@@ -363,7 +390,7 @@ if (-not $psExe) {
     Add-Row jira_auth FAIL "no PowerShell runtime (pwsh/powershell) found to run jira.ps1" `
         "install PowerShell 5.1+, then $Rerun."
 } else {
-    $whoami = ((& $psExe -NoProfile -File $jiraPs whoami 2>$null) | Out-String)
+    $whoami = ((& $psExe -NoProfile -File $jiraPs --role $Role whoami 2>$null) | Out-String)
     if ($LASTEXITCODE -eq 0 -and $whoami.Trim()) {
         $who = ''
         try {
@@ -371,20 +398,20 @@ if (-not $psExe) {
             $who = if ($o.emailAddress) { $o.emailAddress } elseif ($o.displayName) { $o.displayName } else { $o.accountId }
         } catch { }
         $JiraOk = $true
-        Add-Row jira_auth OK "authenticated as $(if ($who) { $who } else { 'unknown' }) (GET /myself)"
+        Add-Row jira_auth OK "$Role authenticated as $(if ($who) { $who } else { 'unknown' }) (GET /myself)"
     } else {
-        Add-Row jira_auth FAIL "the default Jira credential doesn't authenticate — 'jira whoami' failed (stale/invalid JIRA_TOKEN, or unreachable site)" `
-            "set a working JIRA_ACCOUNT_EMAIL + JIRA_TOKEN pair (the per-request Basic default) in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
+        Add-Row jira_auth FAIL "the $Role Jira credential doesn't authenticate — 'jira --role $Role whoami' failed (unset/stale/invalid pair, or unreachable site)" `
+            "set a working JIRA_${RoleUc}_EMAIL + JIRA_${RoleUc}_TOKEN pair in jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
     }
 }
 
 # --- Jira project reachable ('jira.ps1 project exists' → GET /project/search) -
 if ($JiraOk -and $ProjectKey) {
-    & $psExe -NoProfile -File $jiraPs project exists $ProjectKey *> $null
+    & $psExe -NoProfile -File $jiraPs --role $Role project exists $ProjectKey *> $null
     if ($LASTEXITCODE -eq 0) {
         Add-Row jira_project OK "project $ProjectKey reachable on the authenticated site"
     } else {
-        Add-Row jira_project FAIL "project '$ProjectKey' not visible to the default account via 'jira project exists' (or the call timed out)" `
+        Add-Row jira_project FAIL "project '$ProjectKey' not visible to the $Role account via 'jira project exists' (or the call timed out)" `
             "check PROJECT_KEY in jira-sdlc-tools.env, whether the token is scoped to a different site, and whether this account has access to the project — or retry if Jira was just slow."
     }
 } else {

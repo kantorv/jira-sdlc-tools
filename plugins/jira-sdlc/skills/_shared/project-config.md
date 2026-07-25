@@ -39,8 +39,9 @@ define the same variable (though they define disjoint sets by convention).
 |---|---|---|
 | `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it constructs issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
-| `<JIRA_ACCOUNT_EMAIL>` | The email address of the Jira account that owns the API token — the **default** identity `jira.sh` authenticates as. | `you@example.com` |
-| `<JIRA_TOKEN>` | The Jira API token **value** itself — not a path to a file containing it. `jira.sh` sends it as per-request Basic auth (`-u email:token`); nothing is stored. | `ATATT3xFfGF0…` |
+
+The three **role credential pairs** are required too — they're the whole of the
+auth model, so they get their own section below.
 
 ### Auth — per-request, no login step
 
@@ -48,25 +49,27 @@ There is **no login and no keyring**. The `jira.sh` / `jira.ps1` client
 (`skills/_shared/jira-api-reference.md` §9) authenticates **per-request**:
 every call resolves its credential from these env files and sends it as Basic
 auth on that one request. Nothing to set up before first use — fill in the
-three variables above and the skills work.
+variables above plus the three role pairs below and the skills work.
 
-`JIRA_TOKEN` holds the raw token value; a file path is not accepted. Create the
-token at `id.atlassian.com` → Security → API tokens (classic or scoped both
+Every token is the raw token value; a file path is not accepted. Create the
+tokens at `id.atlassian.com` → Security → API tokens (classic or scoped both
 work through the gateway — see `jira-api-reference.md` §5).
 
-Each skill picks a role identity per-request with `jira.sh --role
-executor|assigner|reviewer`, which selects the matching per-role pair below and
-falls back to this default account. Because auth is per-request, different
-roles can run **concurrently** as different identities with no shared,
-machine-global "active account" to race over — the reason the earlier
-login-based model was replaced.
+Each skill picks its role identity per-request with `jira.sh --role
+assigner|executor|reviewer`, which selects that role's pair below. `--role` is
+**required** — there is no default account to fall back on. Because auth is
+per-request, different roles can run **concurrently** as different identities
+with no shared, machine-global "active account" to race over — the reason the
+earlier login-based model was replaced.
 
-## Optional — per-role Jira accounts (in `jira-sdlc-tools.local.env`)
+## Required — per-role Jira accounts (in `jira-sdlc-tools.local.env`)
 
-Each skill can run as its **own** Jira account, so the board shows who did
+Each skill runs as its **own** Jira account, so the board shows who did
 what: the assigner filed it, the executor implemented it, the reviewer
-approved it. Every variable below is optional and falls back to the default
-account, so a project that configures none of them keeps working.
+approved it. All six variables below are required — each role needs BOTH its
+own email and its own token, and there is no default pair behind them. The
+three accounts may of course be the same Atlassian account if you'd rather not
+split them; state it explicitly in all three pairs.
 
 | Token | What it is | Example |
 |---|---|---|
@@ -74,19 +77,18 @@ account, so a project that configures none of them keeps working.
 | `<JIRA_EXECUTOR_EMAIL>` / `<JIRA_EXECUTOR_TOKEN>` | The account `jira-task-executor` runs as. Doubles as the **assignee**: the assigner puts this email on every issue it creates, and the executor refuses to work an issue that isn't assigned to it. | `executor@example.com` / `ATATT3xFfGF0…` |
 | `<JIRA_REVIEWER_EMAIL>` / `<JIRA_REVIEWER_TOKEN>` | The account `jira-task-reviewer` runs as — it posts the verdict comments. | `reviewer@example.com` / `ATATT3xFfGF0…` |
 
-Tokens are the raw API token **value**, never a path to a file (as with
-`<JIRA_TOKEN>`). Email and token fall back **independently**: a role that
-sets only `<ROLE>_EMAIL` shares the default token, which is useful when one
-Atlassian account has several addresses.
+Tokens are the raw API token **value**, never a path to a file. A role missing
+either half is an error, not a fallback: `jira.sh --role <role>` stops and
+names the variable to set, rather than quietly acting as somebody else.
 
 **What this enables.** The assigner assigns every issue it creates
 (top-level and sub-task) to the executor's email rather than leaving it
 unassigned for board triage — the previous default. The executor then
 **gates on ownership**: before any status transition or work, it refuses an
 issue not assigned to the executor, prints the command to assign it, and
-exits without transitioning, branching, committing, or commenting. With
-nothing configured, all three roles resolve to the default account and the
-gate still holds — issues are simply owned by that one account.
+exits without transitioning, branching, committing, or commenting. The gate
+holds against whichever account `JIRA_EXECUTOR_EMAIL` names — including the
+case where all three roles point at one Atlassian account.
 
 **It's in the scripts, not in skill prose.** All of them parse the env files
 with the same `NAME = value` parser and local-overrides-team precedence as
@@ -135,14 +137,11 @@ STATUS_DONE           = Done
 ```
 WORKTREES_DIR         = ../myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
-JIRA_ACCOUNT_EMAIL    = you@example.com
-JIRA_TOKEN            = ATATT3xFfGF0…
-# Optional per-role accounts (each defaults to JIRA_ACCOUNT_EMAIL/JIRA_TOKEN above) —
-# uncomment + fill to have each skill act as its own Jira user:
-#JIRA_ASSIGNER_EMAIL   = assigner@example.com
-#JIRA_ASSIGNER_TOKEN   = ATATT3xFfGF0…
-#JIRA_EXECUTOR_EMAIL   = executor@example.com
-#JIRA_EXECUTOR_TOKEN   = ATATT3xFfGF0…
-#JIRA_REVIEWER_EMAIL   = reviewer@example.com
-#JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
+# All three role pairs are required — one email + one token each, no default:
+JIRA_ASSIGNER_EMAIL   = assigner@example.com
+JIRA_ASSIGNER_TOKEN   = ATATT3xFfGF0…
+JIRA_EXECUTOR_EMAIL   = executor@example.com
+JIRA_EXECUTOR_TOKEN   = ATATT3xFfGF0…
+JIRA_REVIEWER_EMAIL   = reviewer@example.com
+JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
 ```
