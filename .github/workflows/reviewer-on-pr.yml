@@ -18,40 +18,35 @@ jobs:
   check_pr_exists:
     runs-on: ubuntu-latest
     name: Check PR exists
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
       pr_number: ${{ steps.check_pr.outputs.pr_number }}
-
     steps:
-      - uses: actions/checkout@v6
-
-
-      - name: Set up Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-
       - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
         id: check_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           BRANCH_NAME="${{ github.ref_name }}"
           REPO_NAME="${{ github.repository }}"
           PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
             --json number --jq '.[0].number // empty' 2>/dev/null || true)
+
           if [ -n "$PR_NUMBER" ]; then
             echo "pr_exists=1" >> "$GITHUB_OUTPUT"
             echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
             echo "Found PR #$PR_NUMBER"
           else
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
-            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
             echo "No open PR for branch $BRANCH_NAME"
           fi
 
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
   reviewer-smoke:
     needs: check_pr_exists
     if: needs.check_pr_exists.outputs.pr_exists == '1'
@@ -68,47 +63,38 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-
-      # 1. Resolve the latest version to use as cache key
       - name: Resolve Kimi Code version
         id: kimi-version
         run: |
-          VERSION=$(curl -fsSL https://code.kimi.com/kimi-code/latest)
+          VERSION=$(curl -fsSL --max-time 10 https://code.kimi.com/kimi-code/latest)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Latest Kimi Code version: $VERSION"
 
-      # 2. Restore cache
       - name: Cache Kimi Code CLI
         id: cache-kimi
         uses: actions/cache@v4
         with:
           path: ~/.kimi-code
-          key: kimi-code-${{ runner.os }}-${{ steps.kimi-version.outputs.version }}
+          key: kimi-code-${{ runner.os }}-${{ runner.arch }}-${{ steps.kimi-version.outputs.version }}
           restore-keys: |
-            kimi-code-${{ runner.os }}-
+            kimi-code-${{ runner.os }}-${{ runner.arch }}-
 
-      # 3. Install only on cache miss
       - name: Install Kimi Code
         if: steps.cache-kimi.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
 
-
-
-      # 4. Always add to PATH for this and subsequent steps
       - name: Add Kimi to PATH
         run: echo "$HOME/.kimi-code/bin" >> "$GITHUB_PATH"
 
       - name: Write Kimi Code config.toml
         shell: bash
         env:
-          # NVIDIA_NIM_API_KEY is an existing repo secret. Map it to the
-          # provider api_key the way the reviewer.yml demo does
-          # (env -> [providers.nvidia].api_key), not via a placeholder + sed.
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
+
           if [ -z "${NVIDIA_NIM_API_KEY:-}" ]; then
             echo "::error::NVIDIA_NIM_API_KEY secret is empty or unset — cannot configure the NVIDIA provider."
             exit 1
@@ -118,83 +104,33 @@ jobs:
             echo "::error::OPENROUTER_API_KEY secret is empty or unset — cannot configure the OPENROUTER provider."
             exit 1
           fi
+
           mkdir -p ~/.kimi-code
-          # Unquoted heredoc is intentional: $(pwd) and ${NVIDIA_API_KEY} expand
-          # to the runner workspace / secret value as the file is written. The
-          # reviewer.yml demo ships a TOML quoting bug here (a missing *opening*
-          # double-quote on the array element) that this file fixes, not copies;
-          # the corrected form is a properly quoted string "$(pwd)/...".
           cat > ~/.kimi-code/config.toml <<EOF
-          #default_model = "nvidia/z-ai/glm-5.2"
-          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
-
-          extra_skill_dirs = [
-            "$(pwd)/plugins/jira-sdlc/skills"
-          ]
-
           [providers.nvidia]
-          type = "openai"
           api_key = "${NVIDIA_NIM_API_KEY}"
-          base_url = "https://integrate.api.nvidia.com/v1"
 
           [providers.openrouter]
-          type = "openai"
           api_key = "${OPENROUTER_API_KEY}"
-          base_url = "https://openrouter.ai/api/v1"
-
-
-          [models."nvidia/z-ai/glm-5.2"]
-          provider = "nvidia"
-          model = "z-ai/glm-5.2"
-          max_context_size = 1000000
-          max_output_size = 131072
-          capabilities = ["thinking", "tool_use"]
-          display_name = "GLM-5.2"
-          reasoning_key = "reasoning_content"
-
-          [models."openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"]
-          provider = "openrouter"
-          model = "nvidia/nemotron-3-ultra-550b-a55b:free"
-          max_context_size = 1000000
-          max_output_size = 65536
-          capabilities = [ "always_thinking", "tool_use" ]
-          display_name = "Nemotron 3 Ultra (free)"
-          support_efforts = [ "medium", "high" ]
-
-          [thinking]
-          enabled = true
+          default_model = "nvidia/z-ai/glm-5.2"
           EOF
 
-      - name: Verify installation
-        run: |
-          kimi --version
-          echo "Configuration (~/.kimi-code/config.toml):"
-          cat ~/.kimi-code/config.toml
-
-      - name: Validate config.toml
-        run: kimi doctor config
-
-
       - name: Fetch PR diff
-        id: diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
           set -euo pipefail
-          gh pr diff "$PR_NUMBER" --color=never > /tmp/pr.diff
+          gh pr diff "$PR_NUMBER" > /tmp/pr.diff
           echo "Diff size: $(wc -c < /tmp/pr.diff) bytes"
-
-
-
 
       - name: AI Code Review
         timeout-minutes: 10
         env:
-          # Intentionally NO GH_TOKEN here
           PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
           set -euo pipefail
+
           cat > /tmp/review-prompt.txt << 'PROMPT_EOF'
           You are a senior software engineer performing a thorough code review of a pull request.
 
@@ -202,7 +138,7 @@ jobs:
           1. The complete unified diff of the PR is provided below between the markers.
           2. Analyze only the changes in the diff. Do not review unrelated files.
           3. Produce a clear, actionable review and write it to /tmp/report.md.
-             Do NOT attempt to call any external tools or post the review yourself.
+          Do NOT attempt to call any external tools or post the review yourself.
 
           ## Review criteria (priority order)
           - Correctness & logic bugs
@@ -242,7 +178,6 @@ jobs:
           - Keep the report concise (under ~300 lines).
           PROMPT_EOF
 
-          # Safe substitution (PR number is always numeric)
           sed -i "s|PR_NUMBER_PLACEHOLDER|${PR_NUMBER}|g" /tmp/review-prompt.txt
 
           {
@@ -253,18 +188,12 @@ jobs:
             echo "----- END PR DIFF -----"
           } > /tmp/full-prompt.txt
 
-          # Prefer file/stdin if the CLI supports it; fall back to -p
-          if kimi -p @/tmp/full-prompt.txt 2>/dev/null; then
-            :
-          else
-            kimi -p "$(cat /tmp/full-prompt.txt)"
-          fi
+          kimi -p @/tmp/full-prompt.txt
 
           test -s /tmp/report.md || {
             echo "::error::Kimi did not produce /tmp/report.md"
             exit 1
           }
-
 
       - name: Post review
         env:
@@ -275,40 +204,38 @@ jobs:
           gh pr review "$PR_NUMBER" --comment --body-file /tmp/report.md
           echo "Review posted on PR #$PR_NUMBER"
 
-
       - name: Verify review was posted
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
           set -euo pipefail
-          # Simple existence check (latest comment body contains our marker)
-          COUNT=$(gh pr view "$PR_NUMBER" --json comments \
-            --jq '[.comments[] | select(.body | contains("Code Review – PR #"))] | length')
+          COUNT=$(gh pr view "$PR_NUMBER" --json reviews \
+            --jq '[.reviews[] | select(.body | contains("Code Review – PR #"))] | length')
+
           if [ "$COUNT" -eq 0 ]; then
             echo "::error::No review comment found on PR #$PR_NUMBER"
             exit 1
           fi
+
           echo "Verified: review comment is present"
 
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-report
+          path: /tmp/report.md
+          if-no-files-found: warn
+          retention-days: 7
 
-
-      # - name: Upload report
-      #   if: failure()
-      #   uses: actions/upload-artifact@v7
-      #   with:
-      #     name: pr-report
-      #     path: /tmp/report.md
-      
       - name: Locate newest Kimi session directory
         id: kimi_session
+        if: always()
         run: |
           set -euo pipefail
           SESSIONS_ROOT="${HOME}/.kimi-code/sessions"
-
-          SESSION_DIR=$(find "$SESSIONS_ROOT" -maxdepth 1 -type d \
-            -name '*session_*' -printf '%T@ %p\n' 2>/dev/null \
-            | sort -n | tail -1 | cut -d' ' -f2-)
+          SESSION_DIR=$(find "$SESSIONS_ROOT" -maxdepth 1 -type d -name '*session_*' 2>/dev/null | sort | tail -1 || true)
 
           if [ -z "${SESSION_DIR}" ] || [ ! -d "${SESSION_DIR}" ]; then
             echo "::error::No session directories found under ${SESSIONS_ROOT}"
@@ -319,11 +246,11 @@ jobs:
           BASENAME=$(basename "$SESSION_DIR")
           echo "Newest session: ${SESSION_DIR}"
           echo "path=${SESSION_DIR}" >> "$GITHUB_OUTPUT"
-          echo "name=${BASENAME}"   >> "$GITHUB_OUTPUT"
-
+          echo "name=${BASENAME}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Kimi session as artifact
-        uses: actions/upload-artifact@v7   # or @v7 if that is what your repo uses
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: kimi-session-${{ steps.kimi_session.outputs.name }}
           path: ${{ steps.kimi_session.outputs.path }}
