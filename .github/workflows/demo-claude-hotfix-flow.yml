@@ -41,11 +41,15 @@
 #     assigner's `PR target branch: …` Jira comment is the durable fallback
 #     the skills would otherwise use.
 #  3. **Do not export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a
-#     skill.** Every skill starts with statuscheck, which runs
-#     `gh auth logout && gh auth login --with-token` from GITHUB_PAT_TOKEN;
-#     gh refuses that login while a token env var is set, which FAILs the
-#     `gh_auth` row and aborts the run before any work happens. `git push`
-#     still works — it uses the credentials actions/checkout persisted.
+#     skill.** Every skill starts with statuscheck, which reads
+#     GITHUB_PAT_TOKEN *out of the env file* (not the environment) and runs
+#     `gh auth logout && gh auth login --with-token` with it; gh refuses that
+#     login while either token variable is set — "first clear the value from
+#     the environment", exit 1 — which FAILs the `gh_auth` row and aborts the
+#     run before any work happens. That is why the token is written into
+#     `.jst/jira-sdlc-tools.local.env` and the `env:` blocks below stop at the
+#     file-writing steps. `git push` is unaffected: it uses the credentials
+#     actions/checkout persisted in `.git/config`.
 #  4. **Self-review.** Job 3's gh session is the same account that opened the
 #     PR in job 2, and GitHub blocks approving your own PR — the reviewer
 #     skill already posts its verdict as a PR *comment* for this reason.
@@ -59,6 +63,14 @@
 # `::error::` rather than letting the claude CLI die on an unset key halfway
 # through. Each job gets **only its own role's** token: `JIRA_ASSIGNER_*` in
 # job 1, `JIRA_EXECUTOR_*` in job 2, `JIRA_REVIEWER_*` in job 3.
+#
+# For GitHub itself no new secret is needed: `GITHUB_PAT_TOKEN` falls back to
+# the runner's built-in `secrets.GITHUB_TOKEN`, which can push and open a PR
+# given the job `permissions:` below. Add the PAT secret only to lift the one
+# real limitation of the built-in token — a PR opened with it does not trigger
+# other workflows, so the repo's own `jira_issue_transition_on_pr_open.yml`
+# stays silent for the demo's PR (the executor skill transitions Jira itself,
+# so the chain still completes either way).
 
 name: Demo — Claude hotfix flow (assigner → executor → reviewer)
 
