@@ -542,10 +542,12 @@ branch" shortcut. **The prefix follows the base branch, not the issue type**
 (SDLC.md §2): `feature/` = branched from `<DEFAULT_BASE_BRANCH>`
 (`development`), covering all planned work — features *and* bug fixes alike;
 `hotfix/` = an emergency fix branched from `<PRODUCTION_BRANCH>`.
-`jira-task-assigner` pre-creates the branch and worktree for every leaf issue,
-and since it only ever branches from `development`, every branch it creates is
-a `feature/` branch — a `hotfix/` branch is only ever produced by the
-no-assigner bootstrap below.
+`jira-task-assigner` pre-creates the branch and worktree for every leaf issue
+and takes its prefix from the base it was told to use (its step 5C):
+`feature/` by default, `hotfix/` only when the user explicitly asks for the
+emergency production flow, in which case it cuts a single leaf from
+`origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes from either that
+path or the no-assigner bootstrap below.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue key
 inside the branch name — no API call required.
@@ -636,5 +638,22 @@ output. Sources, in order:
      `gh pr create` and ask the user** — do not fall back to
      `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
 4. `<DEFAULT_BASE_BRANCH>` from `.jst/jira-sdlc-tools.env` — reachable **only for a
-   top-level issue** (empty `PARENT_KEY`), for which it is correct. Still call
-   it out in the report.
+   top-level issue** (empty `PARENT_KEY`), and correct for a planned-work one.
+   Still call it out in the report, and check it against the prefix first (below).
+
+### Sanity check: the prefix and the base have to agree
+
+§12 ties the prefix to the base branch, so for a **top-level** issue (empty
+`PARENT_KEY` — the only case that can reach source 4) the two are a matched
+pair, and a disagreement means one of them is wrong:
+
+- branch `hotfix/…` with a base that isn't `<PRODUCTION_BRANCH>`
+- branch `feature/…` with a base that *is* `<PRODUCTION_BRANCH>`
+
+**Stop and ask which is right** rather than opening the PR. The first case is
+the one that actually happens: a hotfix whose `PR target branch:` comment was
+never posted has nothing to stop it falling through to source 4, and a
+production fix quietly retargeted at staging neither reaches production nor
+gets versioned (`hotfix/*` is what CI patch-bumps — SDLC.md §5). Sub-tasks are
+exempt: a sub-task's base is its parent's branch, which carries the parent's
+prefix rather than a long-lived branch name.

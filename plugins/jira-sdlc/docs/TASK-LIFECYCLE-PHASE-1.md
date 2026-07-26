@@ -46,7 +46,7 @@ sequenceDiagram
         User-->>Assigner: answers
     end
 
-    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)
+    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)<br/>+ base — planned work (default) or explicit hotfix
 
     Assigner->>Assigner: get_assignee_email.sh — resolve ASSIGNEE_EMAIL<br/>(the executor's identity — no email configured → stop)
     Note right of Assigner: every create below carries<br/>--assignee ASSIGNEE_EMAIL
@@ -54,7 +54,7 @@ sequenceDiagram
     alt Multistep (split into parallel sub-tasks)
         Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: <PARENT-KEY>
-        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug><br/>(always feature/ — assigner branches from development),<br/>set parentbranch config, push, add parent worktree
+        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug><br/>(multistep is always the planned path — feature/ from development),<br/>set parentbranch config, push, add parent worktree
         GIT-->>Assigner: branch + worktree ready
         loop per sub-task
             Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)<br/>--assignee ASSIGNEE_EMAIL
@@ -64,10 +64,10 @@ sequenceDiagram
             Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
         end
         Assigner->>JIRA: post "PR target branch: <BASE_BRANCH>.<br/>Worktree: worktree-<PARENT-KEY>" comment (on the parent)
-    else Single-step (one cohesive task)
+    else Single-step (one cohesive task, and every hotfix)
         Assigner->>JIRA: create single top-level issue<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: issue key
-        Assigner->>GIT: create branch + worktree,<br/>set parentbranch config, push
+        Assigner->>GIT: create branch + worktree from the chosen base<br/>(feature/ off development — hotfix/ off origin/main),<br/>set parentbranch config, push
         GIT-->>Assigner: branch + worktree ready
         Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
     end
@@ -107,6 +107,13 @@ sequenceDiagram
   top-level type (`alt Multistep / else Single-step`); inside the
   multistep loop it provisions each sub-task's issue (JIRA) then branch
   + worktree (GIT) uniformly.
+- **The base decision rides along with scope** — planned work (the
+  default) branches `feature/` off `development`, while an *explicitly
+  requested* emergency production fix branches a single `hotfix/` off
+  `origin/main` (SDLC.md §4). The assigner stays on `development` either
+  way — it cuts the hotfix from the fetched remote ref rather than
+  checking production out — so the `Multistep` arm is always the planned
+  path and the two never mix within a run.
 - **Provisioning is uniform** — *every* scenario (single-step,
   multistep parent, sub-task) records `branch.<branch>.parentbranch`
   in git config via GIT, pushes the branch to the remote via GIT, and

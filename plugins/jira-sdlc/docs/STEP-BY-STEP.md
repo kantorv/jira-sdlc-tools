@@ -83,7 +83,9 @@ they follow the policy in [SDLC.md](SDLC.md). The five branches that matter:
 | `release/sprint-<X.Y.Z>` | `development` | `main` | Sprint QA branch, cut at release time |
 
 You only create the first two by hand. The skills create `feature/` and
-`hotfix/` branches themselves, one per issue, each with its own worktree.
+`hotfix/` branches themselves, one per issue, each with its own worktree —
+`feature/` by default, and `hotfix/` when you explicitly ask
+`jira-task-assigner` for an emergency production fix.
 
 ### 2.2 Split production from base
 

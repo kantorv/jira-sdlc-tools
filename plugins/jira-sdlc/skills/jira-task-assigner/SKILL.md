@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf.
+description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf. Branches are `feature/` off the default base branch; when the user explicitly asks for an emergency production fix it provisions a single-step `hotfix/` off the production branch instead.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob
 ---
@@ -20,17 +20,21 @@ project. Given a task description from the user ($ARGUMENTS):
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
 - **Branch prefix** — the prefix follows the **base branch, not the
-  issue type** (`../_shared/jira-api-reference.md` §12; SDLC.md §2). The
-  assigner only ever branches from `<DEFAULT_BASE_BRANCH>`
-  (`development`), so every branch it creates is a **`feature/`** branch,
-  regardless of issue type: `feature/` covers all planned work —
-  new features *and* bug fixes alike. The `hotfix/` prefix is reserved
-  for emergency production fixes branched from `<PRODUCTION_BRANCH>`, a
-  flow the assigner does **not** provision (that's the manual bootstrap
-  in §7).
-  Branch naming is always `feature/<KEY>-<slug>` whether `<KEY>` is the
-  top-level issue or a Sub-task — this keeps the branch-parsing regex in
+  issue type** (`../_shared/jira-api-reference.md` §12; SDLC.md §2), so
+  it falls out of step 5C's base decision and never out of picking `Bug`:
+  branching from `<DEFAULT_BASE_BRANCH>` (`development`) → **`feature/`**,
+  which covers all planned work, new features *and* bug fixes alike;
+  branching from `<PRODUCTION_BRANCH>` (`main`) → **`hotfix/`**, the
+  emergency production flow (SDLC.md §4) that step 5C only takes when the
+  user asks for it outright.
+  The prefix is uniform within a run — a Sub-task inherits its parent's —
+  so branch naming is always `<PREFIX><KEY>-<slug>` whether `<KEY>` is the
+  top-level issue or a Sub-task, which keeps the branch-parsing regex in
   step 2 working no matter which branch someone checks out later.
+- `<PREFIX>`, `<BASE_BRANCH>`, `<BRANCH_FROM>` — set once by step 5C, used
+  verbatim by step 6. An issue already created *without* this skill needs
+  no decision here: provision it with the no-assigner bootstrap in
+  `../_shared/jira-api-reference.md` §12 and go straight to the executor.
 
 ## 1. Discovery and healthcheck
 
@@ -113,7 +117,8 @@ interpretation: `git_repo`, `env_config`, `env_local`,
 `env_local_ignored`, `jira_auth` (the **assigner's** credential authenticates —
 `jira.sh --role assigner whoami`, the same pair every `jira.sh` call in
 steps 6–7 uses), `jira_project`, plus context
-`base_branch` (INFO) and `working_tree`
+`base_branch` (INFO), `production_branch` (INFO — only consumed on the
+hotfix path in step 5C, which stops if it reads `unset`), and `working_tree`
 (INFO, or WARN when the tree is dirty — that doesn't block, but mention
 it to the user before branching from a dirty base checkout).
 
@@ -134,12 +139,18 @@ Read the `branch` row from step 1's healthcheck to determine your
 starting point (the script already ran `git branch --show-current`; don't
 re-run it):
 
-- **Base branch (`<DEFAULT_BASE_BRANCH>`)**:
-  `BASE_BRANCH = <DEFAULT_BASE_BRANCH>`. Proceed to investigate and plan the work.
+- **Base branch (`<DEFAULT_BASE_BRANCH>`)**: you're standing where this skill
+  expects to run. Proceed to investigate and plan the work — step 5C decides
+  what the new branches get cut *from*, which isn't necessarily the branch
+  you're standing on.
 - **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch**:
   **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
 - **Any other branch name**:
   Ask the user whether to treat it as a base branch or abort. Do not guess.
+  If it's `<PRODUCTION_BRANCH>` and the user wants a hotfix, the answer is
+  to switch back to `<DEFAULT_BASE_BRANCH>` and re-run: step 5C's hotfix path
+  cuts from the fetched `origin/<PRODUCTION_BRANCH>` and never needs it
+  checked out.
 
 ## 3. Investigate
 
@@ -167,7 +178,7 @@ so the criteria are durable and visible to anyone picking up the work.
 
 ## 5. Decide: Scope and Issue Type
 
-By this point Step 2 has already decided the branch context and confirmed you're starting from a base branch (`BASE_BRANCH`) — there is no second branch-context check here. Make the following two decisions before moving to setup:
+By this point Step 2 has already confirmed you're standing on the base branch — there is no second branch-context check here. Make the following three decisions before moving to setup; C is what turns "which branch am I on" into the base the new branches actually get cut from:
 
 **A. Decide Scope: single-step or multistep**
 - **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
@@ -179,19 +190,65 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
 - **Scope (A) and issue type (B) are independent** — scope is about *can the pieces run at the same time*; issue type is about *size/value of the whole*. A multistep `Task` of parallel technical chores is valid; a single-step `Story` is valid.
 
+**C. Decide the base: planned work (default) or emergency hotfix**
+
+Nearly every run is planned work. Take the hotfix path **only when the user
+explicitly asks for an emergency production fix** — SDLC.md §4's flow, for a
+bug already live in production that can't wait for the next sprint release.
+Urgency words ("urgent", "asap", "this is blocking us") are not that signal;
+deliberate ones are ("hotfix", "emergency production fix", "we need to patch
+prod now"), and even then say which path you're taking and get a yes before
+creating anything — a hotfix PR aims at production, so a false positive ships
+code that never sat in staging.
+
+| | planned work (default) | emergency hotfix |
+|---|---|---|
+| `<BASE_BRANCH>` — what the PR targets | `<DEFAULT_BASE_BRANCH>` | `<PRODUCTION_BRANCH>` |
+| `<BRANCH_FROM>` — what you cut from | `<DEFAULT_BASE_BRANCH>` (your checkout) | `origin/<PRODUCTION_BRANCH>` |
+| `<PREFIX>` | `feature/` | `hotfix/` |
+| scope from (A) | single-step or multistep | **single-step, always** |
+
+The issue type still comes from B, where an emergency production fix lands on
+`Bug` like any other defect. Two entries in the hotfix column carry the weight:
+
+- **`origin/<PRODUCTION_BRANCH>`, not your local copy and not
+  `<DEFAULT_BASE_BRANCH>`.** Cutting from the freshly fetched remote ref needs
+  no checkout, so step 1's main-checkout requirement still holds and a stale
+  local `<PRODUCTION_BRANCH>` can't poison the branch. Cutting from
+  `<DEFAULT_BASE_BRANCH>` instead would carry every unreleased sprint feature
+  into a production release — the accident SDLC.md §4 exists to prevent, and
+  it stays invisible until the release ships.
+- **Single-step overrides (A).** Splitting an emergency into parallel
+  sub-tasks serializes the fix behind a stack of PRs. Work too big for one
+  branch isn't a patch (SDLC.md §5) and belongs in the planned flow — say so
+  rather than provisioning a hotfix parent with children.
+
+The prefix is what makes the release machinery work, not just a label: CI
+resolves the version from the branch name, patch-bumping a `hotfix/*` merge
+into `<PRODUCTION_BRANCH>` (SDLC.md §5). A `feature/` branch merged there
+matches nothing and is never tagged or released.
+
+If step 1's `production_branch` row read `unset`, stop and ask — don't invent
+a name for the branch you're about to point a PR at.
+
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
 Because step 2 stopped you if you were already on an issue branch, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
 
 **Re-run / partial-failure safety — deferred:** The assigner mints a fresh `<PARENT-KEY>` per run and has no resume input, so a key-keyed pre-check can't detect a prior run's differently-keyed orphan; revisit when a resume path or orphan-scan is added.
 
-Before any branch creation, make sure the local base branch actually
-matches the remote — a bare `git fetch` moves only the remote-tracking
-ref, not the branch you're about to branch from:
+Before any branch creation, refresh from the remote. Which of the two
+commands you need follows step 5C's `<BRANCH_FROM>`:
 ```bash
-git fetch origin
-git pull --ff-only   # you're on BASE_BRANCH (step 2); if this can't fast-forward, stop and ask
+git fetch origin     # both paths — also refreshes origin/<PRODUCTION_BRANCH>
+git pull --ff-only   # planned work only: you cut from your own checkout, and a bare
+                     # fetch moves only the remote-tracking ref, not the branch you
+                     # branch from. If it can't fast-forward, stop and ask.
 ```
+On the hotfix path **skip the pull**: you cut from the fetched
+`origin/<PRODUCTION_BRANCH>`, which the fetch already brought up to date, and
+pulling would merge production into your `<DEFAULT_BASE_BRANCH>` checkout as a
+side effect nobody asked for.
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 
@@ -211,23 +268,27 @@ default; see INTEGRATIONS.md.)
    - **Assign on create** — pass `--assignee "$ASSIGNEE_EMAIL"` on the
      `jira.sh --role assigner issue create` call. One flag does it (no separate
      `issue assign`).
-2. Create the branch: `git branch feature/<PARENT-KEY>-<slug> <BASE_BRANCH>`, then `git push -u origin feature/<PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
-3. Set parentbranch config: `git config branch.feature/<PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
+2. Create the branch: `git branch <PREFIX><PARENT-KEY>-<slug> <BRANCH_FROM>`, then `git push -u origin <PREFIX><PARENT-KEY>-<slug>`. This is the `PARENT_BRANCH`.
+3. Set parentbranch config: `git config branch.<PREFIX><PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
+   — record `<BASE_BRANCH>`, never `<BRANCH_FROM>`: this value becomes the
+   executor's `gh pr create --base`, and on the hotfix path `origin/main` isn't
+   something `gh` can target while `main` is.
 4. **Always create a parent worktree:**
-   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> feature/<PARENT-KEY>-<slug>`
+   `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> <PREFIX><PARENT-KEY>-<slug>`
    *(A worktree to check out when inspecting the assembled parent branch, and a base for future additions.)*
 
 **B. If Single-step (Cohesive work):**
 The top-level issue is your only issue. You are done creating issues.
 Proceed to leave a PR-target comment on `<PARENT-KEY>` (see "PR-target comments" below).
+Every hotfix run ends here — 5C forces single-step.
 
 **C. If Multistep (Parallelizable): Create Sub-tasks (each with its own branch and worktree)**
 Create the `Sub-task`s under `<PARENT-KEY>`. Every sub-task gets the same treatment — its own dedicated branch, its own worktree, and its own PR into `PARENT_BRANCH` — regardless of how small it is. There is no "small enough to commit straight to the parent branch" shortcut. Sub-task creates take the same `--assignee "$ASSIGNEE_EMAIL"` as the top-level issue — resolved once in 6A above, passed on every `issue create` here.
 
 For each sub-task `→ <SUBTASK-KEY>`:
- 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b feature/<SUBTASK-KEY>-<slug> feature/<PARENT-KEY>-<slug>`
-    (sub-tasks use the same `feature/` prefix as the parent — the nesting rule in `../_shared/jira-api-reference.md` §12)
- 2. `git config branch.feature/<SUBTASK-KEY>-<slug>.parentbranch feature/<PARENT-KEY>-<slug>` (required for executor)
+ 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX><SUBTASK-KEY>-<slug> <PREFIX><PARENT-KEY>-<slug>`
+    (sub-tasks inherit the parent's prefix — the nesting rule in `../_shared/jira-api-reference.md` §12 — and since 5C only reaches this branch on the planned path, `<PREFIX>` is `feature/` here)
+ 2. `git config branch.<PREFIX><SUBTASK-KEY>-<slug>.parentbranch <PREFIX><PARENT-KEY>-<slug>` (required for executor)
  3. Leave a PR-target comment on the sub-task (format below).
 
 **PR-target comments** (consumed by the executor, and by the reviewer's fallback on a fresh clone):
@@ -237,9 +298,15 @@ After creating each leaf issue (the single top-level task, OR each sub-task), ad
 *"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>."*
 
 *Multistep sub-task:*
-*"PR target branch: feature/<PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+*"PR target branch: <PREFIX><PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
 
 In the multistep path, after creating all sub-tasks, also post the single-step-format comment on the **parent issue** — its PR targets `<BASE_BRANCH>` — so the reviewer's fallback can recover `<BASE_BRANCH>` even without `git config` (fresh clone or different machine).
+
+On the hotfix path this comment is load-bearing rather than a convenience: the
+PR-base resolver's last fallback is `<DEFAULT_BASE_BRANCH>`
+(`../_shared/jira-api-reference.md` §13), so a hotfix whose comment never
+landed can look like ordinary planned work to a later session. Confirm the
+comment posted before reporting back.
 
 **Client mechanics — things to never forget** (`jira.sh` on POSIX /
 `jira.ps1` on Windows; full command surface in `../_shared/jira-api-reference.md`
@@ -281,7 +348,13 @@ In the multistep path, after creating all sub-tasks, also post the single-step-f
 
 ## 7. Report back
 
-List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
+List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; which base path 5C took and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
+
+On the hotfix path, add that the fix also has to reach
+`<DEFAULT_BASE_BRANCH>` after it lands on `<PRODUCTION_BRANCH>` (SDLC.md §4
+step 4) — automatically if the project's release workflow back-merges, by hand
+otherwise. Without it the bug returns with the next sprint release, and this
+report is the last point where anyone is thinking about it.
 
 Post this same report to the user in chat **and** as a single Jira comment on the parent issue. Since it's multi-line, write it to a temp file and post it with `jira.sh --role assigner issue comment add <PARENT-KEY> --body-file <file>` (there is no inline body — the body always comes from a file; see `../_shared/jira-api-reference.md` §11).
 
