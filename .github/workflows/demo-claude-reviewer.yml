@@ -223,7 +223,7 @@ jobs:
           JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
           JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

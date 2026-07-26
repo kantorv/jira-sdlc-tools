@@ -122,7 +122,7 @@ env:
   # Pinned deliberately, same as validator.yml: a float would let an upstream
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
-  CLAUDE_CLI_VERSION: 2.1.199
+  CLAUDE_CLI_VERSION: 2.1.220
 
 jobs:
   # ── Job 1 ── assigner: bug text → Jira Bug + hotfix/<KEY>-<slug> off main ──
@@ -160,7 +160,7 @@ jobs:
           # the executor, and get_assignee_email.sh reads that address (and
           # only the address — no executor token) from the env file.
           JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{  secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -352,7 +352,7 @@ jobs:
           JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
           JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
