@@ -349,6 +349,13 @@ stale-branch merge and step 10's PR-base resolution).
         proceed, and say so explicitly in the final report, naming the branch.
       - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `.jst/jira-sdlc-tools.env`;
         top-level issues only) — proceed, and say so explicitly in the final report.
+      - **Prefix and base disagree** (top-level issues only — the §13 sanity
+        check): you're on `hotfix/…` but `PR_BASE` isn't `<PRODUCTION_BRANCH>`,
+        or on `feature/…` but it is. §12 ties the prefix to the base, so one of
+        the two is wrong — **stop and ask.** A hotfix that fell through to the
+        `<DEFAULT_BASE_BRANCH>` default above is the realistic case, and
+        retargeting a production fix at staging neither ships it nor gets it
+        versioned. A sub-task is exempt: its base is its parent's branch.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
       (`<JIRA_ACCOUNT_URL>` comes from `.jst/jira-sdlc-tools.local.env` under
       the project root — there's no browse-URL subcommand, so construct the

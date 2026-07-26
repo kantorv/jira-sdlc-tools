@@ -1,0 +1,348 @@
+# Demo — Claude-powered jira-task-reviewer on a PR (replaces the Kimi smoke test)
+#
+# What it demos: running the jira-task-reviewer skill headlessly in CI against a
+# PR that already exists on the current branch. It is a Claude-powered rework of
+# reviewer-on-pr.yml, which did the same job with Kimi Code + a hand-written
+# review prompt. Here the skill supplies its own instructions — the workflow's
+# only job is to stand up the exact environment the skill's healthcheck demands,
+# then invoke it.
+#
+# Trigger: workflow_dispatch ONLY, by explicit decision (the same one
+# reviewer-on-pr.yml made). This is a manually-invoked smoke test, not a real
+# pull_request: opened/reopened trigger. A real on-PR trigger would need its
+# own design (gating on reviewer availability, secret plumbing, retry policy);
+# this file stays a deliberate, inspectable demo.
+#
+# reviewer-on-pr.yml and reviewer.yml are left untouched — this is a new file.
+#
+# ── The shape (two jobs, mirroring reviewer-on-pr.yml) ───────────────────────
+#
+#  1. check_pr_exists — byte-for-byte the gating job from reviewer-on-pr.yml:
+#     `gh pr list --head <dispatch branch>` and skip the rest if none exists.
+#  2. reviewer-claude — the new job. The old Kimi install/config/invoke steps are
+#     replaced with: native claude CLI install (validator.yml's pattern), a
+#     linked-worktree checkout of the PR head branch, and a headless
+#     `claude -p "/jira-sdlc:jira-task-reviewer"` invocation.
+#
+# ── The one constraint that shapes the whole job (the "solved problem") ─────
+#
+#  The reviewer skill's healthcheck hard-stops unless it runs in a LINKED
+#  WORKTREE (`.git` is a file) on a `feature/*` or `hotfix/*` branch. A bare
+#  actions/checkout is a *main checkout* (`.git` is a directory), which FAILs
+#  that check before any review happens. So this job, like
+#  demo-claude-hotfix-flow.yml job 3, keeps actions/checkout as the main
+#  checkout (on the PR's base branch, where the skills load from via
+#  --plugin-dir) and rebuilds a linked worktree for the PR's HEAD branch — the
+#  skill derives its Jira issue key from that branch name and runs there.
+#
+#  The head and base branches come from the PR itself (`gh pr view
+#  --json headRefName,baseRefName`), NOT from the assigner job output the
+#  hotfix-flow demo uses (this workflow has no upstream assigner job). Reading
+#  the PR's real base works for both a sub-task PR (base = the parent branch)
+#  and a single-step top-level PR (base = development), and sets
+#  `parentbranch` so the skill's PR-base resolver gets the right answer on its
+#  first source instead of falling back.
+#
+# ── Caveats worth knowing before you copy this into another repo ─────────────
+#
+#  1. **Do not export GH_TOKEN / GITHUB_TOKEN into the step that runs the
+#     skill.** Every skill starts with statuscheck, which reads GITHUB_PAT_TOKEN
+#     out of the env FILE (not the environment) and runs
+#     `gh auth logout && gh auth login --with-token`; gh refuses that login
+#     while either token variable is set — "first clear the value from the
+#     environment", exit 1 — which FAILs the gh_auth row and aborts before any
+#     review. The skill-running step below exports ONLY ANTHROPIC_API_KEY; the
+#     one step that needs GH_TOKEN (resolve head/base) sets it before the skill
+#     runs, never alongside it.
+#  2. **Self-review.** The executor opens PRs with the same gh account this
+#     reviewer logs in as, and GitHub blocks approving your own PR — the
+#     reviewer skill already posts its verdict as a PR *comment* (with an
+#     `APPROVED — …` / `CHANGES REQUESTED — …` prefix) for exactly this reason.
+#  3. **The skills come from the base-branch checkout.** `--plugin-dir` points
+#     into the actions/checkout workspace (standing on the PR's base branch), so
+#     the skill prompts loaded are the base branch's, not the PR head's. If a PR
+#     changes a skill file, this demo reviews the PR with the *base's* copy —
+#     land skill changes on the base branch first if you want them exercised.
+#
+# ── Secrets (repo-level, mirroring reviewer-on-pr.yml — no environment gate) ─
+#
+#  None of these exist in this repo yet. The env-file-writing step checks every
+#  one up front and fails loud with `::error::` if any is empty/unset, rather
+#  than letting the claude CLI die halfway through on a missing key.
+#
+#    ANTHROPIC_API_KEY    the claude CLI reads this from the environment — the
+#                         only secret never written to the file
+#    JIRA_ACCOUNT_URL     written to .jst/jira-sdlc-tools.local.env
+#    JIRA_REVIEWER_EMAIL  } the reviewer's Jira identity
+#    JIRA_REVIEWER_TOKEN  }
+#    GITHUB_PAT_TOKEN     optional — falls back to the built-in GITHUB_TOKEN
+#                         (which can post a review comment given the job
+#                         permissions below); add the PAT only to lift the
+#                         built-in token's limitation that PRs opened with it
+#                         don't trigger other workflows
+#
+#  Each is named exactly as the env-file key it becomes, so the bootstrap step
+#  is one loop over a KEYS list (secret -> file via env, not sed) rather than a
+#  hand-mapped list of printfs — the same pattern reviewer-on-pr.yml uses, just
+#  looped.
+
+name: Reviewer Skill on PR (Claude demo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Claude model to use'
+        required: false
+        default: 'sonnet'
+        type: choice
+        options:
+          - sonnet
+          - opus
+          - fable
+
+jobs:
+  # ── Gating job — byte-for-byte from reviewer-on-pr.yml ────────────────────
+  # Skip the reviewer once a PR is already open on the dispatch branch (the real
+  # CI workflows take over there). Unchanged from the file this demo reworks.
+  check_pr_exists:
+    runs-on: ubuntu-latest
+    name: Check PR exists
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
+      pr_number: ${{ steps.check_pr.outputs.pr_number }}
+      issue_key: ${{ steps.check_pr.outputs.issue_key }}
+    steps:
+      - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
+        id: check_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH_NAME="${{ github.ref_name }}"
+          REPO_NAME="${{ github.repository }}"
+
+          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          # Extract issue key from branch name (PROJ-NNN)
+          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
+            --json number --jq '.[0].number // empty' 2>/dev/null || true)
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "pr_exists=1" >> "$GITHUB_OUTPUT"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUMBER for issue $ISSUE_KEY"
+          else
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
+          fi
+
+  # ── Reviewer job — the Claude-powered rework of reviewer-on-pr.yml's
+  #    reviewer-smoke job ────────────────────────────────────────────────────
+  reviewer-claude:
+    name: Reviewer skill (Claude)
+    needs: check_pr_exists
+    if: needs.check_pr_exists.outputs.pr_exists == '1'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write # the reviewer posts its verdict as a PR comment
+
+    steps:
+      - name: Checkout
+        # Full history + every remote ref: the linked worktree is built from a
+        # fetched origin/<head>, and we stand on the PR's base branch, both of
+        # which a shallow single-branch clone doesn't have.
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve PR head, base, and issue key
+        # The authoritative head/base come from the PR itself, not from
+        # github.ref_name (the branch the run was dispatched from) — which is
+        # usually the head but isn't what the PR records. Deriving the issue key
+        # here lets us fail now, before installing claude or spending tokens, if
+        # the dispatch branch isn't an issue branch at all.
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          HEAD=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          BASE=$(gh pr view "$PR_NUMBER" --json baseRefName  --jq '.baseRefName')
+          if [ -z "${HEAD:-}" ] || [ -z "${BASE:-}" ]; then
+            echo "::error::could not resolve head/base refs for PR #$PR_NUMBER"
+            exit 1
+          fi
+          # Generic <UPPER>-<digits> key (any project), so the worktree path
+          # matches the worktree-<KEY> convention the skill expects without
+          # needing PROJECT_KEY from the env file.
+          KEY=$(printf '%s' "$HEAD" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]*-[0-9]+)-.+$#\2#p')
+          if [ -z "$KEY" ]; then
+            echo "::error::PR #$PR_NUMBER head branch '$HEAD' is not a feature/* or hotfix/* issue branch — no <KEY>-<n> to derive, and the reviewer skill hard-stops otherwise. Dispatch this workflow from the PR's issue branch."
+            exit 1
+          fi
+          echo "head=$HEAD"  >> "$GITHUB_OUTPUT"
+          echo "base=$BASE"  >> "$GITHUB_OUTPUT"
+          echo "key=$KEY"    >> "$GITHUB_OUTPUT"
+          echo "### Reviewing \`$KEY\` — PR #$PR_NUMBER \`$HEAD\` → \`$BASE\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write .jst/jira-sdlc-tools.local.env (reviewer role only)
+        shell: bash
+        env:
+          # Each secret is named exactly as the env-file key it becomes, so the
+          # loop below is the whole secret->file mapping (env, not sed).
+          KEYS: JIRA_ACCOUNT_URL JIRA_REVIEWER_EMAIL JIRA_REVIEWER_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
+          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
+          # Checked here so one step catches every missing secret, but never
+          # written to the file — the claude CLI reads it from the environment.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Written in the *main checkout*, before the worktree exists: the
+          # skill's own ensure_local_env.sh copies it into the worktree from
+          # here, which is exactly the path that script exists to cover.
+          missing=()
+          for k in ANTHROPIC_API_KEY $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty repo secret(s): ${missing[*]} — this demo cannot run without them. Add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # Create empty and lock it down BEFORE the secrets go in.
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          # printf with the value as an argument: secret values are data, never
+          # re-expanded by the shell and never part of the script text.
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          # WORKTREES_DIR is deliberately NOT a secret: it's a path on *this*
+          # runner, and a value carried over from a developer's machine would
+          # point somewhere that doesn't exist here.
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Stand on the base branch
+        # The workspace stays a *main checkout* (`.git` is a directory) on the
+        # PR's base branch; the skill itself runs in the linked worktree built
+        # below. Standing on the base (not the head) means --plugin-dir loads
+        # the base branch's copy of the skills — see caveat 3 in the header.
+        shell: bash
+        env:
+          BASE: ${{ steps.pr.outputs.base }}
+        run: |
+          set -euo pipefail
+          git switch "$BASE"
+          # The reviewer is read-only — it never commits — so unlike
+          # demo-claude-hotfix-flow.yml's committing jobs, no git user identity
+          # is needed here. git switch's DWIM creates a local tracking branch
+          # from origin/<base> when one doesn't exist locally yet.
+
+      - name: Install claude CLI (native, no npm)
+        # Same install as validator.yml and demo-claude-hotfix-flow.yml: the
+        # installer SHA256-verifies a prebuilt binary against Anthropic's
+        # manifest and runs its own `claude install`. Pinned deliberately — a
+        # float would let an upstream CLI change break this demo on an unrelated
+        # day. validator.yml and demo-claude-hotfix-flow.yml pin the same
+        # version — bump all three together.
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.220
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Rebuild the issue worktree (linked, from the PR head)
+        # The prerequisite the bare checkout can't satisfy: a LINKED worktree on
+        # the PR's head branch, where the skill runs and derives its issue key.
+        # Without this the skill's statuscheck FAILs on the `worktree` row.
+        id: worktree
+        shell: bash
+        env:
+          HEAD: ${{ steps.pr.outputs.head }}
+          BASE: ${{ steps.pr.outputs.base }}
+          KEY: ${{ steps.pr.outputs.key }}
+        run: |
+          set -euo pipefail
+          WT="$RUNNER_TEMP/worktrees/worktree-$KEY"
+          git fetch origin "+refs/heads/$HEAD:refs/remotes/origin/$HEAD"
+          git worktree add --track -B "$HEAD" "$WT" "origin/$HEAD"
+          # parentbranch is machine-local git config, so it never survives into
+          # CI. Re-set it to the PR's real base: first source the skill's §13
+          # PR-base resolver reads, ahead of the assigner's durable "PR target
+          # branch:" Jira comment. Correct for sub-task PRs (base = parent
+          # branch) and single-step PRs (base = development) alike.
+          git config "branch.$HEAD.parentbranch" "$BASE"
+          echo "path=$WT" >> "$GITHUB_OUTPUT"
+
+      - name: Run jira-task-reviewer
+        # Bare, no key: the reviewer derives the issue from the worktree's
+        # branch. Run in the worktree, with --plugin-dir pointing back into the
+        # main checkout (base branch) for the skills.
+        #
+        # --dangerously-skip-permissions: headless runs have no interactive
+        # turn to approve tool calls. Safe-ish here and nowhere else: a
+        # throwaway runner VM, non-root (the flag refuses to run as root).
+        #
+        # ONLY ANTHROPIC_API_KEY is exported here — see caveat 1 in the header:
+        # exporting GH_TOKEN/GITHUB_TOKEN would block statuscheck's gh login
+        # and abort the run before any review. The skill reads its gh/Jira
+        # credentials from the env FILE (written above), not the environment.
+        timeout-minutes: 25
+        shell: bash
+        working-directory: ${{ steps.worktree.outputs.path }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+            --dangerously-skip-permissions \
+            --model "${{ github.event.inputs.model }}" \
+            -p "/jira-sdlc:jira-task-reviewer" \
+            2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+
+      - name: Upload reviewer log
+        # The skill's full transcript — its verdict is echoed here as it posts
+        # to GitHub and Jira, so a human inspecting the run sees the review.
+        # The reviewer skill itself owns the report.md / Jira comment content;
+        # this log is the reliable, path-independent artifact of what happened.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-log
+          path: ${{ runner.temp }}/reviewer.log
+          if-no-files-found: warn
+          retention-days: 7
