@@ -58,11 +58,31 @@
 #     a `feature/*` branch therefore does *not* exercise that branch's copy of
 #     the skills; land them on the base branch first.
 #
-# Secrets: ANTHROPIC_API_KEY plus the Jira role credentials. Neither exists in
-# this repo yet — every job checks its own set up front and fails loud with
-# `::error::` rather than letting the claude CLI die on an unset key halfway
-# through. Each job gets **only its own role's** token: `JIRA_ASSIGNER_*` in
-# job 1, `JIRA_EXECUTOR_*` in job 2, `JIRA_REVIEWER_*` in job 3.
+# ── Secrets ───────────────────────────────────────────────────────────────
+#
+# All of them are **environment secrets on `production`** (so a job that
+# forgets `environment: production` sees empty strings, not repo-level
+# values), and each is named **exactly as the `jira-sdlc-tools.local.env` key
+# it becomes** — which is what lets each job's first step be a single loop
+# over a `KEYS` list rather than a hand-mapped list of printfs:
+#
+#   ANTHROPIC_API_KEY     every job (read from the environment by the CLI —
+#                         the only one never written to the file)
+#   JIRA_ACCOUNT_URL      every job
+#   JIRA_ASSIGNER_EMAIL / JIRA_ASSIGNER_TOKEN    job 1 only
+#   JIRA_EXECUTOR_EMAIL / JIRA_EXECUTOR_TOKEN    job 2 only  (job 1 also gets
+#                         the *email* — it's an assignment target, not a
+#                         credential; see the step comment there)
+#   JIRA_REVIEWER_EMAIL / JIRA_REVIEWER_TOKEN    job 3 only
+#   GITHUB_PAT_TOKEN      every job, optional — see below
+#
+# `WORKTREES_DIR` is the one key that is *not* a secret: it's computed per job
+# as a path under RUNNER_TEMP, because a value carried over from a developer's
+# machine would point somewhere that doesn't exist on the runner.
+#
+# None of these exist in this repo yet — every job checks its own set up front
+# and fails loud with `::error::` rather than letting the claude CLI die on an
+# unset key halfway through.
 #
 # For GitHub itself no new secret is needed: `GITHUB_PAT_TOKEN` falls back to
 # the runner's built-in `secrets.GITHUB_TOKEN`, which can push and open a PR
@@ -115,6 +135,54 @@ jobs:
           # clone doesn't have.
           fetch-depth: 0
 
+      - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
+        shell: bash
+        env:
+          # Environment secrets on `production`, each named exactly as the
+          # env-file key it becomes — which is what lets the step below be one
+          # loop instead of a hand-mapped list. KEYS is the whole contract.
+          KEYS: JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
+          JIRA_ASSIGNER_TOKEN: ${{ secrets.JIRA_ASSIGNER_TOKEN }}
+          # Not a credential: the assigner assigns every issue it creates to
+          # the executor, and get_assignee_email.sh reads that address (and
+          # only the address — no executor token) from the env file.
+          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          # Checked here so one step catches every missing secret, but never
+          # written to the file — the claude CLI reads it from the environment.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # First real step of the job: no filesystem survives from job to job,
+          # so each one rebuilds this file from its own secrets. jira.sh and
+          # statuscheck read credentials ONLY from here (never the
+          # environment), resolved from the git top-level.
+          missing=()
+          for k in ANTHROPIC_API_KEY $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          # Create empty and lock it down BEFORE the secrets go in.
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          # printf with the value as an argument: secret values are data, never
+          # re-expanded by the shell and never part of the script text.
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          # WORKTREES_DIR is deliberately NOT a secret: it's a path on *this*
+          # runner, and a value carried over from a developer's machine would
+          # point somewhere that doesn't exist here.
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
       - name: Resolve project config
         id: config
         shell: bash
@@ -148,56 +216,6 @@ jobs:
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Verify required secrets
-        shell: bash
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
-          JIRA_ASSIGNER_TOKEN: ${{ secrets.JIRA_ASSIGNER_TOKEN }}
-          # Not a credential: the assigner assigns every issue it creates to
-          # the executor, and get_assignee_email.sh reads that address (and
-          # only the address — no executor token) from the env file.
-          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for v in ANTHROPIC_API_KEY JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL \
-                   JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN; do
-            [ -n "${!v:-}" ] || missing+=("$v")
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s): ${missing[*]} — this demo cannot run without them"
-            exit 1
-          fi
-          echo "All required secrets present."
-
-      - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
-        shell: bash
-        env:
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
-          JIRA_ASSIGNER_TOKEN: ${{ secrets.JIRA_ASSIGNER_TOKEN }}
-          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # jira.sh reads credentials ONLY from this file (never from the
-          # environment), resolved from the git top-level — so writing it is
-          # how a role's identity reaches the skill. printf, not a heredoc:
-          # secret values are passed as data and never re-expanded by the shell.
-          mkdir -p "$RUNNER_TEMP/worktrees"
-          {
-            printf 'JIRA_ACCOUNT_URL=%s\n'    "$JIRA_ACCOUNT_URL"
-            printf 'WORKTREES_DIR=%s\n'       "$RUNNER_TEMP/worktrees"
-            printf 'JIRA_ASSIGNER_EMAIL=%s\n' "$JIRA_ASSIGNER_EMAIL"
-            printf 'JIRA_ASSIGNER_TOKEN=%s\n' "$JIRA_ASSIGNER_TOKEN"
-            printf 'JIRA_EXECUTOR_EMAIL=%s\n' "$JIRA_EXECUTOR_EMAIL"
-            printf 'GITHUB_PAT_TOKEN=%s\n'    "$GITHUB_PAT_TOKEN"
-          } > .jst/jira-sdlc-tools.local.env
-          chmod 600 .jst/jira-sdlc-tools.local.env
 
       - name: Install claude CLI (native, no npm)
         shell: bash
@@ -298,6 +316,40 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Write .jst/jira-sdlc-tools.local.env (executor role only)
+        shell: bash
+        env:
+          # Same shape as job 1, one role over: environment secrets named
+          # exactly as the env-file keys they become.
+          KEYS: JIRA_ACCOUNT_URL JIRA_EXECUTOR_EMAIL JIRA_EXECUTOR_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
+          JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Written in the *main checkout*, before the worktree exists: the
+          # executor's own ensure_local_env.sh copies it into the worktree from
+          # here, which is exactly the path that script exists to cover.
+          missing=()
+          for k in ANTHROPIC_API_KEY $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
       - name: Resolve project config
         id: config
         shell: bash
@@ -326,49 +378,6 @@ jobs:
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Verify required secrets
-        shell: bash
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for v in ANTHROPIC_API_KEY JIRA_ACCOUNT_URL JIRA_EXECUTOR_EMAIL \
-                   JIRA_EXECUTOR_TOKEN GITHUB_PAT_TOKEN; do
-            [ -n "${!v:-}" ] || missing+=("$v")
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s): ${missing[*]} — this demo cannot run without them"
-            exit 1
-          fi
-          echo "All required secrets present."
-
-      - name: Write .jst/jira-sdlc-tools.local.env (executor role only)
-        shell: bash
-        env:
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Written in the *main checkout*: the executor's own
-          # ensure_local_env.sh copies it into the worktree from here, which is
-          # exactly the path that script exists to cover.
-          mkdir -p "$RUNNER_TEMP/worktrees"
-          {
-            printf 'JIRA_ACCOUNT_URL=%s\n'    "$JIRA_ACCOUNT_URL"
-            printf 'WORKTREES_DIR=%s\n'       "$RUNNER_TEMP/worktrees"
-            printf 'JIRA_EXECUTOR_EMAIL=%s\n' "$JIRA_EXECUTOR_EMAIL"
-            printf 'JIRA_EXECUTOR_TOKEN=%s\n' "$JIRA_EXECUTOR_TOKEN"
-            printf 'GITHUB_PAT_TOKEN=%s\n'    "$GITHUB_PAT_TOKEN"
-          } > .jst/jira-sdlc-tools.local.env
-          chmod 600 .jst/jira-sdlc-tools.local.env
 
       - name: Install claude CLI (native, no npm)
         shell: bash
@@ -453,6 +462,37 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Write .jst/jira-sdlc-tools.local.env (reviewer role only)
+        shell: bash
+        env:
+          # Same shape again, reviewer role. The reviewer's credential is the
+          # only Jira secret this job can see.
+          KEYS: JIRA_ACCOUNT_URL JIRA_REVIEWER_EMAIL JIRA_REVIEWER_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
+          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for k in ANTHROPIC_API_KEY $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
       - name: Resolve project config
         id: config
         shell: bash
@@ -478,46 +518,6 @@ jobs:
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Verify required secrets
-        shell: bash
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
-          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for v in ANTHROPIC_API_KEY JIRA_ACCOUNT_URL JIRA_REVIEWER_EMAIL \
-                   JIRA_REVIEWER_TOKEN GITHUB_PAT_TOKEN; do
-            [ -n "${!v:-}" ] || missing+=("$v")
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s): ${missing[*]} — this demo cannot run without them"
-            exit 1
-          fi
-          echo "All required secrets present."
-
-      - name: Write .jst/jira-sdlc-tools.local.env (reviewer role only)
-        shell: bash
-        env:
-          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
-          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
-          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/worktrees"
-          {
-            printf 'JIRA_ACCOUNT_URL=%s\n'    "$JIRA_ACCOUNT_URL"
-            printf 'WORKTREES_DIR=%s\n'       "$RUNNER_TEMP/worktrees"
-            printf 'JIRA_REVIEWER_EMAIL=%s\n' "$JIRA_REVIEWER_EMAIL"
-            printf 'JIRA_REVIEWER_TOKEN=%s\n' "$JIRA_REVIEWER_TOKEN"
-            printf 'GITHUB_PAT_TOKEN=%s\n'    "$GITHUB_PAT_TOKEN"
-          } > .jst/jira-sdlc-tools.local.env
-          chmod 600 .jst/jira-sdlc-tools.local.env
 
       - name: Install claude CLI (native, no npm)
         shell: bash
