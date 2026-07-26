@@ -30,7 +30,7 @@ sequenceDiagram
     participant GIT
     participant JIRA
 
-    Note over User,JIRA: Phase 1 — Plan<br/>(runs once, from the base branch)
+    Note over User,JIRA: Phase 1 — Plan<br/>(runs once, from the base branch — or production, hotfix only)
     User->>Assigner: invoke /jira-task-assigner "<task description>"
 
     activate Assigner
