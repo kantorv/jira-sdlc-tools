@@ -139,7 +139,11 @@ climbing from a sub-task to its parent if needed).
     | sed -e 's/PR target branch: //' -e 's/\.$//')
   [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
   ```
-  Only ask the user if all three come up empty.
+  Only ask the user if all three come up empty. Then apply §13's prefix/base
+  sanity check to the resolved pair: a `hotfix/` `<PARENT-BRANCH>` sitting on
+  `<DEFAULT_BASE_BRANCH>` means the last resort fired on a production fix, so
+  the phase check below would hunt for the PR on the wrong base and 5a would
+  open a duplicate into staging. Stop and ask which base is right.
 
   **Why no parent-branch search here, unlike §13.** That step recovers a
   *sub-task's* base by finding its parent's branch, and §13 gates it on a
