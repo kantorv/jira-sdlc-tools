@@ -1,9 +1,10 @@
 # Task Lifecycle — Phase 1: Plan
 
 Phase 1 of the task lifecycle, run by the **`jira-task-assigner`** skill.
-Triggered once per task, **invoked from the default base branch** — the
+Triggered once per task, **invoked from the default base branch** (or from
+the production branch, which is accepted only for an emergency hotfix) — the
 assigner refuses to run on an existing `feature/`/`hotfix/` issue branch,
-and asks the user how to proceed on any other non-base branch.
+and asks the user how to proceed on any other branch.
 
 This phase ends when the assigner reports back: issues exist, branches
 and worktrees are ready, a `"PR target branch: ... Worktree: ..."`
@@ -36,9 +37,9 @@ sequenceDiagram
     Assigner->>JIRA: get_assignee_email.sh (resolve executor email)
     Note right of Assigner: login fails → stop.<br/>Everything below is now filed BY the assigner<br/>(Jira sets creator + reporter from it)
     Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
-    Assigner->>GIT: read current branch (base? feature/hotfix? other?)
+    Assigner->>GIT: read current branch (base? production? feature/hotfix? other?)
     GIT-->>Assigner: current branch
-    Note right of Assigner: base → continue · feature/hotfix → stop · other → ask user
+    Note right of Assigner: base → continue · production → continue, hotfix only (step 5C decides)<br/>feature/hotfix → stop · other → ask user
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled
@@ -110,10 +111,12 @@ sequenceDiagram
 - **The base decision rides along with scope** — planned work (the
   default) branches `feature/` off `development`, while an *explicitly
   requested* emergency production fix branches a single `hotfix/` off
-  `origin/main` (SDLC.md §4). The assigner stays on `development` either
-  way — it cuts the hotfix from the fetched remote ref rather than
-  checking production out — so the `Multistep` arm is always the planned
-  path and the two never mix within a run.
+  `origin/main` (SDLC.md §4). Because it cuts from the fetched remote ref
+  rather than checking production out, the hotfix works the same whether
+  you invoke it from `development` or from `main` — `main` is a permitted
+  start state, never a required one, and step 5C stops if it turns out to
+  be planned work. Either way the `Multistep` arm is always the planned
+  path, and the two never mix within a run.
 - **Provisioning is uniform** — *every* scenario (single-step,
   multistep parent, sub-task) records `branch.<branch>.parentbranch`
   in git config via GIT, pushes the branch to the remote via GIT, and

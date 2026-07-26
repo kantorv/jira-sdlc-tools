@@ -98,13 +98,13 @@ here; the rest are role-independent preconditions defined in
 printed output — that live output, not this table, is what the skill
 actually acts on). The script never FAILs the three rows below — it
 reports them for every role, and each skill judges them for itself; the
-assigner runs from the **main repo checkout on the base branch** (not a
-per-issue worktree), the opposite reading from the executor/reviewer:
+assigner runs from the **main repo checkout** (not a per-issue worktree) on a
+long-lived branch, the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; a linked-worktree reading is a stop condition (see "Reading the result" below) |
-| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **The assigner requires the base branch**; step 2 consumes this row and resolves the other two readings |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **The assigner requires `<DEFAULT_BASE_BRANCH>`, or `<PRODUCTION_BRANCH>` when the run turns out to be a hotfix** — the script only knows the former by name, so it reports production as *neither*; match it against the `production_branch` row yourself. Step 2 consumes this row and resolves every reading |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
 Because no issue exists yet, `branch_project`, `issue_key`, and
@@ -143,14 +143,16 @@ re-run it):
   expects to run. Proceed to investigate and plan the work — step 5C decides
   what the new branches get cut *from*, which isn't necessarily the branch
   you're standing on.
+- **`<PRODUCTION_BRANCH>`**: a valid start state, but only for a hotfix.
+  Proceed and let step 5C decide as it always does — don't try to settle
+  hotfix-vs-planned here, before you've investigated; 5C is the single place
+  that decision is made and confirmed with the user, and it stops there if it
+  lands on planned work. (You cut from `origin/<PRODUCTION_BRANCH>` either
+  way, so standing here is permitted, never required.)
 - **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch**:
   **STOP.** Running this skill from an existing issue branch is currently not supported. Tell the user to checkout the base branch first.
 - **Any other branch name**:
   Ask the user whether to treat it as a base branch or abort. Do not guess.
-  If it's `<PRODUCTION_BRANCH>` and the user wants a hotfix, the answer is
-  to switch back to `<DEFAULT_BASE_BRANCH>` and re-run: step 5C's hotfix path
-  cuts from the fetched `origin/<PRODUCTION_BRANCH>` and never needs it
-  checked out.
 
 ## 3. Investigate
 
@@ -178,7 +180,7 @@ so the criteria are durable and visible to anyone picking up the work.
 
 ## 5. Decide: Scope and Issue Type
 
-By this point Step 2 has already confirmed you're standing on the base branch — there is no second branch-context check here. Make the following three decisions before moving to setup; C is what turns "which branch am I on" into the base the new branches actually get cut from:
+By this point Step 2 has already confirmed you're standing on a branch this skill can run from — `<DEFAULT_BASE_BRANCH>`, or `<PRODUCTION_BRANCH>` pending a hotfix decision here. There is no second branch-context check. Make the following three decisions before moving to setup; C is what turns "which branch am I on" into the base the new branches actually get cut from:
 
 **A. Decide Scope: single-step or multistep**
 - **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
@@ -212,9 +214,9 @@ The issue type still comes from B, where an emergency production fix lands on
 `Bug` like any other defect. Two entries in the hotfix column carry the weight:
 
 - **`origin/<PRODUCTION_BRANCH>`, not your local copy and not
-  `<DEFAULT_BASE_BRANCH>`.** Cutting from the freshly fetched remote ref needs
-  no checkout, so step 1's main-checkout requirement still holds and a stale
-  local `<PRODUCTION_BRANCH>` can't poison the branch. Cutting from
+  `<DEFAULT_BASE_BRANCH>`.** Cutting from the freshly fetched remote ref works
+  identically from either start state step 2 allows, and a stale local
+  `<PRODUCTION_BRANCH>` can't poison the branch. Cutting from
   `<DEFAULT_BASE_BRANCH>` instead would carry every unreleased sprint feature
   into a production release — the accident SDLC.md §4 exists to prevent, and
   it stays invisible until the release ships.
@@ -231,6 +233,11 @@ matches nothing and is never tagged or released.
 If step 1's `production_branch` row read `unset`, stop and ask — don't invent
 a name for the branch you're about to point a PR at.
 
+If step 2 started you on `<PRODUCTION_BRANCH>` and this decision lands on
+**planned work**, stop and tell the user to checkout `<DEFAULT_BASE_BRANCH>`:
+the planned path cuts from your own checkout (step 6), so continuing from here
+would branch tomorrow's feature off production.
+
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
 Because step 2 stopped you if you were already on an issue branch, you are always creating a brand-new top-level issue. By always provisioning a worktree for this top-level issue, the setup becomes a single, unified flow regardless of your scope decision.
@@ -246,9 +253,10 @@ git pull --ff-only   # planned work only: you cut from your own checkout, and a 
                      # branch from. If it can't fast-forward, stop and ask.
 ```
 On the hotfix path **skip the pull**: you cut from the fetched
-`origin/<PRODUCTION_BRANCH>`, which the fetch already brought up to date, and
-pulling would merge production into your `<DEFAULT_BASE_BRANCH>` checkout as a
-side effect nobody asked for.
+`origin/<PRODUCTION_BRANCH>`, which the fetch already brought up to date.
+Pulling would only move whichever branch you happen to be standing on —
+nothing the hotfix needs, and from `<DEFAULT_BASE_BRANCH>` it quietly merges
+production into your checkout.
 
 **A. Create the Top-Level Issue, Branch, and Worktree (Always)**
 

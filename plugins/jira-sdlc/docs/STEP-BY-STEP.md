@@ -117,10 +117,13 @@ reviewed PR, which is exactly the flow the skills produce.
 
 ### 2.3 Clone the base branch — this is the entry point
 
-**`jira-task-assigner` runs only from the base branch.** Invoked from a
-feature or hotfix branch, it stops and tells you to switch back — it plans
-work *from* the base branch, then hands each issue its own branch and
-worktree. So the clone you work in should sit on `development`:
+**`jira-task-assigner` runs from a long-lived branch, not an issue branch.**
+Invoked from a feature or hotfix branch, it stops and tells you to switch
+back — it plans work *from* a long-lived branch, then hands each issue its own
+branch and worktree. Normally that's the base branch, so the clone you work in
+should sit on `development` (`main` is accepted too, but only when you're
+asking for an emergency hotfix — and even then it isn't required, since the
+hotfix is cut from `origin/main` regardless):
 
 ```bash
 git clone -b development git@github.com:<OWNER>/<REPO>.git myapp
