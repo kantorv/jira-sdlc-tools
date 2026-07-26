@@ -35,11 +35,11 @@ Nothing is merged. The run ends with an open, reviewed PR into
 
 ```mermaid
 flowchart LR
-    D([workflow_dispatch<br>bug text]) --> G1{{approve}}
+    D([workflow_dispatch<br>bug text]) --> G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira Bug + hotfix branch<br>cut from origin/PRODUCTION_BRANCH"]
-    J1 --> G2{{approve}}
+    J1 --> G2{{"approve<br>executor run"}}
     G2 --> J2["job 2 · executor<br>implement in linked worktree<br>push + open PR"]
-    J2 --> G3{{approve}}
+    J2 --> G3{{"approve<br>reviewer run"}}
     G3 --> J3["job 3 · reviewer<br>review the PR<br>verdict to GitHub + Jira"]
     J3 --> H([human merges the PR<br>release.yml patch-bumps])
 ```
