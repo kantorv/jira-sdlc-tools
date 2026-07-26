@@ -42,8 +42,6 @@ flowchart LR
     J2 --> G3{{approve}}
     G3 --> J3["job 3 · reviewer<br>review the PR<br>verdict to GitHub + Jira"]
     J3 --> H([human merges the PR<br>release.yml patch-bumps])
-    J1 -. "issue_key · branch · pr_base" .-> J2
-    J1 -. "issue_key · branch · pr_base" .-> J3
 ```
 
 Every gate above is real, not decorative — see the next section.
