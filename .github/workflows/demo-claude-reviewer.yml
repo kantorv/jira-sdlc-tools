@@ -90,6 +90,16 @@ name: Reviewer Skill on PR (Claude demo)
 
 on:
   workflow_dispatch:
+    inputs:
+      model:
+        description: 'Claude model to use'
+        required: false
+        default: 'sonnet'
+        type: choice
+        options:
+          - sonnet
+          - opus
+          - fable
 
 jobs:
   # ── Gating job — byte-for-byte from reviewer-on-pr.yml ────────────────────
@@ -133,6 +143,7 @@ jobs:
     name: Reviewer skill (Claude)
     needs: check_pr_exists
     if: needs.check_pr_exists.outputs.pr_exists == '1'
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -248,7 +259,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.199
+          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.220
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Rebuild the issue worktree (linked, from the PR head)
@@ -296,6 +307,7 @@ jobs:
           set -euo pipefail
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
+            --model "${{ github.event.inputs.model }}" \
             -p "/jira-sdlc:jira-task-reviewer" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
 
