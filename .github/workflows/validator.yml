@@ -39,6 +39,8 @@ jobs:
       # float would let an upstream schema change turn the gate red mid-week.
       # `bash -s -- 2.1.199` puts 2.1.199 in $1 (install.sh reads TARGET="$1"),
       # never $0. See claude plugin validate --help for --strict.
+      # demo-claude-hotfix-flow.yml pins the same version (its
+      # CLAUDE_CLI_VERSION env) — bump both together.
       - name: Install claude CLI (native, no npm)
         run: |
           curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.199

@@ -36,6 +36,16 @@
 #     from scratch. That rebuild is not optional decoration — the executor and
 #     reviewer both stop unless `.git` is a file (a linked worktree) on a
 #     `feature/*` / `hotfix/*` branch, which a bare `actions/checkout` is not.
+#
+#     Same reason every job rebuilds `.jst/jira-sdlc-tools.local.env` for
+#     itself: there is no earlier job's copy to inherit. Those three bootstrap
+#     steps are near-identical **on purpose** and are not factored into a
+#     shared composite action or helper script — this repo has no CI-reuse
+#     mechanism anywhere (the three `jira_issue_transition_on_*.yml` files are
+#     likewise ~45 of 75 lines identical), and these workflows are meant to be
+#     *copied into other repos*, which a sibling helper file quietly breaks.
+#     Keep the copies byte-identical apart from the role, so a diff between
+#     two jobs shows only what genuinely differs.
 #  2. **`git config branch.<b>.parentbranch` is machine-local**, so it never
 #     survives to jobs 2/3 either. They re-set it from job 1's outputs. The
 #     assigner's `PR target branch: …` Jira comment is the durable fallback
@@ -110,7 +120,8 @@ concurrency:
 
 env:
   # Pinned deliberately, same as validator.yml: a float would let an upstream
-  # CLI change break this demo on an unrelated day.
+  # CLI change break this demo on an unrelated day. Workflow-level env can't
+  # cross files, so validator.yml hardcodes the same pin — bump both together.
   CLAUDE_CLI_VERSION: 2.1.199
 
 jobs:
@@ -210,9 +221,25 @@ jobs:
           BASE: ${{ steps.config.outputs.default_base_branch }}
         run: |
           set -euo pipefail
-          # The assigner's step 2 accepts the base branch or PRODUCTION_BRANCH
-          # and stops on an issue branch, so move off whatever ref dispatched
-          # this run. Caveat 5 above: this is also where the skills come from.
+          # Why the BASE branch and not PRODUCTION_BRANCH, on a *hotfix* demo —
+          # the obvious question, so: the checkout is not what the hotfix is cut
+          # from. Assigner step 5C sets BRANCH_FROM = origin/<PRODUCTION_BRANCH>,
+          # the freshly fetched remote ref, precisely so a stale local
+          # production branch can't poison it. Both start states its step 2
+          # allows produce an identical hotfix/<KEY>-<slug> and an identical
+          # production PR base, so standing here costs the demo nothing.
+          #
+          # Two things then make the base branch the better of the two:
+          #   - the skills come from this checkout (caveat 5), and the hotfix
+          #     directive reaches PRODUCTION_BRANCH only after a release — until
+          #     then, standing on production would load an assigner with no
+          #     hotfix path, which cuts feature/<KEY> and fails the branch check
+          #     in "Capture the created issue and branch";
+          #   - 5C hard-stops if it started on PRODUCTION_BRANCH and the run
+          #     lands on planned work, and a headless run has no turn to
+          #     recover in. From here that misread degrades instead of halting.
+          # The assigner also stops outright on an issue branch, so moving off
+          # whatever ref dispatched this run is required either way.
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -355,16 +382,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Byte-identical to job 1's copy except the key list — the three
+          # copies are deliberately duplicated (see the header), so keep them
+          # diffable rather than letting each grow its own variant.
           cfg() {
             grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
               | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
           }
-          BASE=$(cfg DEFAULT_BASE_BRANCH)
-          if [ -z "$BASE" ]; then
-            echo "::error::DEFAULT_BASE_BRANCH is unset in .jst/jira-sdlc-tools.env"
-            exit 1
-          fi
-          echo "default_base_branch=$BASE" >> "$GITHUB_OUTPUT"
+          for k in DEFAULT_BASE_BRANCH; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
 
       - name: Stand on the base branch
         shell: bash
@@ -374,7 +407,11 @@ jobs:
           set -euo pipefail
           # The workspace stays a *main checkout* (`.git` is a directory) on a
           # long-lived branch; the issue branch gets a linked worktree below,
-          # which is the only shape the executor will run in.
+          # which is the only shape the executor will run in. The branch itself
+          # matters less here than in job 1 — this job's work happens in the
+          # worktree — but it is still where the skills are loaded from, so keep
+          # it the same base branch job 1 used (see that job for why not
+          # PRODUCTION_BRANCH).
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -498,16 +535,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Byte-identical to job 1's copy except the key list — the three
+          # copies are deliberately duplicated (see the header), so keep them
+          # diffable rather than letting each grow its own variant.
           cfg() {
             grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
               | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
           }
-          BASE=$(cfg DEFAULT_BASE_BRANCH)
-          if [ -z "$BASE" ]; then
-            echo "::error::DEFAULT_BASE_BRANCH is unset in .jst/jira-sdlc-tools.env"
-            exit 1
-          fi
-          echo "default_base_branch=$BASE" >> "$GITHUB_OUTPUT"
+          for k in DEFAULT_BASE_BRANCH; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
 
       - name: Stand on the base branch
         shell: bash
@@ -515,6 +558,9 @@ jobs:
           BASE: ${{ steps.config.outputs.default_base_branch }}
         run: |
           set -euo pipefail
+          # Same as job 2: the workspace stays a main checkout on a long-lived
+          # branch and supplies the skills, while the review itself happens in
+          # the linked worktree below. (Job 1 explains why not PRODUCTION_BRANCH.)
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
