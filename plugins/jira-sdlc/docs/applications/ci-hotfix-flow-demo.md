@@ -34,7 +34,7 @@ Nothing is merged. The run ends with an open, reviewed PR into
 ([SDLC.md §5](../SDLC.md)).
 
 ```mermaid
-flowchart LR
+flowchart TB
     D([workflow_dispatch<br>bug text]) --> G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira Bug + hotfix branch<br>cut from origin/PRODUCTION_BRANCH"]
     J1 --> G2{{"approve<br>executor run"}}
