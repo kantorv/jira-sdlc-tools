@@ -134,7 +134,7 @@ jobs:
           # the executor, and get_assignee_email.sh reads that address (and
           # only the address — no executor token) from the env file.
           JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
-          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -219,7 +219,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.199
+          curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.220
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run jira-task-assigner
