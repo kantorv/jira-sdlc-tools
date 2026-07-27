@@ -64,11 +64,14 @@ into the other goes wrong:
 
 | | hotfix demo | this one |
 | :--- | :--- | :--- |
-| trigger | `workflow_dispatch` with a bug-text input | `issue_comment` — `/make-feature` on an issue |
+| trigger | `issue_comment` — `/make-hotfix` on an issue | `issue_comment` — `/make-feature` on an issue |
 | branch | `hotfix/<KEY>-<slug>` off `origin/<PRODUCTION_BRANCH>` | `feature/<KEY>-<slug>` off `<DEFAULT_BASE_BRANCH>` |
 | PR base / `parentbranch` | `<PRODUCTION_BRANCH>` | `<DEFAULT_BASE_BRANCH>` |
-| assigner prompt | bug text **plus** an explicit hotfix directive, which engages assigner step 5C (forces single-step scope, cuts from production) | issue title + body only — no directive, so scope is the assigner's own judgement |
-| reporting | step summaries + log artifacts | the same **plus** a report comment per job on the triggering issue, and a transcript-GIF artifact per job |
+| assigner prompt | the issue text **plus** an explicit hotfix directive, which engages assigner step 5C (forces single-step scope, cuts from production) | issue title + body only — no directive, so scope is the assigner's own judgement |
+
+Everything else — the guard on the trigger, the report comment and
+transcript-GIF artifact per job, the per-role model defaults, the runner
+bootstrap — is the same in both, described in the same words there.
 
 ## The trigger and its gate
 

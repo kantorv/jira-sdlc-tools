@@ -3,8 +3,9 @@
 > **Note on this document:** this describes
 > [`demo-claude-hotfix-flow.yml`](../../../../.github/workflows/demo-claude-hotfix-flow.yml)
 > at the **marketplace repo root** — a GitHub Actions workflow that chains all
-> three `jira-sdlc` skills headlessly, one job per skill, to turn a typed bug
-> report into a reviewed hotfix PR. It is an **application demo**: a worked
+> three `jira-sdlc` skills headlessly, one job per skill, to turn a GitHub
+> issue into a reviewed hotfix PR when someone comments `/make-hotfix` on it.
+> It is an **application demo**: a worked
 > example of running the skills in a CI environment, meant to be read next to
 > the workflow file (whose comments carry the line-level rationale) and copied
 > into other repos. It is **not** this repo's hotfix procedure — that stays
@@ -14,17 +15,17 @@
 >
 > Its sibling is [ci-feature-flow-demo.md](./ci-feature-flow-demo.md) — the
 > same three-job chain on the *planned-work* flow, triggered by a
-> `/make-feature` issue comment. This file carries the shared pattern in full;
-> that one covers only what differs.
+> `/make-feature` comment instead. This file carries the shared pattern in
+> full; that one covers only what differs.
 
 ## What it demonstrates
 
-One `workflow_dispatch` input — free-form bug text — flows through three
-sequential jobs, each a fresh runner VM, each running one skill under its own
-Jira identity, with the issue key and branch handed forward through job
-outputs:
+A GitHub issue is the bug report. A maintainer comments `/make-hotfix` on it,
+and its title + body flow through three sequential jobs, each a fresh runner
+VM, each running one skill under its own Jira identity, with the issue key and
+branch handed forward through job outputs:
 
-1. **assigner** — turns the text into a Jira `Bug`, cuts
+1. **assigner** — turns the issue's title + body into a Jira `Bug`, cuts
    `hotfix/<KEY>-<slug>` from the freshly fetched
    `origin/<PRODUCTION_BRANCH>`, pushes it, and assigns the issue to the
    executor.
@@ -33,6 +34,9 @@ outputs:
 3. **reviewer** — rebuilds the worktree again, reviews the PR, and posts its
    verdict to both GitHub and Jira.
 
+Each job also comments its skill's report back on the triggering GitHub issue,
+so the whole run is visible where the fix was requested.
+
 Nothing is merged. The run ends with an open, reviewed PR into
 `<PRODUCTION_BRANCH>`; merging it is a human act, after which the repo's
 `release.yml` patch-bumps the tag as for any `hotfix/*` merge
@@ -40,16 +44,54 @@ Nothing is merged. The run ends with an open, reviewed PR into
 
 ```mermaid
 flowchart TB
-    D([workflow_dispatch<br>bug text]) --> G1{{"approve<br>assigner run"}}
+    C([issue comment<br>/make-hotfix]) --> GA{{"guard — body is exactly /make-hotfix<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    GA -->|no match| X([no run — silently skipped])
+    GA -->|match| G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira Bug + hotfix branch<br>cut from origin/PRODUCTION_BRANCH"]
     J1 --> G2{{"approve<br>executor run"}}
-    G2 --> J2["job 2 · executor<br>implement in linked worktree<br>push + open PR"]
+    G2 --> J2["job 2 · executor<br>implement in linked worktree<br>push + open PR into PRODUCTION_BRANCH"]
     J2 --> G3{{"approve<br>reviewer run"}}
     G3 --> J3["job 3 · reviewer<br>review the PR<br>verdict to GitHub + Jira"]
     J3 --> H([human merges the PR<br>release.yml patch-bumps])
+    J1 -.->|report comment| C
+    J2 -.->|report comment| C
+    J3 -.->|report comment| C
 ```
 
-Every gate above is real, not decorative — see the next section.
+Every gate above is real, not decorative — see the next two sections.
+
+## The trigger and its gate
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+```
+
+`issue_comment` fires for **any** commenter on a public repo, and what follows
+runs an LLM with write permissions on a runner. The job-level `if` is therefore
+the security boundary of this workflow, and it requires all three of:
+
+| Condition | Why it's there |
+| :--- | :--- |
+| `github.event.comment.body == '/make-hotfix'` | a bare command, so a comment that merely mentions `/make-hotfix` in prose doesn't fire the chain. Exact match also means a trailing character means no run — that's the intended strictness, not a bug |
+| `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "the environment approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
+| `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-hotfix` on a pull request would hand the assigner a PR description as a bug report |
+
+Jobs 2 and 3 declare `needs`, and a skipped dependency skips its dependents, so
+the guard is stated once on job 1. A comment that fails it produces no run at
+all — no failed check, no notification, so a public repo doesn't accumulate a
+red X for every unrelated comment.
+
+**The issue, not the comment, is the bug report** — and unlike the feature
+demo, it is only *part* of the prompt. The assigner receives a two-part
+message: the issue's title, a blank line, then its body, followed by the
+explicit `2. CREATE AN EMERGENCY HOTFIX FROM IT BRANCHED FROM MAIN` directive
+that engages assigner step 5C. That second part is what makes this the hotfix
+flow; without it the same run produces a plain `feature/<KEY>` branch and a PR
+aimed at staging. Issue bodies are attacker-supplied text, so they reach the
+prompt through env vars and a `printf`-built temp file, never interpolated into
+a shell command.
 
 ## The `environment: production` gate — one approval per skill
 
@@ -61,11 +103,11 @@ environment: production
 
 and the `production` environment in this repo has GitHub's **Required
 reviewers** protection rule checked. Environment protection is evaluated
-**before each job starts**, so a single dispatch pauses three times:
+**before each job starts**, so one `/make-hotfix` comment pauses three times:
 
 | Pause | Approving it releases | What has happened so far |
 | :--- | :--- | :--- |
-| before job 1 | the assigner | nothing — this is the "should this run at all" gate |
+| before job 1 | the assigner | nothing — this is the "should this run at all" gate, and the first place a human reads the issue text with the run in mind |
 | before job 2 | the executor | a Jira Bug exists and `hotfix/<KEY>-<slug>` is pushed — the owner can inspect both before any code is written |
 | before job 3 | the reviewer | the fix is pushed and the PR is open — the owner can eyeball the diff before the automated review spends tokens on it |
 
@@ -124,7 +166,16 @@ branch only decides (a) that the assigner's start-state check passes, and
 `--plugin-dir` points into this checkout. That second point is why the base
 branch beats production for the demo: skill changes reach
 `<PRODUCTION_BRANCH>` only after a release, so standing on production would
-run *yesterday's* skills against today's demo.
+run *yesterday's* skills against today's demo. The switch is explicit rather
+than inherited, because an `issue_comment` event checks out the repo's
+*default* branch, which is not by definition `<DEFAULT_BASE_BRANCH>`.
+
+**Each role runs on a named model.** The workflow-level `env` block pins
+`DEFAULT_ASSIGNER_MODEL` / `DEFAULT_EXECUTOR_MODEL` / `DEFAULT_REVIEWER_MODEL`
+(`opus`, `opus`, `sonnet`), and each job passes its own to `claude --model`.
+Left unset, a headless run would take whatever the CLI's default happens to be
+that week, and the three roles are not equally model-hungry — the assigner and
+executor write; the reviewer reads a diff.
 
 **Never export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a skill.**
 Every skill starts with statuscheck, which logs `gh` in from the
@@ -132,8 +183,9 @@ Every skill starts with statuscheck, which logs `gh` in from the
 `gh auth logout && gh auth login --with-token` — and `gh` refuses that login
 while either token variable is exported, which fails the healthcheck before
 any work happens. The demo's skill-running steps therefore export only
-`CLAUDE_CODE_OAUTH_TOKEN`, and the one step that needs `GH_TOKEN` (job 2's
-"Confirm a PR was opened") sets it inline, after the skill has exited.
+`CLAUDE_CODE_OAUTH_TOKEN`. The steps that do need `GH_TOKEN` (job 2's
+"Confirm a PR was opened" and the three comment-posting steps) run *after*
+the skill and set it inline on the one command.
 
 **Self-review is by design.** Job 3's `gh` session is the same account that
 opened the PR in job 2, and GitHub blocks approving your own PR. The reviewer
@@ -158,25 +210,103 @@ copied into other repos as a single file, which a sibling helper would
 quietly break. Keep the copies byte-identical apart from the role, so a diff
 between two jobs shows only what genuinely differs.
 
+## Reporting back to the issue
+
+Beyond the step summaries and the log artifacts (`assigner-log`,
+`executor-log`, `reviewer-log`, 7-day retention), each job posts a comment on
+the triggering issue: a structured summary — Jira key, branch, PR link where
+applicable — followed by the full skill transcript inside a collapsed
+`<details>` block. The point is that the conversation stays where the fix was
+requested, instead of in an Actions tab nobody opens.
+
+Three details in those steps are load-bearing:
+
+- **The 65536-character comment limit.** A `gh issue comment` body over it
+  fails the job outright, which would turn a successful skill run into a red
+  X. The transcript is capped at 55000 bytes and keeps the **tail**, since the
+  skill's own report is the last thing it prints, with a pointer to the full
+  artifact in place of what was dropped.
+- **A byte-wise cut can land mid-character.** The transcripts are full of
+  em-dashes and box-drawing, and invalid UTF-8 makes the GitHub API reject the
+  whole comment — so the truncated tail is passed through
+  `iconv -c -f UTF-8 -t UTF-8`, which drops the orphaned continuation bytes.
+- **The transcript is fenced with five backticks**, because the skill's own
+  output contains triple-backtick blocks that would otherwise close the fence
+  early. Every summary line is built with `printf` and the value as an
+  argument, so a backtick or `$` in a branch name or issue key can't be
+  re-expanded by the shell.
+
+The comment steps run `if: always()` and after the skill, which is what lets a
+*failed* run still explain itself on the issue: the summary carries
+`job.status`, and a missing log becomes an explicit "the job failed before the
+skill produced output" note rather than an empty block.
+
+### The transcript GIFs
+
+Each job uploads a second artifact next to its log — `assigner-transcript-gif`,
+`executor-transcript-gif`, `reviewer-transcript-gif`, same 7-day retention —
+holding the skill's own Claude Code session rendered to an animated GIF by
+[agent-log-gif](https://pypi.org/project/agent-log-gif/): a terminal replay of
+the run, Nord scheme, `linux` window chrome, tool calls visible, first 50
+turns. It is purely a debugging affordance, and it earns its place on the case
+the text log serves worst — a failed or simply *weird* headless run, much
+easier to read as a replay than as 50000 characters of piped stdout.
+
+**Why an artifact and not an attachment on the issue comment**, given
+everything else in this section works hard to report where the work was
+requested: GitHub has no API for attaching a file to an issue comment. Images
+in comment bodies are uploads made by a *browser* session to a separate
+user-content host, which a workflow's token cannot do. An artifact is the only
+place a run can put a binary, so that is where it goes.
+
+The rule for this step is that **a debug nicety must never redden a green
+run**, which shapes all of it:
+
+- `if: always()` — the failed run is the one you want the GIF for, so it must
+  survive the skill step failing.
+- `continue-on-error: true` plus a step `timeout-minutes` — a broken tool
+  install, an unparseable session, or a slow render is *reported and skipped*,
+  never fatal. The step deliberately runs without `set -e` so each failure path
+  prints its own reason: no session file gives a `::notice::` and exits clean,
+  a render failure gives a `::warning::` plus the renderer's last lines.
+- **The job timeouts carry +5 minutes over their skill step** for this, or a
+  render at the end of a job whose skill used its whole budget would be killed
+  by the *job* timeout — which fails the job, defeating every guard above.
+- The renderer's progress output goes to a file rather than the Actions log;
+  only the GIF's name, size and the renderer's final summary line are echoed.
+- The session file is found by globbing `$HOME/.claude/projects/*/*.jsonl`
+  rather than computing the project slug, which differs per job (job 1 runs
+  `claude` from the workspace, jobs 2 and 3 from the worktree under
+  `RUNNER_TEMP`). A fresh VM per job normally means exactly one file; zero and
+  several are both handled rather than assumed away.
+
+A *turn* is a whole conversation turn, so `--turns 50` of a real skill run is
+not a small render — a 2.9 MB session JSONL measured 8308 frames, 23 MB, and
+about three minutes. That is what the step timeout is for, and it means a very
+long run is the one most likely to skip its own GIF; the log artifact is always
+there either way.
+
 ## Running it
 
 1. Create the `production` environment (repo → Settings → Environments),
    check **Required reviewers**, and add the owner (or whoever should gate
    each step) as a reviewer.
 2. Add the secrets from the table above **to that environment**.
-3. Dispatch *Demo — Claude hotfix flow* from the Actions tab with a bug
-   report as `issue_text` — phrased as the emergency it simulates, since the
-   workflow's prompt adds the explicit hotfix directive the assigner's
-   step 5C requires.
-4. Approve each of the three pauses as it arrives, inspecting the Jira
-   issue / branch / PR between them.
-5. When job 3 finishes, read the review verdict on the PR. Merging it (and
+3. Open a GitHub issue whose title and body describe the bug the way you'd
+   describe it to `/jira-sdlc:jira-task-assigner` interactively — phrased as
+   the emergency it simulates, since the workflow's prompt wraps it in the
+   explicit hotfix directive the assigner's step 5C requires.
+4. Comment `/make-hotfix` on it, as an OWNER or MEMBER, with nothing else in
+   the comment.
+5. Approve each of the three pauses as it arrives, inspecting the Jira
+   issue / branch / PR — plus each job's report comment on the issue —
+   between them.
+6. When job 3 finishes, read the review verdict on the PR. Merging it (and
    the patch release that follows) is yours.
 
 Runs are serialized by a `concurrency` group — two at once would race on the
-same Jira project — and each job uploads its full skill transcript as an
-artifact (`assigner-log`, `executor-log`, `reviewer-log`, 7-day retention)
-for post-mortems.
+same Jira project and the same worktrees dir — and the group is per-workflow
+rather than per-issue for exactly that reason.
 
 ## What this demo is not
 
@@ -186,6 +316,7 @@ branch, reviews the fix, and merges it. What the demo borrows from that flow
 is only the *branch semantics* — assigner step 5C's
 `hotfix/<KEY>-<slug>` cut from `origin/<PRODUCTION_BRANCH>`, single-step
 scope forced, PR aimed at production — which are real and identical to what
-the skills do on a developer machine. The wiring around them (job chaining,
-output handoff, environment gates) is the CI pattern this document exists to
+the skills do on a developer machine. The wiring around them (the comment
+trigger and its gate, job chaining, output handoff, environment gates,
+reporting back to the issue) is the CI pattern this document exists to
 explain.
