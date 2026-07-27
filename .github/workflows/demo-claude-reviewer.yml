@@ -2,22 +2,22 @@
 #
 # What it demos: running the jira-task-reviewer skill headlessly in CI against a
 # PR that already exists on the current branch. It is a Claude-powered rework of
-# reviewer-on-pr.yml, which did the same job with Kimi Code + a hand-written
+# demo-kimi-openrouter-reviewer.yml, which did the same job with Kimi Code + a hand-written
 # review prompt. Here the skill supplies its own instructions — the workflow's
 # only job is to stand up the exact environment the skill's healthcheck demands,
 # then invoke it.
 #
 # Trigger: workflow_dispatch ONLY, by explicit decision (the same one
-# reviewer-on-pr.yml made). This is a manually-invoked smoke test, not a real
+# demo-kimi-openrouter-reviewer.yml made). This is a manually-invoked smoke test, not a real
 # pull_request: opened/reopened trigger. A real on-PR trigger would need its
 # own design (gating on reviewer availability, secret plumbing, retry policy);
 # this file stays a deliberate, inspectable demo.
 #
-# reviewer-on-pr.yml and reviewer.yml are left untouched — this is a new file.
+# demo-kimi-openrouter-reviewer.yml and reviewer.yml are left untouched — this is a new file.
 #
-# ── The shape (two jobs, mirroring reviewer-on-pr.yml) ───────────────────────
+# ── The shape (two jobs, mirroring demo-kimi-openrouter-reviewer.yml) ────────
 #
-#  1. check_pr_exists — byte-for-byte the gating job from reviewer-on-pr.yml:
+#  1. check_pr_exists — byte-for-byte the gating job from demo-kimi-openrouter-reviewer.yml:
 #     `gh pr list --head <dispatch branch>` and skip the rest if none exists.
 #  2. reviewer-claude — the new job. The old Kimi install/config/invoke steps are
 #     replaced with: native claude CLI install (validator.yml's pattern), a
@@ -64,7 +64,7 @@
 #     changes a skill file, this demo reviews the PR with the *base's* copy —
 #     land skill changes on the base branch first if you want them exercised.
 #
-# ── Secrets (repo-level, mirroring reviewer-on-pr.yml — no environment gate) ─
+# ── Secrets (repo-level, mirroring demo-kimi-openrouter-reviewer.yml — no environment gate) ─
 #
 #  None of these exist in this repo yet. The env-file-writing step checks every
 #  one up front and fails loud with `::error::` if any is empty/unset, rather
@@ -84,7 +84,7 @@
 #
 #  Each is named exactly as the env-file key it becomes, so the bootstrap step
 #  is one loop over a KEYS list (secret -> file via env, not sed) rather than a
-#  hand-mapped list of printfs — the same pattern reviewer-on-pr.yml uses, just
+#  hand-mapped list of printfs — the same pattern demo-kimi-openrouter-reviewer.yml uses, just
 #  looped.
 
 name: Reviewer Skill on PR (Claude demo)
@@ -103,7 +103,7 @@ on:
           - fable
 
 jobs:
-  # ── Gating job — byte-for-byte from reviewer-on-pr.yml ────────────────────
+  # ── Gating job — byte-for-byte from demo-kimi-openrouter-reviewer.yml ─────
   # Skip the reviewer once a PR is already open on the dispatch branch (the real
   # CI workflows take over there). Unchanged from the file this demo reworks.
   check_pr_exists:
@@ -161,7 +161,7 @@ jobs:
             echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
           fi
 
-  # ── Reviewer job — the Claude-powered rework of reviewer-on-pr.yml's
+  # ── Reviewer job — the Claude-powered rework of demo-kimi-openrouter-reviewer.yml's
   #    reviewer-smoke job ────────────────────────────────────────────────────
   reviewer-claude:
     name: Reviewer skill (Claude)

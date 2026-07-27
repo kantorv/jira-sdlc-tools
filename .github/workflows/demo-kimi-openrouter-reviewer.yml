@@ -1,4 +1,4 @@
-name: Reviewer Skill on PR (Smoke Test)
+name: Reviewer Skill on PR (Kimi + OpenRouter demo)
 
 # Wiring smoke test for the jira-task-reviewer skill in CI. On an opened or
 # reopened PR it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
@@ -8,8 +8,6 @@ name: Reviewer Skill on PR (Smoke Test)
 # real reviewer run is wanted later, that needs a worktree checkout plus
 # gh auth and the Jira credentials in .jst/jira-sdlc-tools.local.env, which is
 # out of scope here.
-#
-# The existing workflow_dispatch-only reviewer.yml demo is left untouched.
 
 on:
   workflow_dispatch:
@@ -91,52 +89,31 @@ jobs:
       - name: Write Kimi Code config.toml
         shell: bash
         env:
-          # NVIDIA_NIM_API_KEY is an existing repo secret. Map it to the
-          # provider api_key the way the reviewer.yml demo does
-          # (env -> [providers.nvidia].api_key), not via a placeholder + sed.
-          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          # OPENROUTER_API_KEY is an existing repo secret. Map it straight to the
+          # provider api_key (env -> [providers.openrouter].api_key), not via a
+          # placeholder + sed.
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${NVIDIA_NIM_API_KEY:-}" ]; then
-            echo "::error::NVIDIA_NIM_API_KEY secret is empty or unset — cannot configure the NVIDIA provider."
-            exit 1
-          fi
           if [ -z "${OPENROUTER_API_KEY:-}" ]; then
             echo "::error::OPENROUTER_API_KEY secret is empty or unset — cannot configure the OPENROUTER provider."
             exit 1
           fi
           mkdir -p ~/.kimi-code
-          # Unquoted heredoc is intentional: $(pwd) and ${NVIDIA_API_KEY} expand
-          # to the runner workspace / secret value as the file is written. The
-          # reviewer.yml demo ships a TOML quoting bug here (a missing *opening*
-          # double-quote on the array element) that this file fixes, not copies;
-          # the corrected form is a properly quoted string "$(pwd)/...".
+          # Unquoted heredoc is intentional: $(pwd) and ${OPENROUTER_API_KEY}
+          # expand to the runner workspace / secret value as the file is written.
+          # The array element is a properly quoted string "$(pwd)/..." — a missing
+          # *opening* double-quote there is a TOML bug that is easy to reintroduce.
           cat > ~/.kimi-code/config.toml <<EOF
-          #default_model = "nvidia/z-ai/glm-5.2"
           default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
           ]
 
-          [providers.nvidia]
-          type = "openai"
-          api_key = "${NVIDIA_NIM_API_KEY}"
-          base_url = "https://integrate.api.nvidia.com/v1"
-
           [providers.openrouter]
           type = "openai"
           api_key = "${OPENROUTER_API_KEY}"
           base_url = "https://openrouter.ai/api/v1"
-
-          [models."nvidia/z-ai/glm-5.2"]
-          provider = "nvidia"
-          model = "z-ai/glm-5.2"
-          max_context_size = 1000000
-          max_output_size = 131072
-          capabilities = ["thinking", "tool_use"]
-          display_name = "GLM-5.2"
-          reasoning_key = "reasoning_content"
 
           [models."openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"]
           provider = "openrouter"

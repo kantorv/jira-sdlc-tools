@@ -68,7 +68,7 @@
 #  values), and each is named exactly as the `jira-sdlc-tools.local.env` key
 #  it becomes — which is what lets the bootstrap step below be one loop over a
 #  KEYS list rather than a hand-mapped list of printfs (secret -> file via
-#  env, no sed — the reviewer-on-pr.yml mapping pattern, applied to
+#  env, no sed — the demo-kimi-openrouter-reviewer.yml mapping pattern, applied to
 #  .jst/jira-sdlc-tools.local.env the way demo-claude-hotfix-flow.yml does):
 #
 #    CLAUDE_CODE_OAUTH_TOKEN  every run (read from the environment by the
