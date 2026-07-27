@@ -59,6 +59,18 @@
 # that touch `GH_TOKEN`, and they set it inline on the one command — see
 # caveat 3.
 #
+# Each job also uploads a second, *visual* copy of its run:
+# `<role>-transcript-gif`, the skill's own Claude Code session rendered to an
+# animated GIF with agent-log-gif. It exists for the case the text log serves
+# worst — a failed or weird headless run, far easier to read as a terminal
+# replay than as 50k characters of piped stdout. It is an **artifact** and not
+# an attachment on the issue comment because GitHub has no API for attaching
+# files to an issue comment. Being a debug convenience, it must never redden a
+# green run: `if: always()` + `continue-on-error: true` + a step
+# `timeout-minutes`, and the job timeouts carry +5 minutes of headroom over
+# their skill step so the render still fits after a skill that used its whole
+# budget.
+#
 # ── Caveats carried over from demo-claude-hotfix-flow.yml ──────────────────
 #
 #  1. **No shared disk between jobs.** WORKTREES_DIR conventions assume a
@@ -175,7 +187,10 @@ jobs:
        github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 30
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 35
     permissions:
       contents: write # the assigner pushes the new feature branch
       issues: write # posts the assigner report back on the triggering issue
@@ -426,13 +441,83 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Render the assigner transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: assigner
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload assigner transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: assigner-transcript-gif
+          path: ${{ runner.temp }}/assigner-gif/*.gif
+          if-no-files-found: warn
+          retention-days: 7
+
   # ── Job 2 ── executor: implement, push, open the PR into the base branch ────
   execute:
     name: 2 · executor — implement and open the PR
     needs: assign
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 40
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 45
     permissions:
       contents: write # push the implementation commits
       pull-requests: write # gh pr create
@@ -639,13 +724,83 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Render the executor transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: executor
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload executor transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-transcript-gif
+          path: ${{ runner.temp }}/executor-gif/*.gif
+          if-no-files-found: warn
+          retention-days: 7
+
   # ── Job 3 ── reviewer: review the PR, post the verdict to GitHub + Jira ────
   review:
     name: 3 · reviewer — review the PR
     needs: [assign, execute]
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 30
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 35
     permissions:
       contents: read
       pull-requests: write # posts the review as a PR comment
@@ -836,5 +991,72 @@ jobs:
         with:
           name: reviewer-log
           path: ${{ runner.temp }}/reviewer.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Render the reviewer transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: reviewer
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload reviewer transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-transcript-gif
+          path: ${{ runner.temp }}/reviewer-gif/*.gif
           if-no-files-found: warn
           retention-days: 7

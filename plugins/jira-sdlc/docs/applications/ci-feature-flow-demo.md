@@ -68,7 +68,7 @@ into the other goes wrong:
 | branch | `hotfix/<KEY>-<slug>` off `origin/<PRODUCTION_BRANCH>` | `feature/<KEY>-<slug>` off `<DEFAULT_BASE_BRANCH>` |
 | PR base / `parentbranch` | `<PRODUCTION_BRANCH>` | `<DEFAULT_BASE_BRANCH>` |
 | assigner prompt | bug text **plus** an explicit hotfix directive, which engages assigner step 5C (forces single-step scope, cuts from production) | issue title + body only — no directive, so scope is the assigner's own judgement |
-| reporting | step summaries + log artifacts | the same **plus** a report comment per job on the triggering issue |
+| reporting | step summaries + log artifacts | the same **plus** a report comment per job on the triggering issue, and a transcript-GIF artifact per job |
 
 ## The trigger and its gate
 
@@ -227,6 +227,56 @@ The comment steps run `if: always()` and after the skill, which is what lets a
 *failed* run still explain itself on the issue: the summary carries
 `job.status`, and a missing log becomes an explicit "the job failed before the
 skill produced output" note rather than an empty block.
+
+### The transcript GIFs
+
+Each job uploads a second artifact next to its log — `assigner-transcript-gif`,
+`executor-transcript-gif`, `reviewer-transcript-gif`, same 7-day retention —
+holding the skill's own Claude Code session rendered to an animated GIF by
+[agent-log-gif](https://pypi.org/project/agent-log-gif/): a terminal replay of
+the run, Nord scheme, `linux` window chrome, tool calls visible, first 50
+turns. It is purely a debugging affordance, and it earns its place on the case
+the text log serves worst — a failed or simply *weird* headless run, which is
+much easier to read as a replay than as 50000 characters of piped stdout.
+
+**Why an artifact and not an attachment on the issue comment**, given
+everything else in this section works hard to report where the work was
+requested: GitHub has no API for attaching a file to an issue comment. Images
+in comment bodies are uploads made by a *browser* session to a separate
+user-content host, which a workflow's token cannot do. An artifact is the only
+place a run can put a binary, so that is where it goes — the GIF is fetched
+from the run's Artifacts panel, one click from the comment's own link back to
+the run. Attaching it to the Jira issue was rejected for the same reason it is
+not worth doing: the debugging audience is already in the Actions tab.
+
+The rule for this step is that **a debug nicety must never redden a green
+run**, which shapes all of it:
+
+- `if: always()` — the failed run is the one you want the GIF for, so it must
+  survive the skill step failing.
+- `continue-on-error: true` plus a step `timeout-minutes` — a broken tool
+  install, an unparseable session, or a slow render is *reported and skipped*,
+  never fatal. The step deliberately runs without `set -e` so each failure path
+  prints its own reason: no session file gives a `::notice::` and exits clean,
+  a render failure gives a `::warning::` plus the renderer's last lines.
+- **The job timeouts carry +5 minutes over their skill step** for this. Before,
+  each job's budget sat only three to five minutes above the skill it runs, so
+  a render at the end of a job whose skill used its whole budget would have
+  been killed by the *job* timeout — which fails the job, defeating every guard
+  above. Any workflow this step is ported into needs the same headroom.
+- The renderer's progress output goes to a file rather than the Actions log;
+  only the GIF's name, size and the renderer's final summary line are echoed.
+- The session file is found by globbing `$HOME/.claude/projects/*/*.jsonl`
+  rather than computing the project slug, which differs per job (job 1 runs
+  `claude` from the workspace, jobs 2 and 3 from the worktree under
+  `RUNNER_TEMP`). A fresh VM per job normally means exactly one file; zero and
+  several are both handled rather than assumed away.
+
+Sizing is worth knowing before you go looking for these: a *turn* is a whole
+conversation turn, so `--turns 50` of a real skill run is not a small render —
+a 2.9 MB session JSONL measured 8308 frames, 23 MB, and about three minutes.
+That is what the step timeout is for. It also means a very long run is the one
+most likely to skip its own GIF; the log artifact is always there either way.
 
 ## Running it
 
