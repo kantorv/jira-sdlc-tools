@@ -43,8 +43,8 @@
 #     `gh auth logout && gh auth login --with-token`; gh refuses that login
 #     while either token variable is set — "first clear the value from the
 #     environment", exit 1 — which FAILs the gh_auth row and aborts the run
-#     before any work happens. ANTHROPIC_API_KEY is the ONLY secret exported
-#     into the skill-running step; the rest are written to
+#     before any work happens. CLAUDE_CODE_OAUTH_TOKEN is the ONLY secret
+#     exported into the skill-running step; the rest are written to
 #     .jst/jira-sdlc-tools.local.env and read from there. `git push` is
 #     unaffected: it uses the credentials actions/checkout persisted in
 #     `.git/config`, so the built-in GITHUB_TOKEN (which can push given the
@@ -71,24 +71,26 @@
 #  env, no sed — the reviewer-on-pr.yml mapping pattern, applied to
 #  .jst/jira-sdlc-tools.local.env the way demo-claude-hotfix-flow.yml does):
 #
-#    ANTHROPIC_API_KEY     every run (read from the environment by the CLI —
-#                          the only one never written to the file)
-#    JIRA_ACCOUNT_URL      every run
+#    CLAUDE_CODE_OAUTH_TOKEN  every run (read from the environment by the
+#                             CLI — the only one never written to the file)
+#    JIRA_ACCOUNT_URL         every run
 #    JIRA_ASSIGNER_EMAIL / JIRA_ASSIGNER_TOKEN   the assigner's Jira identity
-#    JIRA_EXECUTOR_EMAIL   not a credential — the assigner assigns every issue
-#                          it creates to the executor, and
-#                          get_assignee_email.sh reads that address (and only
-#                          the address — no executor token) from the env file
-#    GITHUB_PAT_TOKEN      optional — falls back to the built-in GITHUB_TOKEN
-#                          (which can push the new branch given the job
-#                          permissions below); add the PAT only to lift the
-#                          built-in token's limitation that PRs opened with it
-#                          don't trigger other workflows
+#    JIRA_EXECUTOR_EMAIL      not a credential — the assigner assigns every
+#                             issue it creates to the executor, and
+#                             get_assignee_email.sh reads that address (and
+#                             only the address — no executor token) from the
+#                             env file
+#    GITHUB_PAT_TOKEN         optional — falls back to the built-in
+#                             GITHUB_TOKEN (which can push the new branch
+#                             given the job permissions below); add the PAT
+#                             only to lift the built-in token's limitation
+#                             that PRs opened with it don't trigger other
+#                             workflows
 #
 #  None are assumed to exist: the bootstrap step checks its whole set up front
 #  and fails loud with `::error::` rather than letting the claude CLI die
-#  halfway through on a missing key (ANTHROPIC_API_KEY in particular does not
-#  exist in this repo yet).
+#  halfway through on a missing key (CLAUDE_CODE_OAUTH_TOKEN in particular
+#  does not exist in this repo yet).
 #
 #  `WORKTREES_DIR` is the one key that is *not* a secret: it's a path on
 #  *this* runner, computed per job under RUNNER_TEMP (a value carried over
@@ -137,7 +139,7 @@ jobs:
           GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           # No filesystem carries over from a previous run on a hosted runner,
@@ -145,7 +147,7 @@ jobs:
           # jira.sh and statuscheck read credentials ONLY from here (never the
           # environment), resolved from the git top-level.
           missing=()
-          for k in ANTHROPIC_API_KEY $KEYS; do
+          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -229,7 +231,7 @@ jobs:
           # The only secret exported into the skill-running step — see
           # caveat 1 in the header: exporting GH_TOKEN/GITHUB_TOKEN here would
           # block statuscheck's gh login and abort before any work happens.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Pull the issue's title and body into env vars FIRST, then build the
           # prompt from them — never interpolate github.event.issue.* directly
           # into the shell command (issue bodies are user content, not script

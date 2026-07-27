@@ -51,9 +51,9 @@
 #     `gh auth logout && gh auth login --with-token`; gh refuses that login
 #     while either token variable is set — "first clear the value from the
 #     environment", exit 1 — which FAILs the gh_auth row and aborts before any
-#     review. The skill-running step below exports ONLY ANTHROPIC_API_KEY; the
-#     one step that needs GH_TOKEN (resolve head/base) sets it before the skill
-#     runs, never alongside it.
+#     review. The skill-running step below exports ONLY
+#     CLAUDE_CODE_OAUTH_TOKEN; the one step that needs GH_TOKEN (resolve
+#     head/base) sets it before the skill runs, never alongside it.
 #  2. **Self-review.** The executor opens PRs with the same gh account this
 #     reviewer logs in as, and GitHub blocks approving your own PR — the
 #     reviewer skill already posts its verdict as a PR *comment* (with an
@@ -70,16 +70,17 @@
 #  one up front and fails loud with `::error::` if any is empty/unset, rather
 #  than letting the claude CLI die halfway through on a missing key.
 #
-#    ANTHROPIC_API_KEY    the claude CLI reads this from the environment — the
-#                         only secret never written to the file
-#    JIRA_ACCOUNT_URL     written to .jst/jira-sdlc-tools.local.env
-#    JIRA_REVIEWER_EMAIL  } the reviewer's Jira identity
-#    JIRA_REVIEWER_TOKEN  }
-#    GITHUB_PAT_TOKEN     optional — falls back to the built-in GITHUB_TOKEN
-#                         (which can post a review comment given the job
-#                         permissions below); add the PAT only to lift the
-#                         built-in token's limitation that PRs opened with it
-#                         don't trigger other workflows
+#    CLAUDE_CODE_OAUTH_TOKEN  the claude CLI reads this from the environment
+#                             — the only secret never written to the file
+#    JIRA_ACCOUNT_URL         written to .jst/jira-sdlc-tools.local.env
+#    JIRA_REVIEWER_EMAIL      } the reviewer's Jira identity
+#    JIRA_REVIEWER_TOKEN      }
+#    GITHUB_PAT_TOKEN         optional — falls back to the built-in
+#                             GITHUB_TOKEN (which can post a review comment
+#                             given the job permissions below); add the PAT
+#                             only to lift the built-in token's limitation
+#                             that PRs opened with it don't trigger other
+#                             workflows
 #
 #  Each is named exactly as the env-file key it becomes, so the bootstrap step
 #  is one loop over a KEYS list (secret -> file via env, not sed) rather than a
@@ -226,14 +227,14 @@ jobs:
           GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           # Written in the *main checkout*, before the worktree exists: the
           # skill's own ensure_local_env.sh copies it into the worktree from
           # here, which is exactly the path that script exists to cover.
           missing=()
-          for k in ANTHROPIC_API_KEY $KEYS; do
+          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -317,15 +318,16 @@ jobs:
         # turn to approve tool calls. Safe-ish here and nowhere else: a
         # throwaway runner VM, non-root (the flag refuses to run as root).
         #
-        # ONLY ANTHROPIC_API_KEY is exported here — see caveat 1 in the header:
-        # exporting GH_TOKEN/GITHUB_TOKEN would block statuscheck's gh login
-        # and abort the run before any review. The skill reads its gh/Jira
-        # credentials from the env FILE (written above), not the environment.
+        # ONLY CLAUDE_CODE_OAUTH_TOKEN is exported here — see caveat 1 in the
+        # header: exporting GH_TOKEN/GITHUB_TOKEN would block statuscheck's
+        # gh login and abort the run before any review. The skill reads its
+        # gh/Jira credentials from the env FILE (written above), not the
+        # environment.
         timeout-minutes: 25
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \

@@ -76,7 +76,7 @@ explicit up-front secret check), never real credentials:
 
 | Secret | Used by | Notes |
 | :--- | :--- | :--- |
-| `ANTHROPIC_API_KEY` | every job | read from the environment by the claude CLI — the only one never written to the env file |
+| `CLAUDE_CODE_OAUTH_TOKEN` | every job | read from the environment by the claude CLI — the only one never written to the env file |
 | `JIRA_ACCOUNT_URL` | every job | |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | job 1 | the assigner's Jira identity |
 | `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | job 2 | job 1 also receives the *email* only — it is the assignment target, not a credential |
@@ -127,7 +127,7 @@ Every skill starts with statuscheck, which logs `gh` in from the
 `gh auth logout && gh auth login --with-token` — and `gh` refuses that login
 while either token variable is exported, which fails the healthcheck before
 any work happens. The demo's skill-running steps therefore export only
-`ANTHROPIC_API_KEY`, and the one step that needs `GH_TOKEN` (job 2's
+`CLAUDE_CODE_OAUTH_TOKEN`, and the one step that needs `GH_TOKEN` (job 2's
 "Confirm a PR was opened") sets it inline, after the skill has exited.
 
 **Self-review is by design.** Job 3's `gh` session is the same account that
