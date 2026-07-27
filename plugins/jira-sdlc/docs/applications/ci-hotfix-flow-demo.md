@@ -11,6 +11,11 @@
 > human-driven ([SDLC.md §4](../SDLC.md)). The workflow-by-workflow CI
 > reference is [CI.md](../CI.md); this file covers just this one workflow, in
 > depth.
+>
+> Its sibling is [ci-feature-flow-demo.md](./ci-feature-flow-demo.md) — the
+> same three-job chain on the *planned-work* flow, triggered by a
+> `/make-feature` issue comment. This file carries the shared pattern in full;
+> that one covers only what differs.
 
 ## What it demonstrates
 
