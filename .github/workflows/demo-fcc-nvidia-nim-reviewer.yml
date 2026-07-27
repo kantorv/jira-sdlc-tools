@@ -1,10 +1,10 @@
-name: Reviewer Skill on PR (Claude demo)
+name: Reviewer Skill on PR (FCC + NVIDIA-NIM + CLAUDE demo)
 
 on:
   workflow_dispatch:
     inputs:
       model:
-        description: 'Claude model to use'
+        description: 'Nvidia-NIM model to use'
         required: false
         default: 'nvidia/nemotron-3-ultra-550b-a55b'
         type: choice
@@ -112,7 +112,7 @@ jobs:
         id: pr
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{  secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
           set -euo pipefail
@@ -145,16 +145,14 @@ jobs:
           JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
           JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
           GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
-          # Checked here so one step catches every missing secret, but never
-          # written to the file — the claude CLI reads it from the environment.
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
         run: |
           set -euo pipefail
           # Written in the *main checkout*, before the worktree exists: the
           # skill's own ensure_local_env.sh copies it into the worktree from
           # here, which is exactly the path that script exists to cover.
           missing=()
-          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
+          for k in $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -280,12 +278,7 @@ jobs:
         # --dangerously-skip-permissions: headless runs have no interactive
         # turn to approve tool calls. Safe-ish here and nowhere else: a
         # throwaway runner VM, non-root (the flag refuses to run as root).
-        #
-        # ONLY CLAUDE_CODE_OAUTH_TOKEN is exported here — see caveat 1 in the
-        # header: exporting GH_TOKEN/GITHUB_TOKEN would block statuscheck's
-        # gh login and abort the run before any review. The skill reads its
-        # gh/Jira credentials from the env FILE (written above), not the
-        # environment.
+        
         timeout-minutes: 60
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}

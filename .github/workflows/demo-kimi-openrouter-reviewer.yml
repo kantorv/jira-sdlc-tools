@@ -1,4 +1,4 @@
-name: Reviewer Skill on PR (Kimi + OpenRouter demo)
+name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 
 # Wiring smoke test for the jira-task-reviewer skill in CI. On an opened or
 # reopened PR it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
@@ -11,6 +11,15 @@ name: Reviewer Skill on PR (Kimi + OpenRouter demo)
 
 on:
   workflow_dispatch:
+    inputs:
+      model:
+        description: 'OpenRouter model to use'
+        required: false
+        default: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+        type: choice
+        options:
+          - "nvidia/nemotron-3-ultra-550b-a55b:free"
+          - "nvidia/nemotron-3-super-120b-a12b:free"
 
 jobs:
   check_pr_exists:
@@ -23,6 +32,7 @@ jobs:
     outputs:
       pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
       pr_number: ${{ steps.check_pr.outputs.pr_number }}
+      issue_key: ${{ steps.check_pr.outputs.issue_key }}
     steps:
       - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
         id: check_pr
@@ -32,17 +42,39 @@ jobs:
           set -euo pipefail
           BRANCH_NAME="${{ github.ref_name }}"
           REPO_NAME="${{ github.repository }}"
+
+          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          # Extract issue key from branch name (PROJ-NNN)
+          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
           PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
             --json number --jq '.[0].number // empty' 2>/dev/null || true)
 
           if [ -n "$PR_NUMBER" ]; then
             echo "pr_exists=1" >> "$GITHUB_OUTPUT"
             echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "Found PR #$PR_NUMBER"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUMBER for issue $ISSUE_KEY"
           else
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
             echo "pr_number=0" >> "$GITHUB_OUTPUT"
-            echo "No open PR for branch $BRANCH_NAME"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
           fi
 
   reviewer-smoke:
@@ -93,6 +125,7 @@ jobs:
           # provider api_key (env -> [providers.openrouter].api_key), not via a
           # placeholder + sed.
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ github.event.inputs.model }}
         run: |
           set -euo pipefail
           if [ -z "${OPENROUTER_API_KEY:-}" ]; then
@@ -105,7 +138,7 @@ jobs:
           # The array element is a properly quoted string "$(pwd)/..." — a missing
           # *opening* double-quote there is a TOML bug that is easy to reintroduce.
           cat > ~/.kimi-code/config.toml <<EOF
-          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+          default_model = "openrouter/${OPENROUTER_MODEL}"
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
           ]
@@ -123,6 +156,15 @@ jobs:
           capabilities = [ "always_thinking", "tool_use" ]
           display_name = "Nemotron 3 Ultra (free)"
           support_efforts = [ "medium", "high" ]
+
+          [models."openrouter/nvidia/nemotron-3-super-120b-a12b:free"]
+          provider = "openrouter"
+          model = "nvidia/nemotron-3-super-120b-a12b:free"
+          max_context_size = 262144
+          max_output_size = 262144
+          capabilities = [ "always_thinking", "tool_use" ]
+          display_name = "Nemotron 3 Super (free)"
+          support_efforts = [ "low", "medium" ]
 
           [thinking]
           enabled = true
