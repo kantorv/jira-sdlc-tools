@@ -14,14 +14,14 @@
 # below. The prose walkthrough is
 # plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md.
 #
-# ── The trigger: a `/make-feature` comment on a GitHub issue ────────────────
+# ── The trigger: a `/fcc-make-feature` comment on a GitHub issue ────────────
 #
 # Unlike the hotfix demo's `workflow_dispatch`, this run is driven from an
 # issue comment, so the GitHub issue itself *is* the task description and the
 # whole run reports back where the work was requested. The job-level `if`
 # requires all of:
 #
-#   * the comment body is exactly `/make-feature` — a bare command, so a
+#   * the comment body is exactly `/fcc-make-feature` — a bare command, so a
 #     comment that merely mentions it in prose doesn't fire the chain;
 #   * `author_association` is OWNER or MEMBER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
@@ -37,7 +37,8 @@
 # Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
 # guard is stated once.
 #
-# The issue's **title + blank line + body** (never the `/make-feature` comment)
+# The issue's **title + blank line + body** (never the `/fcc-make-feature`
+# comment)
 # is the free-form task description handed to jira-task-assigner — the same
 # shape demo-claude-issue-to-task.yml uses. Issue bodies are attacker-supplied
 # text, so they are pulled into env vars first and written to a temp file with
@@ -182,7 +183,7 @@ jobs:
     # conditions are required; jobs 2/3 inherit the guard by `needs`.
     if: |
           github.event.issue.pull_request == null &&
-          github.event.comment.body == '/make-feature' &&
+          github.event.comment.body == '/fcc-make-feature' &&
           (github.event.comment.author_association == 'OWNER' ||
           github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
