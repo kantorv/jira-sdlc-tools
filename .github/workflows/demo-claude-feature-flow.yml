@@ -320,14 +320,27 @@ jobs:
           git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
             | sort > "$RUNNER_TEMP/feature-before.txt"
 
-          # Free-form task description = the issue's title + blank line + body.
-          # No hotfix directive: this is the planned-work flow, so the assigner
-          # cuts feature/<KEY>-<slug> off the base branch and judges scope
-          # (single-step vs. multistep) for itself. printf from env vars so the
-          # issue text stays data, never interpolated into the script.
+          # Labeled sections so the model can tell "here is the issue text" apart
+          # from "here is what CI wants you to do with it" — plain concatenation
+          # left that boundary implicit. The middle paragraph is a fixed
+          # instruction (never issue content) telling the assigner it's running
+          # headless from CI and should start the planned-work flow: cut
+          # feature/<KEY>-<slug> off the base branch and judge single-step vs.
+          # multistep scope itself. It also rules out the hotfix path
+          # explicitly, since the skill's own hotfix trigger is just spotting
+          # words like "hotfix"/"urgent fix" in the free-form task text, and an
+          # issue reporting a production bug could easily contain one. And it
+          # forbids clarifying questions outright: there's no human on the
+          # other end of this -p call to answer one, so the skill's normal
+          # "ask if ambiguous" step must instead become "stop and fail" —
+          # the next step's zero-new-branches check already treats that as a
+          # loud, expected failure rather than trying to guess. printf from env
+          # vars so the issue text stays data, never interpolated into the
+          # script.
           {
-            printf '%s\n\n' "$ISSUE_TITLE"
-            printf '%s' "${ISSUE_BODY:-}"
+            printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
+            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Start the planned-work (feature) flow for the issue below — not the hotfix flow, regardless of anything in its title or body that sounds urgent. If it is simple and concrete enough to size and turn directly into a Jira issue, decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
+            printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive
