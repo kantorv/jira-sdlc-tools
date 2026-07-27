@@ -1,19 +1,23 @@
 name: Reviewer Skill on PR (FCC + NVIDIA-NIM + CLAUDE demo)
 
-on:
-  workflow_dispatch:
-    inputs:
-      model:
-        description: 'Nvidia-NIM model to use'
-        required: false
-        default: 'nvidia/nemotron-3-ultra-550b-a55b'
-        type: choice
-        options:
-          - "z-ai/glm-5.2"
-          - "nvidia/nemotron-3-ultra-550b-a55b"
-          - "deepseek-ai/deepseek-v4-pro"
-          - "minimaxai/minimax-m3"
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       model:
+#         description: 'Nvidia-NIM model to use'
+#         required: false
+#         default: 'nvidia/nemotron-3-ultra-550b-a55b'
+#         type: choice
+#         options:
+#           - "z-ai/glm-5.2"
+#           - "nvidia/nemotron-3-ultra-550b-a55b"
+#           - "deepseek-ai/deepseek-v4-pro"
+#           - "minimaxai/minimax-m3"
 
+
+on:
+  issue_comment:
+    types: [created]
 
 
 env:
@@ -21,12 +25,19 @@ env:
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
   CLAUDE_CLI_VERSION: 2.1.220
+  DEFAULT_REVIEWER_MODEL: "z-ai/glm-5.2"
 
 jobs:
   # ── Gating job — byte-for-byte from demo-kimi-openrouter-reviewer.yml ─────
   # Skip the reviewer once a PR is already open on the dispatch branch (the real
   # CI workflows take over there). Unchanged from the file this demo reworks.
   check_pr_exists:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/fcc-review') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER')
+
     runs-on: ubuntu-latest
     name: Check PR exists
     timeout-minutes: 5
@@ -222,7 +233,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL:  "nvidia_nim/${{ github.event.inputs.model }}" 
+          MODEL:  "nvidia_nim/$DEFAULT_REVIEWER_MODEL" 
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
@@ -303,5 +314,76 @@ jobs:
         with:
           name: reviewer-log
           path: ${{ runner.temp }}/reviewer.log
+          if-no-files-found: warn
+          retention-days: 7
+
+
+
+
+
+      - name: Render the reviewer transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: reviewer
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload reviewer transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-transcript-gif
+          path: ${{ runner.temp }}/reviewer-gif/*.gif
           if-no-files-found: warn
           retention-days: 7

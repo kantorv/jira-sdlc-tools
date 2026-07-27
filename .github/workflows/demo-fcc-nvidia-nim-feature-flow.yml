@@ -1,38 +1,27 @@
-# ⚠️ THIS IS A JOB-CHAINING DEMO — NOT THIS REPO'S HOTFIX PROCEDURE. ⚠️
+# ⚠️ THIS IS A JOB-CHAINING DEMO — NOT THIS REPO'S DEVELOPMENT PROCEDURE. ⚠️
 #
-# What it demonstrates: how the three jira-sdlc skills chain across GitHub
-# Actions jobs — assigner → executor → reviewer — each running headlessly in
-# its own runner, each as its own Jira identity, with the issue key and branch
-# handed forward through job outputs. It exists to show the CI wiring pattern.
+# What it demonstrates: the *planned-work* sibling of
+# demo-claude-hotfix-flow.yml. Same three-job chain — assigner → executor →
+# reviewer, each running one skill headlessly in its own runner VM, each as its
+# own Jira identity, with the issue key and branch handed forward through job
+# outputs — but on the regular feature flow: `feature/<KEY>-<slug>` cut from
+# `<DEFAULT_BASE_BRANCH>`, a PR targeting `<DEFAULT_BASE_BRANCH>`, and no
+# hotfix directive in the assigner prompt (so assigner step 5C never engages
+# and scope is the assigner's own single-step/multistep judgement).
 #
-# What it is NOT: the real emergency-hotfix workflow. A production hotfix in
-# this repo is a human decision (SDLC.md §4): a human cuts or requests
-# `hotfix/*` off `main`, a human reviews it, and a human merges it — after
-# which release.yml patch-bumps the tag. Nothing here should be read as "run
-# this when prod is broken". The bug it fixes is whatever a GitHub issue says,
-# on a runner, unattended; that is a demo, not an incident response. It also
-# can't answer clarifying questions (a headless `-p` run has no interactive
-# turn), so a run where the assigner stops to ask ends with no branch and job 1
-# fails loud rather than guessing.
+# Read demo-claude-hotfix-flow.yml next to this file: the two differ only in
+# the trigger, the branch/PR-base semantics, and the issue-comment reporting
+# below. The prose walkthrough is
+# plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md.
 #
-# The hotfix *branch semantics* are real, though: job 1 relies on
-# jira-task-assigner step 5C (JST-184), which on an explicit hotfix directive
-# cuts `hotfix/<KEY>-<slug>` from the fetched `origin/<PRODUCTION_BRANCH>` and
-# forces single-step scope. Before JST-184 landed, the same prompt produced a
-# plain `feature/<KEY>` branch off the base branch and a PR aimed at staging.
+# ── The trigger: a `/make-feature` comment on a GitHub issue ────────────────
 #
-# Read demo-claude-feature-flow.yml next to this file: the two differ only in
-# the trigger word, the branch/PR-base semantics, and the hotfix-specific prose
-# here. The prose walkthrough is
-# plugins/jira-sdlc/docs/applications/ci-hotfix-flow-demo.md.
+# Unlike the hotfix demo's `workflow_dispatch`, this run is driven from an
+# issue comment, so the GitHub issue itself *is* the task description and the
+# whole run reports back where the work was requested. The job-level `if`
+# requires all of:
 #
-# ── The trigger: a `/make-hotfix` comment on a GitHub issue ─────────────────
-#
-# The run is driven from an issue comment, so the GitHub issue itself *is* the
-# bug report and the whole run reports back where the fix was requested. The
-# job-level `if` requires all of:
-#
-#   * the comment body is exactly `/make-hotfix` — a bare command, so a
+#   * the comment body is exactly `/make-feature` — a bare command, so a
 #     comment that merely mentions it in prose doesn't fire the chain;
 #   * `author_association` is OWNER or MEMBER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
@@ -42,24 +31,17 @@
 #     place to be reading attacker-supplied text for the first time.
 #   * the comment is on an **issue, not a pull request**. `issue_comment` fires
 #     for PR comments too, and `github.event.issue` would then be the PR —
-#     handing the assigner a PR description as a bug report. Excluded
+#     handing the assigner a PR description as a feature request. Excluded
 #     explicitly rather than left to chance.
 #
 # Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
 # guard is stated once.
 #
-# The issue's **title + blank line + body** (never the `/make-hotfix` comment)
-# is the bug report handed to jira-task-assigner, wrapped in the two-part
-# prompt shape below: part 1 is the bug, part 2 is the explicit emergency-
-# hotfix directive that engages assigner step 5C. Issue bodies are
-# attacker-supplied text, so they are pulled into env vars first and written to
-# a temp file with `printf`, never interpolated into a shell command.
-#
-# Gating: every job declares `environment: production`, so GitHub's
-# environment-protection rule pauses for approval *before each job starts* —
-# one approval per skill (job 2 waits after job 1, job 3 waits after job 2).
-# One environment reused per job is enough; three separate environments buy
-# nothing here.
+# The issue's **title + blank line + body** (never the `/make-feature` comment)
+# is the free-form task description handed to jira-task-assigner — the same
+# shape demo-claude-issue-to-task.yml uses. Issue bodies are attacker-supplied
+# text, so they are pulled into env vars first and written to a temp file with
+# `printf`, never interpolated into a shell command.
 #
 # ── Reporting back to the issue ────────────────────────────────────────────
 #
@@ -89,30 +71,27 @@
 # their skill step so the render still fits after a skill that used its whole
 # budget.
 #
-# ── Caveats worth knowing before you copy this into another repo ──────────
+# ── Caveats carried over from demo-claude-hotfix-flow.yml ──────────────────
 #
 #  1. **No shared disk between jobs.** WORKTREES_DIR conventions assume a
 #     persistent checkout with sibling worktrees; GitHub-hosted runners give
-#     each job a fresh VM. So nothing is carried over on disk: job 1 pushes
-#     the branch to origin, and jobs 2/3 rebuild a *linked* worktree for it
-#     from scratch. That rebuild is not optional decoration — the executor and
-#     reviewer both stop unless `.git` is a file (a linked worktree) on a
-#     `feature/*` / `hotfix/*` branch, which a bare `actions/checkout` is not.
-#
-#     Same reason every job rebuilds `.jst/jira-sdlc-tools.local.env` for
-#     itself: there is no earlier job's copy to inherit. Those three bootstrap
-#     steps are near-identical **on purpose** and are not factored into a
-#     shared composite action or helper script — this repo has no CI-reuse
-#     mechanism anywhere (the three `jira_issue_transition_on_*.yml` files are
-#     likewise ~45 of 75 lines identical), and these workflows are meant to be
-#     *copied into other repos*, which a sibling helper file quietly breaks.
-#     Keep the copies byte-identical apart from the role, so a diff between
-#     two jobs shows only what genuinely differs.
+#     each job a fresh VM. So job 1 pushes the branch to origin and jobs 2/3
+#     rebuild a *linked* worktree for it from scratch — not decoration: the
+#     executor and reviewer both stop unless `.git` is a file (a linked
+#     worktree) on a `feature/*` / `hotfix/*` branch, which a bare
+#     `actions/checkout` is not. Same reason every job rebuilds
+#     `.jst/jira-sdlc-tools.local.env` from its own environment secrets: there
+#     is no earlier job's copy to inherit. Those bootstrap steps are
+#     near-identical **on purpose** and are not factored into a composite
+#     action — this repo has no CI-reuse mechanism anywhere, and these
+#     workflows are meant to be *copied into other repos*, which a sibling
+#     helper file quietly breaks. Keep the copies byte-identical apart from
+#     the role, so a diff between two jobs shows only what genuinely differs.
 #  2. **`git config branch.<b>.parentbranch` is machine-local**, so it never
-#     survives to jobs 2/3 either. They re-set it from job 1's outputs. Here
-#     that value is `<PRODUCTION_BRANCH>` — *not* `<DEFAULT_BASE_BRANCH>`,
-#     which is the one line of this pair that differs from the feature demo,
-#     and the one most likely to be copied over wrongly. The assigner's
+#     survives to jobs 2/3; they re-set it from job 1's outputs. Here that
+#     value is `<DEFAULT_BASE_BRANCH>` — *not* `<PRODUCTION_BRANCH>`, which is
+#     the one line of this pair that differs from the hotfix demo, and the one
+#     most likely to be copied over wrongly. The assigner's
 #     `PR target branch: …` Jira comment is the durable fallback the skills
 #     would otherwise use.
 #  3. **Do not export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a
@@ -132,7 +111,7 @@
 #     skill already posts its verdict as a PR *comment* for this reason.
 #  5. **The skills come from the base-branch checkout**, because the assigner
 #     refuses to run from an issue branch (its step 2). An `issue_comment`
-#     event checks out the repo's *default* branch, which is not by definition
+#     event checks out the repo's *default* branch, which is not necessarily
 #     `<DEFAULT_BASE_BRANCH>` — so the bootstrap still switches to the base
 #     branch explicitly rather than trusting the event's default. Land skill
 #     changes on the base branch first if you want them exercised.
@@ -171,18 +150,18 @@
 # executor skill transitions Jira itself, so the chain still completes either
 # way).
 
-name: Demo — Claude hotfix flow (assigner → executor → reviewer)
+name: Demo — Free Claude Code + NVIDIA NIM feature flow (assigner → executor → reviewer)
 
 on:
   issue_comment:
     types: [created]
 
 # Two runs at once would race on the same Jira project and push sibling
-# hotfix branches — serialize them, and don't cancel a run mid-skill. The
+# feature branches — serialize them, and don't cancel a run mid-skill. The
 # group is per-workflow, not per-issue, deliberately: the race is over shared
 # state (the Jira project, the runner's worktrees dir), not over one issue.
 concurrency:
-  group: demo-claude-hotfix-flow
+  group: demo-fcc-nvidia-nim-feature-flow
   cancel-in-progress: false
 
 env:
@@ -190,22 +169,22 @@ env:
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
   CLAUDE_CLI_VERSION: 2.1.220
-  DEFAULT_ASSIGNER_MODEL: opus
-  DEFAULT_EXECUTOR_MODEL: opus
-  DEFAULT_REVIEWER_MODEL: sonnet
+  # Default model for issue_comment runs (no dispatch inputs). Sync the value
+  # with the workflow_dispatch input's default.
+  DEFAULT_NIM_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b'
 
 
 jobs:
-  # ── Job 1 ── assigner: bug text → Jira Bug + hotfix/<KEY>-<slug> off main ──
+  # ── Job 1 ── assigner: issue text → Jira issue + feature/<KEY>-<slug> ──────
   assign:
-    name: 1 · assigner — create the Bug and hotfix branch
+    name: 1 · assigner — create the Jira issue and feature branch
     # The whole security boundary of this workflow — see the header. All three
     # conditions are required; jobs 2/3 inherit the guard by `needs`.
     if: |
-      github.event.issue.pull_request == null &&
-      github.event.comment.body == '/make-hotfix' &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER')
+          github.event.issue.pull_request == null &&
+          github.event.comment.body == '/make-feature' &&
+          (github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
     environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
@@ -213,21 +192,21 @@ jobs:
     # after a skill run that used all of its own.
     timeout-minutes: 35
     permissions:
-      contents: write # the assigner pushes the new hotfix branch
+      contents: write # the assigner pushes the new feature branch
       issues: write # posts the assigner report back on the triggering issue
     outputs:
       issue_key: ${{ steps.assigned.outputs.issue_key }}
       branch: ${{ steps.assigned.outputs.branch }}
-      pr_base: ${{ steps.config.outputs.production_branch }}
+      pr_base: ${{ steps.config.outputs.default_base_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          # Full history + every remote ref: the assigner cuts the hotfix from
-          # a fetched origin/<PRODUCTION_BRANCH>, which a shallow single-branch
-          # clone doesn't have. It also lets the `git switch` below work
-          # regardless of which ref the issue_comment event defaulted to
-          # (caveat 5).
+          # Full history + every remote ref: the assigner cuts the feature
+          # branch from a fetched origin/<DEFAULT_BASE_BRANCH>, which a shallow
+          # single-branch clone doesn't have. It also lets the `git switch`
+          # below work regardless of which ref the issue_comment event
+          # defaulted to (caveat 5).
           fetch-depth: 0
 
       - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
@@ -245,9 +224,6 @@ jobs:
           # only the address — no executor token) from the env file.
           JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
           GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          # Checked here so one step catches every missing secret, but never
-          # written to the file — the claude CLI reads it from the environment.
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           # First real step of the job: no filesystem survives from job to job,
@@ -255,7 +231,7 @@ jobs:
           # statuscheck read credentials ONLY from here (never the
           # environment), resolved from the git top-level.
           missing=()
-          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
+          for k in $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -289,7 +265,7 @@ jobs:
             grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
               | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
           }
-          for k in DEFAULT_BASE_BRANCH PRODUCTION_BRANCH PROJECT_KEY; do
+          for k in DEFAULT_BASE_BRANCH PROJECT_KEY; do
             v=$(cfg "$k")
             if [ -z "$v" ]; then
               echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
@@ -305,26 +281,13 @@ jobs:
           BASE: ${{ steps.config.outputs.default_base_branch }}
         run: |
           set -euo pipefail
-          # Why the BASE branch and not PRODUCTION_BRANCH, on a *hotfix* demo —
-          # the obvious question, so: the checkout is not what the hotfix is cut
-          # from. Assigner step 5C sets BRANCH_FROM = origin/<PRODUCTION_BRANCH>,
-          # the freshly fetched remote ref, precisely so a stale local
-          # production branch can't poison it. Both start states its step 2
-          # allows produce an identical hotfix/<KEY>-<slug> and an identical
-          # production PR base, so standing here costs the demo nothing.
-          #
-          # Two things then make the base branch the better of the two:
-          #   - the skills come from this checkout (caveat 5), and the hotfix
-          #     directive reaches PRODUCTION_BRANCH only after a release — until
-          #     then, standing on production would load an assigner with no
-          #     hotfix path, which cuts feature/<KEY> and fails the branch check
-          #     in "Capture the created issue and branch";
-          #   - 5C hard-stops if it started on PRODUCTION_BRANCH and the run
-          #     lands on planned work, and a headless run has no turn to
-          #     recover in. From here that misread degrades instead of halting.
-          # Switching is required either way: the assigner stops outright on an
-          # issue branch, and an issue_comment event checks out the repo's
-          # *default* branch, which is not by definition <DEFAULT_BASE_BRANCH>.
+          # The assigner requires a *main checkout* (`.git` is a directory) on
+          # the base branch and hard-stops on an issue branch or inside a linked
+          # worktree (its step 2) — it *creates* worktrees, it doesn't run in
+          # one. An issue_comment event checks out the repo's default branch,
+          # which is not by definition <DEFAULT_BASE_BRANCH>, so switch
+          # explicitly instead of trusting the event. This checkout is also what
+          # supplies the skill prompts (caveat 5).
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -336,12 +299,50 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          # wait until the proxy answers
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
+
       - name: Run jira-task-assigner
         id: run
         timeout-minutes: 25
         shell: bash
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
           # Pull the issue's title and body into env vars FIRST, then build the
           # prompt from them — never interpolate github.event.issue.* into the
           # shell command (issue bodies are user content, not script text).
@@ -349,23 +350,19 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           set -euo pipefail
-          # Snapshot local hotfix branches so the next step can tell which one
+          # Snapshot local feature branches so the next step can tell which one
           # this run created, instead of parsing the model's prose report.
-          git for-each-ref --format='%(refname:short)' 'refs/heads/hotfix/*' \
-            | sort > "$RUNNER_TEMP/hotfix-before.txt"
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-before.txt"
 
-          # The bug report = the issue's title + blank line + body, wrapped in
-          # the two-part prompt shape the hotfix directive needs: the bug, then
-          # an explicit instruction that this is an emergency hotfix off the
-          # production branch. Part 2 is what engages assigner step 5C — drop
-          # it and this silently becomes a feature-flow run (plain
-          # feature/<KEY> branch, PR aimed at staging). printf from env vars so
-          # the issue text stays data, never interpolated into the script.
+          # Free-form task description = the issue's title + blank line + body.
+          # No hotfix directive: this is the planned-work flow, so the assigner
+          # cuts feature/<KEY>-<slug> off the base branch and judges scope
+          # (single-step vs. multistep) for itself. printf from env vars so the
+          # issue text stays data, never interpolated into the script.
           {
-            printf '%s\n\n' '1. READ THE BUG'
             printf '%s\n\n' "$ISSUE_TITLE"
-            printf '%s\n\n' "${ISSUE_BODY:-}"
-            printf '%s\n'   '2. CREATE AN EMERGENCY HOTFIX FROM IT BRANCHED FROM MAIN'
+            printf '%s' "${ISSUE_BODY:-}"
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive
@@ -374,7 +371,6 @@ jobs:
           # The prompt is passed via `$(cat …)` inside the quoted -p argument,
           # so it stays one argument and its newlines survive into the model.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
-            --model $DEFAULT_ASSIGNER_MODEL \
             --dangerously-skip-permissions \
             -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
             2>&1 | tee "$RUNNER_TEMP/assigner.log"
@@ -386,18 +382,22 @@ jobs:
           PROJECT_KEY: ${{ steps.config.outputs.project_key }}
         run: |
           set -euo pipefail
-          git for-each-ref --format='%(refname:short)' 'refs/heads/hotfix/*' \
-            | sort > "$RUNNER_TEMP/hotfix-after.txt"
-          NEW=$(comm -13 "$RUNNER_TEMP/hotfix-before.txt" "$RUNNER_TEMP/hotfix-after.txt")
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-after.txt"
+          NEW=$(comm -13 "$RUNNER_TEMP/feature-before.txt" "$RUNNER_TEMP/feature-after.txt")
           COUNT=$(printf '%s' "$NEW" | grep -c . || true)
 
+          # Exactly one: a headless run that stopped to ask a clarifying
+          # question creates none, and a multistep breakdown creates a parent
+          # plus one branch per sub-task — which this two-successor chain (one
+          # executor, one reviewer) cannot carry. Both land here, loudly.
           if [ "$COUNT" -ne 1 ]; then
-            echo "::error::expected exactly 1 new hotfix/* branch from the assigner, found $COUNT — a run that stopped to ask a question, or that took the planned-work path, lands here. Branches: $(printf '%s' "$NEW" | tr '\n' ' ')"
+            echo "::error::expected exactly 1 new feature/* branch from the assigner, found $COUNT — a run that stopped to ask a question (0), or one the assigner broke into sub-tasks (>1), lands here. Branches: $(printf '%s' "$NEW" | tr '\n' ' ')"
             exit 1
           fi
 
           BRANCH="$NEW"
-          KEY=$(printf '%s' "$BRANCH" | sed -nE "s#^hotfix/(${PROJECT_KEY}-[0-9]+)-.+\$#\1#p")
+          KEY=$(printf '%s' "$BRANCH" | sed -nE "s#^feature/(${PROJECT_KEY}-[0-9]+)-.+\$#\1#p")
           if [ -z "$KEY" ]; then
             echo "::error::cannot derive a $PROJECT_KEY issue key from branch '$BRANCH'"
             exit 1
@@ -425,7 +425,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           KEY: ${{ steps.assigned.outputs.issue_key }}
           BRANCH: ${{ steps.assigned.outputs.branch }}
-          PR_BASE: ${{ steps.config.outputs.production_branch }}
+          PR_BASE: ${{ steps.config.outputs.default_base_branch }}
           ROLE: assigner
           JOB_LABEL: 1 · assigner
           ARTIFACT: assigner-log
@@ -542,7 +542,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ── Job 2 ── executor: implement the fix, push, open the PR into main ──────
+  # ── Job 2 ── executor: implement, push, open the PR into the base branch ────
   execute:
     name: 2 · executor — implement and open the PR
     needs: assign
@@ -575,14 +575,13 @@ jobs:
           JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
           JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
           GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           # Written in the *main checkout*, before the worktree exists: the
           # executor's own ensure_local_env.sh copies it into the worktree from
           # here, which is exactly the path that script exists to cover.
           missing=()
-          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
+          for k in $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -632,8 +631,7 @@ jobs:
           # which is the only shape the executor will run in. The branch itself
           # matters less here than in job 1 — this job's work happens in the
           # worktree — but it is still where the skills are loaded from, so keep
-          # it the same base branch job 1 used (see that job for why not
-          # PRODUCTION_BRANCH).
+          # it the same base branch job 1 used.
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -644,6 +642,41 @@ jobs:
           set -euo pipefail
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
 
       - name: Rebuild the issue worktree
         id: worktree
@@ -658,10 +691,10 @@ jobs:
           git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
           git worktree add --track -B "$BRANCH" "$WT" "origin/$BRANCH"
           # parentbranch is machine-local config, so job 1's copy is gone.
-          # Re-set it to what the PR must target — the PRODUCTION branch on
-          # this emergency flow (caveat 2; the feature demo's twin of this line
-          # is the base branch instead). It is the first source the executor's
-          # PR-base resolver reads, ahead of the assigner's durable
+          # Re-set it to what the PR must target — the BASE branch on this
+          # planned-work flow (caveat 2; the hotfix demo's twin of this line is
+          # the production branch instead). It is the first source the
+          # executor's PR-base resolver reads, ahead of the assigner's durable
           # "PR target branch:" Jira comment.
           git config "branch.$BRANCH.parentbranch" "$PR_BASE"
           echo "path=$WT" >> "$GITHUB_OUTPUT"
@@ -671,14 +704,15 @@ jobs:
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
         run: |
           set -euo pipefail
           # No key argument by contract — the executor derives it from the
           # branch this worktree is on.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
-            --model $DEFAULT_EXECUTOR_MODEL \
             -p "/jira-sdlc:jira-task-executor" \
             2>&1 | tee "$RUNNER_TEMP/executor.log"
 
@@ -856,11 +890,10 @@ jobs:
           JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
           JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
           GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
           missing=()
-          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
+          for k in $KEYS; do
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -907,7 +940,7 @@ jobs:
           set -euo pipefail
           # Same as job 2: the workspace stays a main checkout on a long-lived
           # branch and supplies the skills, while the review itself happens in
-          # the linked worktree below. (Job 1 explains why not PRODUCTION_BRANCH.)
+          # the linked worktree below.
           git switch "$BASE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -918,6 +951,41 @@ jobs:
           set -euo pipefail
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
 
       - name: Rebuild the issue worktree
         id: worktree
@@ -943,14 +1011,15 @@ jobs:
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
         run: |
           set -euo pipefail
-          # Bare, no key: the reviewer derives the issue from the branch. This
-          # is a single-step top-level issue (5C forces single-step for a
-          # hotfix), so it reviews one PR — the one into the production branch.
+          # Bare, no key: the reviewer derives the issue from the branch. Job 1
+          # guaranteed a single feature branch, so this is a single-step
+          # top-level issue — one PR to review, the one into the base branch.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
-            --model $DEFAULT_REVIEWER_MODEL \
             --dangerously-skip-permissions \
             -p "/jira-sdlc:jira-task-reviewer" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
@@ -967,7 +1036,7 @@ jobs:
             echo "### Reviewed \`$KEY\` on \`$BRANCH\`"
             echo ""
             echo "Nothing was merged — the reviewer never merges, and this demo"
-            echo "stops here. A real hotfix needs a human to merge the PR."
+            echo "stops here. Merging the PR is a human act."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment the reviewer report on the triggering issue
