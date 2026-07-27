@@ -49,11 +49,15 @@
 # guard is stated once.
 #
 # The issue's **title + blank line + body** (never the `/make-hotfix` comment)
-# is the bug report handed to jira-task-assigner, wrapped in the two-part
-# prompt shape below: part 1 is the bug, part 2 is the explicit emergency-
-# hotfix directive that engages assigner step 5C. Issue bodies are
-# attacker-supplied text, so they are pulled into env vars first and written to
-# a temp file with `printf`, never interpolated into a shell command.
+# is the bug report handed to jira-task-assigner, wrapped in labeled
+# `-- ISSUE TITLE --` / `-- ISSUE BODY --` sections around a fixed middle
+# paragraph — never issue content — stating the run is headless (no
+# clarifying questions; stop and fail on genuine ambiguity) and carrying the
+# explicit emergency-hotfix directive that engages assigner step 5C: a
+# single-step hotfix/<KEY>-<slug> branch off origin/<PRODUCTION_BRANCH>. Issue
+# bodies are attacker-supplied text, so they are pulled into env vars first and
+# written to a temp file with `printf`, never interpolated into a shell
+# command.
 #
 # Gating: every job declares `environment: production`, so GitHub's
 # environment-protection rule pauses for approval *before each job starts* —
@@ -347,6 +351,7 @@ jobs:
           # shell command (issue bodies are user content, not script text).
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          PRODUCTION_BRANCH: ${{ steps.config.outputs.production_branch }}
         run: |
           set -euo pipefail
           # Snapshot local hotfix branches so the next step can tell which one
@@ -354,18 +359,23 @@ jobs:
           git for-each-ref --format='%(refname:short)' 'refs/heads/hotfix/*' \
             | sort > "$RUNNER_TEMP/hotfix-before.txt"
 
-          # The bug report = the issue's title + blank line + body, wrapped in
-          # the two-part prompt shape the hotfix directive needs: the bug, then
-          # an explicit instruction that this is an emergency hotfix off the
-          # production branch. Part 2 is what engages assigner step 5C — drop
-          # it and this silently becomes a feature-flow run (plain
-          # feature/<KEY> branch, PR aimed at staging). printf from env vars so
-          # the issue text stays data, never interpolated into the script.
+          # Labeled sections, mirroring demo-claude-feature-flow.yml's prompt
+          # shape, so the model can tell "here is the bug report" apart from
+          # "here is what CI wants done with it". The middle paragraph is a
+          # fixed instruction (never issue content): it states this is a
+          # headless CI run with no interactive turn, so genuine ambiguity
+          # must halt with a failure rather than a guess or a clarifying
+          # question — and it carries the explicit emergency-hotfix directive
+          # that engages assigner step 5C (JST-184): a single-step
+          # hotfix/<KEY>-<slug> branch off origin/<PRODUCTION_BRANCH>. Drop
+          # that directive and this silently becomes a feature-flow run
+          # instead (plain feature/<KEY>, PR aimed at the base branch). printf
+          # from env vars so the issue text stays data, never interpolated
+          # into the script.
           {
-            printf '%s\n\n' '1. READ THE BUG'
-            printf '%s\n\n' "$ISSUE_TITLE"
-            printf '%s\n\n' "${ISSUE_BODY:-}"
-            printf '%s\n'   '2. CREATE AN EMERGENCY HOTFIX FROM IT BRANCHED FROM MAIN'
+            printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
+            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. The issue below is an explicit request for an emergency production hotfix: take the hotfix path (step 5C) — create a single-step hotfix/<KEY>-<slug> branch off origin/%s, never feature/. If the bug report is simple and concrete enough to size and turn directly into a Jira issue, proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n' "$PRODUCTION_BRANCH"
+            printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive
