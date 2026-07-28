@@ -142,15 +142,45 @@ and hotfix paths. Full detail, including production-environment setup and
 which secrets each demo reads, is in
 **[Applications](plugins/jira-sdlc/docs/applications/APPLICATIONS.md)**.
 
-The same demos, one row per scenario rather than per workflow file:
+Five scenarios, each with its own walkthrough. "Approvals" counts the
+`environment: production` pauses a run waits on before it can continue.
 
-| Scenario | What the flow does | Trigger | Approval | Implementations |
-|---|---|---|---|---|
-| [**Feature flow**](plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](.github/workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
-| [**Hotfix flow**](plugins/jira-sdlc/docs/applications/ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](.github/workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
-| [**Review a PR**](plugins/jira-sdlc/docs/applications/ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](.github/workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](.github/workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review` |
-| [**Issue to task**](plugins/jira-sdlc/docs/applications/ci-issue-to-task-demo.md) | Assigner alone. A newly opened GitHub issue becomes a Jira task with its branch and worktree, and the run stops there — no implementation, no PR. | **auto** | **Up to 1** — `environment: production` on the assigner job. ⚠️ **Effectively mandatory here**: this is the only demo with no author check, so the approval is the sole guard between any opened issue and an unattended run. | • [`demo-claude-issue-to-task.yml`](.github/workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `issues: opened` |
-| [**Smoke test**](plugins/jira-sdlc/docs/applications/ci-smoke-test-demo.md) | **No skill is invoked.** Installs a coding assistant on the runner, points its config at this plugin's `skills/`, and drives one plain inference to prove the backend is wired up — the plumbing check you run *before* trusting a new client or model with a real flow. Answers "does this assistant install, authenticate, find the skills, and return a completion in CI?", nothing more. | **manual** | **None** — declares no `environment`, so it never pauses and reads no environment secrets | • [`demo-kimi-openrouter-reviewer.yml`](.github/workflows/demo-kimi-openrouter-reviewer.yml) — Kimi Code + OpenRouter · `workflow_dispatch` — installs Kimi, writes a `config.toml` whose `extra_skill_dirs` points at the plugin, then runs one hand-written review prompt over `gh pr diff` and posts the result to the PR |
+- **[Feature flow](plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md)**
+  — the whole assigner → executor → reviewer chain on the planned path: a
+  GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
+  and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
+  3 approvals.
+  [`demo-claude-feature-flow.yml`](.github/workflows/demo-claude-feature-flow.yml)
+  (Claude Code · `/make-feature`) ·
+  [`demo-fcc-nvidia-nim-feature-flow.yml`](.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml)
+  (Free Claude Code + NVIDIA NIM · `/fcc-make-feature`)
+- **[Hotfix flow](plugins/jira-sdlc/docs/applications/ci-hotfix-flow-demo.md)**
+  — the same chain on the emergency path: `hotfix/*` cut off
+  `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
+  Comment-triggered, up to 3 approvals.
+  [`demo-claude-hotfix-flow.yml`](.github/workflows/demo-claude-hotfix-flow.yml)
+  (Claude Code · `/make-hotfix`)
+- **[Review a PR](plugins/jira-sdlc/docs/applications/ci-review-pr-demo.md)** —
+  the reviewer on its own against an already-open PR, posting its verdict to
+  GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
+  [`demo-claude-reviewer.yml`](.github/workflows/demo-claude-reviewer.yml)
+  (Claude Code · `/review`) ·
+  [`demo-fcc-nvidia-nim-reviewer.yml`](.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
+  (Free Claude Code + NVIDIA NIM · `/fcc-review`)
+- **[Issue to task](plugins/jira-sdlc/docs/applications/ci-issue-to-task-demo.md)**
+  — the assigner alone: a newly opened issue becomes a Jira task with its
+  branch and worktree, and the run stops there. Fires automatically on
+  `issues: opened` and is the one demo with ⚠️ **no author check**, so its
+  single approval is the only guard.
+  [`demo-claude-issue-to-task.yml`](.github/workflows/demo-claude-issue-to-task.yml)
+  (Claude Code)
+- **[Smoke test](plugins/jira-sdlc/docs/applications/ci-smoke-test-demo.md)** —
+  **no skill runs.** It installs a coding assistant, points it at this plugin's
+  `skills/`, and drives one plain inference to prove the backend is wired up —
+  the plumbing check before you trust a new client or model with a real flow.
+  Manual, no approval gate.
+  [`demo-kimi-openrouter-reviewer.yml`](.github/workflows/demo-kimi-openrouter-reviewer.yml)
+  (Kimi Code + OpenRouter · `workflow_dispatch`)
 
 ## Jira states - who can move a card
 

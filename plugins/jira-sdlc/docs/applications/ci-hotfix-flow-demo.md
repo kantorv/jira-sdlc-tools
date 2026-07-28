@@ -212,10 +212,12 @@ Three things make this step necessary rather than tidy:
    branch does not make a main checkout acceptable.
 2. **The job holds two checkouts at once, deliberately.** The
    `actions/checkout` workspace stays a main checkout standing on
-   `<DEFAULT_BASE_BRANCH>` — that is where `--plugin-dir` loads the skill
-   prompts from — while the linked worktree on the `hotfix/*` branch is where
+   `<DEFAULT_BASE_BRANCH>` — the start state the assigner's healthcheck
+   demands — while the linked worktree on the `hotfix/*` branch is where
    the skill *runs*. Neither alone satisfies both requirements. (This is the
-   same split described below: where a job *stands* is not what it *works on*.)
+   same split described below: where a job *stands* is not what it *works on*.
+   Neither is where the *skills* come from: those are installed from the
+   marketplace, below.)
 3. **The working directory is the addressing mechanism.** Neither skill takes
    an issue-key argument; each derives its key from the branch of the worktree
    it stands in. That is what
@@ -242,14 +244,28 @@ from production!") confuses where the assigner *stands* with what it *cuts
 from*. Assigner step 5C sets its cut point to `origin/<PRODUCTION_BRANCH>`,
 the freshly fetched remote ref, regardless of the local checkout — precisely
 so a stale local production branch can never poison a hotfix. The checkout
-branch only decides (a) that the assigner's start-state check passes, and
-(b) **which version of the skill prompts gets loaded**, since
-`--plugin-dir` points into this checkout. That second point is why the base
-branch beats production for the demo: skill changes reach
-`<PRODUCTION_BRANCH>` only after a release, so standing on production would
-run *yesterday's* skills against today's demo. The switch is explicit rather
-than inherited, because an `issue_comment` event checks out the repo's
-*default* branch, which is not by definition `<DEFAULT_BASE_BRANCH>`.
+branch only decides that the assigner's start-state check passes — it does
+**not** decide which version of the skill prompts gets loaded, which comes
+from the marketplace install below. What still favours the base branch is
+assigner step 5C: it hard-stops if it started on `<PRODUCTION_BRANCH>` and the
+run turns out to be planned work, and a headless run has no turn in which to
+recover. The switch is explicit rather than inherited, because an
+`issue_comment` event checks out the repo's *default* branch, which is not by
+definition `<DEFAULT_BASE_BRANCH>`.
+
+**The skills come from the marketplace, not from the checkout.** Every job
+installs the plugin the way a consumer would, which is what makes these
+workflows copy-pasteable into a repo that doesn't contain the plugin:
+
+```bash
+claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+claude plugin install jira-sdlc@jira-sdlc-tools
+# external consumers: swap the URL for your own fork or clone
+```
+
+`marketplace add` clones the plugin repo's **default** branch, so what a run
+exercises is whatever has landed there — never the skill files on the branch
+under test.
 
 **Each role runs on a named model.** The workflow-level `env` block pins
 `DEFAULT_ASSIGNER_MODEL` / `DEFAULT_EXECUTOR_MODEL` / `DEFAULT_REVIEWER_MODEL`
@@ -293,12 +309,22 @@ between two jobs shows only what genuinely differs.
 
 ## Reporting back to the issue
 
-Beyond the step summaries and the log artifacts (`assigner-log`,
-`executor-log`, `reviewer-log`, 7-day retention), each job posts a comment on
-the triggering issue: a structured summary — Jira key, branch, PR link where
-applicable — followed by the full skill transcript inside a collapsed
-`<details>` block. The point is that the conversation stays where the fix was
-requested, instead of in an Actions tab nobody opens.
+Beyond the log artifacts (`assigner-log`, `executor-log`, `reviewer-log`,
+7-day retention), each job reports twice — once where the fix was requested,
+once where the run happened.
+
+The **issue comment** is a structured summary — Jira key, branch, PR link
+where applicable — followed by the full skill transcript, in plain markdown.
+It is deliberately *not* folded into a `<details>` block: the comment reads top
+to bottom without a click, and the conversation stays where the fix was
+requested instead of in an Actions tab nobody opens.
+
+The **job summary** appends that same transcript to `$GITHUB_STEP_SUMMARY`,
+under the one-line heading each job already writes there, so the run page
+explains itself without opening the log or downloading an artifact. It has its
+own ceiling — 1 MiB per step, against the comment's 65536 characters — and
+gets the same truncation treatment, in a step that is `if: always()` for the
+same reason the comment step is.
 
 Three details in those steps are load-bearing:
 

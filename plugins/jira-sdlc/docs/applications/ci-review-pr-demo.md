@@ -73,8 +73,12 @@ workflow's only job is to stand up the exact environment the skill's
 healthcheck demands, then invoke it bare:
 
 ```bash
-claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
-  --dangerously-skip-permissions \
+# the skills come from the marketplace, not from either checkout —
+# external consumers: swap the URL for your own fork or clone
+claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+claude plugin install jira-sdlc@jira-sdlc-tools
+
+claude --dangerously-skip-permissions \
   --model "$DEFAULT_REVIEWER_MODEL" \
   -p "/jira-sdlc:jira-task-reviewer"
 ```
@@ -168,8 +172,9 @@ produces a *main checkout* (`.git` is a *directory*), which fails the
 So the job keeps two checkouts at once:
 
 1. **The main checkout**, from `actions/checkout` with `fetch-depth: 0`,
-   switched to the PR's **base** branch. This is where `--plugin-dir` reads
-   the skills from.
+   switched to the PR's **base** branch. Standing on the base rather than the
+   head is what lets the worktree below exist at all — git refuses to check
+   the same branch out twice.
 2. **A linked worktree** on the PR's **head** branch, rebuilt under
    `$RUNNER_TEMP/worktrees/worktree-<KEY>`. This is where the skill actually
    runs.
@@ -201,11 +206,12 @@ has no upstream assigner job to hand them forward.
    set in the environment. The skill step exports only the model credential;
    the one step that needs `GH_TOKEN` (resolving head/base) sets it before the
    skill runs, never alongside it.
-2. **The skills come from the base-branch checkout.** `--plugin-dir` points
-   into the main checkout, which stands on the PR's *base*. If a PR changes a
-   skill file, this demo reviews that PR with the **base's** copy of the
-   skill. Land skill changes on the base branch first if you want them
-   exercised.
+2. **The skills come from the marketplace, not from either checkout.** The
+   job runs `claude plugin marketplace add` + `claude plugin install`, which
+   clones the plugin repo's **default** branch. If a PR changes a skill file,
+   this demo reviews that PR with the *marketplace's* copy — land skill
+   changes on the plugin repo's default branch if you want them exercised
+   here.
 3. **Self-review.** The executor opens PRs with the same `gh` account this
    reviewer logs in as, and GitHub blocks approving your own PR — which is why
    the skill records its verdict as a PR **comment** prefixed
