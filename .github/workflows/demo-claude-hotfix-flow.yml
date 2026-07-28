@@ -196,8 +196,8 @@ env:
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
   CLAUDE_CLI_VERSION: 2.1.220
-  DEFAULT_ASSIGNER_MODEL: opus
-  DEFAULT_EXECUTOR_MODEL: opus
+  DEFAULT_ASSIGNER_MODEL: sonnet
+  DEFAULT_EXECUTOR_MODEL: sonnet
   DEFAULT_REVIEWER_MODEL: sonnet
 
 
