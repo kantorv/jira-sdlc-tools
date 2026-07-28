@@ -172,7 +172,9 @@ env:
   CLAUDE_CLI_VERSION: 2.1.220
   # Default model for issue_comment runs (no dispatch inputs). Sync the value
   # with the workflow_dispatch input's default.
-  DEFAULT_NIM_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b'
+  DEFAULT_ASSIGNER_MODEL: "nvidia_nim/z-ai/glm-5.2"
+  DEFAULT_EXECUTOR_MODEL: "nvidia_nim/deepseek-ai/deepseek-v4-pro"
+  DEFAULT_REVIEWER_MODEL: 'nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b'
 
 
 jobs:
@@ -314,7 +316,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          MODEL: "${{ env.DEFAULT_ASSIGNER_MODEL }}"
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
@@ -373,7 +375,7 @@ jobs:
           # so it stays one argument and its newlines survive into the model.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
-            --model "nvidia/$DEFAULT_NIM_MODEL" \
+            --model "${{ env.DEFAULT_ASSIGNER_MODEL }}" \
             -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
             2>&1 | tee "$RUNNER_TEMP/assigner.log"
 
@@ -659,7 +661,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          MODEL: "${{  env.DEFAULT_EXECUTOR_MODEL }}"
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
@@ -715,7 +717,7 @@ jobs:
           # branch this worktree is on.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
-            --model "nvidia/$DEFAULT_NIM_MODEL" \
+            --model "${{ env.DEFAULT_EXECUTOR_MODEL }}" \
             -p "/jira-sdlc:jira-task-executor" \
             2>&1 | tee "$RUNNER_TEMP/executor.log"
 
@@ -969,7 +971,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL: "nvidia_nim/${{ github.event.inputs.model || env.DEFAULT_NIM_MODEL }}"
+          MODEL: "${{  env.DEFAULT_REVIEWER_MODEL }}"
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
@@ -1024,7 +1026,7 @@ jobs:
           # top-level issue — one PR to review, the one into the base branch.
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
-            --model "nvidia/$DEFAULT_NIM_MODEL" \
+            --model "${{ env.DEFAULT_REVIEWER_MODEL }}" \
             -p "/jira-sdlc:jira-task-reviewer" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
 
