@@ -215,7 +215,15 @@ running with the wrong identity.
 | `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | reviewer job | Reviewer's own Jira identity. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | every job on the Claude-Code-backed demos | Read by the `claude` CLI from the environment — never written into the env file. Not used by the FCC + NVIDIA NIM demos, which authenticate to NIM instead (see below). |
 | `NVIDIA_NIM_API_KEY` | `demo-fcc-nvidia-nim-feature-flow.yml`, `demo-fcc-nvidia-nim-reviewer.yml` | The FCC + NIM demos' equivalent of `CLAUDE_CODE_OAUTH_TOKEN` — model backend credential instead of the Claude Code CLI's. |
-| `GITHUB_PAT_TOKEN` | every job, optional | Falls back to the runner's built-in `secrets.GITHUB_TOKEN` if unset. Add a PAT only to lift the built-in token's one limitation: PRs it opens don't trigger other workflows. |
+
+`GITHUB_PAT_TOKEN` is not a secret to create here: every workflow always
+populates it from the runner's built-in `secrets.GITHUB_TOKEN`, which can
+push, open a PR, and comment given each job's `permissions:` block. It stays
+an env-file key (see "Common patterns across the CI demos" above) because
+the skills' `statuscheck` reads it from
+`.jst/jira-sdlc-tools.local.env` to log `gh` in — a real PAT is only needed
+there, for local/dev use. One limitation of the built-in token carries over
+unchanged in CI: PRs it opens don't trigger other workflows.
 
 ### 3.4 Setting secrets via GitHub CLI
 
@@ -228,8 +236,6 @@ gh secret set JIRA_EXECUTOR_TOKEN   --repo <OWNER>/<REPO> --body "<executor-api-
 gh secret set JIRA_REVIEWER_EMAIL   --repo <OWNER>/<REPO> --body "<reviewer-identity-email>"  --env production
 gh secret set JIRA_REVIEWER_TOKEN   --repo <OWNER>/<REPO> --body "<reviewer-api-token>"        --env production
 gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <OWNER>/<REPO> --body "<claude-code-oauth-token>" --env production
-# Optional — only needed if demo PRs should trigger other workflows
-gh secret set GITHUB_PAT_TOKEN      --repo <OWNER>/<REPO> --body "<github-pat>"                --env production
 # Only for the FCC + NVIDIA NIM demos, in place of CLAUDE_CODE_OAUTH_TOKEN
 gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-api-key>"         --env production
 ```

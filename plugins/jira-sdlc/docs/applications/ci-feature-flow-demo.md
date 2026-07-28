@@ -140,9 +140,13 @@ demand. This is the part worth studying before copying the pattern.
 **Fresh VM per job → rebuild everything.** Each job rewrites
 `.jst/jira-sdlc-tools.local.env` from its own role-scoped secrets, and jobs
 2/3 rebuild the linked worktree the skills demand (next section).
-`WORKTREES_DIR` points under `RUNNER_TEMP` and is the one config key that is
-*not* a secret, because a value carried from a developer's machine would name
-a path that doesn't exist here.
+`WORKTREES_DIR` and `GITHUB_PAT_TOKEN` are the two config keys that are
+*not* secrets. `WORKTREES_DIR` points under `RUNNER_TEMP`, because a value
+carried from a developer's machine would name a path that doesn't exist
+here. `GITHUB_PAT_TOKEN` is always populated from the built-in
+`GITHUB_TOKEN` (see the hotfix demo's secrets table) — a real PAT is only
+needed for local/dev use, where `statuscheck` reads it from
+`.jst/jira-sdlc-tools.local.env` to log `gh` in.
 
 ### Jobs 2 and 3 must build the worktree *before* invoking the skill
 

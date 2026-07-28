@@ -128,11 +128,18 @@ explicit up-front secret check), never real credentials:
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | job 1 | the assigner's Jira identity |
 | `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | job 2 | job 1 also receives the *email* only — it is the assignment target, not a credential |
 | `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | job 3 | |
-| `GITHUB_PAT_TOKEN` | every job, optional | falls back to the built-in `GITHUB_TOKEN`, see the workflow header |
 
 Each secret is named **exactly as the `jira-sdlc-tools.local.env` key it
 becomes**, which lets each job's env-file bootstrap be a single loop over a
 `KEYS` list instead of hand-mapped `printf`s.
+
+`GITHUB_PAT_TOKEN` is in that `KEYS` list too, but it is not a secret to
+create: every job always populates it from the runner's built-in
+`GITHUB_TOKEN`, which can push, open a PR, and comment given the job's
+`permissions:` block — see the workflow header. It stays an env-file key
+because the skills' `statuscheck` reads it from
+`.jst/jira-sdlc-tools.local.env` to log `gh` in; a real PAT is only needed
+for local/dev use.
 
 ## Why each job is shaped the way it is
 

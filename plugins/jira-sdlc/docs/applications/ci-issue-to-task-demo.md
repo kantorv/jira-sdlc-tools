@@ -137,7 +137,7 @@ machine does, wouldn't need the trick.
 A value carried over from a developer's machine would point somewhere that
 doesn't exist here.
 
-## Secrets and the one credential that isn't one
+## Secrets and the credentials that aren't ones
 
 All are environment secrets on `production`, each named exactly as the
 `.jst/jira-sdlc-tools.local.env` key it becomes, so the bootstrap is one loop
@@ -149,7 +149,7 @@ over a `KEYS` list:
 | `JIRA_ACCOUNT_URL` | Jira site. |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | The assigner's own Jira identity. |
 | `JIRA_EXECUTOR_EMAIL` | **Not a credential** — just an address. The assigner assigns every issue it creates to the executor, and `get_assignee_email.sh` reads this from the env file. No executor *token* is present in this job. |
-| `GITHUB_PAT_TOKEN` | Optional. Currently wired straight to the built-in `GITHUB_TOKEN`, which can push given `permissions: contents: write`. |
+| `GITHUB_PAT_TOKEN` | Not a secret either — always wired straight to the built-in `GITHUB_TOKEN`, which can push given `permissions: contents: write`. Stays an env-file key because `statuscheck` reads it from `.jst/jira-sdlc-tools.local.env` to log `gh` in; a real PAT is only needed for local/dev use. |
 
 The bootstrap checks its whole set up front and fails with `::error::` rather
 than letting the CLI die halfway through on a missing key.
