@@ -18,7 +18,7 @@ Both ports take the identical argument set — one positional, four flags:
 | Argument | Required | Description |
 | --- | --- | --- |
 | `<ISSUE-KEY>` | yes | The Jira issue key, e.g. `JST-93`. Positional — matched against `[A-Za-z]*-[0-9]*`; anything else (missing, malformed, bare `-`) prints usage to stderr and exits 1. |
-| `--title "<summary>"` | no | Overrides the issue's Jira summary used for signal 2 of the main-checkout pin (see Detection logic below). Self-fetched via `acli jira workitem view <KEY>` when omitted and `acli` is available, so callers normally don't pass it — it exists to keep the detector runnable offline or against a Jira instance `acli` can't reach. |
+| `--title "<summary>"` | no | Overrides the issue's Jira summary used for signal 2 of the main-checkout pin (see Detection logic below). Self-fetched via `jira.sh --role executor issue view <KEY>` when omitted and that client is present, so callers normally don't pass it — it exists to keep the detector runnable offline or against a Jira instance the client can't reach. |
 | `--created "<iso8601>"` | no | Overrides the issue's Jira `created` instant used for signal 3 (the decisive tie-breaker). Same self-fetch/offline rationale as `--title`. Accepts both the transcript `…Z` form and Jira's `…+0300` offset form. |
 | `--attach` | no | Switches the script from read-only detection to actually uploading: hands the computed attachment-path list to the sibling `jira_attach` script (bash: `posix/jira_attach.sh`; Windows: `win/jira_attach.ps1`). Without it, the script only prints the grouped listing and the `=== attachment paths ===` block — nothing is written, transitioned, or uploaded. |
 | `--dry-run` | no | Only meaningful combined with `--attach` — passed straight through to `jira_attach`, which previews the upload without performing it. Ignored (has no effect) when `--attach` is absent. |
@@ -31,7 +31,7 @@ space-separated tokens on Windows (see Execution nuances below).
 
 Beyond the CLI arguments, both ports read two machine-config values —
 `CONVERSATIONS_MAINREPO_PATH` and `CONVERSATIONS_WORKTREES_PREFIX` — from
-`jira-sdlc-tools.local.env` to locate the two transcript folders (see
+`.jst/jira-sdlc-tools.local.env` to locate the two transcript folders (see
 **Configuration** below). These are not script arguments and are never
 passed on the command line.
 
@@ -64,13 +64,13 @@ named after that session's cwd:
      since only the session that was live at creation time could have
      created the issue
 
-  `--title`/`--created` (self-fetched via `acli` when omitted) drive
+  `--title`/`--created` (self-fetched via `jira.sh` when omitted) drive
   signals 2 and 3. Without them the script still runs but can only list
   candidates, not pick one.
 
 Both ports resolve the two `~/.claude/projects` transcript folders from
 **config**, not from git / a cwd-encoding step. Two
-`jira-sdlc-tools(.local).env` values pin them:
+`.jst/jira-sdlc-tools(.local).env` values pin them:
 `CONVERSATIONS_MAINREPO_PATH` is the main checkout's folder (used as-is),
 and `CONVERSATIONS_WORKTREES_PREFIX` is the prefix shared by every
 worktree's folder — this issue's is `<prefix>worktree-<KEY>`. Each holds
@@ -96,7 +96,7 @@ natively (no bash). Exit 1 only on a usage/environment error.
 
 ## Configuration — the two transcript-folder variables
 
-Both folders come from `jira-sdlc-tools.local.env` (machine-specific; set
+Both folders come from `.jst/jira-sdlc-tools.local.env` (machine-specific; set
 once, read by the script itself — never passed on the command line). They
 matter only to this builtin, so a project that doesn't run
 `sync_conversations` can leave both unset.
@@ -149,7 +149,7 @@ bash posix/sync_conversations.sh JST-93 --attach
 # Preview what would be attached without uploading
 bash posix/sync_conversations.sh JST-93 --attach --dry-run
 
-# Offline, with manual title/created overrides (skips the acli self-fetch)
+# Offline, with manual title/created overrides (skips the Jira self-fetch)
 bash posix/sync_conversations.sh JST-93 --title="Fix login bug" --created="2026-07-01T12:00:00Z"
 ```
 

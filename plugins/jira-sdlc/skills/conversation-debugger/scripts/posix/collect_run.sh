@@ -16,8 +16,9 @@
 # known site in its own run, and a recorded transcript already contains
 # that site:
 #   jira-task-assigner  -> it *creates* the issue: the key is in the
-#                          `acli jira workitem create` result (first create
-#                          = the top-level issue; sub-task creates follow).
+#                          `jira.sh … issue create` result, which prints a bare
+#                          key on stdout (first create = the top-level issue;
+#                          sub-task creates follow).
 #   jira-task-executor  -> it *derives* the key from the branch: the key is
 #   jira-task-reviewer     in statuscheck's `issue_key` row (branch row as
 #                          fallback; the reviewer may then climb to a parent).
@@ -44,8 +45,9 @@ command -v jq >/dev/null || die "jq is required but not on PATH."
 # --- repo root: conversations/ always lives at the project root ----------
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) \
   || die "not inside a git repository — run this from the project checkout."
-[ -f "$ROOT/jira-sdlc-tools.env" ] \
-  || die "jira-sdlc-tools.env not found in $ROOT — run this from the main checkout."
+CFG_DIR="$ROOT/.jst"   # config lives under <repo-root>/.jst/, as in _shared/scripts
+[ -f "$CFG_DIR/jira-sdlc-tools.env" ] \
+  || die ".jst/jira-sdlc-tools.env not found in $ROOT — run this from the main checkout."
 
 # --- validate + profile --------------------------------------------------
 jq -e . "$SRC" >/dev/null 2>&1 || die "$SRC is not valid JSON-lines."
@@ -104,15 +106,15 @@ fi
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$ROOT/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$ROOT/$f" 2>/dev/null \
+    [ -f "$CFG_DIR/$f" ] || continue
+    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
         | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
     if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
   done
   return 1
 }
 PROJECT_KEY=$(cfg 'PROJECT[-_]KEY' || true)
-[ -n "$PROJECT_KEY" ] || die "PROJECT-KEY unset in jira-sdlc-tools.env."
+[ -n "$PROJECT_KEY" ] || die "PROJECT-KEY unset in .jst/jira-sdlc-tools.env."
 
 # every <PROJECT-KEY>-<n> in the file, by frequency — context only, never
 # the decision (anchored to the project key so line refs like L61-66 can't match)
@@ -143,26 +145,27 @@ KEY=""; SOURCE=""; STATUS=""
 if [ -n "$FORCED_KEY" ]; then
   KEY="$FORCED_KEY"; SOURCE="explicit argument"; STATUS=given
 elif [ "$SKILL" = "jira-task-assigner" ]; then
-  # the assigner mints the key: first `workitem create` (not `comment create`).
+  # the assigner mints the key: first `issue create` (not `issue comment add`).
   # Matched by command text, never the tool's name — the shell tool is "Bash" on
   # POSIX but "PowerShell" on Windows (and may be renamed again), while only
   # shell-type tools carry .input.command at all. The result parse below then
   # validates the match, so a false positive cannot file a wrong key.
   CREATE_ID=$(jq -r 'select(.type=="assistant")|.message.content[]?
         | select(.type=="tool_use")
-        | select((.input.command? // "") | test("workitem[[:space:]]+create"))
+        | select((.input.command? // "") | test("issue[[:space:]]+create"))
         | .id' "$SRC" 2>/dev/null | head -1)
   if [ -n "${CREATE_ID:-}" ]; then
+    # `jira.sh issue create` prints a BARE key on stdout — no JSON, no browse
+    # URL — so the key is whatever <PROJECT-KEY>-<n> the result carries.
     RES=$(tool_result_for "$CREATE_ID")
-    KEY=$(printf '%s' "$RES" | jq -r '.key // empty' 2>/dev/null || true)   # --json form
-    [ -n "$KEY" ] || KEY=$(printf '%s' "$RES" | grep -oE "\\b${PROJECT_KEY}-[0-9]+\\b" | head -1 || true)  # text/browse-URL form
+    KEY=$(printf '%s' "$RES" | grep -oE "\\b${PROJECT_KEY}-[0-9]+\\b" | head -1 || true)
     if [ -n "$KEY" ]; then
-      STATUS=expected; SOURCE="acli workitem create result (the issue this run created)"
+      STATUS=expected; SOURCE="jira.sh issue create result (the issue this run created)"
     else
-      STATUS=unexpected; SOURCE="workitem create ran but its result carried no ${PROJECT_KEY}-<n> (create failed, or output was truncated)"
+      STATUS=unexpected; SOURCE="issue create ran but its result carried no ${PROJECT_KEY}-<n> (create failed, or output was truncated)"
     fi
   else
-    STATUS=unexpected; SOURCE="no 'acli jira workitem create' call in the transcript — this run never created an issue"
+    STATUS=unexpected; SOURCE="no 'jira.sh … issue create' call in the transcript — this run never created an issue"
   fi
 else
   # executor/reviewer derive the key from the branch — statuscheck reports it

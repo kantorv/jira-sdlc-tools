@@ -3,7 +3,7 @@
 #
 # Golden-file parity harness for collect_feature (see ../collect_feature.md
 # → "Golden-file harness"). Each fixture scenario replays canned
-# sync_conversations / collect_run / acli output through stub siblings, so the
+# sync_conversations / collect_run / jira.sh output through stub siblings, so the
 # collector's real orchestration, dedup, and aggregation run end to end with
 # every number deterministic. The resulting stdout JSON is normalized and
 # diffed byte-for-byte against the committed golden.
@@ -75,13 +75,13 @@ skipped_ps1=0
 stage() {  # stage <scenario> -> prints the staging dir
   local scenario="$1" work
   work=$(mktemp -d) || exit 1
-  mkdir -p "$work/proj" "$work/engine" "$work/sync"
-  # controlled provenance config, read from cwd ($work/proj is not a git repo;
+  mkdir -p "$work/proj/.jst" "$work/engine" "$work/sync"
+  # controlled provenance config, read from cwd/.jst ($work/proj is not a git repo;
   # GIT_CEILING_DIRECTORIES keeps discovery from climbing to any real one)
   {
     echo "CONVERSATIONS_WORKTREES_PREFIX=$work/wt"
     echo "CONVERSATIONS_MAINREPO_PATH=$work/main"
-  } > "$work/proj/jira-sdlc-tools.local.env"
+  } > "$work/proj/.jst/jira-sdlc-tools.local.env"
   # transcripts (skill-marker content the collector greps) at their staged paths
   if [ -d "$FIX/$scenario/transcripts" ]; then
     cp -R "$FIX/$scenario/transcripts/." "$work/"
@@ -93,10 +93,10 @@ stage() {  # stage <scenario> -> prints the staging dir
     sed "s|@WORK@|$work|g" "$f" > "$work/sync/$(basename "$f")"
   done
   [ -d "$FIX/$scenario/collect_run" ] && cp -R "$FIX/$scenario/collect_run" "$work/"
-  cp "$FIX/$scenario/acli.json" "$work/"
-  # stub siblings + stub acli become the engine dir
+  cp "$FIX/$scenario/jira.json" "$work/"
+  # stub siblings + stub jira client become the engine dir
   cp "$FIX/stubs/"* "$work/engine/"
-  chmod +x "$work/engine/"*.sh "$work/engine/acli"
+  chmod +x "$work/engine/"*.sh
   echo "$work"
 }
 

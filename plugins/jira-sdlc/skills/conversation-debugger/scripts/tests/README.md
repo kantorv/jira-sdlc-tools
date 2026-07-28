@@ -53,13 +53,14 @@ For each scenario, the harness builds a throwaway staging directory and runs the
 *real* collector inside it, with only its outermost dependencies faked:
 
 1. **Stage.** A `mktemp -d` gets a `proj/` (holding a synthetic
-   `jira-sdlc-tools.local.env` whose `CONVERSATIONS_*` paths point back into the
-   staging dir), the scenario's transcripts at those paths, its canned
+   `.jst/jira-sdlc-tools.local.env` whose `CONVERSATIONS_*` paths point back into
+   the staging dir), the scenario's transcripts at those paths, its canned
    `sync_conversations` listings with `@WORK@` resolved to this run's real path,
-   its `collect_run` output, and its `acli` response.
+   its `collect_run` output, and its `jira.sh` response.
 2. **Substitute the siblings.** Stub `sync_conversations` / `collect_run` and a
-   stub `acli` are placed in an `engine/` dir, which becomes `CF_SCRIPT_DIR` and
-   goes first on `PATH`.
+   stub `jira` client are placed in an `engine/` dir, which becomes
+   `CF_SCRIPT_DIR` — the collector looks for a jira client alongside its siblings
+   before falling back to `_shared/scripts/`, which is what the stub takes over.
 3. **Run the collector** from `proj/`, with `GIT_CEILING_DIRECTORIES` set so its
    `git rev-parse` config lookup can't escape into the real repository.
 4. **Normalize and diff** stdout against the committed golden.
@@ -94,11 +95,11 @@ tests/
 ├── run_collect_feature_golden.sh
 └── fixtures/collect_feature/
     ├── stubs/                    shared by every scenario
-    │   ├── acli                  replays <scenario>/acli.json
+    │   ├── jira.sh/.ps1          replays <scenario>/jira.json
     │   ├── sync_conversations.sh/.ps1   replays <scenario>/sync/<KEY>.txt
     │   └── collect_run.sh/.ps1          replays <scenario>/collect_run/<uuid>.<skill>.kv
     └── <scenario>/
-        ├── acli.json             the sub-task lookup response (drives @2 vs @3)
+        ├── jira.json             the sub-task lookup response (drives @2 vs @3)
         ├── sync/<KEY>.txt        one per key; @WORK@ = staging dir placeholder
         ├── collect_run/          one .kv per (transcript, skill) pair
         ├── transcripts/          .jsonl files; only their skill markers matter

@@ -48,8 +48,9 @@ function Get-GitTop {
 }
 $Root = Get-GitTop
 if (-not $Root) { Fail 'not inside a git repository -- run this from the project checkout.' }
-if (-not (Test-Path -LiteralPath (Join-Path $Root 'jira-sdlc-tools.env'))) {
-    Fail "jira-sdlc-tools.env not found in $Root -- run this from the main checkout."
+$CfgDir = Join-Path $Root '.jst'   # config lives under <repo-root>/.jst/, as in _shared/scripts
+if (-not (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.env'))) {
+    Fail ".jst/jira-sdlc-tools.env not found in $Root -- run this from the main checkout."
 }
 
 # ---- read + parse the transcript once ---------------------------------------
@@ -142,7 +143,7 @@ if ($Invocations -eq 0) {
 # ---- project key (same two spellings statuscheck.ps1 accepts) --------------
 function Get-Cfg([string]$Pattern) {
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $Root $f
+        $path = Join-Path $CfgDir $f
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $val = $null
         foreach ($line in Get-Content -LiteralPath $path) {
@@ -153,7 +154,7 @@ function Get-Cfg([string]$Pattern) {
     return $null
 }
 $ProjectKey = Get-Cfg 'PROJECT[-_]KEY'
-if (-not $ProjectKey) { Fail 'PROJECT-KEY unset in jira-sdlc-tools.env.' }
+if (-not $ProjectKey) { Fail 'PROJECT-KEY unset in .jst/jira-sdlc-tools.env.' }
 
 # every <PROJECT-KEY>-<n> in the file, by frequency -- context only, never
 # the decision (anchored to the project key so line refs like L61-66 can't match)
@@ -163,7 +164,9 @@ $RawContent = [System.IO.File]::ReadAllText($Src)
 $AllKeyHits = @([regex]::Matches($RawContent, $KeyOccurrenceRe) | ForEach-Object { $_.Value })
 if ($AllKeyHits.Count -gt 0) {
     $Grouped = $AllKeyHits | Group-Object | Sort-Object Count -Descending
-    $RankFlat = (($Grouped | ForEach-Object { "$($_.Count) $($_.Name)" }) -join '; ') + ';'
+    # No trailing separator — the bash twin's `tr '\n' ';'` only ever puts one
+    # BETWEEN entries, and KEY_RANKING is compared byte-for-byte in parity checks.
+    $RankFlat = ($Grouped | ForEach-Object { "$($_.Count) $($_.Name)" }) -join '; '
     $RankTop = $Grouped[0].Name
 }
 
@@ -228,7 +231,7 @@ $Key = ''; $Source = ''; $Status = ''
 if ($ForcedKey) {
     $Key = $ForcedKey; $Source = 'explicit argument'; $Status = 'given'
 } elseif ($Skill -eq 'jira-task-assigner') {
-    # the assigner mints the key: first `workitem create` (not `comment create`).
+    # the assigner mints the key: first `issue create` (not `issue comment add`).
     # Matched by command text, never the tool's name -- the shell tool is "Bash" on
     # POSIX but "PowerShell" on Windows (and may be renamed again), while only
     # shell-type tools carry .input.command at all. The result parse below then
@@ -239,7 +242,7 @@ if ($ForcedKey) {
         $content = $o.message.content
         if ($content -isnot [System.Collections.IEnumerable] -or $content -is [string]) { continue }
         foreach ($b in $content) {
-            if ($b -and $b.type -eq 'tool_use' -and ([string]$b.input.command) -match 'workitem\s+create') {
+            if ($b -and $b.type -eq 'tool_use' -and ([string]$b.input.command) -match 'issue\s+create') {
                 $CreateId = [string]$b.id
                 break
             }
@@ -247,23 +250,19 @@ if ($ForcedKey) {
         if ($CreateId) { break }
     }
     if ($CreateId) {
+        # `jira.ps1 issue create` prints a BARE key on stdout -- no JSON, no browse
+        # URL -- so the key is whatever <PROJECT-KEY>-<n> the result carries.
         $Res = Get-ToolResultFor $CreateId
         $ParsedKey = $null
-        try {
-            $j = $Res | ConvertFrom-Json -ErrorAction Stop
-            if ($j -and $j.key) { $ParsedKey = [string]$j.key }   # --json form
-        } catch { }
-        if (-not $ParsedKey) {
-            $m = [regex]::Match($Res, $KeyOccurrenceRe)           # text/browse-URL form
-            if ($m.Success) { $ParsedKey = $m.Value }
-        }
+        $m = [regex]::Match($Res, $KeyOccurrenceRe)
+        if ($m.Success) { $ParsedKey = $m.Value }
         if ($ParsedKey) {
-            $Key = $ParsedKey; $Status = 'expected'; $Source = 'acli workitem create result (the issue this run created)'
+            $Key = $ParsedKey; $Status = 'expected'; $Source = 'jira.sh issue create result (the issue this run created)'
         } else {
-            $Status = 'unexpected'; $Source = "workitem create ran but its result carried no $ProjectKey-<n> (create failed, or output was truncated)"
+            $Status = 'unexpected'; $Source = "issue create ran but its result carried no $ProjectKey-<n> (create failed, or output was truncated)"
         }
     } else {
-        $Status = 'unexpected'; $Source = "no 'acli jira workitem create' call in the transcript -- this run never created an issue"
+        $Status = 'unexpected'; $Source = "no 'jira.sh ... issue create' call in the transcript -- this run never created an issue"
     }
 } else {
     # executor/reviewer derive the key from the branch -- statuscheck reports it

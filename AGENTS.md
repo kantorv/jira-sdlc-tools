@@ -233,6 +233,20 @@ done   # add the args each one needs: --role <role> to statuscheck; --role <role
        # role-scoped, with no default credential.
 ```
 
+⚠️ **Calling `jira.ps1` from another PowerShell script: `& …` captures
+nothing.** `jira.ps1` writes its payload with `[Console]::Out.Write`, which
+bypasses PowerShell's success stream — so `$x = & jira.ps1 …` (and
+`Receive-Job` on a job that does the same) returns empty *and* leaks the JSON
+onto the calling script's own stdout, corrupting whatever machine-readable
+output it was producing. The bash twin has no such trap: `$(…)` captures a
+subprocess's real stdout. Run it as a **child process with stdout redirected to
+a file** instead — `Start-Process -FilePath (Get-Process -Id $PID).Path
+-ArgumentList @('-NoProfile','-File',$JiraCli,…) -RedirectStandardOutput $tmp
+-WorkingDirectory (Get-Location).Path` — which also inherits the cwd `jira.ps1`
+needs to find `.jst/`. Both conversation-debugger call sites do it this way.
+A stub that writes to the success stream (as the golden harness's does) will
+**not** reproduce this — only a live call against the real `jira.ps1` does.
+
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
 a real Windows 11 box, but the port logic and

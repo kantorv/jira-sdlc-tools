@@ -8,9 +8,9 @@ change, change it in `collect_feature` first; the report-builder follows.
 
 ## Two feature types, two shapes
 
-`collect_feature` detects the feature **type** from Jira (one `acli jira
-workitem view <KEY> --json --fields 'summary,subtasks'` — `subtasks` must be
-named explicitly, the default `--json` omits it) and emits one of two shapes:
+`collect_feature` detects the feature **type** from Jira (one `jira.sh --role
+executor issue view <KEY> --fields 'summary,subtasks'` — `subtasks` must be
+named explicitly or the narrowed payload omits it) and emits one of two shapes:
 
 - **single-step** — the issue has **no** sub-tasks: one cohesive feature with
   its conversations. Emits the **flat `@2`** shape below (unchanged).
@@ -179,7 +179,7 @@ feature-wide `aggregate`.
 
 - **Detection is Jira-driven, with a safe fallback.** The single/multistep split
   comes from the `subtasks` lookup, wrapped in a long timeout (the API can take
-  minutes). If the `acli` fetch fails or times out, `collect_feature` falls back
+  minutes). If the fetch fails, exits non-zero, or times out, `collect_feature` falls back
   to **single-step (`@2`)** with a loud stderr WARN rather than aborting the
   read-only roll-up.
 

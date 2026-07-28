@@ -144,7 +144,7 @@ transcript already contains that point — so the script reads it there:
 
 | skill | when the key exists | where the script reads it |
 |---|---|---|
-| `jira-task-assigner` | **only once the issue is created** (step 6A.1) — before that the run has no key, because it mints one | the first `acli jira workitem create` result (`.key` under `--json`, else the key in the browse URL). Multistep: the first create is the top-level issue; sub-task creates follow. |
+| `jira-task-assigner` | **only once the issue is created** (step 6A.1) — before that the run has no key, because it mints one | the first `jira.sh … issue create` result, which is a **bare key** on stdout. Multistep: the first create is the top-level issue; sub-task creates follow. |
 | `jira-task-executor` | **after statuscheck** — the key is derived from the worktree's branch, not passed in | statuscheck's `issue_key` row (its `branch` row as fallback) |
 | `jira-task-reviewer` | **after statuscheck**, same derivation — then the run may climb from a sub-task branch to its parent | statuscheck's `issue_key` row (its `branch` row as fallback); note in the report if the run then climbed to a parent |
 
@@ -159,7 +159,7 @@ anchor isn't the loudest key (it says so on stderr when they differ).
 **On `KEY_STATUS=unexpected` — stop and ask, don't improvise.** It means the
 key was absent from the site that skill is supposed to produce it, which is
 itself a finding worth understanding before filing anything: an assigner run
-with no `workitem create` never created an issue; an executor/reviewer run
+with no `issue create` never created an issue; an executor/reviewer run
 with no resolved `issue_key` row never got past its healthcheck. The script
 files nothing and prints what it found. Ask the user which key to file
 under (offering the `KEY_RANKING` candidates and what the run appears to

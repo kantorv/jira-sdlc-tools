@@ -17,12 +17,12 @@ TWO FEATURE TYPES (auto-detected from Jira):
     parent's own conversations, a children[] array (each child carrying its own
     conversations[] + per-child roll-up), and a feature-wide aggregate rolled up
     across the parent AND all children.
-Detection is a single Jira fetch (acli jira workitem view <KEY> --json --fields
-'summary,subtasks'; key is POSITIONAL, and 'subtasks' must be named explicitly
-since the default --json omits it). Non-empty subtasks -> multistep; otherwise
-single-step. The acli call is wrapped in a LONG TIMEOUT (the API can legitimately
-take minutes); an acli failure/timeout falls back to single-step with a loud WARN
-rather than aborting the read-only roll-up.
+Detection is a single Jira fetch (jira.sh --role <role> issue view <KEY> --fields
+'summary,subtasks'; key is POSITIONAL, and 'subtasks' must be named explicitly or
+the narrowed payload omits it). Non-empty subtasks -> multistep; otherwise
+single-step. The call is wrapped in a LONG TIMEOUT (the API can legitimately take
+minutes); a failure/timeout falls back to single-step with a loud WARN rather than
+aborting the read-only roll-up.
 
 It reuses the two sibling scripts rather than re-deriving anything:
   * sync_conversations.sh <KEY>  -> the transcript path list (its machine-
@@ -60,18 +60,33 @@ git-ignored, so this stays local. Nothing is uploaded or posted to Jira.
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime
 
-ACLI_TIMEOUT_SEC = 300
+JIRA_TIMEOUT_SEC = 300
+
+# DEBUGGER ROLE — jira.sh authenticates per-request and REQUIRES --role; there is
+# no default account. The debugger only ever READS Jira (this one sub-task
+# lookup), and read access is identical across the three roles, so the choice is
+# arbitrary on permissions — `executor` wins because it is the credential every
+# checkout and worktree is already guaranteed to have (ensure_local_env.sh copies
+# it in). Keep this in step with sync_conversations.{sh,ps1}.
+JIRA_ROLE = 'executor'
 
 # Sibling scripts: CF_SCRIPT_DIR (shim contract / harness seam) or ../posix.
 SKILL_DIR = os.environ.get('CF_SCRIPT_DIR', '') or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'posix'))
 SYNC_SCRIPT = os.path.join(SKILL_DIR, 'sync_conversations.sh')
 COLLECT_RUN = os.path.join(SKILL_DIR, 'collect_run.sh')
+
+# The shared Jira REST client. Normally _shared/scripts/posix/jira.sh, three
+# levels above this file; a jira.sh sitting alongside the sibling scripts wins,
+# which is the seam the golden-file harness uses to substitute a stub.
+_JIRA_SIBLING = os.path.join(SKILL_DIR, 'jira.sh')
+JIRA_CLI = _JIRA_SIBLING if os.path.isfile(_JIRA_SIBLING) else os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 '..', '..', '..', '_shared', 'scripts', 'posix', 'jira.sh'))
 
 # Which of the 3 analyzable skills a transcript invoked. Matches collect_run's
 # own acceptance: namespaced (/jira-sdlc:jira-task-x) or bare (/jira-task-x),
@@ -106,7 +121,8 @@ def git_top():
     return None
 
 
-CFG_DIR = git_top() or os.getcwd()
+# Config lives under <repo-root>/.jst/, as in _shared/scripts.
+CFG_DIR = os.path.join(git_top() or os.getcwd(), '.jst')
 
 
 def cfg(pattern):
@@ -541,34 +557,37 @@ def write_human_totals(label, agg):
 
 # ---- detect feature type: does <KEY> have sub-tasks? ------------------------
 # One Jira fetch, wrapped in a LONG TIMEOUT (the API can legitimately take
-# minutes). A timeout or any acli failure falls back to single-step with a loud
+# minutes). A timeout or any jira.sh failure falls back to single-step with a loud
 # WARN rather than aborting a read-only report. `subtasks` must be named
-# explicitly in --fields since the default --json omits it.
+# explicitly in --fields since the narrowed payload otherwise omits it.
 def get_subtasks(fkey):
     result = {'ok': False, 'summary': '', 'subtasks': []}
-    if not shutil.which('acli'):
-        note("collect_feature: acli not found -- cannot detect sub-tasks; treating %s as single-step." % fkey)
+    if not os.path.isfile(JIRA_CLI):
+        note("collect_feature: jira client not found at %s -- cannot detect sub-tasks; treating %s as single-step." % (JIRA_CLI, fkey))
         return result
     try:
-        p = subprocess.run(['acli', 'jira', 'workitem', 'view', fkey, '--json', '--fields', 'summary,subtasks'],
-                           capture_output=True, text=True, timeout=ACLI_TIMEOUT_SEC)
+        p = subprocess.run(['bash', JIRA_CLI, '--role', JIRA_ROLE, 'issue', 'view', fkey,
+                            '--fields', 'summary,subtasks'],
+                           capture_output=True, text=True, timeout=JIRA_TIMEOUT_SEC)
         raw = p.stdout
     except subprocess.TimeoutExpired:
-        note("collect_feature: acli sub-task lookup for %s timed out after %ds -- treating as single-step." % (fkey, ACLI_TIMEOUT_SEC))
+        note("collect_feature: jira.sh sub-task lookup for %s timed out after %ds -- treating as single-step." % (fkey, JIRA_TIMEOUT_SEC))
         return result
     except Exception as e:
-        note("collect_feature: acli sub-task lookup for %s failed (%s) -- treating as single-step." % (fkey, e))
+        note("collect_feature: jira.sh sub-task lookup for %s failed (%s) -- treating as single-step." % (fkey, e))
+        return result
+    if p.returncode != 0:
+        note("collect_feature: jira.sh sub-task lookup for %s exited %d (%s) -- treating as single-step."
+             % (fkey, p.returncode, (p.stderr or '').strip().splitlines()[-1] if (p.stderr or '').strip() else 'no stderr'))
         return result
     if not raw or not raw.strip():
         return result
-    # acli may print leading non-JSON lines; jump to the first '{'.
-    brace = raw.find('{')
-    if brace < 0:
-        return result
+    # jira.sh prints the raw REST payload on stdout and nothing else (errors go
+    # to stderr with a non-zero exit, handled above), so this parses directly.
     try:
-        obj = json.loads(raw[brace:])
+        obj = json.loads(raw)
     except Exception:
-        note("collect_feature: acli sub-task lookup for %s returned unparseable JSON -- treating as single-step." % fkey)
+        note("collect_feature: jira.sh sub-task lookup for %s returned unparseable JSON -- treating as single-step." % fkey)
         return result
     fields = obj.get('fields') if obj.get('fields') is not None else obj
     result['ok'] = True

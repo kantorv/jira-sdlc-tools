@@ -16,12 +16,12 @@
 #     parent's own conversations, a children[] array (each child carrying its own
 #     conversations[] + per-child roll-up), and a feature-wide aggregate rolled up
 #     across the parent AND all children.
-# Detection is a single Jira fetch (acli jira workitem view <KEY> --json --fields
-# 'summary,subtasks'; key is POSITIONAL, and 'subtasks' must be named explicitly
-# since the default --json omits it). Non-empty subtasks -> multistep; otherwise
-# single-step. The acli call is wrapped in a LONG TIMEOUT (the API can legitimately
-# take minutes); an acli failure/timeout falls back to single-step with a loud WARN
-# rather than aborting the read-only roll-up.
+# Detection is a single Jira fetch (jira.ps1 --role <role> issue view <KEY> --fields
+# 'summary,subtasks'; key is POSITIONAL, and 'subtasks' must be named explicitly or
+# the narrowed payload omits it). Non-empty subtasks -> multistep; otherwise
+# single-step. The call is wrapped in a LONG TIMEOUT (the API can legitimately take
+# minutes); a failure/timeout falls back to single-step with a loud WARN rather than
+# aborting the read-only roll-up.
 #
 # It reuses the two sibling scripts rather than re-deriving anything:
 #   * sync_conversations.ps1 <KEY>  -> the transcript path list (its machine-
@@ -72,6 +72,20 @@ $CollectRun = Join-Path $PSScriptRoot 'collect_run.ps1'
 if (-not (Test-Path -LiteralPath $SyncScript)) { Fail "sibling sync_conversations.ps1 not found at $SyncScript" }
 if (-not (Test-Path -LiteralPath $CollectRun)) { Fail "sibling collect_run.ps1 not found at $CollectRun" }
 
+# The shared Jira REST client. Normally _shared/scripts/win/jira.ps1, three levels
+# above this folder; a jira.ps1 sitting alongside the siblings wins, which is the
+# seam the golden-file harness uses to substitute a stub.
+$JiraCli = Join-Path $PSScriptRoot 'jira.ps1'
+if (-not (Test-Path -LiteralPath $JiraCli)) {
+    $JiraCli = Join-Path $PSScriptRoot '..\..\..\_shared\scripts\win\jira.ps1'
+}
+# DEBUGGER ROLE — jira.ps1 authenticates per-request and REQUIRES --role; there is
+# no default account. The debugger only ever READS Jira (this one sub-task lookup),
+# and read access is identical across the three roles, so the choice is arbitrary
+# on permissions — `executor` wins because it is the credential every checkout and
+# worktree is already guaranteed to have. Keep in step with py/collect_feature.py.
+$JiraRole = 'executor'
+
 # ---- provenance config (worktree vs main-checkout) --------------------------
 # Provenance is classified by the same two config folders sync_conversations uses —
 # read the same way (env files, not $env), rather than scraping sync's human
@@ -83,6 +97,7 @@ function Get-GitTop {
 }
 $CfgDir = Get-GitTop
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+$CfgDir = Join-Path $CfgDir '.jst'   # config lives under <repo-root>/.jst/, as in _shared/scripts
 function Get-Cfg([string]$Pattern) {
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
         $path = Join-Path $CfgDir $f
@@ -455,41 +470,61 @@ function Write-HumanTotals {
 # ---- detect feature type: does <KEY> have sub-tasks? ------------------------
 # One Jira fetch, wrapped in a LONG TIMEOUT (the API can legitimately take
 # minutes). Run in a background job so a hung call can't wedge the roll-up; a
-# timeout or any acli failure falls back to single-step with a loud WARN rather
-# than aborting a read-only report. `subtasks` must be named explicitly in
-# --fields since the default --json omits it (see docs/examples/acli-list-subtasks.py).
-$AcliTimeoutSec = 300
+# timeout or any jira.ps1 failure falls back to single-step with a loud WARN rather
+# than aborting a read-only report. `subtasks` must be named explicitly in --fields
+# or the narrowed payload omits it.
+$JiraTimeoutSec = 300
 function Get-Subtasks([string]$FKey) {
     # Returns @{ ok=$bool; summary=<string>; subtasks=@(@{key;summary}...) }.
     $result = @{ ok = $false; summary = $null; subtasks = @() }
-    if (-not (Get-Command acli -ErrorAction SilentlyContinue)) {
-        Note "collect_feature: acli not found -- cannot detect sub-tasks; treating $FKey as single-step."
+    if (-not (Test-Path -LiteralPath $JiraCli)) {
+        Note "collect_feature: jira client not found at $JiraCli -- cannot detect sub-tasks; treating $FKey as single-step."
         return $result
     }
     $raw = $null
+    $code = 0
+    # Run as a CHILD PROCESS with stdout redirected to a file, not `& …` in a
+    # background job: jira.ps1 emits its payload through [Console]::Out, which
+    # bypasses PowerShell's success stream, so neither `&` nor Receive-Job would
+    # see it (it would leak to this script's own stdout instead, corrupting the
+    # report JSON). A child process also gives the timeout for free -- and
+    # inherits the cwd explicitly, which jira.ps1 needs to find .jst/.
+    $outFile = $null; $errFile = $null
     try {
-        $job = Start-Job -ScriptBlock {
-            param($k)
-            & acli jira workitem view $k --json --fields 'summary,subtasks'
-        } -ArgumentList $FKey
-        if (Wait-Job $job -Timeout $AcliTimeoutSec) {
-            $raw = (Receive-Job $job -ErrorAction SilentlyContinue) -join "`n"
+        $hostExe = (Get-Process -Id $PID).Path
+        if (-not $hostExe) { $hostExe = 'pwsh' }
+        $outFile = [System.IO.Path]::GetTempFileName()
+        $errFile = [System.IO.Path]::GetTempFileName()
+        $proc = Start-Process -FilePath $hostExe -PassThru -NoNewWindow `
+            -WorkingDirectory (Get-Location).Path `
+            -RedirectStandardOutput $outFile -RedirectStandardError $errFile `
+            -ArgumentList @('-NoProfile', '-File', $JiraCli, '--role', $JiraRole,
+                            'issue', 'view', $FKey, '--fields', 'summary,subtasks')
+        if ($proc.WaitForExit($JiraTimeoutSec * 1000)) {
+            $raw = [string](Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue)
+            $code = $proc.ExitCode
         } else {
-            Stop-Job $job -ErrorAction SilentlyContinue
-            Note "collect_feature: acli sub-task lookup for $FKey timed out after ${AcliTimeoutSec}s -- treating as single-step."
+            try { $proc.Kill() } catch { }
+            Note "collect_feature: jira.ps1 sub-task lookup for $FKey timed out after ${JiraTimeoutSec}s -- treating as single-step."
+            return $result
         }
-        Remove-Job $job -Force -ErrorAction SilentlyContinue
     } catch {
-        Note "collect_feature: acli sub-task lookup for $FKey failed ($($_.Exception.Message)) -- treating as single-step."
+        Note "collect_feature: jira.ps1 sub-task lookup for $FKey failed ($($_.Exception.Message)) -- treating as single-step."
+        return $result
+    } finally {
+        if ($outFile) { Remove-Item -LiteralPath $outFile -Force -ErrorAction SilentlyContinue }
+        if ($errFile) { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue }
+    }
+    if ($code -ne 0) {
+        Note "collect_feature: jira.ps1 sub-task lookup for $FKey exited $code -- treating as single-step."
         return $result
     }
     if ([string]::IsNullOrWhiteSpace($raw)) { return $result }
-    # acli may print leading non-JSON lines; jump to the first '{'.
-    $brace = $raw.IndexOf('{')
-    if ($brace -lt 0) { return $result }
+    # jira.ps1 prints the raw REST payload on stdout and nothing else (errors go to
+    # stderr with a non-zero exit, handled above), so this parses directly.
     $obj = $null
-    try { $obj = $raw.Substring($brace) | ConvertFrom-Json } catch {
-        Note "collect_feature: acli sub-task lookup for $FKey returned unparseable JSON -- treating as single-step."
+    try { $obj = $raw | ConvertFrom-Json } catch {
+        Note "collect_feature: jira.ps1 sub-task lookup for $FKey returned unparseable JSON -- treating as single-step."
         return $result
     }
     $fields = if ($obj.fields) { $obj.fields } else { $obj }
