@@ -78,12 +78,12 @@
 #    JIRA_ACCOUNT_URL         written to .jst/jira-sdlc-tools.local.env
 #    JIRA_REVIEWER_EMAIL      } the reviewer's Jira identity
 #    JIRA_REVIEWER_TOKEN      }
-#    GITHUB_PAT_TOKEN         optional — falls back to the built-in
-#                             GITHUB_TOKEN (which can post a review comment
-#                             given the job permissions below); add the PAT
-#                             only to lift the built-in token's limitation
-#                             that PRs opened with it don't trigger other
-#                             workflows
+#    GITHUB_PAT_TOKEN         not a secret to create — always populated from
+#                             the built-in GITHUB_TOKEN (which can post a
+#                             review comment given the job permissions
+#                             below). One limitation of the built-in token
+#                             carries over unchanged: PRs opened with it
+#                             don't trigger other workflows
 #
 #  Each is named exactly as the env-file key it becomes, so the bootstrap step
 #  is one loop over a KEYS list (secret -> file via env, not sed) rather than a
@@ -228,7 +228,7 @@ jobs:
         id: pr
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
         run: |
           set -euo pipefail
@@ -260,7 +260,7 @@ jobs:
           JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
           JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
-          GITHUB_PAT_TOKEN: ${{   secrets.GITHUB_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Checked here so one step catches every missing secret, but never
           # written to the file — the claude CLI reads it from the environment.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

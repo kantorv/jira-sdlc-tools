@@ -48,7 +48,8 @@
 #     .jst/jira-sdlc-tools.local.env and read from there. `git push` is
 #     unaffected: it uses the credentials actions/checkout persisted in
 #     `.git/config`, so the built-in GITHUB_TOKEN (which can push given the
-#     job `permissions:` below) is enough and GITHUB_PAT_TOKEN is optional.
+#     job `permissions:` below) is enough — GITHUB_PAT_TOKEN is not a secret
+#     to create.
 #  2. **The skills come from the base-branch checkout.** `--plugin-dir`
 #     points into the actions/checkout workspace, stood on the base branch
 #     (development), so the skill prompts loaded are the base branch's, not
@@ -80,21 +81,23 @@
 #                             get_assignee_email.sh reads that address (and
 #                             only the address — no executor token) from the
 #                             env file
-#    GITHUB_PAT_TOKEN         optional — falls back to the built-in
-#                             GITHUB_TOKEN (which can push the new branch
-#                             given the job permissions below); add the PAT
-#                             only to lift the built-in token's limitation
-#                             that PRs opened with it don't trigger other
-#                             workflows
+#    GITHUB_PAT_TOKEN         not a secret to create — always populated from
+#                             the built-in GITHUB_TOKEN (which can push the
+#                             new branch given the job permissions below).
+#                             One limitation of the built-in token carries
+#                             over unchanged: PRs opened with it don't
+#                             trigger other workflows
 #
 #  None are assumed to exist: the bootstrap step checks its whole set up front
 #  and fails loud with `::error::` rather than letting the claude CLI die
 #  halfway through on a missing key (CLAUDE_CODE_OAUTH_TOKEN in particular
 #  does not exist in this repo yet).
 #
-#  `WORKTREES_DIR` is the one key that is *not* a secret: it's a path on
-#  *this* runner, computed per job under RUNNER_TEMP (a value carried over
-#  from a developer's machine would point somewhere that doesn't exist here).
+#  `WORKTREES_DIR` and `GITHUB_PAT_TOKEN` are the two keys that are *not*
+#  secrets: `WORKTREES_DIR` is a path on *this* runner, computed per job
+#  under RUNNER_TEMP (a value carried over from a developer's machine would
+#  point somewhere that doesn't exist here), and `GITHUB_PAT_TOKEN` is
+#  populated from the runner's built-in token, per above.
 
 name: Demo — Claude issue-to-task (jira-task-assigner on issue opened)
 
