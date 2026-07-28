@@ -42,7 +42,7 @@ own.
 
 ```mermaid
 flowchart TB
-    C([issue comment<br>/make-feature]) --> GA{{"guard — body is exactly /make-feature<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    C([issue comment<br>/make-feature — optionally plus prose]) --> GA{{"guard — body is /make-feature, bare or plus a separator<br>author_association OWNER or MEMBER<br>not a PR comment"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira issue + feature branch<br>cut from DEFAULT_BASE_BRANCH"]
@@ -87,7 +87,7 @@ the security boundary of this workflow, and it requires all three of:
 
 | Condition | Why it's there |
 | :--- | :--- |
-| `github.event.comment.body == '/make-feature'` | a bare command, so a comment that merely mentions `/make-feature` in prose doesn't fire the chain. Exact match also means a trailing character means no run — that's the intended strictness, not a bug |
+| body is `/make-feature`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-feature` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-feature')`, would also fire on `/make-feature-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
 | `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "the environment approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-feature` on a pull request would hand the assigner a PR description as a feature request |
 
@@ -103,6 +103,59 @@ the issue's title, a blank line, then its body — the same shape
 `demo-claude-issue-to-task.yml` uses. Issue bodies are attacker-supplied text,
 so they reach the prompt through env vars and a `printf`-built temp file, never
 interpolated into a shell command.
+
+### Steering one run from the comment
+
+The comment can still carry direction, though — anything typed after the
+command word is free-form guidance for *this run*:
+
+```
+/make-feature split this per service, and reuse the existing retry helper
+```
+
+It also works across lines, which is the readable form for more than a phrase:
+
+```
+/make-feature
+Split this per service.
+Reuse the existing retry helper — do not add a dependency.
+```
+
+A parse step strips the command token, trims the surrounding whitespace, and
+the assigner prompt gains one labelled section **after** the issue body:
+
+```
+-- ISSUE TITLE --
+…
+
+You are running headless, triggered by a GitHub Actions issue_comment event — …
+
+-- ISSUE BODY --
+…
+
+-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --
+Split this per service.
+Reuse the existing retry helper — do not add a dependency.
+```
+
+Three things about that placement are deliberate:
+
+- **It supplements, never replaces.** The GitHub issue stays the task
+  description and the fixed middle paragraph stays the CI instruction
+  (headless, no clarifying questions, feature-not-hotfix). The prose is a
+  fourth section, not a substitute for any of them.
+- **A bare `/make-feature` omits the section entirely**, so the prompt is
+  byte-identical to what this demo built before the feature existed. Adding
+  prose is opt-in per comment; changing nothing changes nothing.
+- **The comment body is attacker-supplied text like the issue body**, and
+  travels the same way — into an env var, out through `printf` — never
+  interpolated into the script. The parse step does no gating; the guard above
+  is still the only thing between a commenter and the run.
+
+Only the **assigner** reads the prose in this chain: jobs 2 and 3 run in
+separate VMs off job 1's outputs and invoke their skills as they always have.
+Direction meant for the reviewer goes in a `/review` comment on the PR instead
+([ci-review-pr-demo.md](./ci-review-pr-demo.md)).
 
 ## The `environment: production` gate — one approval per skill
 
@@ -338,8 +391,9 @@ most likely to skip its own GIF; the log artifact is always there either way.
 3. Open a GitHub issue whose title and body describe the work the way you'd
    describe it to `/jira-sdlc:jira-task-assigner` interactively. Keep it to
    one coherent, single-step piece of work (see *Headless means no questions*).
-4. Comment `/make-feature` on it, as an OWNER or MEMBER, with nothing else in
-   the comment.
+4. Comment `/make-feature` on it, as an OWNER or MEMBER — bare, or followed by
+   a space or newline and any direction you want to give *this* run (see
+   *Steering one run from the comment*).
 5. Approve each of the three pauses as it arrives, inspecting the Jira issue,
    branch, and PR — plus each job's report comment on the issue — between them.
 6. When job 3 finishes, read the review verdict on the PR. Merging it is yours.

@@ -57,7 +57,7 @@ is created, no code is written, nothing is merged.
 
 ```mermaid
 flowchart TB
-    C([comment /review on a PR]) --> GA{{"guard — body starts with /review<br>author_association OWNER or MEMBER<br>comment is on a PR, not a plain issue"}}
+    C([comment /review on a PR — optionally plus prose]) --> GA{{"guard — body is /review, bare or plus a separator<br>author_association OWNER or MEMBER<br>comment is on a PR, not a plain issue"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| J1["job 1 · check_pr_exists<br>resolve branch → issue key<br>find the open PR"]
     J1 -->|no PR| X2([nothing to review — stop])
@@ -83,6 +83,9 @@ No issue-key argument. The skill derives the issue from the branch of the
 worktree it is standing in — which is why the worktree, not the prompt, is
 what this workflow spends its effort building.
 
+What the prompt *can* carry is the prose from the triggering comment, appended
+as the skill's argument — see *Steering the review from the comment* below.
+
 ## The trigger and its gate
 
 The intended trigger is a comment. The guard has three clauses, all necessary:
@@ -90,12 +93,49 @@ The intended trigger is a comment. The guard has three clauses, all necessary:
 | Clause | Why |
 |---|---|
 | `github.event.issue.pull_request` | `issue_comment` fires for plain issues too. This is what restricts it to PR comments. |
-| `startsWith(github.event.comment.body, '/review')` | The command. `startsWith`, not `==` — unlike the flow demos' exact match, so trailing text is tolerated. |
+| body is `/review`, bare or followed by a space or newline | The command, which must be the comment's first token. Written out as an exact match plus three `startsWith` forms rather than the bare `startsWith(body, '/review')` this used to be — that one also fired on `/reviewer-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match. |
 | `author_association == 'OWNER' \|\| 'MEMBER'` | The security boundary. `issue_comment` fires for *any* commenter on a public repo; without this, a stranger's comment would spend your tokens and your Jira credentials. |
 
 The trigger word differs per backend so that one comment can't start two
 workflows on a repo where both are installed: `/review` for the Claude
 implementation, `/fcc-review` for the FCC + NVIDIA NIM one.
+
+### Steering the review from the comment
+
+Anything typed after the command is free-form direction for *this* review:
+
+```
+/review focus on the error paths — the happy path was reviewed last week
+```
+
+It also works across lines:
+
+```
+/review
+Focus on the error paths.
+Skip the docs churn; it was reviewed in the last PR.
+```
+
+A parse step strips the command token, trims the surrounding whitespace, and
+passes the remainder to the skill as its argument, which `jira-task-reviewer`
+documents as free-form notes about the run (focus areas, constraints,
+context):
+
+```bash
+-p "/jira-sdlc:jira-task-reviewer Focus on the error paths. …"
+```
+
+A bare `/review` produces the bare invocation shown earlier, byte for byte —
+the fallback isn't an empty argument, it's the same command line this demo has
+always run. The prose is direction, not an override: the skill still derives
+the issue from the worktree's branch, still reviews the whole diff, and still
+posts its verdict to GitHub and Jira.
+
+Comment bodies are attacker-supplied text, so the body reaches the shell only
+as an env var and is assembled with `printf` — never interpolated into the
+script. The parse step does no gating; the guard above is still the only thing
+between a commenter and the run, which is also why it stays entirely inside the
+job-level `if:`.
 
 Then `check_pr_exists` validates the branch name against
 `^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+-`, extracts the issue key from it,
@@ -178,7 +218,7 @@ identically. They differ only in what drives the model.
 
 | | `demo-claude-reviewer.yml` | `demo-fcc-nvidia-nim-reviewer.yml` |
 |---|---|---|
-| **Trigger** | `/review` comment | `/fcc-review` comment |
+| **Trigger** | `/review` comment, bare or plus prose | `/fcc-review` comment, bare or plus prose |
 | **Model backend** | Claude CLI, pinned `2.1.220`, default model `sonnet` | Same CLI, pointed at a local FCC proxy (`ANTHROPIC_BASE_URL=http://127.0.0.1:8082`) that fronts NVIDIA NIM; default `z-ai/glm-5.2` |
 | **Credential** | `CLAUDE_CODE_OAUTH_TOKEN` | `NVIDIA_NIM_API_KEY` |
 | **Skill step timeout** | 25 min | 60 min |
@@ -239,7 +279,9 @@ Nothing is ever merged. That stays a human act.
    See [APPLICATIONS.md §3.4](./APPLICATIONS.md#34-setting-secrets-via-github-cli).
 2. Open a PR from a `feature/<KEY>-…` or `hotfix/<KEY>-…` branch.
 3. Comment `/review` on it (`/fcc-review` for the FCC variant) as an OWNER or
-   MEMBER of the repo.
+   MEMBER of the repo — bare, or followed by a space or newline and whatever
+   you want this review to focus on (see *Steering the review from the
+   comment*).
 4. Approve the `production` gate if GitHub pauses (it will only pause when the
    environment has Required reviewers enabled).
 

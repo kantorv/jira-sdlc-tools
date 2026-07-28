@@ -32,8 +32,12 @@
 # bug report and the whole run reports back where the fix was requested. The
 # job-level `if` requires all of:
 #
-#   * the comment body is exactly `/make-hotfix` — a bare command, so a
-#     comment that merely mentions it in prose doesn't fire the chain;
+#   * the comment body is `/make-hotfix`, either bare or followed by a space
+#     or a newline and free-form prose (see below). Spelled out as an exact
+#     match plus three `startsWith` forms rather than one bare
+#     `startsWith(body, '/make-hotfix')`, which would also fire on
+#     `/make-hotfix-anything`; a comment that merely mentions the command
+#     mid-sentence still doesn't fire the chain;
 #   * `author_association` is OWNER or MEMBER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
 #     and what follows runs an LLM with write permissions on a runner. Do not
@@ -48,8 +52,8 @@
 # Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
 # guard is stated once.
 #
-# The issue's **title + blank line + body** (never the `/make-hotfix` comment)
-# is the bug report handed to jira-task-assigner, wrapped in labeled
+# The issue's **title + blank line + body** is the bug report handed to
+# jira-task-assigner, wrapped in labeled
 # `-- ISSUE TITLE --` / `-- ISSUE BODY --` sections around a fixed middle
 # paragraph — never issue content — stating the run is headless (no
 # clarifying questions; stop and fail on genuine ambiguity) and carrying the
@@ -58,6 +62,15 @@
 # bodies are attacker-supplied text, so they are pulled into env vars first and
 # written to a temp file with `printf`, never interpolated into a shell
 # command.
+#
+# **Anything typed after the command** in the triggering comment is free-form
+# direction for *this run*. A parse step strips the command token, trims, and
+# appends the remainder to the prompt as a labelled `-- EXTRA DIRECTION FOR
+# THIS RUN --` section after the issue body: it supplements the bug report and
+# the fixed CI/hotfix paragraph, never replaces either. A bare command leaves
+# the section out entirely, so that prompt is byte-identical to what this demo
+# built before. Comment bodies are attacker-supplied text too, and travel
+# exactly like issue bodies — env var, then `printf`, never script text.
 #
 # Gating: every job declares `environment: production`, so GitHub's
 # environment-protection rule pauses for approval *before each job starts* —
@@ -207,9 +220,18 @@ jobs:
     name: 1 · assigner — create the Bug and hotfix branch
     # The whole security boundary of this workflow — see the header. All three
     # conditions are required; jobs 2/3 inherit the guard by `needs`.
+    #
+    # The command clause accepts the bare command or the command plus a
+    # separator, so prose after it still fires the run. `fromJSON('"\n"')` is
+    # how you spell a newline in a GitHub expression — there is no escape
+    # sequence in its string literals; `\r` is checked too because comment
+    # bodies come back from the API with CRLF line endings.
     if: |
       github.event.issue.pull_request == null &&
-      github.event.comment.body == '/make-hotfix' &&
+      (github.event.comment.body == '/make-hotfix' ||
+       startsWith(github.event.comment.body, '/make-hotfix ') ||
+       startsWith(github.event.comment.body, format('/make-hotfix{0}', fromJSON('"\n"'))) ||
+       startsWith(github.event.comment.body, format('/make-hotfix{0}', fromJSON('"\r"')))) &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
@@ -342,12 +364,59 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Parse the prose after the trigger command
+        # Free-form direction may follow the command in the triggering comment
+        # (`/make-hotfix focus on the retry path`). Strip the leading token,
+        # trim, and expose the remainder as a step output; an empty remainder is
+        # the normal case and leaves the run behaving exactly as a bare command
+        # always did.
+        #
+        # This step parses, it never gates: the security boundary is the
+        # job-level `if:` above and stays there, so this step only ever sees a
+        # comment that already passed it. The body is attacker-supplied text —
+        # it enters as an env var and leaves through `printf`, never as part of
+        # the script.
+        #
+        # Identical in all five comment-triggered demos apart from COMMAND —
+        # keep it that way, so a diff between two of them shows only what
+        # genuinely differs.
+        id: prose
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMAND: /make-hotfix
+        run: |
+          set -euo pipefail
+          shopt -s extglob
+          PROSE=${COMMENT_BODY:-}
+          PROSE=${PROSE//$'\r'/}          # comment bodies arrive CRLF
+          PROSE=${PROSE#"$COMMAND"}       # drop the leading command token
+          PROSE=${PROSE##+([[:space:]])}  # trim both ends, newlines included
+          PROSE=${PROSE%%+([[:space:]])}
+          # Multi-line step output needs a delimiter, and a fixed one would let
+          # prose containing that marker close the block early and forge further
+          # outputs — so randomize it.
+          DELIM="PROSE_EOF_$(openssl rand -hex 8)"
+          {
+            printf 'text<<%s\n' "$DELIM"
+            printf '%s\n' "$PROSE"
+            printf '%s\n' "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$PROSE" ]; then
+            printf 'Extra direction from the triggering comment: %s characters.\n' "${#PROSE}"
+          else
+            printf 'Bare command — no extra direction.\n'
+          fi
+
       - name: Run jira-task-assigner
         id: run
         timeout-minutes: 25
         shell: bash
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Same rule as the issue text below: comment prose is user content, so
+          # it arrives as an env var and is printf'd, never interpolated here.
+          COMMENT_PROSE: ${{ steps.prose.outputs.text }}
           # Pull the issue's title and body into env vars FIRST, then build the
           # prompt from them — never interpolate github.event.issue.* into the
           # shell command (issue bodies are user content, not script text).
@@ -378,6 +447,14 @@ jobs:
             printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
             printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. The issue below is an explicit request for an emergency production hotfix: take the hotfix path (step 5C) — create a single-step hotfix/<KEY>-<slug> branch off origin/%s, never feature/. If the bug report is simple and concrete enough to size and turn directly into a Jira issue, proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n' "$PRODUCTION_BRANCH"
             printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
+            # Whatever was typed after the trigger command, as its own labelled
+            # section: extra steering for THIS run, while the issue above stays
+            # the bug report and the paragraph above stays the fixed CI/hotfix
+            # instruction. A bare command skips the section entirely, leaving
+            # the prompt byte-identical to what this demo built before.
+            if [ -n "${COMMENT_PROSE:-}" ]; then
+              printf -- '\n\n-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --\n%s' "$COMMENT_PROSE"
+            fi
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive

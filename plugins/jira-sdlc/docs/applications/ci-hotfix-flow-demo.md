@@ -44,7 +44,7 @@ Nothing is merged. The run ends with an open, reviewed PR into
 
 ```mermaid
 flowchart TB
-    C([issue comment<br>/make-hotfix]) --> GA{{"guard — body is exactly /make-hotfix<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    C([issue comment<br>/make-hotfix — optionally plus prose]) --> GA{{"guard — body is /make-hotfix, bare or plus a separator<br>author_association OWNER or MEMBER<br>not a PR comment"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira Bug + hotfix branch<br>cut from origin/PRODUCTION_BRANCH"]
@@ -74,7 +74,7 @@ the security boundary of this workflow, and it requires all three of:
 
 | Condition | Why it's there |
 | :--- | :--- |
-| `github.event.comment.body == '/make-hotfix'` | a bare command, so a comment that merely mentions `/make-hotfix` in prose doesn't fire the chain. Exact match also means a trailing character means no run — that's the intended strictness, not a bug |
+| body is `/make-hotfix`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-hotfix` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-hotfix')`, would also fire on `/make-hotfix-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
 | `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "the environment approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-hotfix` on a pull request would hand the assigner a PR description as a bug report |
 
@@ -92,6 +92,31 @@ flow; without it the same run produces a plain `feature/<KEY>` branch and a PR
 aimed at staging. Issue bodies are attacker-supplied text, so they reach the
 prompt through env vars and a `printf`-built temp file, never interpolated into
 a shell command.
+
+### Steering one run from the comment
+
+The comment can still carry direction — anything typed after the command word
+is free-form guidance for *this run*, on one line or several:
+
+```
+/make-hotfix the regression is in the retry path, not the parser
+```
+
+A parse step strips the command token, trims the surrounding whitespace, and
+the assigner prompt gains one labelled `-- EXTRA DIRECTION FOR THIS RUN (from
+the triggering comment) --` section **after** the issue body. It supplements
+the bug report and the hotfix directive rather than replacing either — which
+matters more here than on the feature flow, since dropping that directive is
+what silently turns a hotfix run into a feature run. A bare `/make-hotfix`
+omits the section entirely, leaving the prompt byte-identical to what this
+demo built before. The comment body is attacker-supplied text like the issue
+body and travels the same way (env var → `printf`, never script text); the
+parse step does no gating, and the guard above remains the only boundary.
+
+Only the **assigner** reads the prose: jobs 2 and 3 run in separate VMs off
+job 1's outputs and invoke their skills as they always have.
+[ci-feature-flow-demo.md](./ci-feature-flow-demo.md) carries the fuller
+worked example.
 
 ## The `environment: production` gate — one approval per skill
 
@@ -352,8 +377,9 @@ there either way.
    describe it to `/jira-sdlc:jira-task-assigner` interactively — phrased as
    the emergency it simulates, since the workflow's prompt wraps it in the
    explicit hotfix directive the assigner's step 5C requires.
-4. Comment `/make-hotfix` on it, as an OWNER or MEMBER, with nothing else in
-   the comment.
+4. Comment `/make-hotfix` on it, as an OWNER or MEMBER — bare, or followed by
+   a space or newline and any direction you want to give *this* run (see
+   *Steering one run from the comment*).
 5. Approve each of the three pauses as it arrives, inspecting the Jira
    issue / branch / PR — plus each job's report comment on the issue —
    between them.
