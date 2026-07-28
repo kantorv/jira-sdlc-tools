@@ -122,12 +122,16 @@
 #  4. **Self-review.** Job 3's gh session is the same account that opened the
 #     PR in job 2, and GitHub blocks approving your own PR — the reviewer
 #     skill already posts its verdict as a PR *comment* for this reason.
-#  5. **The skills come from the base-branch checkout**, because the assigner
-#     refuses to run from an issue branch (its step 2). An `issue_comment`
-#     event checks out the repo's *default* branch, which is not necessarily
-#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap still switches to the base
-#     branch explicitly rather than trusting the event's default. Land skill
-#     changes on the base branch first if you want them exercised.
+#  5. **The skills come from the marketplace, not from this checkout.** Every
+#     job installs the plugin with `claude plugin marketplace add` +
+#     `claude plugin install`, which clones the plugin repo's *default* branch
+#     — so a skill change is exercised here only once it has landed there,
+#     never from the branch under test. The checkout still has to stand on the
+#     base branch, for a different reason: the assigner refuses to run from an
+#     issue branch (its step 2), and an `issue_comment` event checks out the
+#     repo's *default* branch, which is not necessarily
+#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap switches to the base branch
+#     explicitly rather than trusting the event's default.
 #
 # ── Secrets ───────────────────────────────────────────────────────────────
 #
@@ -325,6 +329,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -450,7 +475,7 @@ jobs:
           # throwaway runner VM, non-root (the flag refuses to run as root).
           # The prompt is passed via `$(cat …)` inside the quoted -p argument,
           # so it stays one argument and its newlines survive into the model.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_ASSIGNER_MODEL }}" \
             -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
@@ -724,6 +749,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -792,7 +838,7 @@ jobs:
           set -euo pipefail
           # No key argument by contract — the executor derives it from the
           # branch this worktree is on.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_EXECUTOR_MODEL }}" \
             -p "/jira-sdlc:jira-task-executor" \
@@ -1034,6 +1080,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -1101,7 +1168,7 @@ jobs:
           # Bare, no key: the reviewer derives the issue from the branch. Job 1
           # guaranteed a single feature branch, so this is a single-step
           # top-level issue — one PR to review, the one into the base branch.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_REVIEWER_MODEL }}" \
             -p "/jira-sdlc:jira-task-reviewer" \

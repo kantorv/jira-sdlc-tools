@@ -42,9 +42,10 @@
 #  actions/checkout is a *main checkout* (`.git` is a directory), which FAILs
 #  that check before any review happens. So this job, like
 #  demo-claude-hotfix-flow.yml job 3, keeps actions/checkout as the main
-#  checkout (on the PR's base branch, where the skills load from via
-#  --plugin-dir) and rebuilds a linked worktree for the PR's HEAD branch — the
-#  skill derives its Jira issue key from that branch name and runs there.
+#  checkout (on the PR's base branch) and rebuilds a linked worktree for the
+#  PR's HEAD branch — the skill derives its Jira issue key from that branch
+#  name and runs there. The skills themselves come from the marketplace
+#  install, not from either checkout (caveat 3).
 #
 #  The head and base branches come from the PR itself (`gh pr view
 #  --json headRefName,baseRefName`), NOT from the assigner job output the
@@ -69,11 +70,12 @@
 #     reviewer logs in as, and GitHub blocks approving your own PR — the
 #     reviewer skill already posts its verdict as a PR *comment* (with an
 #     `APPROVED — …` / `CHANGES REQUESTED — …` prefix) for exactly this reason.
-#  3. **The skills come from the base-branch checkout.** `--plugin-dir` points
-#     into the actions/checkout workspace (standing on the PR's base branch), so
-#     the skill prompts loaded are the base branch's, not the PR head's. If a PR
-#     changes a skill file, this demo reviews the PR with the *base's* copy —
-#     land skill changes on the base branch first if you want them exercised.
+#  3. **The skills come from the marketplace, not from either checkout.** The
+#     job installs the plugin with `claude plugin marketplace add` +
+#     `claude plugin install`, which clones the plugin repo's *default* branch.
+#     If a PR changes a skill file, this demo reviews that PR with the
+#     *marketplace's* copy, not the PR head's — land skill changes on the
+#     plugin repo's default branch if you want them exercised here.
 #
 # ── Secrets (environment secrets on `production`) ───────────────────────────
 #
@@ -314,8 +316,10 @@ jobs:
       - name: Stand on the base branch
         # The workspace stays a *main checkout* (`.git` is a directory) on the
         # PR's base branch; the skill itself runs in the linked worktree built
-        # below. Standing on the base (not the head) means --plugin-dir loads
-        # the base branch's copy of the skills — see caveat 3 in the header.
+        # below. Standing on the base (not the head) is what lets that worktree
+        # be created at all — git refuses to check the same branch out twice.
+        # The skills are not read from either checkout: they come from the
+        # marketplace install — see caveat 3 in the header.
         shell: bash
         env:
           BASE: ${{ steps.pr.outputs.base }}
@@ -339,6 +343,27 @@ jobs:
           set -euo pipefail
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
 
       - name: Rebuild the issue worktree (linked, from the PR head)
         # The prerequisite the bare checkout can't satisfy: a LINKED worktree on
@@ -409,8 +434,8 @@ jobs:
 
       - name: Run jira-task-reviewer
         # No key: the reviewer derives the issue from the worktree's
-        # branch. Run in the worktree, with --plugin-dir pointing back into the
-        # main checkout (base branch) for the skills. Anything typed after
+        # branch. Run in the worktree; the skills come from the marketplace
+        # install, so nothing points back into the checkout. Anything typed after
         # `/review` becomes the skill's argument — the free-form run notes it
         # documents — and a bare command keeps the bare invocation.
         #
@@ -438,7 +463,7 @@ jobs:
           if [ -n "${COMMENT_PROSE:-}" ]; then
             PROMPT=$(printf -- '%s %s' "$PROMPT" "$COMMENT_PROSE")
           fi
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "$DEFAULT_REVIEWER_MODEL" \
             -p "$PROMPT" \
