@@ -12,14 +12,13 @@ Its main caller is `sync_conversations` (its `--attach` leg), which hands
 `jira_attach` the transcript path list it just computed. You can also run
 `jira_attach` directly with any files.
 
-## Why REST instead of `acli`
+## Why its own REST call instead of `jira.sh`
 
-`acli jira workitem attachment` only supports **list** and **delete** — it
-can't upload. So `jira_attach` goes through Jira Cloud's REST API on the
-`api.atlassian.com` gateway, authenticating with the executor's
-`email:token` basic auth (the same identity `jira_acli_login` logs in as).
-acli's keyring isn't reusable for raw REST, so the credentials are read
-straight from the env files.
+Attachments are a **multipart** upload, which the shared `jira.sh` / `jira.ps1`
+client doesn't implement. So `jira_attach` talks to Jira Cloud's REST API on the
+`api.atlassian.com` gateway itself, authenticating with the executor's
+`email:token` basic auth — the same per-request credential `jira.sh` uses, read
+straight from `.jst/jira-sdlc-tools(.local).env`.
 
 ## Usage / dispatch
 
@@ -73,8 +72,8 @@ duplicates") rather than silently risking duplicate uploads.
 
 ## Configuration and precedence
 
-Credentials and site are read from `jira-sdlc-tools.local.env` then
-`jira-sdlc-tools.env` in the repo root, with the same `NAME = value` parser
+Credentials and site are read from `.jst/jira-sdlc-tools.local.env` then
+`.jst/jira-sdlc-tools.env` under the repo root, with the same `NAME = value` parser
 and **local-overrides-team, last-match-wins** precedence as the other
 scripts:
 

@@ -9,15 +9,15 @@
 # Upload one or more files to a Jira issue as attachments. --dry-run reports the
 # upload/skip decision for each file without POSTing anything.
 #
-# `acli jira workitem attachment` only supports list/delete — it can't upload —
-# so this goes through Jira Cloud's REST API on the api.atlassian.com gateway
-# with the executor's basic auth (email:token), the same identity
-# jira_acli_login.ps1 logs in as. (The keyring acli uses isn't reusable for raw
-# REST, so we read the credentials straight from the env files here.)
+# Attachments are a multipart upload, which the shared `jira.ps1` REST client
+# doesn't implement — so this talks to Jira Cloud's REST API on the
+# api.atlassian.com gateway directly, with the executor's basic auth
+# (email:token), the same per-request credential jira.ps1 uses.
 #
 # Reads, with the same `NAME = value` parser + local-overrides-team precedence
 # as the other scripts: JIRA_ACCOUNT_URL and JIRA_EXECUTOR_EMAIL /
-# JIRA_EXECUTOR_TOKEN (each falling back to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN).
+# JIRA_EXECUTOR_TOKEN (each falling back to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN),
+# from .jst/jira-sdlc-tools(.local).env.
 #
 # Exit 0 if every file uploaded; exit 1 on any usage/auth/upload failure.
 #
@@ -63,6 +63,7 @@ function Get-GitTop {
 }
 $CfgDir = Get-GitTop
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+$CfgDir = Join-Path $CfgDir '.jst'   # config lives under <repo-root>/.jst/, as in _shared/scripts
 
 function Get-Cfg {
     param([string]$Pattern)

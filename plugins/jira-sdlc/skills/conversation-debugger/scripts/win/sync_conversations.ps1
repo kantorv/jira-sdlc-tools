@@ -21,7 +21,7 @@
 # from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
 # folder (used as-is), and CONVERSATIONS_WORKTREES_PREFIX is the prefix of the
 # worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
-# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# .jst/jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
 # letting this port / the agent compute arbitrary paths) is deliberate: it scopes
 # this read-only builtin to the configured trees and nothing else under
 # ~/.claude/projects.
@@ -35,7 +35,7 @@
 # tokens (--created "2026-01-01T00:00:00Z"). Under `pwsh -File`, the glued
 # `--created=<value>` form is split by PowerShell's own CLI parser at any colon
 # in the value before this script sees it — the bash twin's `=` form is fine, the
-# ps1's is not. The skill never passes these (it self-fetches via acli), so this
+# ps1's is not. The skill never passes these (it self-fetches via jira.ps1), so this
 # only affects manual/offline runs.
 #
 # Read-only without --attach: never writes, transitions, or uploads. Exit 1 only
@@ -77,6 +77,7 @@ function Get-GitTop {
 }
 $CfgDir = Get-GitTop
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+$CfgDir = Join-Path $CfgDir '.jst'   # config lives under <repo-root>/.jst/, as in _shared/scripts
 function Get-Cfg {
     param([string]$Pattern)
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
@@ -113,9 +114,28 @@ if (-not (Test-Path -LiteralPath $WtFolder -PathType Container)) {
 # ---- self-fetch title/created from Jira (both pin the creating session) -----
 # --title/--created stay as overrides that skip the fetch, keeping the detector
 # runnable offline.
-if ((-not $Title -or -not $Created) -and (Get-Command acli -ErrorAction SilentlyContinue)) {
+# jira.ps1 authenticates per-request from the env files, so there is no login step
+# to have done first. The role is `executor` (see DEBUGGER ROLE in
+# ../collect_feature.md): a read-only fetch, on the credential every checkout has.
+#
+# It must run as a CHILD PROCESS with stdout redirected to a file, not as `& …`:
+# jira.ps1 emits its payload through [Console]::Out, which bypasses PowerShell's
+# success stream entirely, so `&` would capture nothing AND leak the JSON onto
+# this script's own stdout — corrupting the machine-readable listing.
+$JiraCli = Join-Path $PSScriptRoot '..\..\..\_shared\scripts\win\jira.ps1'
+if ((-not $Title -or -not $Created) -and (Test-Path -LiteralPath $JiraCli)) {
     try {
-        $rawMeta = (& acli jira workitem view $Key --json --fields 'summary,created' 2>$null) -join "`n"
+        $hostExe = (Get-Process -Id $PID).Path
+        if (-not $hostExe) { $hostExe = 'pwsh' }
+        $outFile = [System.IO.Path]::GetTempFileName()
+        $errFile = [System.IO.Path]::GetTempFileName()
+        Start-Process -FilePath $hostExe -Wait -NoNewWindow `
+            -WorkingDirectory (Get-Location).Path `
+            -RedirectStandardOutput $outFile -RedirectStandardError $errFile `
+            -ArgumentList @('-NoProfile', '-File', $JiraCli, '--role', 'executor',
+                            'issue', 'view', $Key, '--fields', 'summary,created')
+        $rawMeta = [string](Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue)
+        Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
         if (-not $Title) {
             $meta = $rawMeta | ConvertFrom-Json
             if ($meta -and $meta.fields) { $Title = [string]$meta.fields.summary }

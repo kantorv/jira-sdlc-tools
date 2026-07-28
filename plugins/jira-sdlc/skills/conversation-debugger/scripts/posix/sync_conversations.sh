@@ -28,7 +28,7 @@
 # from git / the cwd encoding: CONVERSATIONS_MAINREPO_PATH is the main checkout's
 # folder (used as-is), and CONVERSATIONS_WORKTREES_PREFIX is the prefix of the
 # worktrees' folders — this issue's is <prefix>worktree-<KEY>. Both come from
-# jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
+# .jst/jira-sdlc-tools(.local).env and are validated below. Pinning them in config (vs.
 # letting this script / the agent compute arbitrary paths) is deliberate: it scopes
 # this read-only builtin to the configured trees and nothing else under
 # ~/.claude/projects.
@@ -62,7 +62,7 @@ esac
 # env files (not the process environment) is what makes the scoping trustworthy:
 # the agent can't widen it by exporting a variable.
 CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
-CFG_DIR="${CFG_DIR:-$PWD}"
+CFG_DIR="${CFG_DIR:-$PWD}/.jst"
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
@@ -90,11 +90,14 @@ if [ ! -d "$WT_FOLDER" ]; then
   exit 1; fi
 
 # The two signals that pin the creating session (title + creation date) come
-# from Jira. Self-fetch them so the caller doesn't have to — acli is already
-# logged in as the executor by the time the skill runs this. --title/--created
-# stay as overrides that skip the fetch, keeping the detector runnable offline.
-if { [ -z "$TITLE" ] || [ -z "$CREATED" ]; } && command -v acli >/dev/null 2>&1; then
-  _meta=$(acli jira workitem view "$KEY" --json --fields 'summary,created' 2>/dev/null || true)
+# from Jira. Self-fetch them so the caller doesn't have to — jira.sh authenticates
+# per-request from the env files, so there is no login step to have done first.
+# --title/--created stay as overrides that skip the fetch, keeping the detector
+# runnable offline. The role is `executor` (see DEBUGGER ROLE in ../collect_feature.md):
+# this is a read-only fetch, and executor is the credential every checkout has.
+_JIRA="$SCRIPT_DIR/../../../_shared/scripts/posix/jira.sh"
+if { [ -z "$TITLE" ] || [ -z "$CREATED" ]; } && [ -f "$_JIRA" ]; then
+  _meta=$(bash "$_JIRA" --role executor issue view "$KEY" --fields 'summary,created' 2>/dev/null || true)
   if [ -n "$_meta" ]; then
     _pick() { printf '%s' "$_meta" | python3 -c 'import sys,json;print((((json.load(sys.stdin) or {}).get("fields")) or {}).get("'"$1"'") or "")' 2>/dev/null || true; }
     [ -z "$TITLE" ]   && TITLE=$(_pick summary)

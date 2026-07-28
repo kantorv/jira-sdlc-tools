@@ -50,18 +50,18 @@ transcript already contains that site:
 
 | skill | when the key exists | where the script reads it |
 |---|---|---|
-| `jira-task-assigner` | only once the issue is created | the first `acli jira workitem create` tool result — `.key` from the `--json` form, else the first `<PROJECT-KEY>-<n>` found in its output (text/browse-URL form) |
+| `jira-task-assigner` | only once the issue is created | the first `jira.sh … issue create` tool result — `jira.sh` prints a **bare key** on stdout, so the first `<PROJECT-KEY>-<n>` in its output *is* the key |
 | `jira-task-executor` / `jira-task-reviewer` | after statuscheck, derived from the worktree's branch | statuscheck's `issue_key` markdown-table row (its `branch` row as fallback) |
 
-If that site never fires — no `workitem create` call for the assigner,
+If that site never fires — no `issue create` call for the assigner,
 no resolved `issue_key` row for the executor/reviewer — the script
 files nothing and exits 2 (`KEY_STATUS=unexpected`), naming the reason.
 A mention of `<PROJECT-KEY>-<n>` found *anywhere else* in the transcript
 is never used to decide the filing key: a run can cite an unrelated
 issue ("do it like JST-9") far more often than it mentions its own
 subject, so frequency is reported only as context (`KEY_RANKING`), never
-the decision. `PROJECT-KEY` itself is read from `jira-sdlc-tools.env` /
-`jira-sdlc-tools.local.env` (`PROJECT-KEY` or `PROJECT_KEY`) at the
+the decision. `PROJECT-KEY` itself is read from `.jst/jira-sdlc-tools.env` /
+`.jst/jira-sdlc-tools.local.env` (`PROJECT-KEY` or `PROJECT_KEY`) under the
 project root — resolved via `git rev-parse --show-toplevel`, so the
 script must be run from inside the project checkout.
 

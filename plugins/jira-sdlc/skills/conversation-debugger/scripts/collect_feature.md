@@ -63,7 +63,7 @@ directory — the same seam the golden-file harness uses to substitute stubs.
 
 No flags. Like the other scripts it reads `PROJECT_KEY` and the two
 `CONVERSATIONS_*` transcript-folder variables from
-`jira-sdlc-tools(.local).env` (via `git rev-parse --show-toplevel`), so run it
+`.jst/jira-sdlc-tools(.local).env` (via `git rev-parse --show-toplevel`), so run it
 from inside the project checkout.
 
 ## Feature-type detection
@@ -72,19 +72,32 @@ Before resolving any conversations, `collect_feature` asks Jira whether `<KEY>`
 is a multistep parent:
 
 ```
-acli jira workitem view <KEY> --json --fields 'summary,subtasks'
+jira.sh --role executor issue view <KEY> --fields 'summary,subtasks'
 ```
 
 The key is **positional**, and `subtasks` **must be named explicitly** — the
-default `--json` omits it, so a naive fetch would report every parent as
-single-step (the same gotcha [`../../docs/examples/acli-list-subtasks.py`](../../docs/examples/acli-list-subtasks.py)
-documents). **Non-empty `subtasks` → multistep; empty → single-step.**
+narrowed payload omits it otherwise, so a naive fetch would report every parent
+as single-step. **Non-empty `subtasks` → multistep; empty → single-step.**
 
 The call is wrapped in a **long timeout** (run in a background job; the API can
-legitimately take minutes). If `acli` is missing, errors, or times out,
-`collect_feature` falls back to **single-step** with a loud stderr WARN rather
-than aborting — the roll-up is read-only, so the safe default is the historical
-flat report.
+legitimately take minutes). If the client is missing, errors, exits non-zero, or
+times out, `collect_feature` falls back to **single-step** with a loud stderr
+WARN rather than aborting — the roll-up is read-only, so the safe default is the
+historical flat report.
+
+### DEBUGGER ROLE
+
+`jira.sh` / `jira.ps1` authenticate **per-request** and **require** `--role`;
+there is no default account. The debugger only ever *reads* Jira — this sub-task
+lookup and `sync_conversations`' title/created self-fetch — and read access is
+the same for all three roles, so the choice is arbitrary on permissions.
+It uses **`executor`**, because that is the credential every checkout and
+worktree is already guaranteed to have (`ensure_local_env.sh` copies it in).
+Both ports and `sync_conversations.{sh,ps1}` must name the same role.
+
+The client is normally `_shared/scripts/{posix/jira.sh,win/jira.ps1}`. A jira
+client sitting *alongside* the sibling scripts wins — that is the seam the
+golden-file harness uses to substitute a stub.
 
 ## What it does
 
@@ -245,7 +258,7 @@ bash tests/run_collect_feature_golden.sh ps1      # one engine (ps1 needs pwsh �
 ```
 
 It replays captured fixtures (canned `sync_conversations` listings,
-`collect_run` KEY=VALUE blocks, and the `acli` sub-task lookup) through stub
+`collect_run` KEY=VALUE blocks, and the `jira.sh` sub-task lookup) through stub
 siblings, so the collector's real orchestration, dedup, and aggregation run
 end to end on numbers that never move mid-run, then diffs the normalized JSON
 byte-for-byte against the committed goldens under
