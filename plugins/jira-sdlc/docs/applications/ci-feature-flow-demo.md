@@ -234,9 +234,10 @@ Three things make this step necessary rather than tidy:
    branch does not make a main checkout acceptable.
 2. **The job holds two checkouts at once, deliberately.** The
    `actions/checkout` workspace stays a main checkout standing on
-   `<DEFAULT_BASE_BRANCH>` — that is where `--plugin-dir` loads the skill
-   prompts from — while the linked worktree on the issue branch is where the
-   skill *runs*. Neither alone satisfies both requirements.
+   `<DEFAULT_BASE_BRANCH>` — the start state the assigner's healthcheck
+   demands — while the linked worktree on the issue branch is where the
+   skill *runs*. Neither alone satisfies both requirements. (Neither is where
+   the *skills* come from: those are installed from the marketplace, below.)
 3. **The working directory is the addressing mechanism.** Neither skill takes
    an issue-key argument; each derives its key from the branch of the worktree
    it stands in. That is what
@@ -259,9 +260,22 @@ comment is the fallback the skills would otherwise resolve from.
 `issue_comment` event checks out the repo's *default* branch, which is not by
 definition `<DEFAULT_BASE_BRANCH>` — and the assigner hard-stops unless it
 runs in a main checkout on the base branch (it *creates* worktrees, it doesn't
-run inside one). The checkout is also **where the skill prompts come from**,
-since `--plugin-dir` points into it, so skill changes have to land on the base
-branch before this demo exercises them.
+run inside one).
+
+**The skills come from the marketplace, not from the checkout.** Every job
+installs the plugin the way a consumer would, which is what makes these
+workflows copy-pasteable into a repo that doesn't contain the plugin:
+
+```bash
+claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+claude plugin install jira-sdlc@jira-sdlc-tools
+# external consumers: swap the URL for your own fork or clone
+```
+
+`marketplace add` clones the plugin repo's **default** branch, so what a run
+exercises is whatever has landed there — never the skill files on the branch
+under test. Land a skill change on that default branch before expecting a demo
+run to pick it up.
 
 **Never export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a skill.**
 Every skill starts with statuscheck, which logs `gh` in from the
@@ -303,12 +317,22 @@ differs.
 
 ## Reporting back to the issue
 
-Beyond the step summaries and the log artifacts (`assigner-log`,
-`executor-log`, `reviewer-log`, 7-day retention), each job posts a comment on
-the triggering issue: a structured summary — Jira key, branch, PR link where
-applicable — followed by the full skill transcript inside a collapsed
-`<details>` block. The point is that the conversation stays where the work was
-requested, instead of in an Actions tab nobody opens.
+Beyond the log artifacts (`assigner-log`, `executor-log`, `reviewer-log`,
+7-day retention), each job reports twice — once where the work was requested,
+once where the run happened.
+
+The **issue comment** is a structured summary — Jira key, branch, PR link
+where applicable — followed by the full skill transcript, in plain markdown.
+It is deliberately *not* folded into a `<details>` block: the comment reads top
+to bottom without a click, and the conversation stays where the work was
+requested instead of in an Actions tab nobody opens.
+
+The **job summary** appends that same transcript to `$GITHUB_STEP_SUMMARY`,
+under the one-line heading each job already writes there, so the run page
+explains itself without opening the log or downloading an artifact. It has its
+own ceiling — 1 MiB per step, against the comment's 65536 characters — and
+gets the same truncation treatment, in a step that is `if: always()` for the
+same reason the comment step is.
 
 Three details in those steps are load-bearing:
 
