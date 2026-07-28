@@ -188,7 +188,7 @@ flowchart LR
 <strong>Phase 3 · Review &amp; aggregate approval</strong><br>
 <code>jira-task-reviewer</code><br>
 <a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
-<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3-single-step.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
+<a href="plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="plugins/jira-sdlc/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
 </td>
 </tr>
 </table>
