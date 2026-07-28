@@ -60,7 +60,7 @@ Three skills, three jobs:
 /plugin install jira-sdlc@jira-sdlc-tools
 ```
 
-Create `jira-sdlc-tools.env` in the project root for your repo (see
+Create `.jst/jira-sdlc-tools.env` in the project root for your repo (see
 [Configuration](#configuration)), then:
 
 ```
@@ -133,12 +133,11 @@ touches outside it (a database, cache, storage, or port) — see
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own.
 
-**What the assigner creates.** The assigner runs only from your base
-branch — invoke it from an existing feature/hotfix branch and it stops,
-telling you to checkout the base branch first (it doesn't append
-sub-tasks to an existing parent). From the base branch it always
-provisions one top-level issue (`Task`/`Story`/`Bug`) with a matching
-branch and a `git worktree`, then:
+**What the assigner creates.** The assigner runs from a long-lived branch,
+normally your base branch — invoke it from an existing feature/hotfix branch
+and it stops, telling you to checkout the base branch first (it doesn't append
+sub-tasks to an existing parent). It always provisions one top-level issue
+(`Task`/`Story`/`Bug`) with a matching branch and a `git worktree`, then:
 
 - **Single-step** — the top-level issue is the only issue. The executor
   runs in that worktree on a dedicated branch whose PR targets the base
@@ -147,6 +146,15 @@ branch and a `git worktree`, then:
   gets its own dedicated branch, worktree, and PR into the parent branch.
   The parent branch (and its worktree) is the merge target for the
   sub-tasks' PRs.
+
+**Emergency hotfixes.** Branches are `feature/` off the base branch by
+default. When you *explicitly* ask for an emergency production fix, the
+assigner instead cuts a single-step `hotfix/` branch from
+`origin/<PRODUCTION_BRANCH>` and points its PR at production
+([SDLC.md](docs/SDLC.md) §4) — urgency wording alone won't trigger it, and it
+confirms with you before creating anything. The cut comes from the fetched
+remote ref, so you can invoke it from either the base branch or the production
+branch; production is never required to be checked out.
 
 **Every sub-task gets a dedicated branch.** Each sub-task has its own
 branch, worktree, and PR into the parent branch — regardless of size. A
@@ -171,7 +179,7 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 
 **Jira status flow across the three skills.** Each skill drives the issue's
 Kanban status explicitly with the four status names from
-`jira-sdlc-tools.env`, so board progress reflects the work without
+`.jst/jira-sdlc-tools.env`, so board progress reflects the work without
 relying on opaque GitHub-for-Jira transition rules:
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
@@ -193,8 +201,9 @@ relying on opaque GitHub-for-Jira transition rules:
   and authenticates per-request. The shared reference (`skills/_shared/jira-api-reference.md`)
   documents the API endpoints and the exact `jira.sh` flag behavior the skills invoke,
   with a detailed companion (`docs/JIRA-REST.md`) for rationale and discovery procedures.
-  It reads the `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, and `JIRA_TOKEN` values
-  from `jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
+  It reads `JIRA_ACCOUNT_URL` and the three role credential pairs
+  (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}`) from
+  `.jst/jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
   there is no interactive login step to run first.
 
 - **GitHub CLI (`gh`)**, authenticated.
@@ -205,7 +214,7 @@ relying on opaque GitHub-for-Jira transition rules:
 - **A documented way to run tests** — the executor's test step reads
   the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
   test" and "full suite" commands; they no longer live in
-  `jira-sdlc-tools.env`. If the project doesn't document them,
+  `.jst/jira-sdlc-tools.env`. If the project doesn't document them,
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
 - **A worktrees directory that already exists**, as a sibling of your
@@ -221,7 +230,7 @@ relying on opaque GitHub-for-Jira transition rules:
    /plugin marketplace add kantorv/jira-sdlc-tools
    /plugin install jira-sdlc@jira-sdlc-tools
    ```
-2. Fill in `jira-sdlc-tools.env` in the project root — see
+2. Fill in `.jst/jira-sdlc-tools.env` in the project root — see
    [Configuration](#configuration).
 3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
    `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
@@ -304,20 +313,25 @@ deliberately — see [Installation](#installation) for why that matters.
 
 ## Configuration
 
-All project-specific values live in two files in the project root:
+All project-specific values live in two files in a **`.jst/` folder at the
+project root**. That folder is the only location read — a leftover copy at the
+root itself is ignored, and every skill's healthcheck FAILs on a missing
+`.jst/` (the `jst_dir` row) before it does anything else.
 
 | File | Purpose | Committed? |
 |------|---------|------------|
-| `jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
-| `jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
+| `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
+| `.jst/jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
 
 See `skills/_shared/project-config.md` for a description of each variable.
 
 Copy the templates from the marketplace root:
 ```bash
-cp /path/to/jira-sdlc-tools/jira-sdlc-tools.env .
-cp /path/to/jira-sdlc-tools/jira-sdlc-tools.local.env.example jira-sdlc-tools.local.env
-# then fill in jira-sdlc-tools.local.env with your machine-specific values
+mkdir -p .jst
+cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.env .jst/
+cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.local.env.example .jst/jira-sdlc-tools.local.env
+# then fill in .jst/jira-sdlc-tools.local.env with your machine-specific values
+echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
 ```
 
 Nothing else under `skills/` should need editing. It covers:
@@ -325,11 +339,11 @@ Nothing else under `skills/` should need editing. It covers:
 - Your Jira project key and worktrees directory (required)
 - Your default base branch (required)
 - Your Jira workflow's real status names — these are flagged as "confirm once" inside the skills themselves, since status *names* aren't standardized across Jira projects
-- The Jira auth token (`JIRA_TOKEN` — the raw API token value itself, not a path to a file containing one)
+- The three Jira role credential pairs (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — each token the raw API token value itself, not a path to a file containing one). All three are required; auth is role-scoped with no default account
 
 Test commands are **not** here anymore — `jira-task-executor` step 7 reads them from the project's own `CLAUDE.md` / `AGENTS.md`.
 
-Open `jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
+Open `.jst/jira-sdlc-tools.env` and read it top to bottom before your first run; it's short, and every skill points back to it.
 
 ### Generating the Jira API token
 
@@ -341,8 +355,8 @@ Atlassian offers two kinds, and the choice matters because Basic auth on the `*.
   with `jira.sh` (what the three skills drive Jira through) and with every
   REST endpoint. It carries the full Jira permissions of the account it
   belongs to, so scope it down by restricting **that account's project
-  role/permissions**, not the token. **This is the recommended token for
-  `JIRA_TOKEN`**.
+  role/permissions**, not the token. **This is the recommended token type for
+  the three role tokens**.
 
 - **Scoped — "Create API token with scopes".** Least privilege, but with
   a hard constraint: a scoped token is **rejected by Basic auth on the
@@ -468,10 +482,11 @@ Deliberately never automated, regardless of how routine a run looks:
   replacing that mechanism, not just swapping CLI commands.
 - Assumes **no `Epic` type** and doesn't create or group under Epics —
   `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
-- The assigner runs **only from your base branch**. Invoked from an
-  existing feature/hotfix branch, it stops and tells you to checkout the
-  base branch first — it doesn't append sub-tasks to an existing parent
-  (that case is TBD per the skill).
+- The assigner runs **only from a long-lived branch** — your base branch,
+  or the production branch when you're asking for an emergency hotfix.
+  Invoked from an existing feature/hotfix branch, it stops and tells you to
+  checkout the base branch first — it doesn't append sub-tasks to an existing
+  parent (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
   one review at a time, with per-PR GH approval (or rejection) and a
   summary on the parent. For a large sub-task count this means later
@@ -500,7 +515,7 @@ real task, not discovering mid-failure:
       a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
       values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
-      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `jira-sdlc-tools.env`.
+      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `.jst/jira-sdlc-tools.env`.
 - [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue comment add --help` — the skills write
       multi-line comments to a temp file and post with `--body-file <real file>`.
       Confirm that form works.
@@ -565,7 +580,7 @@ target-branch defaults, feature-flag policy, and how the release branch's
 name — not PR labels or commit messages — drives the version bump).
 
 If your branching model differs, adapt that document to match yours, then
-update `<DEFAULT_BASE_BRANCH>` in `jira-sdlc-tools.env` and the
+update `<DEFAULT_BASE_BRANCH>` in `.jst/jira-sdlc-tools.env` and the
 `feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
 `jira-api-reference.md` §12 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.

@@ -27,11 +27,11 @@ All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 
 | Script | Path | Summary | Called by |
 |---|---|---|---|
-| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+Jira auth, project config). Exit 0 if all OK, 1 if any `FAIL`. Its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
-| `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (which is born without it); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
-| `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL` → `JIRA_ACCOUNT_EMAIL` fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
-| `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[ISSUE-KEY]` | Is this issue assigned to the account `jira.ps1` authenticates as? Compares **accountId** (not email — email is hidden on others' assignee objects). Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
-| `list_subtasks` | `skills/_shared/scripts/win/list_subtasks.ps1` `-Parent <KEY> [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `docs/JIRA-REST.md` §10 |
+| `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` `--role <role>` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+Jira auth, project config). Exit 0 if all OK, 1 if any `FAIL`, 2 on a bad/missing `--role`. `--role` is required and selects the credential its `jira_auth` row probes; its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
+| `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `.jst/jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (creating `.jst/` there if needed); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
+| `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL`, required — no fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
+| `check_assignee` | `skills/_shared/scripts/win/check_assignee.ps1` `[--role <role>] [ISSUE-KEY]` | Is this issue assigned to the account `jira.ps1` authenticates as? Compares **accountId** (not email — email is hidden on others' assignee objects). Exit 0 = mine → CONTINUE; 1 = unassigned / someone else / unreadable → STOP + fix on stderr. | **executor** only (before working an issue) |
+| `list_subtasks` | `skills/_shared/scripts/win/list_subtasks.ps1` `-Parent <KEY> [-Role <role>] [-EnvPath …] [-Json]` | Lists a Jira parent's sub-tasks (key + summary); `jira.ps1 issue view` omits `subtasks` by default, so it requests `subtasks,issuetype`. Text or `-Json` output. Exit 0/1/<curl code>. | **None of the three skills** (they fetch subtasks inline). Operator/standalone helper a human runs from the CLI; documented in `docs/JIRA-REST.md` §10 |
 
 > **Note on `list_subtasks`:** its POSIX sibling is
 > `skills/_shared/scripts/posix/list_subtasks.sh` — a bash original like
@@ -113,6 +113,6 @@ side-step it.
 - `docs/JIRA-REST.md` §10 — `list_subtasks.sh` /
   `create_parent_and_subtasks.sh` operator helpers (the ps1 twin is the
   Windows form of the former).
-- `skills/_shared/project-config.md` — the `jira-sdlc-tools.env` /
-  `jira-sdlc-tools.local.env` variables the ports resolve (PROJECT-KEY,
-  JIRA_*_EMAIL, JIRA_TOKEN, JIRA_ACCOUNT_URL, status names, etc.).
+- `skills/_shared/project-config.md` — the `.jst/jira-sdlc-tools.env` /
+  `.jst/jira-sdlc-tools.local.env` variables the ports resolve (PROJECT-KEY,
+  JIRA_*_EMAIL, JIRA_*_TOKEN, JIRA_ACCOUNT_URL, status names, etc.).

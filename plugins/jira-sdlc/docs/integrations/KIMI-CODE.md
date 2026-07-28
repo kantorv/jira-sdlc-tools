@@ -4,9 +4,9 @@ Uses the native Claude skills specification via `extra_skill_dirs` in `~/.kimi-c
 
 ## Prerequisites
 
-- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - [Kimi Code CLI](https://www.kimi.com/code/) installed
 
 ## Install / Wire-up Steps

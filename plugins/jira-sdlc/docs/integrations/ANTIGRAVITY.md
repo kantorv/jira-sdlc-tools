@@ -49,9 +49,9 @@ immediately, no settings changed. Three working paths:
 
 ## Prerequisites
 
-- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
 - **Method 1 only** — nothing extra: the Claude Code extension ships inside Antigravity already.
 - **Method 2 only** — no setting to enable and no extension to install, but you do write one `agents/openai.yml` per skill (install step 2).
 - **⚠️ Method 3 only (unconfirmed)** — Antigravity Settings access to toggle an experimental setting, plus the same per-skill `agents/openai.yml` (see below).

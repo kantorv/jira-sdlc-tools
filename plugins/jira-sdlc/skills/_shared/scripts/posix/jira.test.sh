@@ -7,7 +7,7 @@
 #
 # This is an INTEGRATION test: it hits a real Jira instance and creates/deletes
 # real issues, so it is NOT a CI test — it needs live credentials in
-# jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
+# .jst/jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
 # override with JIRA_TEST_ROLE.
 #
 # Usage:  bash jira.test.sh
@@ -21,7 +21,7 @@ ROLE="${JIRA_TEST_ROLE:-assigner}"
 J() { bash "$JIRA_SH" --role "$ROLE" "$@"; }
 
 # --- resolve config the same way jira.sh does (local overrides team) ---------
-cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.jst
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
@@ -33,9 +33,9 @@ cfg() {
 }
 PROJECT_KEY=$(cfg PROJECT_KEY)
 IN_PROGRESS=$(cfg STATUS_IN_PROGRESS); IN_PROGRESS="${IN_PROGRESS:-In Progress}"
-ASSIGN_EMAIL=$(cfg JIRA_EXECUTOR_EMAIL); [ -z "$ASSIGN_EMAIL" ] && ASSIGN_EMAIL=$(cfg JIRA_ACCOUNT_EMAIL)
-[ -n "$PROJECT_KEY" ]  || { echo "test: PROJECT_KEY not set in jira-sdlc-tools.env" >&2; exit 1; }
-[ -n "$ASSIGN_EMAIL" ] || { echo "test: no executor/account email to assign to" >&2; exit 1; }
+ASSIGN_EMAIL=$(cfg JIRA_EXECUTOR_EMAIL)
+[ -n "$PROJECT_KEY" ]  || { echo "test: PROJECT_KEY not set in .jst/jira-sdlc-tools.env" >&2; exit 1; }
+[ -n "$ASSIGN_EMAIL" ] || { echo "test: JIRA_EXECUTOR_EMAIL not set — no email to assign to" >&2; exit 1; }
 
 # --- tiny assertion framework ------------------------------------------------
 PASS=0; FAIL=0
@@ -65,6 +65,9 @@ echo "== jira.sh live test (role=$ROLE, project=$PROJECT_KEY) =="
 out=$(J whoami); r=$?
 rc "whoami exits 0" 0 $r
 ne "whoami returns an accountId" "$(jq -r '.accountId // empty' <<<"$out" 2>/dev/null)"
+
+# 1b. --role is required (no default credential to fall back to) --------------
+JIRA_ROLE="" bash "$JIRA_SH" whoami >/dev/null 2>&1; rc "whoami without --role -> 2 (usage)" 2 $?
 
 # 2/3. project exists (positive + negative) ----------------------------------
 out=$(J project exists "$PROJECT_KEY"); rc "project exists $PROJECT_KEY -> 0" 0 $?

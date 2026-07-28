@@ -9,11 +9,15 @@
 #
 # Requires jira.sh working (curl + jq + a valid credential) and `jq`. Run from
 # within the repo/worktree — jira.sh resolves its config from the git top-level.
-# Reads <PROJECT-KEY> from jira-sdlc-tools.env (override with --env or $PROJECT_KEY);
+# Reads <PROJECT-KEY> from .jst/jira-sdlc-tools.env (override with --env or $PROJECT_KEY);
 # it's printed for confirmation, never sent to the API.
 #
 # Usage:
-#   list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]
+#   list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env <path>] [--json]
+#
+# --role defaults to assigner (as create_parent_and_subtasks.sh does): reading a
+# parent's sub-tasks is the assigner's job, and jira.sh has no default
+# credential to fall back to.
 #
 # Exit 0      — listed sub-tasks (or reported "none").
 # Exit 1      — jq missing, --parent missing, or the response wasn't JSON.
@@ -28,8 +32,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
 PARENT=""
-ROLE=""
-ENV_PATH="./jira-sdlc-tools.env"
+ROLE="assigner"
+ENV_PATH=""   # --env override; default is <repo-root>/.jst/jira-sdlc-tools.env
 JSON_OUT=0
 
 while [ $# -gt 0 ]; do
@@ -39,19 +43,23 @@ while [ $# -gt 0 ]; do
     --env)    ENV_PATH="${2:-}"; shift 2 ;;
     --json)   JSON_OUT=1; shift ;;
     *) die "list_subtasks: unknown argument '$1'
-usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]" ;;
+usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env <path>] [--json]" ;;
   esac
 done
 
 [ -n "$PARENT" ] || die "list_subtasks: missing required --parent <PARENT-KEY>
-usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env ./jira-sdlc-tools.env] [--json]"
+usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env <path>] [--json]"
 
 # --- resolve PROJECT-KEY (hyphen OR underscore form) ------------------------
 # PROJECT-KEY has a hyphen, so `source` can't read it — grep it out. Precedence:
-# --env path, then ./jira-sdlc-tools.env, then ../jira-sdlc-tools.env.
+# --env path, then <repo-root>/.jst/jira-sdlc-tools.env. Anchored at the git
+# top-level (like jira.sh) rather than walked up from cwd, so it resolves the
+# same from any subdirectory.
 resolve_project() {
-  local p m
-  for p in "$ENV_PATH" "jira-sdlc-tools.env" "../jira-sdlc-tools.env"; do
+  local p m root
+  root=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+  for p in "$ENV_PATH" "$root/.jst/jira-sdlc-tools.env"; do
+    [ -n "$p" ] || continue
     [ -f "$p" ] || continue
     m=$(grep -E '^PROJECT[-_]KEY=' "$p" 2>/dev/null | head -1 | sed -E 's/^PROJECT[-_]KEY=//')
     if [ -n "$m" ]; then printf '%s' "$m"; return 0; fi
@@ -66,11 +74,7 @@ PROJ_LABEL=""
 # jira.sh emits clean JSON straight on stdout, so parse it directly.
 ERR_FILE=$(mktemp)
 trap 'rm -f "$ERR_FILE"' EXIT
-if [ -n "$ROLE" ]; then
-  JSON=$(bash "$JIRA_SH" --role "$ROLE" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
-else
-  JSON=$(bash "$JIRA_SH" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
-fi
+JSON=$(bash "$JIRA_SH" --role "$ROLE" issue view "$PARENT" --fields 'subtasks,issuetype' 2>"$ERR_FILE")
 CODE=$?
 if [ "$CODE" -ne 0 ]; then
   printf '%s\n' "$(cat "$ERR_FILE")" >&2

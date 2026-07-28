@@ -20,8 +20,9 @@ because a skill invokes it directly — §7 (Git workflow / branch
 convention) and §12 (PR-base resolver) — carry no supplementary material
 and so have no entry here.
 
-Project-specific values resolve from `jira-sdlc-tools.env` (team-shared)
-and `jira-sdlc-tools.local.env` (machine-specific) in the project root —
+Project-specific values resolve from `.jst/jira-sdlc-tools.env` (team-shared)
+and `.jst/jira-sdlc-tools.local.env` (machine-specific) in the project's
+`.jst/` folder —
 see the lean reference's intro for the full token list. `jira.sh` version
 confirmed against: `1.3.22-stable`.
 
@@ -63,11 +64,14 @@ rm -f ~/.jira_sh_session   # discard the previous credential so the new one take
 
 ### The token value
 
-`<JIRA_TOKEN>` holds the **raw API token value itself**, not a path to a token file.
+Each `<JIRA_<ROLE>_TOKEN>` holds the **raw API token value itself**, not a path
+to a token file.
 
-`<JIRA_ACCOUNT_URL>`, `<JIRA_ACCOUNT_EMAIL>`, and `<JIRA_TOKEN>` are
-resolved from `jira-sdlc-tools.local.env` (machine-specific) in the
-project root.
+`<JIRA_ACCOUNT_URL>` and the three role pairs
+`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` are
+resolved from `.jst/jira-sdlc-tools.local.env` (machine-specific) in the
+project root. All three pairs are required — auth is role-scoped, with no
+default account behind them.
 
 ### Verify with a real call
 
@@ -114,7 +118,7 @@ For this project:
 
 ⚠️ Note the **`Subtask`** spelling (no hyphen).
 
-Default project key: `<PROJECT-KEY>` (from `jira-sdlc-tools.env`).
+Default project key: `<PROJECT-KEY>` (from `.jst/jira-sdlc-tools.env`).
 
 ---
 
@@ -369,7 +373,7 @@ invoked by any skill.**
   own nested `fields.summary`, which a whole-file grep can't reliably
   address).
 
-Both read `<PROJECT-KEY>` from `jira-sdlc-tools.env` (team-shared) in
+Both read `<PROJECT-KEY>` from `.jst/jira-sdlc-tools.env` (team-shared) in
 the project root (override with `--project` or the `PROJECT_KEY` env
 var). Run them from the project root.
 

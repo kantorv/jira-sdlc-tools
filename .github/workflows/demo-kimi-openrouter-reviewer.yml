@@ -1,18 +1,27 @@
-name: Reviewer Skill on PR (Smoke Test)
+name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 
-# Wiring smoke test for the jira-task-reviewer skill in CI. On an opened or
-# reopened PR it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
+# Wiring smoke test for the jira-task-reviewer skill in CI. Triggered manually
+# (workflow_dispatch only — despite the name, it does NOT fire on PR
+# open/reopen), it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
 # pointing extra_skill_dirs at this plugin's skills/, and confirms the three
-# jira-sdlc skills are discoverable. It does NOT run the reviewer skill to
-# completion and posts no review to Jira or GitHub — discovery only. If a
-# real reviewer run is wanted later, that needs a worktree checkout plus
-# gh auth and the Jira credentials in jira-sdlc-tools.local.env, which is
-# out of scope here.
-#
-# The existing workflow_dispatch-only reviewer.yml demo is left untouched.
+# jira-sdlc skills are discoverable. It never invokes the reviewer skill: the
+# review below comes from a hand-written prompt over `gh pr diff`, and IS
+# posted to the PR (`gh pr review --comment`). Nothing is written to Jira. A
+# real reviewer run needs a linked-worktree checkout plus gh auth and the Jira
+# credentials in .jst/jira-sdlc-tools.local.env, which is out of scope here —
+# see demo-claude-reviewer.yml for that.
 
 on:
   workflow_dispatch:
+    inputs:
+      model:
+        description: 'OpenRouter model to use'
+        required: false
+        default: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+        type: choice
+        options:
+          - "nvidia/nemotron-3-ultra-550b-a55b:free"
+          - "nvidia/nemotron-3-super-120b-a12b:free"
 
 jobs:
   check_pr_exists:
@@ -25,6 +34,7 @@ jobs:
     outputs:
       pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
       pr_number: ${{ steps.check_pr.outputs.pr_number }}
+      issue_key: ${{ steps.check_pr.outputs.issue_key }}
     steps:
       - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
         id: check_pr
@@ -34,17 +44,39 @@ jobs:
           set -euo pipefail
           BRANCH_NAME="${{ github.ref_name }}"
           REPO_NAME="${{ github.repository }}"
+
+          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          # Extract issue key from branch name (PROJ-NNN)
+          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
           PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
             --json number --jq '.[0].number // empty' 2>/dev/null || true)
 
           if [ -n "$PR_NUMBER" ]; then
             echo "pr_exists=1" >> "$GITHUB_OUTPUT"
             echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "Found PR #$PR_NUMBER"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUMBER for issue $ISSUE_KEY"
           else
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
             echo "pr_number=0" >> "$GITHUB_OUTPUT"
-            echo "No open PR for branch $BRANCH_NAME"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
           fi
 
   reviewer-smoke:
@@ -91,52 +123,32 @@ jobs:
       - name: Write Kimi Code config.toml
         shell: bash
         env:
-          # NVIDIA_NIM_API_KEY is an existing repo secret. Map it to the
-          # provider api_key the way the reviewer.yml demo does
-          # (env -> [providers.nvidia].api_key), not via a placeholder + sed.
-          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          # OPENROUTER_API_KEY is an existing repo secret. Map it straight to the
+          # provider api_key (env -> [providers.openrouter].api_key), not via a
+          # placeholder + sed.
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ github.event.inputs.model }}
         run: |
           set -euo pipefail
-          if [ -z "${NVIDIA_NIM_API_KEY:-}" ]; then
-            echo "::error::NVIDIA_NIM_API_KEY secret is empty or unset — cannot configure the NVIDIA provider."
-            exit 1
-          fi
           if [ -z "${OPENROUTER_API_KEY:-}" ]; then
             echo "::error::OPENROUTER_API_KEY secret is empty or unset — cannot configure the OPENROUTER provider."
             exit 1
           fi
           mkdir -p ~/.kimi-code
-          # Unquoted heredoc is intentional: $(pwd) and ${NVIDIA_API_KEY} expand
-          # to the runner workspace / secret value as the file is written. The
-          # reviewer.yml demo ships a TOML quoting bug here (a missing *opening*
-          # double-quote on the array element) that this file fixes, not copies;
-          # the corrected form is a properly quoted string "$(pwd)/...".
+          # Unquoted heredoc is intentional: $(pwd) and ${OPENROUTER_API_KEY}
+          # expand to the runner workspace / secret value as the file is written.
+          # The array element is a properly quoted string "$(pwd)/..." — a missing
+          # *opening* double-quote there is a TOML bug that is easy to reintroduce.
           cat > ~/.kimi-code/config.toml <<EOF
-          #default_model = "nvidia/z-ai/glm-5.2"
-          default_model = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+          default_model = "openrouter/${OPENROUTER_MODEL}"
           extra_skill_dirs = [
             "$(pwd)/plugins/jira-sdlc/skills"
           ]
-
-          [providers.nvidia]
-          type = "openai"
-          api_key = "${NVIDIA_NIM_API_KEY}"
-          base_url = "https://integrate.api.nvidia.com/v1"
 
           [providers.openrouter]
           type = "openai"
           api_key = "${OPENROUTER_API_KEY}"
           base_url = "https://openrouter.ai/api/v1"
-
-          [models."nvidia/z-ai/glm-5.2"]
-          provider = "nvidia"
-          model = "z-ai/glm-5.2"
-          max_context_size = 1000000
-          max_output_size = 131072
-          capabilities = ["thinking", "tool_use"]
-          display_name = "GLM-5.2"
-          reasoning_key = "reasoning_content"
 
           [models."openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"]
           provider = "openrouter"
@@ -146,6 +158,15 @@ jobs:
           capabilities = [ "always_thinking", "tool_use" ]
           display_name = "Nemotron 3 Ultra (free)"
           support_efforts = [ "medium", "high" ]
+
+          [models."openrouter/nvidia/nemotron-3-super-120b-a12b:free"]
+          provider = "openrouter"
+          model = "nvidia/nemotron-3-super-120b-a12b:free"
+          max_context_size = 262144
+          max_output_size = 262144
+          capabilities = [ "always_thinking", "tool_use" ]
+          display_name = "Nemotron 3 Super (free)"
+          support_efforts = [ "low", "medium" ]
 
           [thinking]
           enabled = true

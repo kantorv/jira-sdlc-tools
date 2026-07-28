@@ -15,9 +15,10 @@ short, ordered version.
 2. **Have a git repository and a Jira account with a board created.**
    [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md) is a great, recommended
    integration — but it is **not** required.
-3. **Generate your tokens:** a **granular** `GITHUB_PAT` and a **classic**
-   `JIRA_TOKEN` (see the note in [SECURITY.md](SECURITY.md) on why the Jira
-   token must be classic).
+3. **Generate your tokens:** a **granular** `GITHUB_PAT`, and a **classic**
+   Jira API token for each of the three roles — assigner, executor, reviewer
+   (see the note in [SECURITY.md](SECURITY.md) on why the Jira tokens must be
+   classic).
 4. **Define your main repository and worktrees dir in the settings**, e.g.:
    ```
    WORKTREES_DIR=/home/lalala/src/skills-dev/JST-worktrees
@@ -31,7 +32,7 @@ call. `_edge/tenant_info` is unauthenticated and gives you the cloud id;
 `/myself` is the part that proves the token:
 ```bash
 CLOUD_ID=$(curl -fsSL "https://$JIRA_ACCOUNT_URL/_edge/tenant_info" | jq -r .cloudId)
-curl -sS -u "$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN" -H "Accept: application/json" \
+curl -sS -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H "Accept: application/json" \
   "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/myself" | jq -r .emailAddress
 ```
 Getting your own email back means the pair works. The Section 4 healthcheck
@@ -48,24 +49,22 @@ echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 WORKTREES_DIR=/path/to/worktrees/PROJ-worktrees
 
 JIRA_ACCOUNT_URL=your-jira-site.atlassian.net
-JIRA_ACCOUNT_EMAIL=yourmail@example.com
-JIRA_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
-# Optional — one Jira account per role, so the board shows who did what.
-# Each falls back to the default pair above; configure none and everything
-# still works, owned by that one account.
-#JIRA_ASSIGNER_EMAIL=assigner@example.com
-#JIRA_ASSIGNER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
-#JIRA_EXECUTOR_EMAIL=executor@example.com
-#JIRA_EXECUTOR_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
-#JIRA_REVIEWER_EMAIL=reviewer@example.com
-#JIRA_REVIEWER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+# Required — one Jira account per role, so the board shows who did what.
+# All six values, no default pair behind them; point all three at the same
+# Atlassian account if you'd rather not split them.
+JIRA_ASSIGNER_EMAIL=assigner@example.com
+JIRA_ASSIGNER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+JIRA_EXECUTOR_EMAIL=executor@example.com
+JIRA_EXECUTOR_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
+JIRA_REVIEWER_EMAIL=reviewer@example.com
+JIRA_REVIEWER_TOKEN=XXXXXXXXXXXXXXXXXXXXXXX
 
 GITHUB_PAT_TOKEN="XXXXXXXXXXXXX"
 ```
 
-`JIRA_TOKEN` is the token **value**, not a path to a file holding it. Every
-variable above is described in
+Each `JIRA_<ROLE>_TOKEN` is the token **value**, not a path to a file holding
+it. Every variable above is described in
 [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
 
 ## Section 2. GitHub repository preparation
@@ -84,7 +83,9 @@ they follow the policy in [SDLC.md](SDLC.md). The five branches that matter:
 | `release/sprint-<X.Y.Z>` | `development` | `main` | Sprint QA branch, cut at release time |
 
 You only create the first two by hand. The skills create `feature/` and
-`hotfix/` branches themselves, one per issue, each with its own worktree.
+`hotfix/` branches themselves, one per issue, each with its own worktree —
+`feature/` by default, and `hotfix/` when you explicitly ask
+`jira-task-assigner` for an emergency production fix.
 
 ### 2.2 Split production from base
 
@@ -103,7 +104,7 @@ Make `development` the repository default so PRs target it automatically:
 gh repo edit <OWNER>/<REPO> --default-branch development
 ```
 
-Then record both in `jira-sdlc-tools.env` — the skills read these, never a
+Then record both in `.jst/jira-sdlc-tools.env` — the skills read these, never a
 hardcoded branch name:
 
 ```
@@ -116,10 +117,13 @@ reviewed PR, which is exactly the flow the skills produce.
 
 ### 2.3 Clone the base branch — this is the entry point
 
-**`jira-task-assigner` runs only from the base branch.** Invoked from a
-feature or hotfix branch, it stops and tells you to switch back — it plans
-work *from* the base branch, then hands each issue its own branch and
-worktree. So the clone you work in should sit on `development`:
+**`jira-task-assigner` runs from a long-lived branch, not an issue branch.**
+Invoked from a feature or hotfix branch, it stops and tells you to switch
+back — it plans work *from* a long-lived branch, then hands each issue its own
+branch and worktree. Normally that's the base branch, so the clone you work in
+should sit on `development` (`main` is accepted too, but only when you're
+asking for an emergency hotfix — and even then it isn't required, since the
+hotfix is cut from `origin/main` regardless):
 
 ```bash
 git clone -b development git@github.com:<OWNER>/<REPO>.git myapp
@@ -133,7 +137,7 @@ exist — the assigner refuses to create it:
 mkdir -p ../myapp-worktrees
 ```
 
-Then point `WORKTREES_DIR` at it in `jira-sdlc-tools.local.env`. From here
+Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`. From here
 on, the loop is: run the assigner in this clone, then run the executor from
 inside each issue's worktree.
 
@@ -179,8 +183,8 @@ A wrong name fails here, at setup, instead of mid-run.
 
 ### 3.3 Record the project key and statuses
 
-Put all five in `jira-sdlc-tools.env` (the shared/team file — the tokens and
-paths from Section 1 live in `jira-sdlc-tools.local.env` instead):
+Put all five in `.jst/jira-sdlc-tools.env` (the shared/team file — the tokens
+and paths from Section 1 live in `.jst/jira-sdlc-tools.local.env` instead):
 
 ```
 PROJECT_KEY=PROJ
@@ -201,14 +205,15 @@ logins, your settings, and the platform in one pass:
 [`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
-bash statuscheck.sh
+bash statuscheck.sh --role executor   # --role is required: assigner|executor|reviewer
 ```
 
 **Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
 [`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
-pwsh -File statuscheck.ps1        # PowerShell 7+
-powershell -File statuscheck.ps1  # PowerShell 5.1
+# --role is required: assigner|executor|reviewer
+pwsh -File statuscheck.ps1 --role executor        # PowerShell 7+
+powershell -File statuscheck.ps1 --role executor  # PowerShell 5.1
 ```
 

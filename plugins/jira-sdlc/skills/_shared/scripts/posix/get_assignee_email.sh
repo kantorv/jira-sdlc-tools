@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # get_assignee_email.sh — print the email every issue should be assigned to.
 #
-# JIRA_EXECUTOR_EMAIL, falling back to JIRA_ACCOUNT_EMAIL. Callers get one line
-# on stdout and don't need to know which one it came from.
+# JIRA_EXECUTOR_EMAIL — required, with no fallback: auth is role-scoped, so the
+# executor's own address is the only right answer here.
 #
 # Exit 0 — the email is on stdout.
-# Exit 1 — neither is set; the reason is on stderr. The caller stops: an issue
+# Exit 1 — it isn't set; the reason is on stderr. The caller stops: an issue
 #          nobody owns is what this whole mechanism exists to prevent.
 #
 # No token is resolved or printed here — assigning only needs the address.
@@ -18,7 +18,7 @@
 set -u
 
 CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
-CFG_DIR="${CFG_DIR:-$PWD}"
+CFG_DIR="${CFG_DIR:-$PWD}/.jst"
 
 cfg() {
   local f v
@@ -32,10 +32,9 @@ cfg() {
 }
 
 EMAIL=$(cfg JIRA_EXECUTOR_EMAIL || true)
-[ -z "$EMAIL" ] && EMAIL=$(cfg JIRA_ACCOUNT_EMAIL || true)
 
 if [ -z "$EMAIL" ]; then
-  printf '%s\n' "get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL (or JIRA_ACCOUNT_EMAIL) in $CFG_DIR/jira-sdlc-tools.local.env, then rerun." >&2
+  printf '%s\n' "get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL in $CFG_DIR/jira-sdlc-tools.local.env, then rerun." >&2
   exit 1
 fi
 

@@ -32,11 +32,12 @@ Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
 below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `check_assignee`, which takes a `--role` argument, **statuscheck itself
-takes no role or issue-key argument — run it bare** on both POSIX and Windows;
-a stray role name (e.g. `reviewer`) reaching it is ignored rather than mistaken
-for an issue key, but don't add one.
+chose, and can't be what you consult to dispatch statuscheck itself.
+Like `check_assignee`, **statuscheck takes a required `--role` — pass
+`--role reviewer`** on both POSIX and Windows, since it authenticates *your*
+role's credential and there is no default account to fall back on. It takes
+**no issue-key argument** here; a role name reaching it positionally is ignored
+rather than mistaken for one.
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
 `ensure_local_env` no-ops when the file already exists, so run it
@@ -60,7 +61,7 @@ of the executor default:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
-  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role reviewer
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
@@ -74,7 +75,8 @@ It prints one markdown table (`check | status | detail`), where status is
 (suspicious, not blocking), or `INFO` (context only), and exits non-zero
 if any row is `FAIL`. `gh_auth` and `jira_auth` are load-bearing here
 (every verdict comment, `gh pr list` call, and Jira transition depends on
-them). The `worktree` and `branch` rows are context INFO — the shared
+them — and `jira_auth` now confirms the **reviewer's** own credential, the
+one those writes will use). The `worktree` and `branch` rows are context INFO — the shared
 script reports them for every role and never FAILs on them.
 
 Only the rows this skill reads in a role-specific way, or relies on later,
@@ -137,7 +139,11 @@ climbing from a sub-task to its parent if needed).
     | sed -e 's/PR target branch: //' -e 's/\.$//')
   [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
   ```
-  Only ask the user if all three come up empty.
+  Only ask the user if all three come up empty. Then apply §13's prefix/base
+  sanity check to the resolved pair: a `hotfix/` `<PARENT-BRANCH>` sitting on
+  `<DEFAULT_BASE_BRANCH>` means the last resort fired on a production fix, so
+  the phase check below would hunt for the PR on the wrong base and 5a would
+  open a duplicate into staging. Stop and ask which base is right.
 
   **Why no parent-branch search here, unlike §13.** That step recovers a
   *sub-task's* base by finding its parent's branch, and §13 gates it on a
@@ -397,4 +403,4 @@ Post nothing further to Jira here. The step-6 report is the run's single final c
 - **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the parent PR may show conflicts. Stop and report. The user can rebase `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1 detects this and reports the merged state via step 6 (S-MERGED), then exits — no wrap-up; GitHub-for-Jira already handled the `<STATUS_DONE>` transition.
 
-Reference: `../_shared/jira-api-reference.md` is the operational + REST reference — the `jira.sh` command surface, confirmed issue types, and git/branch conventions this skill depends on. The `jira-sdlc-tools.env` (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the project root have this repo's specific values for every `<TOKEN>` used above.
+Reference: `../_shared/jira-api-reference.md` is the operational + REST reference — the `jira.sh` command surface, confirmed issue types, and git/branch conventions this skill depends on. The `.jst/jira-sdlc-tools.env` (team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific) files under the project root have this repo's specific values for every `<TOKEN>` used above.

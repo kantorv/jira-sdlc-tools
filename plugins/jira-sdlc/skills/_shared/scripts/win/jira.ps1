@@ -13,9 +13,11 @@
 #   L4 dispatch  — arg parsing + subcommand routing (bottom of file)
 #
 # Auth is per-request Basic (no login, no stored credential, no global state):
-# --role picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call uses, falling back
-# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. Every credential swap stays request-scoped
-# instead of touching any persisted, global login state.
+# --role is REQUIRED and picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call
+# uses. There is no default account and no fallback — each of the three roles
+# supplies its own email AND token, so an unset pair is an error rather than a
+# silent borrow of someone else's identity. Every credential swap stays
+# request-scoped instead of touching any persisted, global login state.
 #
 # Output contract:  read ops print raw JSON on stdout (caller parses it); write ops
 # print nothing on success (REST returns 204, empty). Errors → stderr.
@@ -35,11 +37,10 @@ $script:CRED  = ''; $script:SITE = ''; $script:CLOUD = ''; $script:BASE = ''
 $script:RESP  = ''; $script:ACCT = ''; $script:CFGDIR = ''
 
 function Die { param([int]$Code, [string]$Msg) [Console]::Error.WriteLine("jira: $Msg"); exit $Code }
-function RoleName { if ($script:ROLE) { $script:ROLE } else { 'default' } }
 
 function Usage {
     [Console]::Error.WriteLine(@'
-usage: jira.sh [--role executor|assigner|reviewer] <command>
+usage: jira.sh --role assigner|executor|reviewer <command>
 
   whoami                                         who this credential authenticates as
   project exists  <KEY>                          is the project visible to this account?
@@ -89,24 +90,23 @@ function Get-Cfg {
 function UrlEnc { param([string]$V) [uri]::EscapeDataString($V) }
 function JsonStr { param([string]$V) ConvertTo-Json -InputObject ([string]$V) -Compress }
 
-# Resolve the <role> credential pair. Email and token fall back to the default
-# account INDEPENDENTLY (a role may set only its email, sharing the default token).
+# Resolve the <role> credential pair. Role-scoped only: each role needs BOTH its
+# own email and its own token, with no default account to fall back to.
 function Resolve-Cred {
+    # Guard the empty/unset case BEFORE the switch: `switch ($null)` matches no
+    # branch at all in PowerShell, so an unset role would fall through with an
+    # empty prefix instead of erroring.
+    if (-not $script:ROLE) { Die $EX_USAGE '--role is required — one of assigner|executor|reviewer' }
     $prefix = ''
     switch ($script:ROLE) {
         'executor' { $prefix = 'JIRA_EXECUTOR' }
         'assigner' { $prefix = 'JIRA_ASSIGNER' }
         'reviewer' { $prefix = 'JIRA_REVIEWER' }
-        ''         { $prefix = '' }
-        $null      { $prefix = '' }
         default    { Die $EX_USAGE "role must be executor|assigner|reviewer (got '$($script:ROLE)')" }
     }
-    $email = ''; $token = ''
-    if ($prefix) { $email = Get-Cfg "${prefix}_EMAIL"; $token = Get-Cfg "${prefix}_TOKEN" }
-    if (-not $email) { $email = Get-Cfg 'JIRA_ACCOUNT_EMAIL' }
-    if (-not $token) { $token = Get-Cfg 'JIRA_TOKEN' }
-    if (-not $email) { Die $EX_ERR "no email for role '$(RoleName)' — set $(if ($prefix) { $prefix } else { 'JIRA_ACCOUNT' })_EMAIL in jira-sdlc-tools.local.env." }
-    if (-not $token) { Die $EX_ERR "no token for role '$(RoleName)' — set $(if ($prefix) { $prefix } else { 'JIRA' })_TOKEN in jira-sdlc-tools.local.env (raw API token value, not a path)." }
+    $email = Get-Cfg "${prefix}_EMAIL"; $token = Get-Cfg "${prefix}_TOKEN"
+    if (-not $email) { Die $EX_ERR "no email for role '$($script:ROLE)' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env." }
+    if (-not $token) { Die $EX_ERR "no token for role '$($script:ROLE)' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)." }
     $script:CRED = "${email}:${token}"
 }
 
@@ -136,9 +136,10 @@ function Resolve-CloudId {
 function Invoke-Ready {
     $script:CFGDIR = Get-GitTop
     if (-not $script:CFGDIR) { $script:CFGDIR = (Get-Location).Path }
+    $script:CFGDIR = Join-Path $script:CFGDIR '.jst'
     $u = Get-Cfg 'JIRA_ACCOUNT_URL'
     if ($u) { $script:SITE = $u -replace '^[^/]*//', '' } else { $script:SITE = '' }
-    if (-not $script:SITE) { Die $EX_ERR 'JIRA_ACCOUNT_URL is unset in jira-sdlc-tools.local.env.' }
+    if (-not $script:SITE) { Die $EX_ERR 'JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env.' }
     Resolve-Cred
     Resolve-CloudId
     $script:BASE = "https://api.atlassian.com/ex/jira/$($script:CLOUD)/rest/api/3"
@@ -206,7 +207,7 @@ function Invoke-Request {
         $script:RESP = $body
         switch ($code) {
             400 { return (Fail $EX_VALIDATION $code 'validation — bad body / unknown field or issue type') }
-            401 { return (Fail $EX_AUTH       $code "unauthorized — token stale/invalid for role '$(RoleName)'") }
+            401 { return (Fail $EX_AUTH       $code "unauthorized — token stale/invalid for role '$($script:ROLE)'") }
             403 { return (Fail $EX_FORBIDDEN  $code 'forbidden — permission') }
             404 { return (Fail $EX_NOTFOUND   $code 'not found (or no permission — Jira masks 403 as 404)') }
             0   { [Console]::Error.WriteLine("jira: transport error (curl failed) on $Method $Path"); return $EX_ERR }

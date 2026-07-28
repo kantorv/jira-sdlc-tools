@@ -45,6 +45,7 @@ if (-not $psExe) { Die "check_assignee: no PowerShell runtime (pwsh/powershell) 
 $CfgDir = $null
 try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $CfgDir = ([string]$t).Trim() } } catch { }
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
+$CfgDir = Join-Path $CfgDir '.jst'
 function Get-Cfg {
     param([string]$Name)
     foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
@@ -67,7 +68,7 @@ if ($Site) { $Site = $Site -replace '^[^/]*//', '' } else { $Site = '' }
 # distinguish "assigned to someone else" from "unassigned". Compare on accountId.
 $whoami = ((& $psExe -NoProfile -File $jiraPs --role $Role whoami 2>$null) | Out-String)
 if ($LASTEXITCODE -ne 0 -or -not $whoami.Trim()) {
-    Die "check_assignee: could not authenticate as role '$Role' — check JIRA_$($Role.ToUpper())_TOKEN (or JIRA_TOKEN) in jira-sdlc-tools.local.env."
+    Die "check_assignee: could not authenticate as role '$Role' — check JIRA_$($Role.ToUpper())_EMAIL + _TOKEN in .jst/jira-sdlc-tools.local.env."
 }
 $MyId = ''; $Me = ''
 try {

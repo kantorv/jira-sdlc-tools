@@ -12,12 +12,12 @@ is deliberately shorter and only covers what's easy to get wrong.
 
 Every project-specific value (Jira project key, worktrees path, test
 commands, workflow status names) is a `<TOKEN>`
-resolved from `jira-sdlc-tools.env` in the project root
+resolved from `.jst/jira-sdlc-tools.env` in the project root
 (see `plugins/jira-sdlc/skills/_shared/project-config.md` for a description of
 each variable) — never a literal.
 **Never hardcode a real project's value into a skill file.** If you're
 about to type an actual Jira key, a real path, or a specific framework
-name into a `SKILL.md` body, it belongs in `jira-sdlc-tools.env`'s example
+name into a `SKILL.md` body, it belongs in `.jst/jira-sdlc-tools.env`'s example
 table instead, referenced through a token. This repo's entire value is
 being reusable across projects; a hardcoded literal quietly breaks that
 for the next person who installs it.
@@ -227,7 +227,10 @@ for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
-done   # pass an issue-key arg to check_assignee; a subcommand (e.g. whoami) to jira
+done   # add the args each one needs: --role <role> to statuscheck; --role <role>
+       # plus an issue key to check_assignee; --role <role> and a subcommand
+       # (e.g. whoami) to jira. All three now REQUIRE --role — auth is
+       # role-scoped, with no default credential.
 ```
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the

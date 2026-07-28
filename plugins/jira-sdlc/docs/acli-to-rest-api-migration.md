@@ -7,6 +7,9 @@
 > live against a real Jira Cloud site. Read it as history, not as
 > instructions — the live operational reference is
 > [`../skills/_shared/jira-api-reference.md`](../skills/_shared/jira-api-reference.md).
+> One detail has since changed: the `$JIRA_ACCOUNT_EMAIL:$JIRA_TOKEN` pair the
+> `curl` samples below use no longer exists. Auth is now role-scoped — read
+> those samples as `$JIRA_<ROLE>_EMAIL:$JIRA_<ROLE>_TOKEN`.
 
 A one-stop map from every `acli` call this toolkit invokes to a plain
 `curl` call against the **Jira Cloud REST API v3**, so a skill (or a

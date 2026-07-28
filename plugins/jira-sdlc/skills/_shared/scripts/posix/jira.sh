@@ -11,9 +11,11 @@
 #   L4 dispatch  — arg parsing + subcommand routing (bottom of file)
 #
 # Auth is per-request Basic (no login, no stored credential, no global state):
-# --role picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call uses, falling back
-# to JIRA_ACCOUNT_EMAIL / JIRA_TOKEN. Every credential swap stays request-scoped
-# instead of touching any persisted, global login state.
+# --role is REQUIRED and picks which <ROLE>_EMAIL/<ROLE>_TOKEN pair the call
+# uses. There is no default account and no fallback — each of the three roles
+# supplies its own email AND token, so an unset pair is an error rather than a
+# silent borrow of someone else's identity. Every credential swap stays
+# request-scoped instead of touching any persisted, global login state.
 #
 # Output contract:  read ops print raw JSON on stdout (caller jq's it); write ops
 # print nothing on success (REST returns 204, empty). Errors → stderr.
@@ -35,7 +37,7 @@ die() { local code=$1; shift; printf 'jira: %s\n' "$*" >&2; exit "$code"; }
 
 usage() {
   cat >&2 <<'EOF'
-usage: jira.sh [--role executor|assigner|reviewer] <command>
+usage: jira.sh --role assigner|executor|reviewer <command>
 
   whoami                                         who this credential authenticates as
   project exists  <KEY>                          is the project visible to this account?
@@ -74,25 +76,21 @@ _cfg() {
 
 _urlenc() { jq -rn --arg v "$1" '$v|@uri'; }
 
-# Resolve the <role> credential pair. Email and token fall back to the default
-# account INDEPENDENTLY (a role may set only its email, sharing the default token).
+# Resolve the <role> credential pair. Role-scoped only: each role needs BOTH its
+# own email and its own token, with no default account to fall back to.
 _resolve_cred() {
   local prefix="" email="" token=""
   case "$_ROLE" in
     executor) prefix=JIRA_EXECUTOR ;;
     assigner) prefix=JIRA_ASSIGNER ;;
     reviewer) prefix=JIRA_REVIEWER ;;
-    "")       prefix="" ;;
+    "")  die "$EX_USAGE" "--role is required — one of assigner|executor|reviewer" ;;
     *) die "$EX_USAGE" "role must be executor|assigner|reviewer (got '$_ROLE')" ;;
   esac
-  if [ -n "$prefix" ]; then
-    email=$(_cfg "${prefix}_EMAIL" || true)
-    token=$(_cfg "${prefix}_TOKEN" || true)
-  fi
-  [ -z "$email" ] && email=$(_cfg JIRA_ACCOUNT_EMAIL || true)
-  [ -z "$token" ] && token=$(_cfg JIRA_TOKEN || true)
-  [ -n "$email" ] || die "$EX_ERR" "no email for role '${_ROLE:-default}' — set ${prefix:-JIRA_ACCOUNT}_EMAIL in jira-sdlc-tools.local.env."
-  [ -n "$token" ] || die "$EX_ERR" "no token for role '${_ROLE:-default}' — set ${prefix:-JIRA}_TOKEN in jira-sdlc-tools.local.env (raw API token value, not a path)."
+  email=$(_cfg "${prefix}_EMAIL" || true)
+  token=$(_cfg "${prefix}_TOKEN" || true)
+  [ -n "$email" ] || die "$EX_ERR" "no email for role '$_ROLE' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env."
+  [ -n "$token" ] || die "$EX_ERR" "no token for role '$_ROLE' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)."
   _CRED="$email:$token"
 }
 
@@ -111,9 +109,9 @@ _resolve_cloud_id() {
 _ready() {
   command -v curl >/dev/null 2>&1 || die "$EX_ERR" "curl is required but not installed."
   command -v jq   >/dev/null 2>&1 || die "$EX_ERR" "jq is required but not installed."
-  _cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || true); _cfg_dir="${_cfg_dir:-$PWD}"
+  _cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || true); _cfg_dir="${_cfg_dir:-$PWD}/.jst"
   _SITE=$(_cfg JIRA_ACCOUNT_URL || true); _SITE="${_SITE#*://}"
-  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in jira-sdlc-tools.local.env."
+  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env."
   _resolve_cred
   _resolve_cloud_id
   _BASE="https://api.atlassian.com/ex/jira/$_CLOUD_ID/rest/api/3"
@@ -150,7 +148,7 @@ _request() {
   case "$code" in
     2??) return "$EX_OK" ;;
     400) _fail "$EX_VALIDATION" "$code" "validation — bad body / unknown field or issue type" ;;
-    401) _fail "$EX_AUTH"       "$code" "unauthorized — token stale/invalid for role '${_ROLE:-default}'" ;;
+    401) _fail "$EX_AUTH"       "$code" "unauthorized — token stale/invalid for role '$_ROLE'" ;;
     403) _fail "$EX_FORBIDDEN"  "$code" "forbidden — permission" ;;
     404) _fail "$EX_NOTFOUND"   "$code" "not found (or no permission — Jira masks 403 as 404)" ;;
     *)   _fail "$EX_UNEXPECTED" "$code" "unexpected status" ;;

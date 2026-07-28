@@ -18,8 +18,8 @@
   §5. Resolve the wording against [STEP-BY-STEP.md](STEP-BY-STEP.md) and the
   root README's Tokens table, which currently describe this differently.
 - **GitHub PAT scope** — fine-grained, Contents + Pull requests read/write.
-- **Where secrets live:** `jira-sdlc-tools.local.env` is the untracked,
-  per-machine file; `jira-sdlc-tools.env` is committed and must hold no
+- **Where secrets live:** `.jst/jira-sdlc-tools.local.env` is the untracked,
+  per-machine file; `.jst/jira-sdlc-tools.env` is committed and must hold no
   credentials. See
   [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
 - **What the skills do with your credentials** — the actions listed in the

@@ -57,6 +57,11 @@ syncing**.
 | `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
 | `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | the three Jira transition workflows |
 
+These Jira secrets are the **CI bot's own** credential, separate from the
+skills' local auth: the skills authenticate per-request as
+`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` from
+`jira-sdlc-tools.local.env` and read nothing from these repo secrets.
+
 ---
 
 ## Tagging Mechanics

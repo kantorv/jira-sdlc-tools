@@ -52,9 +52,9 @@ the issue key is derived from the current branch (see Discovery below).
   git config `parentbranch` first, then the assigner's
   `PR target branch: …` Jira comment (the durable fallback), then the env
   default.
-- `<STATUS_*>` and other `<TOKEN>`s resolve from `jira-sdlc-tools.env`
-  (team-shared) and `jira-sdlc-tools.local.env` (machine-specific) in the
-  project root.
+- `<STATUS_*>` and other `<TOKEN>`s resolve from `.jst/jira-sdlc-tools.env`
+  (team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific),
+  both under the project root.
 
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
@@ -66,11 +66,13 @@ Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
 below are the POSIX form; on Windows substitute the `.ps1` port each time.
 Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
 the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself. And
-unlike `check_assignee`, which takes a `--role` (and an optional issue key),
-**statuscheck itself takes no role or issue-key argument — run it bare** on
-both POSIX and Windows; a stray role name (e.g. `reviewer`) reaching it is
-ignored rather than mistaken for an issue key, but don't add one.
+chose, and can't be what you consult to dispatch statuscheck itself.
+Like `check_assignee`, **statuscheck takes a required `--role` — pass
+`--role executor`** on both POSIX and Windows, since it authenticates *your*
+role's credential and there is no default account to fall back on. It takes
+**no issue-key argument** here: the branch is the sole source of truth for the
+key, and a role name reaching it positionally is ignored rather than mistaken
+for one.
 
 **Get local credentials and confirm you own the issue — run these FIRST,
 before the healthcheck.** Both are idempotent and take no decisions of their
@@ -105,7 +107,7 @@ All the checks are bundled into one script, so this is a single Bash
 call rather than a sequence of separate probes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role executor
 ```
 
 (If `CLAUDE_PLUGIN_ROOT` isn't set — e.g. reading this skill on a non-Claude
@@ -115,8 +117,8 @@ this set), keeping `../_shared/scripts/posix/statuscheck.sh` relative to this
 skill's directory as the default; see INTEGRATIONS.md.)
 
 The script resolves
-`<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `jira-sdlc-tools.env` /
-`jira-sdlc-tools.local.env` itself; you don't need to pre-resolve tokens
+`<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from `.jst/jira-sdlc-tools.env` /
+`.jst/jira-sdlc-tools.local.env` itself; you don't need to pre-resolve tokens
 for this section. It prints one markdown table (`check | status |
 detail`), where status is `OK`, `FAIL` (blocks, with a remedy line
 printed under the table), `WARN` (suspicious, not blocking), or `INFO`
@@ -140,8 +142,9 @@ here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
 from the main checkout when missing by `ensure_local_env.sh`, called
 before this script — see step 1 above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth`
-(step 10's `gh pr create`), `jira_auth` (the default credential authenticates —
-`jira.sh whoami`), `jira_project`, plus context `base_branch`, `working_tree` (WARN when
+(step 10's `gh pr create`), `jira_auth` (the **executor's** credential
+authenticates — `jira.sh --role executor whoami`), `jira_project`, plus context
+`base_branch`, `working_tree` (WARN when
 dirty), and `worktrees_dir` (WARN when missing — only the assigner acts
 on it).
 
@@ -216,7 +219,7 @@ stale-branch merge and step 10's PR-base resolution).
 3. **Transition the issue** to in-progress:
    `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_PROGRESS>"` (transition
    by target status *name*; `jira.sh` resolves it to the id — see
-   `jira-sdlc-tools.env` in the project root for the confirmed status name for
+   `.jst/jira-sdlc-tools.env` for the confirmed status name for
    this project — default example `In Progress`).
 
 4. **Investigate** — read the affected code (Grep/Read/Glob) before
@@ -344,11 +347,18 @@ stale-branch merge and step 10's PR-base resolution).
         to prevent.
       - **Recovered by the branch search** (the first two sources were empty) —
         proceed, and say so explicitly in the final report, naming the branch.
-      - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `jira-sdlc-tools.env`;
+      - **Fell back to `<DEFAULT_BASE_BRANCH>`** (see `.jst/jira-sdlc-tools.env`;
         top-level issues only) — proceed, and say so explicitly in the final report.
+      - **Prefix and base disagree** (top-level issues only — the §13 sanity
+        check): you're on `hotfix/…` but `PR_BASE` isn't `<PRODUCTION_BRANCH>`,
+        or on `feature/…` but it is. §12 ties the prefix to the base, so one of
+        the two is wrong — **stop and ask.** A hotfix that fell through to the
+        `<DEFAULT_BASE_BRANCH>` default above is the realistic case, and
+        retargeting a production fix at staging neither ships it nor gets it
+        versioned. A sub-task is exempt: its base is its parent's branch.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
-      (`<JIRA_ACCOUNT_URL>` comes from `jira-sdlc-tools.local.env` in the
-      project root — there's no browse-URL subcommand, so construct the
+      (`<JIRA_ACCOUNT_URL>` comes from `.jst/jira-sdlc-tools.local.env` under
+      the project root — there's no browse-URL subcommand, so construct the
       link from the token) to link back to it in the PR body, rather than
       hardcoding the Jira site domain anywhere.
     - Write the PR body to a temp file and use `--body-file` (backticks
@@ -373,7 +383,7 @@ stale-branch merge and step 10's PR-base resolution).
     You just opened a PR (step 10), so the work is now under review —
     transition it to in-review:
     `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_REVIEW>"` (see
-    `jira-sdlc-tools.env` in the project root for the confirmed status
+    `.jst/jira-sdlc-tools.env` for the confirmed status
     name for this project — default example `In Review`).
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
     a parent (check `fields.parent` from step 1):
@@ -410,6 +420,7 @@ stale-branch merge and step 10's PR-base resolution).
 
 Reference: `../_shared/jira-api-reference.md` is the operational + REST
 reference — the `jira.sh` command surface, field lists, comment mechanics, and
-git/branch conventions this skill depends on. The `jira-sdlc-tools.env`
-(team-shared) and `jira-sdlc-tools.local.env` (machine-specific) files in the
-project root have this repo's specific values for every `<TOKEN>` used above.
+git/branch conventions this skill depends on. The `.jst/jira-sdlc-tools.env`
+(team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific) files
+under the project root have this repo's specific values for every `<TOKEN>`
+used above.

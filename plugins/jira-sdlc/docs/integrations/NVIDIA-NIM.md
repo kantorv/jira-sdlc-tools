@@ -26,16 +26,16 @@ Alternative proxies).
 
 ## Prerequisites
 
-- Jira auth configured — per-request Basic auth from `jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
-- `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` in your **project root** — see
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project root** — see
   [project-config.md](../../skills/_shared/project-config.md)
 - **A model-proxy platform** that exposes an Anthropic-compatible API and can route to your NIM
   endpoint — fcc (below) is the verified instance; Router9 and similar fulfill the same role.
   Required; NIM cannot front Claude Code without it.
 - **NVIDIA NIM access** — an API key for NIM's hosted service (issued at `build.nvidia.com/settings/api-keys`)
   **or** a self-hosted NIM endpoint. These values live in the proxy's own config, **not** in
-  `jira-sdlc-tools.env` (which is the Jira/Git project layer, not the model endpoint).
+  `.jst/jira-sdlc-tools.env` (which is the Jira/Git project layer, not the model endpoint).
 - **Claude Code CLI** — fcc launches Claude Code, which loads skills from `~/.claude/` as usual.
   *(Unverified: whether the fcc installer installs `claude` itself or expects it pre-installed —
   assume you need Claude Code installed first.)*
@@ -192,7 +192,7 @@ plugin namespace is unchanged because the runtime *is* Claude Code:
   on PATH in the environment the `fcc-claude` session runs in — same prerequisites as the Claude Code
   integration. Any sandboxing fcc applies is limited to model I/O, not the skill scripts, so
   tool-availability limits belong here.
-- **NIM credentials are not `jira-sdlc-tools.env` values.** `<NIM_API_KEY>`, `<NIM_BASE_URL>`, and
+- **NIM credentials are not `.jst/jira-sdlc-tools.env` values.** `<NIM_API_KEY>`, `<NIM_BASE_URL>`, and
   `<NIM_MODEL_ID>` are the *model* layer and live in the proxy's own config (fcc's `~/.fcc/` / Admin
   UI; Router9's dashboard; your gateway's env). Keep them out of the project env to avoid committing
   model-provider keys into the repo.
