@@ -316,6 +316,7 @@ jobs:
           set -euo pipefail
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
+            --model "nvidia/$DEFAULT_REVIEWER_MODEL" \
             -p "/jira-sdlc:jira-task-reviewer" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
 
