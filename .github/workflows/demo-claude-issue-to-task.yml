@@ -1,0 +1,292 @@
+# Demo — turn a freshly-opened GitHub issue into a Jira task via jira-task-assigner
+#
+# What it demos: on `issues: opened`, invoke the jira-task-assigner skill
+# headlessly with the opened issue's title + body as its free-form task
+# description, so a new GitHub issue becomes a Jira Story/Bug plus a
+# feature/<KEY> branch and a worktree — the same thing a developer gets by
+# typing `/jira-sdlc:jira-task-assigner <text>` interactively, but triggered by
+# the issue event instead. It is a Claude-powered sibling of
+# demo-claude-hotfix-flow.yml (assigner half) and demo-claude-reviewer.yml.
+#
+# Gating: the job declares `environment: production` (which already exists in
+# this repo, with owner approval already configured — reuse it, do NOT create
+# a new environment), so GitHub pauses for a human approval BEFORE the assigner
+# runs. That approval is the only thing standing between "anyone opens an
+# issue" and "an LLM creates a Jira issue and a git branch on a runner,
+# unattended" — keep it. Without it this would auto-run the assigner on every
+# issue the moment it's opened, which is too much autonomy for a demo, and a
+# headless `-p` run has no interactive turn to answer a clarifying question
+# (a run where the assigner stops to ask ends with no branch created).
+#
+# ── The worktree-persistence caveat (read this before copying the file) ─────
+#
+#  This is a demo of the *invocation shape*, not a durable end-to-end
+#  issue→task→implement→review pipeline. The assigner skill pushes the new
+#  branch to origin (that survives — it's on the remote) AND creates a linked
+#  worktree for it under WORKTREES_DIR (here $RUNNER_TEMP/worktrees). On a
+#  GitHub-hosted runner each job gets a fresh VM, so WORKTREES_DIR and every
+#  worktree under it are destroyed when the job ends — the branch is still on
+#  origin, but the worktree a later executor/reviewer run would expect to
+#  *already exist* is not. End-to-end chaining on hosted runners therefore
+#  needs the demo-claude-hotfix-flow.yml trick (a later job rebuilds the
+#  worktree from origin) or a persistent/self-hosted runner whose disk
+#  survives across runs the way a developer's machine does. This file
+#  deliberately stops after the assigner: it shows the assigner half of the
+#  chain, and flags that the worktree half does not survive a hosted runner's
+#  teardown rather than silently pretending worktrees persist.
+#
+# ── Caveats worth knowing before you copy this into another repo ──────────
+#
+#  1. **Do not export GH_TOKEN / GITHUB_TOKEN into the step that runs the
+#     skill.** Every skill starts with statuscheck, which reads
+#     GITHUB_PAT_TOKEN out of the env FILE (not the environment) and runs
+#     `gh auth logout && gh auth login --with-token`; gh refuses that login
+#     while either token variable is set — "first clear the value from the
+#     environment", exit 1 — which FAILs the gh_auth row and aborts the run
+#     before any work happens. CLAUDE_CODE_OAUTH_TOKEN is the ONLY secret
+#     exported into the skill-running step; the rest are written to
+#     .jst/jira-sdlc-tools.local.env and read from there. `git push` is
+#     unaffected: it uses the credentials actions/checkout persisted in
+#     `.git/config`, so the built-in GITHUB_TOKEN (which can push given the
+#     job `permissions:` below) is enough — GITHUB_PAT_TOKEN is not a secret
+#     to create.
+#  2. **The skills come from the base-branch checkout.** `--plugin-dir`
+#     points into the actions/checkout workspace, stood on the base branch
+#     (development), so the skill prompts loaded are the base branch's, not
+#     the new issue branch's. The assigner also refuses to run from an issue
+#     branch (its step-2 healthcheck hard-stops), so standing on the base
+#     branch is required, not decorative. Land skill changes on the base
+#     branch first if you want them exercised.
+#  3. **No shared disk across runs** (the worktree caveat above): the only
+#     durable artifact of this run is the branch the assigner pushed to
+#     origin and the uploaded log; the local worktree it created is gone
+#     when the VM tears down.
+#
+# ── Secrets (environment secrets on `production`) ───────────────────────────
+#
+#  All of them are environment secrets on the `production` environment (so a
+#  job that forgets `environment: production` sees empty strings, not repo-level
+#  values), and each is named exactly as the `jira-sdlc-tools.local.env` key
+#  it becomes — which is what lets the bootstrap step below be one loop over a
+#  KEYS list rather than a hand-mapped list of printfs (secret -> file via
+#  env, no sed — the demo-kimi-openrouter-reviewer.yml mapping pattern, applied to
+#  .jst/jira-sdlc-tools.local.env the way demo-claude-hotfix-flow.yml does):
+#
+#    CLAUDE_CODE_OAUTH_TOKEN  every run (read from the environment by the
+#                             CLI — the only one never written to the file)
+#    JIRA_ACCOUNT_URL         every run
+#    JIRA_ASSIGNER_EMAIL / JIRA_ASSIGNER_TOKEN   the assigner's Jira identity
+#    JIRA_EXECUTOR_EMAIL      not a credential — the assigner assigns every
+#                             issue it creates to the executor, and
+#                             get_assignee_email.sh reads that address (and
+#                             only the address — no executor token) from the
+#                             env file
+#    GITHUB_PAT_TOKEN         not a secret to create — always populated from
+#                             the built-in GITHUB_TOKEN (which can push the
+#                             new branch given the job permissions below).
+#                             One limitation of the built-in token carries
+#                             over unchanged: PRs opened with it don't
+#                             trigger other workflows
+#
+#  None are assumed to exist: the bootstrap step checks its whole set up front
+#  and fails loud with `::error::` rather than letting the claude CLI die
+#  halfway through on a missing key (CLAUDE_CODE_OAUTH_TOKEN in particular
+#  does not exist in this repo yet).
+#
+#  `WORKTREES_DIR` and `GITHUB_PAT_TOKEN` are the two keys that are *not*
+#  secrets: `WORKTREES_DIR` is a path on *this* runner, computed per job
+#  under RUNNER_TEMP (a value carried over from a developer's machine would
+#  point somewhere that doesn't exist here), and `GITHUB_PAT_TOKEN` is
+#  populated from the runner's built-in token, per above.
+
+name: Demo — Claude issue-to-task (jira-task-assigner on issue opened)
+
+
+
+env:
+  # Pinned deliberately, same as validator.yml: a float would let an upstream
+  # CLI change break this demo on an unrelated day. Workflow-level env can't
+  # cross files, so validator.yml hardcodes the same pin — bump both together.
+  CLAUDE_CLI_VERSION: 2.1.220
+  DEFAULT_ASSIGNER_MODEL: sonnet
+
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  assign:
+    name: Assigner — turn the opened issue into a Jira task + branch
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: write # the assigner pushes the new feature branch to origin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history + every remote ref: the assigner cuts the new issue
+          # branch from a fetched origin/<base>, which a shallow single-branch
+          # clone doesn't have. fetch-depth: 0 also lets `git switch` to the
+          # base branch below work regardless of which ref actions/checkout
+          # defaulted to (the repo default branch is `development`, so checkout
+          # already lands there — the switch is a robust no-op confirmation).
+          fetch-depth: 0
+
+      - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
+        shell: bash
+        env:
+          # Environment secrets on `production`, each named exactly as the
+          # env-file key it becomes — which is what lets the step below be one
+          # loop instead of a hand-mapped list. KEYS is the whole contract.
+          KEYS: JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
+          JIRA_ASSIGNER_TOKEN: ${{ secrets.JIRA_ASSIGNER_TOKEN }}
+          # Not a credential: the assigner assigns every issue it creates to
+          # the executor, and get_assignee_email.sh reads that address (and
+          # only the address — no executor token) from the env file.
+          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Checked here so one step catches every missing secret, but never
+          # written to the file — the claude CLI reads it from the environment.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # No filesystem carries over from a previous run on a hosted runner,
+          # so this file is rebuilt from this job's own secrets every time.
+          # jira.sh and statuscheck read credentials ONLY from here (never the
+          # environment), resolved from the git top-level.
+          missing=()
+          for k in CLAUDE_CODE_OAUTH_TOKEN $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          # Create empty and lock it down BEFORE the secrets go in.
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          # printf with the value as an argument: secret values are data, never
+          # re-expanded by the shell and never part of the script text.
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          # WORKTREES_DIR is deliberately NOT a secret: it's a path on *this*
+          # runner, and a value carried over from a developer's machine would
+          # point somewhere that doesn't exist here. The assigner never mkdirs
+          # it, so create it now (see the worktree caveat in the header).
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Resolve project config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Branch names are <TOKEN>s from the team-shared env file, never
+          # literals in this workflow (AGENTS.md). Only the base branch is
+          # needed here; the assigner derives the project key itself.
+          cfg() {
+            grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
+              | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
+          }
+          for k in DEFAULT_BASE_BRANCH; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
+
+      - name: Stand on the base branch
+        shell: bash
+        env:
+          BASE: ${{ steps.config.outputs.default_base_branch }}
+        run: |
+          set -euo pipefail
+          # The assigner skill requires running from a *main checkout* (`.git`
+          # is a directory) on the base branch, NEVER a linked worktree or an
+          # issue branch — its step-2 healthcheck hard-stops otherwise (it
+          # *creates* worktrees, it doesn't run inside one). A fresh
+          # actions/checkout on the default branch satisfies the main-checkout
+          # half; this switch lands us on the base branch the skill expects.
+          # fetch-depth: 0 above made origin/<base> available for the DWIM
+          # tracking-branch creation if checkout didn't already land here.
+          git switch "$BASE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install claude CLI (native, no npm)
+        # Same install as validator.yml and demo-claude-hotfix-flow.yml: the
+        # installer downloads a prebuilt binary, SHA256-verifies it against
+        # Anthropic's manifest, and runs its own `claude install`. Pinned
+        # deliberately — a float would let an upstream CLI change break this
+        # demo on an unrelated day. The other demos pin this same version (via
+        # their workflow-level CLAUDE_CLI_VERSION env var) — bump them
+        # together with this file's inline pin. validator.yml lags on an
+        # older pin (2.1.199) and is not part of that bump-together set.
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run jira-task-assigner
+        timeout-minutes: 25
+        shell: bash
+        env:
+          # The only secret exported into the skill-running step — see
+          # caveat 1 in the header: exporting GH_TOKEN/GITHUB_TOKEN here would
+          # block statuscheck's gh login and abort before any work happens.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Pull the issue's title and body into env vars FIRST, then build the
+          # prompt from them — never interpolate github.event.issue.* directly
+          # into the shell command (issue bodies are user content, not script
+          # text). Built into a temp file with printf below so the values stay
+          # data, never re-expanded by the shell.
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          # Free-form task description = the issue's title + blank line + body,
+          # the shape the issue description specifies. printf from env vars so
+          # the issue text is data, not interpolated into the script.
+          {
+            printf '%s\n\n' "$ISSUE_TITLE"
+            printf '%s' "${ISSUE_BODY:-}"
+          } > "$RUNNER_TEMP/assigner-prompt.txt"
+
+          # --dangerously-skip-permissions: headless runs have no interactive
+          # turn to approve tool calls. Safe-ish here and nowhere else: a
+          # throwaway runner VM, non-root (the flag refuses to run as root).
+          # The prompt text is passed via `$(cat …)` inside the quoted -p
+          # argument, so it stays a single argument (no word splitting) and its
+          # newlines survive into the model.
+          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+            --dangerously-skip-permissions \
+            --model "$DEFAULT_ASSIGNER_MODEL" \
+            -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
+            2>&1 | tee "$RUNNER_TEMP/assigner.log"
+
+      - name: Upload assigner log
+        # The assigner's full transcript — its report of the Jira issue(s),
+        # branch(es), and worktree(s) it created is echoed here, so a human
+        # inspecting the run sees what happened. The assigner skill itself owns
+        # its Jira comment content; this log is the reliable, path-independent
+        # artifact of the run. (See the worktree caveat: the local worktree is
+        # gone when the VM tears down, but the log and the pushed branch remain.)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: assigner-log
+          path: ${{ runner.temp }}/assigner.log
+          if-no-files-found: warn
+          retention-days: 7

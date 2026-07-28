@@ -1,0 +1,1174 @@
+# ⚠️ THIS IS A JOB-CHAINING DEMO — NOT THIS REPO'S DEVELOPMENT PROCEDURE. ⚠️
+#
+# What it demonstrates: the *planned-work* sibling of
+# demo-claude-hotfix-flow.yml. Same three-job chain — assigner → executor →
+# reviewer, each running one skill headlessly in its own runner VM, each as its
+# own Jira identity, with the issue key and branch handed forward through job
+# outputs — but on the regular feature flow: `feature/<KEY>-<slug>` cut from
+# `<DEFAULT_BASE_BRANCH>`, a PR targeting `<DEFAULT_BASE_BRANCH>`, and no
+# hotfix directive in the assigner prompt (so assigner step 5C never engages
+# and scope is the assigner's own single-step/multistep judgement).
+#
+# Read demo-claude-hotfix-flow.yml next to this file: the two differ only in
+# the trigger, the branch/PR-base semantics, and the issue-comment reporting
+# below. The prose walkthrough is
+# plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md.
+#
+# ── The trigger: a `/fcc-make-feature` comment on a GitHub issue ────────────
+#
+# Unlike the hotfix demo's `workflow_dispatch`, this run is driven from an
+# issue comment, so the GitHub issue itself *is* the task description and the
+# whole run reports back where the work was requested. The job-level `if`
+# requires all of:
+#
+#   * the comment body is exactly `/fcc-make-feature` — a bare command, so a
+#     comment that merely mentions it in prose doesn't fire the chain;
+#   * `author_association` is OWNER or MEMBER. **This is the security
+#     boundary**: `issue_comment` fires for *any* commenter on a public repo,
+#     and what follows runs an LLM with write permissions on a runner. Do not
+#     loosen it to CONTRIBUTOR (a merged PR earns that) or drop it in favour of
+#     "the environment approval will catch it" — an approval prompt is a poor
+#     place to be reading attacker-supplied text for the first time.
+#   * the comment is on an **issue, not a pull request**. `issue_comment` fires
+#     for PR comments too, and `github.event.issue` would then be the PR —
+#     handing the assigner a PR description as a feature request. Excluded
+#     explicitly rather than left to chance.
+#
+# Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
+# guard is stated once.
+#
+# The issue's **title + blank line + body** (never the `/fcc-make-feature`
+# comment)
+# is the free-form task description handed to jira-task-assigner — the same
+# shape demo-claude-issue-to-task.yml uses. Issue bodies are attacker-supplied
+# text, so they are pulled into env vars first and written to a temp file with
+# `printf`, never interpolated into a shell command.
+#
+# ── Reporting back to the issue ────────────────────────────────────────────
+#
+# Each job posts its skill's report as a comment on the triggering issue: a
+# structured summary (Jira key, branch, PR link where applicable) followed by
+# the full transcript inside a collapsed <details> block, so the comment stays
+# readable without losing the transcript. The per-job log artifacts
+# (assigner-log / executor-log / reviewer-log) are still uploaded — they are
+# the path-independent copy, and the comment's transcript is truncated when it
+# would exceed GitHub's 65536-character comment limit (a `gh issue comment`
+# that exceeds it fails the job, so the guard is not optional).
+#
+# The comment steps run `if: always()` and after the skill, which is what lets
+# a *failed* run still explain itself on the issue. They are the only steps
+# that touch `GH_TOKEN`, and they set it inline on the one command — see
+# caveat 3.
+#
+# Each job also uploads a second, *visual* copy of its run:
+# `<role>-transcript-gif`, the skill's own Claude Code session rendered to an
+# animated GIF with agent-log-gif. It exists for the case the text log serves
+# worst — a failed or weird headless run, far easier to read as a terminal
+# replay than as 50k characters of piped stdout. It is an **artifact** and not
+# an attachment on the issue comment because GitHub has no API for attaching
+# files to an issue comment. Being a debug convenience, it must never redden a
+# green run: `if: always()` + `continue-on-error: true` + a step
+# `timeout-minutes`, and the job timeouts carry +5 minutes of headroom over
+# their skill step so the render still fits after a skill that used its whole
+# budget.
+#
+# ── Caveats carried over from demo-claude-hotfix-flow.yml ──────────────────
+#
+#  1. **No shared disk between jobs.** WORKTREES_DIR conventions assume a
+#     persistent checkout with sibling worktrees; GitHub-hosted runners give
+#     each job a fresh VM. So job 1 pushes the branch to origin and jobs 2/3
+#     rebuild a *linked* worktree for it from scratch — not decoration: the
+#     executor and reviewer both stop unless `.git` is a file (a linked
+#     worktree) on a `feature/*` / `hotfix/*` branch, which a bare
+#     `actions/checkout` is not. Same reason every job rebuilds
+#     `.jst/jira-sdlc-tools.local.env` from its own environment secrets: there
+#     is no earlier job's copy to inherit. Those bootstrap steps are
+#     near-identical **on purpose** and are not factored into a composite
+#     action — this repo has no CI-reuse mechanism anywhere, and these
+#     workflows are meant to be *copied into other repos*, which a sibling
+#     helper file quietly breaks. Keep the copies byte-identical apart from
+#     the role, so a diff between two jobs shows only what genuinely differs.
+#  2. **`git config branch.<b>.parentbranch` is machine-local**, so it never
+#     survives to jobs 2/3; they re-set it from job 1's outputs. Here that
+#     value is `<DEFAULT_BASE_BRANCH>` — *not* `<PRODUCTION_BRANCH>`, which is
+#     the one line of this pair that differs from the hotfix demo, and the one
+#     most likely to be copied over wrongly. The assigner's
+#     `PR target branch: …` Jira comment is the durable fallback the skills
+#     would otherwise use.
+#  3. **Do not export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a
+#     skill.** Every skill starts with statuscheck, which reads
+#     GITHUB_PAT_TOKEN *out of the env file* (not the environment) and runs
+#     `gh auth logout && gh auth login --with-token` with it; gh refuses that
+#     login while either token variable is set — "first clear the value from
+#     the environment", exit 1 — which FAILs the `gh_auth` row and aborts the
+#     run before any work happens. That is why the token is written into
+#     `.jst/jira-sdlc-tools.local.env` and the `env:` blocks of the
+#     skill-running steps stop at CLAUDE_CODE_OAUTH_TOKEN. The
+#     comment-posting steps below run *after* the skill and set `GH_TOKEN`
+#     only on the `gh` command itself. `git push` is unaffected: it uses the
+#     credentials actions/checkout persisted in `.git/config`.
+#  4. **Self-review.** Job 3's gh session is the same account that opened the
+#     PR in job 2, and GitHub blocks approving your own PR — the reviewer
+#     skill already posts its verdict as a PR *comment* for this reason.
+#  5. **The skills come from the base-branch checkout**, because the assigner
+#     refuses to run from an issue branch (its step 2). An `issue_comment`
+#     event checks out the repo's *default* branch, which is not necessarily
+#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap still switches to the base
+#     branch explicitly rather than trusting the event's default. Land skill
+#     changes on the base branch first if you want them exercised.
+#
+# ── Secrets ───────────────────────────────────────────────────────────────
+#
+# All of them are **environment secrets on `production`** (so a job that
+# forgets `environment: production` sees empty strings, not repo-level
+# values), and each is named **exactly as the `jira-sdlc-tools.local.env` key
+# it becomes** — which is what lets each job's first step be a single loop
+# over a `KEYS` list rather than a hand-mapped list of printfs:
+#
+#   CLAUDE_CODE_OAUTH_TOKEN  every job (read from the environment by the
+#                            CLI — the only one never written to the file)
+#   JIRA_ACCOUNT_URL         every job
+#   JIRA_ASSIGNER_EMAIL / JIRA_ASSIGNER_TOKEN    job 1 only
+#   JIRA_EXECUTOR_EMAIL / JIRA_EXECUTOR_TOKEN    job 2 only  (job 1 also gets
+#                            the *email* — it's an assignment target, not a
+#                            credential; see the step comment there)
+#   JIRA_REVIEWER_EMAIL / JIRA_REVIEWER_TOKEN    job 3 only
+#   GITHUB_PAT_TOKEN         every job — not a secret to create; see below
+#
+# `WORKTREES_DIR` and `GITHUB_PAT_TOKEN` are the two keys that are *not*
+# secrets: `WORKTREES_DIR` is computed per job as a path under RUNNER_TEMP
+# (a value carried over from a developer's machine would point somewhere
+# that doesn't exist on the runner), and `GITHUB_PAT_TOKEN` is populated
+# from the runner's built-in token, detailed below.
+#
+# Every job checks its own set up front and fails loud with `::error::` rather
+# than letting the claude CLI die on an unset key halfway through.
+#
+# GitHub itself needs no secret to create: `GITHUB_PAT_TOKEN` is always
+# populated from the runner's built-in `secrets.GITHUB_TOKEN`, which can
+# push, open a PR, and comment on the issue given the job `permissions:`
+# below. One limitation of the built-in token carries over unchanged — PRs
+# it opens don't trigger other workflows, so the repo's own
+# `jira_issue_transition_on_pr_open.yml` stays silent for the demo's PR (the
+# executor skill transitions Jira itself, so the chain still completes
+# either way).
+
+name: Demo — Free Claude Code + NVIDIA NIM feature flow (assigner → executor → reviewer)
+
+on:
+  issue_comment:
+    types: [created]
+
+# Two runs at once would race on the same Jira project and push sibling
+# feature branches — serialize them, and don't cancel a run mid-skill. The
+# group is per-workflow, not per-issue, deliberately: the race is over shared
+# state (the Jira project, the runner's worktrees dir), not over one issue.
+concurrency:
+  group: demo-fcc-nvidia-nim-feature-flow
+  cancel-in-progress: false
+
+env:
+  # Pinned deliberately, same as validator.yml: a float would let an upstream
+  # CLI change break this demo on an unrelated day. Workflow-level env can't
+  # cross files, so validator.yml hardcodes the same pin — bump both together.
+  CLAUDE_CLI_VERSION: 2.1.220
+  # Default model for issue_comment runs (no dispatch inputs). Sync the value
+  # with the workflow_dispatch input's default.
+  DEFAULT_ASSIGNER_MODEL: "nvidia_nim/z-ai/glm-5.2"
+  DEFAULT_EXECUTOR_MODEL: "nvidia_nim/deepseek-ai/deepseek-v4-pro"
+  DEFAULT_REVIEWER_MODEL: 'nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b'
+
+
+jobs:
+  # ── Job 1 ── assigner: issue text → Jira issue + feature/<KEY>-<slug> ──────
+  assign:
+    name: 1 · assigner — create the Jira issue and feature branch
+    # The whole security boundary of this workflow — see the header. All three
+    # conditions are required; jobs 2/3 inherit the guard by `needs`.
+    if: |
+          github.event.issue.pull_request == null &&
+          github.event.comment.body == '/fcc-make-feature' &&
+          (github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER')
+    runs-on: ubuntu-latest
+    environment: production
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 35
+    permissions:
+      contents: write # the assigner pushes the new feature branch
+      issues: write # posts the assigner report back on the triggering issue
+    outputs:
+      issue_key: ${{ steps.assigned.outputs.issue_key }}
+      branch: ${{ steps.assigned.outputs.branch }}
+      pr_base: ${{ steps.config.outputs.default_base_branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history + every remote ref: the assigner cuts the feature
+          # branch from a fetched origin/<DEFAULT_BASE_BRANCH>, which a shallow
+          # single-branch clone doesn't have. It also lets the `git switch`
+          # below work regardless of which ref the issue_comment event
+          # defaulted to (caveat 5).
+          fetch-depth: 0
+
+      - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
+        shell: bash
+        env:
+          # Environment secrets on `production`, each named exactly as the
+          # env-file key it becomes — which is what lets the step below be one
+          # loop instead of a hand-mapped list. KEYS is the whole contract.
+          KEYS: JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
+          JIRA_ASSIGNER_TOKEN: ${{ secrets.JIRA_ASSIGNER_TOKEN }}
+          # Not a credential: the assigner assigns every issue it creates to
+          # the executor, and get_assignee_email.sh reads that address (and
+          # only the address — no executor token) from the env file.
+          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # First real step of the job: no filesystem survives from job to job,
+          # so each one rebuilds this file from its own secrets. jira.sh and
+          # statuscheck read credentials ONLY from here (never the
+          # environment), resolved from the git top-level.
+          missing=()
+          for k in $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          # Create empty and lock it down BEFORE the secrets go in.
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          # printf with the value as an argument: secret values are data, never
+          # re-expanded by the shell and never part of the script text.
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          # WORKTREES_DIR is deliberately NOT a secret: it's a path on *this*
+          # runner, and a value carried over from a developer's machine would
+          # point somewhere that doesn't exist here.
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Resolve project config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Branch names and the project key are <TOKEN>s from the team-shared
+          # env file, never literals in this workflow (AGENTS.md).
+          cfg() {
+            grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
+              | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
+          }
+          for k in DEFAULT_BASE_BRANCH PROJECT_KEY; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
+
+      - name: Stand on the base branch
+        shell: bash
+        env:
+          BASE: ${{ steps.config.outputs.default_base_branch }}
+        run: |
+          set -euo pipefail
+          # The assigner requires a *main checkout* (`.git` is a directory) on
+          # the base branch and hard-stops on an issue branch or inside a linked
+          # worktree (its step 2) — it *creates* worktrees, it doesn't run in
+          # one. An issue_comment event checks out the repo's default branch,
+          # which is not by definition <DEFAULT_BASE_BRANCH>, so switch
+          # explicitly instead of trusting the event. This checkout is also what
+          # supplies the skill prompts (caveat 5).
+          git switch "$BASE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install claude CLI (native, no npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "${{ env.DEFAULT_ASSIGNER_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          # wait until the proxy answers
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
+
+      - name: Run jira-task-assigner
+        id: run
+        timeout-minutes: 25
+        shell: bash
+        env:
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
+          # Pull the issue's title and body into env vars FIRST, then build the
+          # prompt from them — never interpolate github.event.issue.* into the
+          # shell command (issue bodies are user content, not script text).
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          # Snapshot local feature branches so the next step can tell which one
+          # this run created, instead of parsing the model's prose report.
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-before.txt"
+
+          # Free-form task description = the issue's title + blank line + body.
+          # No hotfix directive: this is the planned-work flow, so the assigner
+          # cuts feature/<KEY>-<slug> off the base branch and judges scope
+          # (single-step vs. multistep) for itself. printf from env vars so the
+          # issue text stays data, never interpolated into the script.
+          {
+            printf '%s\n\n' "$ISSUE_TITLE"
+            printf '%s' "${ISSUE_BODY:-}"
+          } > "$RUNNER_TEMP/assigner-prompt.txt"
+
+          # --dangerously-skip-permissions: headless runs have no interactive
+          # turn to approve tool calls. Safe-ish here and nowhere else: a
+          # throwaway runner VM, non-root (the flag refuses to run as root).
+          # The prompt is passed via `$(cat …)` inside the quoted -p argument,
+          # so it stays one argument and its newlines survive into the model.
+          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+            --dangerously-skip-permissions \
+            --model "${{ env.DEFAULT_ASSIGNER_MODEL }}" \
+            -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
+            2>&1 | tee "$RUNNER_TEMP/assigner.log"
+
+      - name: Capture the created issue and branch
+        id: assigned
+        shell: bash
+        env:
+          PROJECT_KEY: ${{ steps.config.outputs.project_key }}
+        run: |
+          set -euo pipefail
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-after.txt"
+          NEW=$(comm -13 "$RUNNER_TEMP/feature-before.txt" "$RUNNER_TEMP/feature-after.txt")
+          COUNT=$(printf '%s' "$NEW" | grep -c . || true)
+
+          # Exactly one: a headless run that stopped to ask a clarifying
+          # question creates none, and a multistep breakdown creates a parent
+          # plus one branch per sub-task — which this two-successor chain (one
+          # executor, one reviewer) cannot carry. Both land here, loudly.
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::expected exactly 1 new feature/* branch from the assigner, found $COUNT — a run that stopped to ask a question (0), or one the assigner broke into sub-tasks (>1), lands here. Branches: $(printf '%s' "$NEW" | tr '\n' ' ')"
+            exit 1
+          fi
+
+          BRANCH="$NEW"
+          KEY=$(printf '%s' "$BRANCH" | sed -nE "s#^feature/(${PROJECT_KEY}-[0-9]+)-.+\$#\1#p")
+          if [ -z "$KEY" ]; then
+            echo "::error::cannot derive a $PROJECT_KEY issue key from branch '$BRANCH'"
+            exit 1
+          fi
+
+          # Jobs 2/3 get the branch from origin, so an unpushed branch is a
+          # dead end — catch it here rather than in the next job's checkout.
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::$BRANCH exists locally but was never pushed to origin"
+            exit 1
+          fi
+
+          echo "branch=$BRANCH"       >> "$GITHUB_OUTPUT"
+          echo "issue_key=$KEY"       >> "$GITHUB_OUTPUT"
+          echo "### Assigned \`$KEY\` on \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the assigner report on the triggering issue
+        if: always()
+        shell: bash
+        env:
+          # Set on the `gh` command only, and only in a step that runs after
+          # the skill — exporting it earlier breaks statuscheck (caveat 3).
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          JOB_STATUS: ${{ job.status }}
+          KEY: ${{ steps.assigned.outputs.issue_key }}
+          BRANCH: ${{ steps.assigned.outputs.branch }}
+          PR_BASE: ${{ steps.config.outputs.default_base_branch }}
+          ROLE: assigner
+          JOB_LABEL: 1 · assigner
+          ARTIFACT: assigner-log
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          BODY="$RUNNER_TEMP/$ROLE-comment.md"
+          # gh rejects a body over 65536 characters and fails the job, so cap
+          # the embedded transcript well under it and keep the *tail* — the
+          # skill's own report is the last thing it prints. The full log is
+          # always in the artifact.
+          LIMIT=55000
+          # Every line is printf with the value as an argument, so a backtick
+          # or `$` reaching this step can't be re-expanded by the shell.
+          # `printf --` because these formats start with `-`.
+          {
+            printf '### %s — %s\n\n' "$JOB_LABEL" "$JOB_STATUS"
+            printf -- '- Jira issue: **%s**\n' "${KEY:-not created}"
+            printf -- '- Branch: `%s`\n' "${BRANCH:-not created}"
+            printf -- '- PR target branch: `%s`\n' "$PR_BASE"
+            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                # iconv drops the orphaned continuation bytes a byte-wise cut
+                # leaves when it lands mid-character — the transcript is full
+                # of em-dashes and box-drawing, and invalid UTF-8 makes the
+                # GitHub API reject the whole comment.
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n\n</details>\n'
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
+      - name: Upload assigner log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: assigner-log
+          path: ${{ runner.temp }}/assigner.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Render the assigner transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: assigner
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload assigner transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: assigner-transcript-gif
+          path: ${{ runner.temp }}/assigner-gif/*.gif
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ── Job 2 ── executor: implement, push, open the PR into the base branch ────
+  execute:
+    name: 2 · executor — implement and open the PR
+    needs: assign
+    runs-on: ubuntu-latest
+    environment: production
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 45
+    permissions:
+      contents: write # push the implementation commits
+      pull-requests: write # gh pr create
+      issues: write # posts the executor report back on the triggering issue
+    outputs:
+      pr_url: ${{ steps.pr.outputs.pr_url }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Write .jst/jira-sdlc-tools.local.env (executor role only)
+        shell: bash
+        env:
+          # Same shape as job 1, one role over: environment secrets named
+          # exactly as the env-file keys they become.
+          KEYS: JIRA_ACCOUNT_URL JIRA_EXECUTOR_EMAIL JIRA_EXECUTOR_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_EXECUTOR_EMAIL: ${{ secrets.JIRA_EXECUTOR_EMAIL }}
+          JIRA_EXECUTOR_TOKEN: ${{ secrets.JIRA_EXECUTOR_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Written in the *main checkout*, before the worktree exists: the
+          # executor's own ensure_local_env.sh copies it into the worktree from
+          # here, which is exactly the path that script exists to cover.
+          missing=()
+          for k in $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Resolve project config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Byte-identical to job 1's copy except the key list — the three
+          # copies are deliberately duplicated (see the header), so keep them
+          # diffable rather than letting each grow its own variant.
+          cfg() {
+            grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
+              | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
+          }
+          for k in DEFAULT_BASE_BRANCH; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
+
+      - name: Stand on the base branch
+        shell: bash
+        env:
+          BASE: ${{ steps.config.outputs.default_base_branch }}
+        run: |
+          set -euo pipefail
+          # The workspace stays a *main checkout* (`.git` is a directory) on a
+          # long-lived branch; the issue branch gets a linked worktree below,
+          # which is the only shape the executor will run in. The branch itself
+          # matters less here than in job 1 — this job's work happens in the
+          # worktree — but it is still where the skills are loaded from, so keep
+          # it the same base branch job 1 used.
+          git switch "$BASE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install claude CLI (native, no npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "${{  env.DEFAULT_EXECUTOR_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
+
+      - name: Rebuild the issue worktree
+        id: worktree
+        shell: bash
+        env:
+          BRANCH: ${{ needs.assign.outputs.branch }}
+          KEY: ${{ needs.assign.outputs.issue_key }}
+          PR_BASE: ${{ needs.assign.outputs.pr_base }}
+        run: |
+          set -euo pipefail
+          WT="$RUNNER_TEMP/worktrees/worktree-$KEY"
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git worktree add --track -B "$BRANCH" "$WT" "origin/$BRANCH"
+          # parentbranch is machine-local config, so job 1's copy is gone.
+          # Re-set it to what the PR must target — the BASE branch on this
+          # planned-work flow (caveat 2; the hotfix demo's twin of this line is
+          # the production branch instead). It is the first source the
+          # executor's PR-base resolver reads, ahead of the assigner's durable
+          # "PR target branch:" Jira comment.
+          git config "branch.$BRANCH.parentbranch" "$PR_BASE"
+          echo "path=$WT" >> "$GITHUB_OUTPUT"
+
+      - name: Run jira-task-executor
+        timeout-minutes: 35
+        shell: bash
+        working-directory: ${{ steps.worktree.outputs.path }}
+        env:
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
+        run: |
+          set -euo pipefail
+          # No key argument by contract — the executor derives it from the
+          # branch this worktree is on.
+          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+            --dangerously-skip-permissions \
+            --model "${{ env.DEFAULT_EXECUTOR_MODEL }}" \
+            -p "/jira-sdlc:jira-task-executor" \
+            2>&1 | tee "$RUNNER_TEMP/executor.log"
+
+      - name: Confirm a PR was opened
+        id: pr
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ needs.assign.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # GH_TOKEN is set only *here* — after the skill has finished — so it
+          # can't break statuscheck's `gh auth login --with-token` (caveat 3).
+          PRS=$(GH_TOKEN="$GITHUB_PAT_TOKEN" gh pr list --head "$BRANCH" \
+            --state open --json number,url)
+          NUM=$(printf '%s' "$PRS" | jq -r '.[0].number // empty')
+          URL=$(printf '%s' "$PRS" | jq -r '.[0].url // empty')
+          if [ -z "$NUM" ]; then
+            echo "::error::the executor opened no PR for $BRANCH — job 3 has nothing to review"
+            exit 1
+          fi
+          echo "pr_number=$NUM" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$URL"    >> "$GITHUB_OUTPUT"
+          echo "### Executor opened PR #$NUM for \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the executor report on the triggering issue
+        if: always()
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          JOB_STATUS: ${{ job.status }}
+          KEY: ${{ needs.assign.outputs.issue_key }}
+          BRANCH: ${{ needs.assign.outputs.branch }}
+          PR_BASE: ${{ needs.assign.outputs.pr_base }}
+          PR_URL: ${{ steps.pr.outputs.pr_url }}
+          ROLE: executor
+          JOB_LABEL: 2 · executor
+          ARTIFACT: executor-log
+        run: |
+          set -euo pipefail
+          # Same shape as job 1's comment step, one role over — see there for
+          # the truncation and printf rationale.
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          BODY="$RUNNER_TEMP/$ROLE-comment.md"
+          LIMIT=55000
+          {
+            printf '### %s — %s\n\n' "$JOB_LABEL" "$JOB_STATUS"
+            printf -- '- Jira issue: **%s**\n' "$KEY"
+            printf -- '- Branch: `%s` → `%s`\n' "$BRANCH" "$PR_BASE"
+            printf -- '- PR: %s\n' "${PR_URL:-not opened}"
+            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                # iconv drops the orphaned continuation bytes a byte-wise cut
+                # leaves when it lands mid-character — the transcript is full
+                # of em-dashes and box-drawing, and invalid UTF-8 makes the
+                # GitHub API reject the whole comment.
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n\n</details>\n'
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
+      - name: Upload executor log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-log
+          path: ${{ runner.temp }}/executor.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Render the executor transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: executor
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload executor transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-transcript-gif
+          path: ${{ runner.temp }}/executor-gif/*.gif
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ── Job 3 ── reviewer: review the PR, post the verdict to GitHub + Jira ────
+  review:
+    name: 3 · reviewer — review the PR
+    needs: [assign, execute]
+    runs-on: ubuntu-latest
+    environment: production
+    # +5 over the skill step's own timeout-minutes below, so the GIF
+    # render at the end of this job still fits inside the job budget
+    # after a skill run that used all of its own.
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      pull-requests: write # posts the review as a PR comment
+      issues: write # posts the reviewer report back on the triggering issue
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Write .jst/jira-sdlc-tools.local.env (reviewer role only)
+        shell: bash
+        env:
+          # Same shape again, reviewer role. The reviewer's credential is the
+          # only Jira secret this job can see.
+          KEYS: JIRA_ACCOUNT_URL JIRA_REVIEWER_EMAIL JIRA_REVIEWER_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
+          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for k in $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            exit 1
+          fi
+
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Resolve project config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Byte-identical to job 1's copy except the key list — the three
+          # copies are deliberately duplicated (see the header), so keep them
+          # diffable rather than letting each grow its own variant.
+          cfg() {
+            grep -E "^[[:space:]]*$1[[:space:]]*=" .jst/jira-sdlc-tools.env \
+              | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//'
+          }
+          for k in DEFAULT_BASE_BRANCH; do
+            v=$(cfg "$k")
+            if [ -z "$v" ]; then
+              echo "::error::$k is unset in .jst/jira-sdlc-tools.env"
+              exit 1
+            fi
+            echo "$(echo "$k" | tr '[:upper:]' '[:lower:]')=$v" >> "$GITHUB_OUTPUT"
+            echo "$k=$v"
+          done
+
+      - name: Stand on the base branch
+        shell: bash
+        env:
+          BASE: ${{ steps.config.outputs.default_base_branch }}
+        run: |
+          set -euo pipefail
+          # Same as job 2: the workspace stays a main checkout on a long-lived
+          # branch and supplies the skills, while the review itself happens in
+          # the linked worktree below.
+          git switch "$BASE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install claude CLI (native, no npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install FCC server only
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install --force --refresh-package free-claude-code \
+            --python 3.14.0 \
+            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Start fcc-server (background)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: "${{  env.DEFAULT_REVIEWER_MODEL }}"
+          ANTHROPIC_AUTH_TOKEN: freecc
+          FCC_OPEN_BROWSER: "0"
+          MESSAGING_PLATFORM: none
+          LOG_LEVEL: INFO
+        run: |
+          fcc-server > /tmp/fcc-server.log 2>&1 &
+          echo $! > /tmp/fcc-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null -H "Authorization: Bearer freecc" \
+                 http://127.0.0.1:8082/v1/models 2>/dev/null \
+               || curl -sf -o /dev/null http://127.0.0.1:8082/admin 2>/dev/null; then
+              echo "fcc-server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "fcc-server failed to start"
+          cat /tmp/fcc-server.log
+          exit 1
+
+      - name: Rebuild the issue worktree
+        id: worktree
+        shell: bash
+        env:
+          BRANCH: ${{ needs.assign.outputs.branch }}
+          KEY: ${{ needs.assign.outputs.issue_key }}
+          PR_BASE: ${{ needs.assign.outputs.pr_base }}
+        run: |
+          set -euo pipefail
+          WT="$RUNNER_TEMP/worktrees/worktree-$KEY"
+          # The executor pushed its commits, so take the branch from origin
+          # again rather than assuming job 2's disk state.
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git worktree add --track -B "$BRANCH" "$WT" "origin/$BRANCH"
+          # The reviewer resolves the PR's base with the same resolver, so it
+          # needs parentbranch re-set here too.
+          git config "branch.$BRANCH.parentbranch" "$PR_BASE"
+          echo "path=$WT" >> "$GITHUB_OUTPUT"
+
+      - name: Run jira-task-reviewer
+        timeout-minutes: 25
+        shell: bash
+        working-directory: ${{ steps.worktree.outputs.path }}
+        env:
+          ANTHROPIC_BASE_URL: http://127.0.0.1:8082
+          ANTHROPIC_AUTH_TOKEN: freecc
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0"
+        run: |
+          set -euo pipefail
+          # Bare, no key: the reviewer derives the issue from the branch. Job 1
+          # guaranteed a single feature branch, so this is a single-step
+          # top-level issue — one PR to review, the one into the base branch.
+          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+            --dangerously-skip-permissions \
+            --model "${{ env.DEFAULT_REVIEWER_MODEL }}" \
+            -p "/jira-sdlc:jira-task-reviewer" \
+            2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        env:
+          KEY: ${{ needs.assign.outputs.issue_key }}
+          BRANCH: ${{ needs.assign.outputs.branch }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Reviewed \`$KEY\` on \`$BRANCH\`"
+            echo ""
+            echo "Nothing was merged — the reviewer never merges, and this demo"
+            echo "stops here. Merging the PR is a human act."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the reviewer report on the triggering issue
+        if: always()
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          JOB_STATUS: ${{ job.status }}
+          KEY: ${{ needs.assign.outputs.issue_key }}
+          BRANCH: ${{ needs.assign.outputs.branch }}
+          PR_URL: ${{ needs.execute.outputs.pr_url }}
+          ROLE: reviewer
+          JOB_LABEL: 3 · reviewer
+          ARTIFACT: reviewer-log
+        run: |
+          set -euo pipefail
+          # Same shape as jobs 1/2 — see job 1's comment step for the
+          # truncation and printf rationale. The verdict itself is not parsed
+          # out of the log: the reviewer posts it on the PR (as a comment, not
+          # an approval — caveat 4) and transitions Jira, and the transcript
+          # below carries its reasoning.
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          BODY="$RUNNER_TEMP/$ROLE-comment.md"
+          LIMIT=55000
+          {
+            printf '### %s — %s\n\n' "$JOB_LABEL" "$JOB_STATUS"
+            printf -- '- Jira issue: **%s**\n' "$KEY"
+            printf -- '- Branch: `%s`\n' "$BRANCH"
+            printf -- '- PR reviewed: %s\n' "${PR_URL:-unknown}"
+            printf -- '- Verdict: on the PR itself, as a comment prefixed `APPROVED — …` / `CHANGES REQUESTED — …`\n'
+            printf -- '- Nothing was merged — the reviewer never merges.\n'
+            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                # iconv drops the orphaned continuation bytes a byte-wise cut
+                # leaves when it lands mid-character — the transcript is full
+                # of em-dashes and box-drawing, and invalid UTF-8 makes the
+                # GitHub API reject the whole comment.
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n\n</details>\n'
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
+      - name: Upload reviewer log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-log
+          path: ${{ runner.temp }}/reviewer.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Render the reviewer transcript to a GIF
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        env:
+          ROLE: reviewer
+        run: |
+          set -uo pipefail
+          # A debug nicety, and it must never redden a green run — hence
+          # `continue-on-error` + a step timeout, and deliberately NO `set -e`,
+          # so each failure path below prints its own reason and the step ends
+          # legibly instead of dying on an opaque non-zero. `if: always()` is
+          # the point rather than a precaution: a *failed* skill run is exactly
+          # the case a terminal replay beats 50k characters of piped stdout.
+          # uv and uvx land in $HOME/.local/bin, which is already on PATH on
+          # ubuntu-latest — prepended explicitly rather than assumed.
+          export PATH="$HOME/.local/bin:$PATH"
+          if ! pip install uv >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — pip install uv failed"; exit 1
+          fi
+          if ! uv tool install agent-log-gif >/dev/null 2>&1; then
+            echo "::warning::$ROLE GIF skipped — uv tool install agent-log-gif failed"; exit 1
+          fi
+          OUT="$RUNNER_TEMP/$ROLE-gif"
+          # RENDER_LOG sits outside OUT: the artifact carries GIFs, not logs.
+          RENDER_LOG="$RUNNER_TEMP/$ROLE-render.log"
+          mkdir -p "$OUT"
+          # Glob rather than computing the project slug: the slug differs per
+          # job (job 1 runs claude from the workspace, jobs 2/3 from the
+          # worktree under RUNNER_TEMP), and each job gets a fresh VM, so there
+          # is normally exactly one file. Both other cases are handled rather
+          # than assumed away.
+          shopt -s nullglob
+          FILES=("$HOME"/.claude/projects/*/*.jsonl)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::notice::no Claude session JSONL found for $ROLE — nothing to render"
+            exit 0
+          fi
+          rc=0
+          for f in "${FILES[@]}"; do
+            gif="$OUT/$(basename "$f" .jsonl).gif"
+            # Renderer output goes to a file: its progress display would
+            # otherwise be noise in the Actions log. Only the name, size and
+            # final summary line are echoed.
+            if uvx agent-log-gif json "$f" -o "$gif" \
+                 --chrome linux --color-scheme Nord --show tools --turns 50 \
+                 > "$RENDER_LOG" 2>&1; then
+              echo "$(basename "$gif") — $(du -h "$gif" | cut -f1) — $(tail -1 "$RENDER_LOG")"
+            else
+              echo "::warning::$ROLE GIF render failed for $(basename "$f")"
+              tail -5 "$RENDER_LOG"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Upload reviewer transcript GIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-transcript-gif
+          path: ${{ runner.temp }}/reviewer-gif/*.gif
+          if-no-files-found: warn
+          retention-days: 7

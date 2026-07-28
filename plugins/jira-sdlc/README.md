@@ -133,12 +133,11 @@ touches outside it (a database, cache, storage, or port) — see
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own.
 
-**What the assigner creates.** The assigner runs only from your base
-branch — invoke it from an existing feature/hotfix branch and it stops,
-telling you to checkout the base branch first (it doesn't append
-sub-tasks to an existing parent). From the base branch it always
-provisions one top-level issue (`Task`/`Story`/`Bug`) with a matching
-branch and a `git worktree`, then:
+**What the assigner creates.** The assigner runs from a long-lived branch,
+normally your base branch — invoke it from an existing feature/hotfix branch
+and it stops, telling you to checkout the base branch first (it doesn't append
+sub-tasks to an existing parent). It always provisions one top-level issue
+(`Task`/`Story`/`Bug`) with a matching branch and a `git worktree`, then:
 
 - **Single-step** — the top-level issue is the only issue. The executor
   runs in that worktree on a dedicated branch whose PR targets the base
@@ -147,6 +146,15 @@ branch and a `git worktree`, then:
   gets its own dedicated branch, worktree, and PR into the parent branch.
   The parent branch (and its worktree) is the merge target for the
   sub-tasks' PRs.
+
+**Emergency hotfixes.** Branches are `feature/` off the base branch by
+default. When you *explicitly* ask for an emergency production fix, the
+assigner instead cuts a single-step `hotfix/` branch from
+`origin/<PRODUCTION_BRANCH>` and points its PR at production
+([SDLC.md](docs/SDLC.md) §4) — urgency wording alone won't trigger it, and it
+confirms with you before creating anything. The cut comes from the fetched
+remote ref, so you can invoke it from either the base branch or the production
+branch; production is never required to be checked out.
 
 **Every sub-task gets a dedicated branch.** Each sub-task has its own
 branch, worktree, and PR into the parent branch — regardless of size. A
@@ -474,10 +482,11 @@ Deliberately never automated, regardless of how routine a run looks:
   replacing that mechanism, not just swapping CLI commands.
 - Assumes **no `Epic` type** and doesn't create or group under Epics —
   `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
-- The assigner runs **only from your base branch**. Invoked from an
-  existing feature/hotfix branch, it stops and tells you to checkout the
-  base branch first — it doesn't append sub-tasks to an existing parent
-  (that case is TBD per the skill).
+- The assigner runs **only from a long-lived branch** — your base branch,
+  or the production branch when you're asking for an emergency hotfix.
+  Invoked from an existing feature/hotfix branch, it stops and tells you to
+  checkout the base branch first — it doesn't append sub-tasks to an existing
+  parent (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
   one review at a time, with per-PR GH approval (or rejection) and a
   summary on the parent. For a large sub-task count this means later

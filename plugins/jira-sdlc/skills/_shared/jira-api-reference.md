@@ -165,26 +165,60 @@ POST transition (id 11)  →  204   →  status: <STATUS_TODO>
 
 ## 5. Token types & scopes
 
-Create tokens at `id.atlassian.com` → Security → API tokens.
+Create tokens at `id.atlassian.com` → Security → API tokens. Two kinds come out
+of that page, and they don't behave the same here:
 
-- **Classic, unscoped** ("Create API token") — works on both hosts; carries
+- **Classic, unscoped** ("Create API token") — works on both hosts (§0); carries
   the account's full Jira permissions. Simplest; restrict via the account's
   project permissions.
-- **Scoped** ("Create API token with scopes") — least privilege, gateway
-  only. For the read-status + transition flow above, the minimal set is
-  three **coarse** scopes:
+- **Scoped** ("Create API token with scopes") — least privilege, **gateway
+  only**. Its scopes come in two flavours: **coarse** (three scopes, works) and
+  **granular** per-resource (a documented trap — see below the table).
 
-  | Scope | Grants |
-  |---|---|
-  | `read:jira-user` | `GET /myself` (identity) |
-  | `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions` |
-  | `write:jira-work` | `POST /issue/{key}/transitions` |
+Each skill authenticates as its own role (§9), so a token only ever needs to
+cover that role's own calls:
 
-  Do **not** use the *granular* per-resource scopes (`read:issue:jira`,
-  `read:issue.transition:jira`, `write:issue:jira`, …): `GET /issue`
-  requires a whole bundle of them simultaneously, and any missing member
-  returns `401 {"message":"Unauthorized; scope does not match"}`. The three
-  coarse scopes above avoid that trap.
+- **assigner** — `whoami`, `project exists`, `issue create` (which resolves
+  `--assignee` through a user search), `comment add`, `issue delete`
+- **executor** — `whoami`, `project exists`, `issue view`, `issue transition`,
+  `comment add` / `comment list`
+- **reviewer** — `whoami`, `project exists`, `issue view`, `comment add` /
+  `comment list`, `issue transition`
+
+What each token kind grants that role:
+
+| Role | Non-scoped | Scoped classic (coarse) | Scoped granular |
+|---|---|---|---|
+| **assigner** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:field:jira`, `read:issue-type:jira`, `write:issue:jira`, `write:comment:jira`, `delete:issue:jira` — **plus** whatever else `POST /issue` demands (same bundle problem) |
+| **executor** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
+| **reviewer** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
+
+**Why Non-scoped is N/A in every row**: an unscoped classic token carries the
+account's full Jira permissions, so there is no per-role scope list to give —
+you narrow it by narrowing the *account's* project permissions instead, not by
+picking scopes.
+
+**The three coarse scopes**, which are identical for all three roles because
+every role reads issues and writes something back:
+
+| Scope | Grants |
+|---|---|
+| `read:jira-user` | `GET /myself` (identity), `GET /user/search` (email → accountId) |
+| `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions`, `GET /issue/{key}/comment`, `GET /project/search` |
+| `write:jira-work` | `POST /issue`, `POST /issue/{key}/transitions`, `POST /issue/{key}/comment`, `PUT /issue/{key}/assignee`, `DELETE /issue/{key}` |
+
+⚠️ **The granular column documents a trap — it is not a recommendation.** The
+per-resource scopes are listed above because they're what you'd reach for, not
+because that configuration is known to work: `GET /issue` requires a whole
+bundle of granular read scopes *simultaneously* (`read:issue-meta:jira`,
+`read:issue-security-level:jira`, `read:issue.vote:jira`,
+`read:issue.changelog:jira`, `read:avatar:jira`, `read:status:jira`,
+`read:attachment:jira`, `read:issue-link:jira`, `read:priority:jira`, … — the
+list is long and undocumented per-endpoint), and **any missing member returns
+`401 {"message":"Unauthorized; scope does not match"}`** rather than naming what
+it wanted. Each row's granular list is therefore a starting point that will be
+incomplete. **Use the three coarse scopes** — they cover every call in the
+per-role lists above and avoid the bundle problem entirely.
 
 ## 6. People fields — `assignee` and `reporter`
 
@@ -508,10 +542,12 @@ branch" shortcut. **The prefix follows the base branch, not the issue type**
 (SDLC.md §2): `feature/` = branched from `<DEFAULT_BASE_BRANCH>`
 (`development`), covering all planned work — features *and* bug fixes alike;
 `hotfix/` = an emergency fix branched from `<PRODUCTION_BRANCH>`.
-`jira-task-assigner` pre-creates the branch and worktree for every leaf issue,
-and since it only ever branches from `development`, every branch it creates is
-a `feature/` branch — a `hotfix/` branch is only ever produced by the
-no-assigner bootstrap below.
+`jira-task-assigner` pre-creates the branch and worktree for every leaf issue
+and takes its prefix from the base it was told to use (its step 5C):
+`feature/` by default, `hotfix/` only when the user explicitly asks for the
+emergency production flow, in which case it cuts a single leaf from
+`origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes from either that
+path or the no-assigner bootstrap below.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue key
 inside the branch name — no API call required.
@@ -602,5 +638,22 @@ output. Sources, in order:
      `gh pr create` and ask the user** — do not fall back to
      `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
 4. `<DEFAULT_BASE_BRANCH>` from `.jst/jira-sdlc-tools.env` — reachable **only for a
-   top-level issue** (empty `PARENT_KEY`), for which it is correct. Still call
-   it out in the report.
+   top-level issue** (empty `PARENT_KEY`), and correct for a planned-work one.
+   Still call it out in the report, and check it against the prefix first (below).
+
+### Sanity check: the prefix and the base have to agree
+
+§12 ties the prefix to the base branch, so for a **top-level** issue (empty
+`PARENT_KEY` — the only case that can reach source 4) the two are a matched
+pair, and a disagreement means one of them is wrong:
+
+- branch `hotfix/…` with a base that isn't `<PRODUCTION_BRANCH>`
+- branch `feature/…` with a base that *is* `<PRODUCTION_BRANCH>`
+
+**Stop and ask which is right** rather than opening the PR. The first case is
+the one that actually happens: a hotfix whose `PR target branch:` comment was
+never posted has nothing to stop it falling through to source 4, and a
+production fix quietly retargeted at staging neither reaches production nor
+gets versioned (`hotfix/*` is what CI patch-bumps — SDLC.md §5). Sub-tasks are
+exempt: a sub-task's base is its parent's branch, which carries the parent's
+prefix rather than a long-lived branch name.
