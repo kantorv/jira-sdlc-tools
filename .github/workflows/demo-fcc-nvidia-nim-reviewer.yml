@@ -248,7 +248,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL:  "$DEFAULT_REVIEWER_MODEL" 
+          MODEL:  ${{ env.DEFAULT_REVIEWER_MODEL  }}
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
