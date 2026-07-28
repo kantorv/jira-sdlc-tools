@@ -25,7 +25,7 @@ env:
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
   CLAUDE_CLI_VERSION: 2.1.220
-  DEFAULT_REVIEWER_MODEL: "z-ai/glm-5.2"
+  DEFAULT_REVIEWER_MODEL: "nvidia_nim/z-ai/glm-5.2"
 
 jobs:
   # ── Gating job — cheap, secret-free, and runs before the environment gate ──
@@ -248,7 +248,7 @@ jobs:
       - name: Start fcc-server (background)
         env:
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL:  "nvidia_nim/$DEFAULT_REVIEWER_MODEL" 
+          MODEL:  "$DEFAULT_REVIEWER_MODEL" 
           ANTHROPIC_AUTH_TOKEN: freecc
           FCC_OPEN_BROWSER: "0"
           MESSAGING_PLATFORM: none
@@ -316,6 +316,7 @@ jobs:
           set -euo pipefail
           claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
             --dangerously-skip-permissions \
+            --model "$DEFAULT_REVIEWER_MODEL" \
             -p "/jira-sdlc:jira-task-reviewer" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
 
