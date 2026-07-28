@@ -216,8 +216,10 @@ jobs:
         # installer downloads a prebuilt binary, SHA256-verifies it against
         # Anthropic's manifest, and runs its own `claude install`. Pinned
         # deliberately — a float would let an upstream CLI change break this
-        # demo on an unrelated day. validator.yml and demo-claude-hotfix-flow.yml
-        # pin the same version (2.1.199) — bump all together.
+        # demo on an unrelated day. validator.yml and the other demos pin the
+        # same version — bump all together. (Unlike its siblings this file
+        # hardcodes the version inline rather than in a workflow-level
+        # CLAUDE_CLI_VERSION env var — keep the two in step when bumping.)
         shell: bash
         run: |
           set -euo pipefail

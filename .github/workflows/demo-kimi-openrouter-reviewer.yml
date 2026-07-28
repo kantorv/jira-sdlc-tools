@@ -1,13 +1,15 @@
 name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 
-# Wiring smoke test for the jira-task-reviewer skill in CI. On an opened or
-# reopened PR it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
+# Wiring smoke test for the jira-task-reviewer skill in CI. Triggered manually
+# (workflow_dispatch only — despite the name, it does NOT fire on PR
+# open/reopen), it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
 # pointing extra_skill_dirs at this plugin's skills/, and confirms the three
-# jira-sdlc skills are discoverable. It does NOT run the reviewer skill to
-# completion and posts no review to Jira or GitHub — discovery only. If a
-# real reviewer run is wanted later, that needs a worktree checkout plus
-# gh auth and the Jira credentials in .jst/jira-sdlc-tools.local.env, which is
-# out of scope here.
+# jira-sdlc skills are discoverable. It never invokes the reviewer skill: the
+# review below comes from a hand-written prompt over `gh pr diff`, and IS
+# posted to the PR (`gh pr review --comment`). Nothing is written to Jira. A
+# real reviewer run needs a linked-worktree checkout plus gh auth and the Jira
+# credentials in .jst/jira-sdlc-tools.local.env, which is out of scope here —
+# see demo-claude-reviewer.yml for that.
 
 on:
   workflow_dispatch:

@@ -7,18 +7,20 @@
 # only job is to stand up the exact environment the skill's healthcheck demands,
 # then invoke it.
 #
-# Trigger: workflow_dispatch ONLY, by explicit decision (the same one
-# demo-kimi-openrouter-reviewer.yml made). This is a manually-invoked smoke test, not a real
-# pull_request: opened/reopened trigger. A real on-PR trigger would need its
-# own design (gating on reviewer availability, secret plumbing, retry policy);
-# this file stays a deliberate, inspectable demo.
+# Trigger: a `/review` comment on a PR (issue_comment), restricted to OWNER or
+# MEMBER commenters — issue_comment fires for any commenter on a public repo,
+# so that author check is the security boundary. Deliberately not
+# `pull_request: opened/reopened`: review is requested, not automatic, so it
+# never fires on every push. This file was workflow_dispatch-only until JST-204;
+# anything below that still says "dispatch branch" predates that change.
 #
 # demo-kimi-openrouter-reviewer.yml and reviewer.yml are left untouched — this is a new file.
 #
 # ── The shape (two jobs, mirroring demo-kimi-openrouter-reviewer.yml) ────────
 #
-#  1. check_pr_exists — byte-for-byte the gating job from demo-kimi-openrouter-reviewer.yml:
-#     `gh pr list --head <dispatch branch>` and skip the rest if none exists.
+#  1. check_pr_exists — resolves the commented-on PR (github.event.issue.number)
+#     via `gh pr view`, validates its head branch, and skips the rest unless
+#     that PR is OPEN on a feature/* or hotfix/* branch.
 #  2. reviewer-claude — the new job. The old Kimi install/config/invoke steps are
 #     replaced with: native claude CLI install (validator.yml's pattern), a
 #     linked-worktree checkout of the PR head branch, and a headless
@@ -64,11 +66,12 @@
 #     changes a skill file, this demo reviews the PR with the *base's* copy —
 #     land skill changes on the base branch first if you want them exercised.
 #
-# ── Secrets (repo-level, mirroring demo-kimi-openrouter-reviewer.yml — no environment gate) ─
+# ── Secrets (environment secrets on `production`) ───────────────────────────
 #
-#  None of these exist in this repo yet. The env-file-writing step checks every
-#  one up front and fails loud with `::error::` if any is empty/unset, rather
-#  than letting the claude CLI die halfway through on a missing key.
+#  The reviewer job declares `environment: production`, so these are read from
+#  that environment, not repo-level. The env-file-writing step checks every one
+#  up front and fails loud with `::error::` if any is empty/unset, rather than
+#  letting the claude CLI die halfway through on a missing key.
 #
 #    CLAUDE_CODE_OAUTH_TOKEN  the claude CLI reads this from the environment
 #                             — the only secret never written to the file
@@ -116,9 +119,10 @@ env:
 
 
 jobs:
-  # ── Gating job — byte-for-byte from demo-kimi-openrouter-reviewer.yml ─────
-  # Skip the reviewer once a PR is already open on the dispatch branch (the real
-  # CI workflows take over there). Unchanged from the file this demo reworks.
+  # ── Gating job — cheap, secret-free, and runs before the environment gate ──
+  # Resolves the commented-on PR and its issue key. Proceeds only when that PR
+  # is OPEN on a feature/*|hotfix/* branch, so an unqualified comment is
+  # rejected without ever asking a human to approve a run.
   check_pr_exists:
     if: >
       github.event.issue.pull_request &&
@@ -136,18 +140,42 @@ jobs:
       pr_number: ${{ steps.check_pr.outputs.pr_number }}
       issue_key: ${{ steps.check_pr.outputs.issue_key }}
     steps:
-      - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
+      - name: Resolve the PR and its issue key
+        # The triggering comment is on a PR (guarded above), so the PR number IS
+        # github.event.issue.number, and the branch must be read from the PR.
+        #
+        # Do NOT use github.ref_name here: on an issue_comment event the ref is
+        # always the repository's DEFAULT branch, never the PR head. This step
+        # used to read it — correct while the trigger was workflow_dispatch,
+        # where ref_name IS the dispatch branch — and when JST-204 switched the
+        # trigger to issue_comment without changing it, every /review run died
+        # here with "Branch name 'development' does not match required format".
         id: check_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO_NAME: ${{ github.repository }}
         run: |
           set -euo pipefail
-          BRANCH_NAME="${{ github.ref_name }}"
-          REPO_NAME="${{ github.repository }}"
+
+          # One API call for both fields the gate needs.
+          PR_JSON=$(gh pr view "$PR_NUMBER" --repo "$REPO_NAME" --json headRefName,state)
+          BRANCH_NAME=$(printf '%s' "$PR_JSON" | jq -r '.headRefName')
+          PR_STATE=$(printf '%s' "$PR_JSON" | jq -r '.state')
+
+          # A closed or merged PR is nothing to review — skip the reviewer job
+          # rather than failing the run, since commenting on one isn't an error.
+          if [ "$PR_STATE" != "OPEN" ]; then
+            echo "PR #$PR_NUMBER is $PR_STATE — nothing to review."
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
           if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
-            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+            echo "::error::PR #$PR_NUMBER head branch '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug — the reviewer skill derives its issue key from the branch and hard-stops otherwise"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
             echo "pr_number=0" >> "$GITHUB_OUTPUT"
             echo "issue_key=" >> "$GITHUB_OUTPUT"
@@ -155,7 +183,7 @@ jobs:
           fi
 
           # Extract issue key from branch name (PROJ-NNN)
-          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          ISSUE_KEY=$(printf '%s' "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
           if [ -z "$ISSUE_KEY" ]; then
             echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
@@ -164,20 +192,10 @@ jobs:
             exit 1
           fi
 
-          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
-            --json number --jq '.[0].number // empty' 2>/dev/null || true)
-
-          if [ -n "$PR_NUMBER" ]; then
-            echo "pr_exists=1" >> "$GITHUB_OUTPUT"
-            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
-            echo "Found PR #$PR_NUMBER for issue $ISSUE_KEY"
-          else
-            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
-            echo "pr_number=0" >> "$GITHUB_OUTPUT"
-            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
-            echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
-          fi
+          echo "pr_exists=1" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+          echo "Found PR #$PR_NUMBER ($BRANCH_NAME) for issue $ISSUE_KEY"
 
   # ── Reviewer job — the Claude-powered rework of demo-kimi-openrouter-reviewer.yml's
   #    reviewer-smoke job ────────────────────────────────────────────────────
@@ -202,11 +220,11 @@ jobs:
           fetch-depth: 0
 
       - name: Resolve PR head, base, and issue key
-        # The authoritative head/base come from the PR itself, not from
-        # github.ref_name (the branch the run was dispatched from) — which is
-        # usually the head but isn't what the PR records. Deriving the issue key
-        # here lets us fail now, before installing claude or spending tokens, if
-        # the dispatch branch isn't an issue branch at all.
+        # The authoritative head/base come from the PR itself. Under an
+        # issue_comment trigger github.ref_name is the repository's default
+        # branch, not the PR head, so the ref is never a usable source here —
+        # see the gating job. Re-deriving the key here lets us fail before
+        # installing claude or spending tokens if the head isn't an issue branch.
         id: pr
         shell: bash
         env:
