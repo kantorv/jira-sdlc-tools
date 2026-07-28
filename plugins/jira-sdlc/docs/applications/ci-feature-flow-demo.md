@@ -139,12 +139,56 @@ demand. This is the part worth studying before copying the pattern.
 
 **Fresh VM per job → rebuild everything.** Each job rewrites
 `.jst/jira-sdlc-tools.local.env` from its own role-scoped secrets, and jobs
-2/3 rebuild a *linked* worktree for the issue branch from `origin` — not for
-convenience: the executor and reviewer both hard-stop unless they run in a
-linked worktree (`.git` is a file) on a `feature/*`/`hotfix/*` branch, which a
-bare `actions/checkout` is not. `WORKTREES_DIR` points under `RUNNER_TEMP` and
-is the one config key that is *not* a secret, because a value carried from a
-developer's machine would name a path that doesn't exist here.
+2/3 rebuild the linked worktree the skills demand (next section).
+`WORKTREES_DIR` points under `RUNNER_TEMP` and is the one config key that is
+*not* a secret, because a value carried from a developer's machine would name
+a path that doesn't exist here.
+
+### Jobs 2 and 3 must build the worktree *before* invoking the skill
+
+Both the executor job and the reviewer job run the same
+`Rebuild the issue worktree` step immediately before their skill step. It is a
+**precondition, not setup convenience**: the executor and reviewer each
+hard-stop unless they are running in a *linked worktree* on a `feature/*` or
+`hotfix/*` branch. Skip it and the run dies in the skill's healthcheck before
+any work happens.
+
+The step is byte-identical in both jobs:
+
+```bash
+WT="$RUNNER_TEMP/worktrees/worktree-$KEY"
+git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+git worktree add --track -B "$BRANCH" "$WT" "origin/$BRANCH"
+git config "branch.$BRANCH.parentbranch" "$PR_BASE"
+```
+
+`$BRANCH` is **the right branch** in the only sense that matters here: job 1's
+`branch` output — the `feature/<KEY>-<slug>` the assigner actually created and
+pushed. It is never re-derived, so jobs 2 and 3 cannot drift onto a different
+branch than the one that was planned.
+
+Three things make this step necessary rather than tidy:
+
+1. **It's the *kind* of checkout, not the branch.** The check is one line in
+   `statuscheck.sh` — `[ -f "$WT_ROOT/.git" ]`. A linked worktree's `.git` is
+   a *file* (a `gitdir:` pointer); a normal checkout's is a *directory*. So
+   pointing `actions/checkout` at the issue branch, or running
+   `git checkout <branch>` in the workspace, still fails — being on the right
+   branch does not make a main checkout acceptable.
+2. **The job holds two checkouts at once, deliberately.** The
+   `actions/checkout` workspace stays a main checkout standing on
+   `<DEFAULT_BASE_BRANCH>` — that is where `--plugin-dir` loads the skill
+   prompts from — while the linked worktree on the issue branch is where the
+   skill *runs*. Neither alone satisfies both requirements.
+3. **The working directory is the addressing mechanism.** Neither skill takes
+   an issue-key argument; each derives its key from the branch of the worktree
+   it stands in. That is what
+   `working-directory: ${{ steps.worktree.outputs.path }}` on the skill step is
+   for — it is how the job says *which issue*, and the local equivalent of
+   `cd <WORKTREES_DIR>/worktree-<KEY> && claude`.
+
+The fourth line restores `parentbranch` — the next paragraph covers why, and
+why it is the one line here most easily copied over wrongly.
 
 **`parentbranch` is machine-local.** The assigner records the PR target in
 `git config branch.<branch>.parentbranch`, which evaporates with job 1's VM.
