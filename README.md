@@ -64,6 +64,55 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
+<img src="plugins/jira-sdlc/docs/assets/conversation-example.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+*Example of what a conversation with the assigner/executor/reviewer looks
+like — this particular recording is a placeholder and will be swapped for a
+final one.*
+
+## Prerequisites
+
+### Tools
+
+| Tool   | Title           | Uses                                     | Install URL                                             | Local docs                                                                       |
+| ------ | --------------- | ----------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `git`  | Version control | commit/push                              | [git-scm.com/downloads](https://git-scm.com/downloads)  | —                                                                                 |
+| `gh`   | GitHub CLI      | pr create/update                         | [cli.github.com](https://cli.github.com/)               | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+| `jq`   | JSON processor  | parse Jira REST responses (`jira.sh`)    | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | —                                                                             |
+| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | —                                                                             |
+
+**Platform specific**
+| Platform | Needs | Tested on | Why |
+|---|---|---|---|
+| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
+| **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
+| **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
+API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
+`JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
+(see [Full Setup](#full-setup) below).
+
+### Tokens and auth
+
+| Tool | Auth type | Scopes | Shared across roles | Description | Link |
+|---|---|---|---|---|---|
+| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#jira) |
+| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#github) |
+| `git` | ⚠️ SSH key | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git/SSH setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#git) |
+
+> ⚠️ **This plugin is designed to run in a shared environment** — the same
+> checkout where a coding assistant operates *and* where you yourself still
+> run `git` commands by hand. That's why `git` auth is left shared between
+> you and the agent rather than split out: a separate agent identity would
+> otherwise fight your own commits/pushes for the same repo state. If your
+> setup doesn't need that — the agent is the only thing ever touching
+> `git` here — it can authenticate with its own PAT instead, the same way
+> `gh` already does. See
+> [GITHUB-PAT-AGENT-OWNED-ENV.md](plugins/jira-sdlc/docs/github/GITHUB-PAT-AGENT-OWNED-ENV.md)
+> for how to set that up.
+
 ## Quick install
 
 ### Claude Code
