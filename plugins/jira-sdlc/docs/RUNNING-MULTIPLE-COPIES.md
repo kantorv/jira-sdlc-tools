@@ -13,6 +13,15 @@ It's guidance, not a feature: the plugin ships no scripts, docker-compose
 files, or templates for any of this. The patterns below are things you
 adapt to your own project's architecture.
 
+**Where the answer goes once you've made it.** This doc is the reasoning;
+the optional [`.jst/PARALLEL-INSTANCES.md`](../skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form)
+convention is where a project writes down what it decided, in terms
+someone can actually run. When that file exists, `jira-task-assigner`
+reads it and repeats its instructions for every worktree it creates, so
+the decisions below reach whoever picks a worktree up instead of staying
+in this doc. There's a full example to start from at
+[`docs/examples/PARALLEL-INSTANCES.example.md`](examples/PARALLEL-INSTANCES.example.md).
+
 ## Why this matters
 
 A worktree is a separate working directory on a separate branch. That

@@ -210,6 +210,13 @@ done   # add the args each one needs: --role <role> to statuscheck; --role <role
        # role-scoped, with no default credential.
 ```
 
+**Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
+knowing this up front saves chasing a port bug that isn't there:
+`$env:TEMP` is unset on Linux, so export `TEMP=/tmp` before the diff, and
+`gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login
+--with-token` doesn't complete down that path) while the bash side reads OK.
+Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
+
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
 a real Windows 11 box, but the port logic and
