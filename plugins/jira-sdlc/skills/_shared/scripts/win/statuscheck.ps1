@@ -462,6 +462,21 @@ if (-not $WorktreesDir) {
     }
 }
 
+# .jst/PARALLEL-INSTANCES.md is the optional, conventional place a project
+# writes down how to turn a worktree into a *running* instance (cloned db,
+# per-instance ports, provisioning commands) — see project-config.md and
+# docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so it is INFO either
+# way, never WARN: most projects won't have one, and its only job here is to
+# remind whoever reads this table that the file exists. Unlike local.env it is
+# tracked, so a linked worktree is born with it — resolve it against CfgDir
+# (this checkout's .jst/), not the main checkout.
+$PiPath = Join-Path $CfgDir 'PARALLEL-INSTANCES.md'
+if (Test-Path -LiteralPath $PiPath -PathType Leaf) {
+    Add-Row parallel_instances INFO "$PiPath (present — the assigner relays it with each worktree)"
+} else {
+    Add-Row parallel_instances INFO "no .jst/PARALLEL-INSTANCES.md (optional — a project adds one to record what each worktree still needs provisioned before its app runs: cloned database, per-instance ports)"
+}
+
 $Parent = (& git config "branch.$Br.parentbranch" 2>$null)
 $Parent = if ($Parent) { ([string]$Parent).Trim() } else { '' }
 Add-Row parent_branch INFO "$(if ($Parent) { $Parent } else { 'unset' }) (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"

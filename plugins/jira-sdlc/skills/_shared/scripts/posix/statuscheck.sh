@@ -493,6 +493,20 @@ else
   fi
 fi
 
+# .jst/PARALLEL-INSTANCES.md is the optional, conventional place a project
+# writes down how to turn a worktree into a *running* instance (cloned db,
+# per-instance ports, provisioning commands) — see project-config.md and
+# docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so it is INFO either
+# way, never WARN: most projects won't have one, and its only job here is to
+# remind whoever reads this table that the file exists. Unlike local.env it is
+# tracked, so a linked worktree is born with it — resolve it against CFG_DIR
+# (this checkout's .jst/), not the main checkout.
+if [ -f "$CFG_DIR/PARALLEL-INSTANCES.md" ]; then
+  row parallel_instances INFO "$CFG_DIR/PARALLEL-INSTANCES.md (present — the assigner relays it with each worktree)"
+else
+  row parallel_instances INFO "no .jst/PARALLEL-INSTANCES.md (optional — a project adds one to record what each worktree still needs provisioned before its app runs: cloned database, per-instance ports)"
+fi
+
 PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
 row parent_branch INFO "${PARENT:-unset} (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
