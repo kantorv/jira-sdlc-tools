@@ -418,6 +418,46 @@ jobs:
             -p "$PROMPT" \
             2>&1 | tee "$RUNNER_TEMP/reviewer.log"
 
+      - name: Comment the reviewer run metrics on the PR
+        # This workflow posts no transcript comment of its own — the reviewer
+        # skill owns the verdict on the PR — so this is the only comment this
+        # job writes, and it carries what the run *cost* rather than what it
+        # said. Worth more here than on the Claude demos: the model is a
+        # workflow input, so the token and turn counts are how one NIM model's
+        # run compares with another's. It goes on the PR (`gh pr comment`, the
+        # number resolved by check_pr_exists) because that is where the review
+        # lives; the job already declares `pull-requests: write`.
+        #
+        # `if: always()` — a failed run is exactly when the numbers are worth
+        # most — plus `continue-on-error: true` following the GIF step's
+        # precedent: a missing transcript or an absent jq must never redden a
+        # green run. GH_TOKEN is set on the gh command in a step that runs AFTER
+        # the skill; exporting it earlier would block statuscheck's gh login and
+        # abort the review.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+          ROLE: reviewer
+        run: |
+          set -uo pipefail
+          # The script exits 0 on every degrade path and never embeds the
+          # transcript, so the body needs no truncation guard — a metrics table
+          # is nowhere near gh's 65536-character limit.
+          BODY="$RUNNER_TEMP/$ROLE-metrics.md"
+          # The workspace stands on the PR's BASE branch, which on an older PR
+          # can predate this script — hence the presence guard: a missing
+          # script degrades to a line, like every other path here.
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
+          {
+            printf '### reviewer — conversation metrics\n\n'
+            [ -f "$SCRIPT" ] && bash "$SCRIPT" \
+              || printf '_%s is not on this checkout — nothing to measure._\n' "${SCRIPT##*/}"
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh pr comment "$PR_NUMBER" --body-file "$BODY"
+
       - name: Upload reviewer log
         # The skill's full transcript — its verdict is echoed here as it posts
         # to GitHub and Jira, so a human inspecting the run sees the review.

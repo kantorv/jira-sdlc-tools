@@ -646,9 +646,11 @@ jobs:
           # transcript, so the body needs no truncation guard — a metrics table
           # is nowhere near gh's 65536-character limit.
           BODY="$RUNNER_TEMP/$ROLE-metrics.md"
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
           {
             printf '### %s — conversation metrics\n\n' "$JOB_LABEL"
-            bash "$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
+            [ -f "$SCRIPT" ] && bash "$SCRIPT" \
+              || printf '_%s is not on this checkout — nothing to measure._\n' "${SCRIPT##*/}"
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
