@@ -622,6 +622,36 @@ jobs:
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
+      - name: Comment the assigner run metrics on the triggering issue
+        # A SECOND, metrics-only comment — deliberately not appended to the
+        # transcript comment above: what the run *cost* is a different question
+        # from what it *did*, and one is readable while the other is 50k
+        # characters. `if: always()` for the same reason every step around it
+        # carries it (a failed run is when the numbers are worth most), plus
+        # `continue-on-error: true` following the GIF step's precedent — a
+        # missing transcript or an absent jq must never redden a green run.
+        # GH_TOKEN stays on the gh command in a step that runs after the skill
+        # (caveat 3).
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ROLE: assigner
+          JOB_LABEL: 1 · assigner
+        run: |
+          set -uo pipefail
+          # The script exits 0 on every degrade path and never embeds the
+          # transcript, so the body needs no truncation guard — a metrics table
+          # is nowhere near gh's 65536-character limit.
+          BODY="$RUNNER_TEMP/$ROLE-metrics.md"
+          {
+            printf '### %s — conversation metrics\n\n' "$JOB_LABEL"
+            bash "$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
       - name: Upload assigner log
         if: always()
         uses: actions/upload-artifact@v7
@@ -962,6 +992,28 @@ jobs:
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
+      - name: Comment the executor run metrics on the triggering issue
+        # Same shape as job 1's metrics step, one role over — see there for the
+        # separate-comment, always()/continue-on-error and GH_TOKEN rationale.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ROLE: executor
+          JOB_LABEL: 2 · executor
+        run: |
+          set -uo pipefail
+          BODY="$RUNNER_TEMP/$ROLE-metrics.md"
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
+          {
+            printf '### %s — conversation metrics\n\n' "$JOB_LABEL"
+            [ -f "$SCRIPT" ] && bash "$SCRIPT" \
+              || printf '_%s is not on this checkout — nothing to measure._\n' "${SCRIPT##*/}"
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
       - name: Upload executor log
         if: always()
         uses: actions/upload-artifact@v7
@@ -1285,6 +1337,28 @@ jobs:
               printf '(no transcript — the job failed before the skill produced output)\n'
             fi
             printf '\n`````\n'
+          } > "$BODY"
+          GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
+
+      - name: Comment the reviewer run metrics on the triggering issue
+        # Same shape as job 1's metrics step, one role over — see there for the
+        # separate-comment, always()/continue-on-error and GH_TOKEN rationale.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ROLE: reviewer
+          JOB_LABEL: 3 · reviewer
+        run: |
+          set -uo pipefail
+          BODY="$RUNNER_TEMP/$ROLE-metrics.md"
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/conversation_metrics.sh"
+          {
+            printf '### %s — conversation metrics\n\n' "$JOB_LABEL"
+            [ -f "$SCRIPT" ] && bash "$SCRIPT" \
+              || printf '_%s is not on this checkout — nothing to measure._\n' "${SCRIPT##*/}"
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
