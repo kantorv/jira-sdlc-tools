@@ -12,16 +12,48 @@ Each skill's "Conventions used below" section names the tokens it needs
 every token it references against **both** env files; the tables below
 describe what each variable means.
 
-## Two-file layout
+## What lives in `.jst/`
 
 | File | Purpose | Committed? |
 |------|---------|------------|
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
 | `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` as `.jst/jira-sdlc-tools.local.env` |
+| `.jst/PARALLEL-INSTANCES.md` | **Optional.** Prose, not variables: how to turn one of this project's worktrees into a *running* instance. Absence is normal — see below. | **Yes** — checked into the repo |
 
-Both files are sourced by tools that need them. Values in
+Both env files are sourced by tools that need them. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
 define the same variable (though they define disjoint sets by convention).
+
+### `.jst/PARALLEL-INSTANCES.md` — optional, and free-form
+
+The two env files above are required; this one is not, and **most projects
+won't have it**. Nothing warns, blocks, or fails when it's missing — the
+`parallel_instances` healthcheck row reports either way as INFO, and
+`jira-task-assigner` simply says nothing about it.
+
+Write one when a fresh worktree of your project isn't runnable until something
+is provisioned for it — a cloned database, an instance index that picks the
+ports, a compose stack scoped to the checkout. The plugin creates N worktrees;
+it can't know what your stack needs to become N running instances, so this file
+is where your project writes that down once instead of it living in one
+developer's head. When it exists, the assigner reads it and folds its
+instructions into the report for each worktree it creates, so whoever picks a
+worktree up knows what's still to do before the app will start. The assigner
+never *runs* any of it — provisioning is environment setup for whoever works
+the issue.
+
+It's **tracked**, unlike the gitignored `jira-sdlc-tools.local.env`, and that's
+the point: a linked worktree is born with it, with no copy step to arrange (the
+reason `ensure_local_env` exists for local.env).
+
+Nothing parses the file — no schema, no tokens, no required headings. Write it
+for a human. To draft one, start from the shipped example,
+`plugins/jira-sdlc/docs/examples/PARALLEL-INSTANCES.example.md`.
+
+The companion doc is [`docs/RUNNING-MULTIPLE-COPIES.md`](../../docs/RUNNING-MULTIPLE-COPIES.md):
+that one is how to *decide* what each worktree's instance shares versus
+isolates (database, cache, storage, queue, ports); this file is where your
+project records the answer it landed on, in runnable terms.
 
 Every skill's pre-flight healthcheck (`statuscheck`) has a `jst_dir` row that
 FAILs — before any other check runs — when `.jst/` is missing, so a checkout

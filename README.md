@@ -130,6 +130,58 @@ ending in one command that verifies most of it for you.
 Prefer it as prose? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)**
 walks the same ground in the order you actually do it.
 
+## Applications
+
+Beyond the walkthrough above, the plugin is consumed two ways — as a Claude
+Code marketplace plugin, or as a loose skillset copied into a project's own
+skills folder — and this repo ships demo GitHub Actions workflows under
+[`.github/workflows/`](.github/workflows/) showing both consumption modes
+driving the three skills headlessly in CI, from a standalone reviewer gate on
+an open PR up to the full assigner → executor → reviewer chain on the feature
+and hotfix paths. Full detail, including production-environment setup and
+which secrets each demo reads, is in
+**[Applications](plugins/jira-sdlc/docs/applications/APPLICATIONS.md)**.
+
+Five scenarios, each with its own walkthrough. "Approvals" counts the
+`environment: production` pauses a run waits on before it can continue.
+
+- **[Feature flow](plugins/jira-sdlc/docs/applications/ci-feature-flow-demo.md)**
+  — the whole assigner → executor → reviewer chain on the planned path: a
+  GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
+  and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
+  3 approvals.
+  [`demo-claude-feature-flow.yml`](.github/workflows/demo-claude-feature-flow.yml)
+  (Claude Code · `/make-feature`) ·
+  [`demo-fcc-nvidia-nim-feature-flow.yml`](.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml)
+  (Free Claude Code + NVIDIA NIM · `/fcc-make-feature`)
+- **[Hotfix flow](plugins/jira-sdlc/docs/applications/ci-hotfix-flow-demo.md)**
+  — the same chain on the emergency path: `hotfix/*` cut off
+  `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
+  Comment-triggered, up to 3 approvals.
+  [`demo-claude-hotfix-flow.yml`](.github/workflows/demo-claude-hotfix-flow.yml)
+  (Claude Code · `/make-hotfix`)
+- **[Review a PR](plugins/jira-sdlc/docs/applications/ci-review-pr-demo.md)** —
+  the reviewer on its own against an already-open PR, posting its verdict to
+  GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
+  [`demo-claude-reviewer.yml`](.github/workflows/demo-claude-reviewer.yml)
+  (Claude Code · `/review`) ·
+  [`demo-fcc-nvidia-nim-reviewer.yml`](.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
+  (Free Claude Code + NVIDIA NIM · `/fcc-review`)
+- **[Issue to task](plugins/jira-sdlc/docs/applications/ci-issue-to-task-demo.md)**
+  — the assigner alone: a newly opened issue becomes a Jira task with its
+  branch and worktree, and the run stops there. Fires automatically on
+  `issues: opened` and is the one demo with ⚠️ **no author check**, so its
+  single approval is the only guard.
+  [`demo-claude-issue-to-task.yml`](.github/workflows/demo-claude-issue-to-task.yml)
+  (Claude Code)
+- **[Smoke test](plugins/jira-sdlc/docs/applications/ci-smoke-test-demo.md)** —
+  **no skill runs.** It installs a coding assistant, points it at this plugin's
+  `skills/`, and drives one plain inference to prove the backend is wired up —
+  the plumbing check before you trust a new client or model with a real flow.
+  Manual, no approval gate.
+  [`demo-kimi-openrouter-reviewer.yml`](.github/workflows/demo-kimi-openrouter-reviewer.yml)
+  (Kimi Code + OpenRouter · `workflow_dispatch`)
+
 ## Jira states - who can move a card
 
 The four statuses are configurable — `<STATUS_*>` below are the tokens you map

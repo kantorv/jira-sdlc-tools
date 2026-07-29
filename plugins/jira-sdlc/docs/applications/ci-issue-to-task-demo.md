@@ -37,8 +37,12 @@ The invocation is the same one a developer types, with the issue's text as the
 free-form description:
 
 ```bash
-claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
-  --dangerously-skip-permissions \
+# the skills come from the marketplace, not from this checkout —
+# external consumers: swap the URL for your own fork or clone
+claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+claude plugin install jira-sdlc@jira-sdlc-tools
+
+claude --dangerously-skip-permissions \
   -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")"
 ```
 

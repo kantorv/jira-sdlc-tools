@@ -21,8 +21,12 @@
 # whole run reports back where the work was requested. The job-level `if`
 # requires all of:
 #
-#   * the comment body is exactly `/fcc-make-feature` — a bare command, so a
-#     comment that merely mentions it in prose doesn't fire the chain;
+#   * the comment body is `/fcc-make-feature`, either bare or followed by a
+#     space or a newline and free-form prose (see below). Spelled out as an
+#     exact match plus three `startsWith` forms rather than one bare
+#     `startsWith(body, '/fcc-make-feature')`, which would also fire on
+#     `/fcc-make-feature-anything`; a comment that merely mentions the command
+#     mid-sentence still doesn't fire the chain;
 #   * `author_association` is OWNER or MEMBER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
 #     and what follows runs an LLM with write permissions on a runner. Do not
@@ -37,12 +41,20 @@
 # Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
 # guard is stated once.
 #
-# The issue's **title + blank line + body** (never the `/fcc-make-feature`
-# comment)
-# is the free-form task description handed to jira-task-assigner — the same
-# shape demo-claude-issue-to-task.yml uses. Issue bodies are attacker-supplied
-# text, so they are pulled into env vars first and written to a temp file with
-# `printf`, never interpolated into a shell command.
+# The issue's **title + blank line + body** is the free-form task description
+# handed to jira-task-assigner — the same shape demo-claude-issue-to-task.yml
+# uses. Issue bodies are attacker-supplied text, so they are pulled into env
+# vars first and written to a temp file with `printf`, never interpolated into
+# a shell command.
+#
+# **Anything typed after the command** in the triggering comment is free-form
+# direction for *this run*. A parse step strips the command token, trims, and
+# appends the remainder to the prompt as a labelled `-- EXTRA DIRECTION FOR
+# THIS RUN --` section after the issue body: it supplements the issue text,
+# never replaces it. A bare command leaves the section out entirely, so that
+# prompt is byte-identical to what this demo built before. Comment bodies are
+# attacker-supplied text too, and travel exactly like issue bodies — env var,
+# then `printf`, never script text.
 #
 # ── Reporting back to the issue ────────────────────────────────────────────
 #
@@ -110,12 +122,16 @@
 #  4. **Self-review.** Job 3's gh session is the same account that opened the
 #     PR in job 2, and GitHub blocks approving your own PR — the reviewer
 #     skill already posts its verdict as a PR *comment* for this reason.
-#  5. **The skills come from the base-branch checkout**, because the assigner
-#     refuses to run from an issue branch (its step 2). An `issue_comment`
-#     event checks out the repo's *default* branch, which is not necessarily
-#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap still switches to the base
-#     branch explicitly rather than trusting the event's default. Land skill
-#     changes on the base branch first if you want them exercised.
+#  5. **The skills come from the marketplace, not from this checkout.** Every
+#     job installs the plugin with `claude plugin marketplace add` +
+#     `claude plugin install`, which clones the plugin repo's *default* branch
+#     — so a skill change is exercised here only once it has landed there,
+#     never from the branch under test. The checkout still has to stand on the
+#     base branch, for a different reason: the assigner refuses to run from an
+#     issue branch (its step 2), and an `issue_comment` event checks out the
+#     repo's *default* branch, which is not necessarily
+#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap switches to the base branch
+#     explicitly rather than trusting the event's default.
 #
 # ── Secrets ───────────────────────────────────────────────────────────────
 #
@@ -185,11 +201,20 @@ jobs:
     name: 1 · assigner — create the Jira issue and feature branch
     # The whole security boundary of this workflow — see the header. All three
     # conditions are required; jobs 2/3 inherit the guard by `needs`.
+    #
+    # The command clause accepts the bare command or the command plus a
+    # separator, so prose after it still fires the run. `fromJSON('"\n"')` is
+    # how you spell a newline in a GitHub expression — there is no escape
+    # sequence in its string literals; `\r` is checked too because comment
+    # bodies come back from the API with CRLF line endings.
     if: |
-          github.event.issue.pull_request == null &&
-          github.event.comment.body == '/fcc-make-feature' &&
-          (github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER')
+      github.event.issue.pull_request == null &&
+      (github.event.comment.body == '/fcc-make-feature' ||
+       startsWith(github.event.comment.body, '/fcc-make-feature ') ||
+       startsWith(github.event.comment.body, format('/fcc-make-feature{0}', fromJSON('"\n"'))) ||
+       startsWith(github.event.comment.body, format('/fcc-make-feature{0}', fromJSON('"\r"')))) &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
     environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
@@ -304,6 +329,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -340,6 +386,50 @@ jobs:
           cat /tmp/fcc-server.log
           exit 1
 
+      - name: Parse the prose after the trigger command
+        # Free-form direction may follow the command in the triggering comment
+        # (`/fcc-make-feature focus on the retry path`). Strip the leading token,
+        # trim, and expose the remainder as a step output; an empty remainder is
+        # the normal case and leaves the run behaving exactly as a bare command
+        # always did.
+        #
+        # This step parses, it never gates: the security boundary is the
+        # job-level `if:` above and stays there, so this step only ever sees a
+        # comment that already passed it. The body is attacker-supplied text —
+        # it enters as an env var and leaves through `printf`, never as part of
+        # the script.
+        #
+        # Identical in all five comment-triggered demos apart from COMMAND —
+        # keep it that way, so a diff between two of them shows only what
+        # genuinely differs.
+        id: prose
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMAND: /fcc-make-feature
+        run: |
+          set -euo pipefail
+          shopt -s extglob
+          PROSE=${COMMENT_BODY:-}
+          PROSE=${PROSE//$'\r'/}          # comment bodies arrive CRLF
+          PROSE=${PROSE#"$COMMAND"}       # drop the leading command token
+          PROSE=${PROSE##+([[:space:]])}  # trim both ends, newlines included
+          PROSE=${PROSE%%+([[:space:]])}
+          # Multi-line step output needs a delimiter, and a fixed one would let
+          # prose containing that marker close the block early and forge further
+          # outputs — so randomize it.
+          DELIM="PROSE_EOF_$(openssl rand -hex 8)"
+          {
+            printf 'text<<%s\n' "$DELIM"
+            printf '%s\n' "$PROSE"
+            printf '%s\n' "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$PROSE" ]; then
+            printf 'Extra direction from the triggering comment: %s characters.\n' "${#PROSE}"
+          else
+            printf 'Bare command — no extra direction.\n'
+          fi
+
       - name: Run jira-task-assigner
         id: run
         timeout-minutes: 25
@@ -353,6 +443,9 @@ jobs:
           # shell command (issue bodies are user content, not script text).
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          # Same rule as the issue text above: comment prose is user content, so
+          # it arrives as an env var and is printf'd, never interpolated here.
+          COMMENT_PROSE: ${{ steps.prose.outputs.text }}
         run: |
           set -euo pipefail
           # Snapshot local feature branches so the next step can tell which one
@@ -368,6 +461,13 @@ jobs:
           {
             printf '%s\n\n' "$ISSUE_TITLE"
             printf '%s' "${ISSUE_BODY:-}"
+            # Whatever was typed after the trigger command, as its own labelled
+            # section: extra steering for THIS run, while the issue above stays
+            # the task description. A bare command skips the section entirely,
+            # leaving the prompt byte-identical to what this demo built before.
+            if [ -n "${COMMENT_PROSE:-}" ]; then
+              printf -- '\n\n-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --\n%s' "$COMMENT_PROSE"
+            fi
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive
@@ -375,7 +475,7 @@ jobs:
           # throwaway runner VM, non-root (the flag refuses to run as root).
           # The prompt is passed via `$(cat …)` inside the quoted -p argument,
           # so it stays one argument and its newlines survive into the model.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_ASSIGNER_MODEL }}" \
             -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
@@ -649,6 +749,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -717,7 +838,7 @@ jobs:
           set -euo pipefail
           # No key argument by contract — the executor derives it from the
           # branch this worktree is on.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_EXECUTOR_MODEL }}" \
             -p "/jira-sdlc:jira-task-executor" \
@@ -959,6 +1080,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -1026,7 +1168,7 @@ jobs:
           # Bare, no key: the reviewer derives the issue from the branch. Job 1
           # guaranteed a single feature branch, so this is a single-step
           # top-level issue — one PR to review, the one into the base branch.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model "${{ env.DEFAULT_REVIEWER_MODEL }}" \
             -p "/jira-sdlc:jira-task-reviewer" \

@@ -21,8 +21,12 @@
 # whole run reports back where the work was requested. The job-level `if`
 # requires all of:
 #
-#   * the comment body is exactly `/make-feature` — a bare command, so a
-#     comment that merely mentions it in prose doesn't fire the chain;
+#   * the comment body is `/make-feature`, either bare or followed by a space
+#     or a newline and free-form prose (see below). Spelled out as an exact
+#     match plus three `startsWith` forms rather than one bare
+#     `startsWith(body, '/make-feature')`, which would also fire on
+#     `/make-feature-anything`; a comment that merely mentions the command
+#     mid-sentence still doesn't fire the chain;
 #   * `author_association` is OWNER or MEMBER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
 #     and what follows runs an LLM with write permissions on a runner. Do not
@@ -37,22 +41,39 @@
 # Jobs 2 and 3 need job 1, and a skipped `needs` skips its dependents, so the
 # guard is stated once.
 #
-# The issue's **title + blank line + body** (never the `/make-feature` comment)
-# is the free-form task description handed to jira-task-assigner — the same
-# shape demo-claude-issue-to-task.yml uses. Issue bodies are attacker-supplied
-# text, so they are pulled into env vars first and written to a temp file with
-# `printf`, never interpolated into a shell command.
+# The issue's **title + blank line + body** is the free-form task description
+# handed to jira-task-assigner — the same shape demo-claude-issue-to-task.yml
+# uses. Issue bodies are attacker-supplied text, so they are pulled into env
+# vars first and written to a temp file with `printf`, never interpolated into
+# a shell command.
+#
+# **Anything typed after the command** in the triggering comment is free-form
+# direction for *this run*. A parse step strips the command token, trims, and
+# appends the remainder to the prompt as a labelled `-- EXTRA DIRECTION FOR
+# THIS RUN --` section after the issue body: it supplements the issue text and
+# the fixed CI instruction paragraph, never replaces either. A bare command
+# leaves the section out entirely, so that prompt is byte-identical to what
+# this demo built before. Comment bodies are attacker-supplied text too, and
+# travel exactly like issue bodies — env var, then `printf`, never script text.
 #
 # ── Reporting back to the issue ────────────────────────────────────────────
 #
-# Each job posts its skill's report as a comment on the triggering issue: a
-# structured summary (Jira key, branch, PR link where applicable) followed by
-# the full transcript inside a collapsed <details> block, so the comment stays
-# readable without losing the transcript. The per-job log artifacts
-# (assigner-log / executor-log / reviewer-log) are still uploaded — they are
-# the path-independent copy, and the comment's transcript is truncated when it
-# would exceed GitHub's 65536-character comment limit (a `gh issue comment`
-# that exceeds it fails the job, so the guard is not optional).
+# Each job reports twice, to two different audiences.
+#
+# **On the triggering issue**, as a comment: a structured summary (Jira key,
+# branch, PR link where applicable) followed by the full transcript, in plain
+# markdown — no <details> wrapper, so the run reads top to bottom without a
+# click. The transcript is truncated when it would exceed GitHub's
+# 65536-character comment limit (a `gh issue comment` that exceeds it fails the
+# job, so the guard is not optional).
+#
+# **On the run page**, as a job summary: the same transcript appended to
+# `$GITHUB_STEP_SUMMARY` under the one-line heading each job already wrote, so
+# the run explains itself without opening the log or downloading anything.
+# Job summaries cap at 1 MiB per step and get the same tail + `iconv -c` guard.
+#
+# The per-job log artifacts (assigner-log / executor-log / reviewer-log) are
+# still uploaded — they are the path-independent, untruncated copy.
 #
 # The comment steps run `if: always()` and after the skill, which is what lets
 # a *failed* run still explain itself on the issue. They are the only steps
@@ -109,12 +130,16 @@
 #  4. **Self-review.** Job 3's gh session is the same account that opened the
 #     PR in job 2, and GitHub blocks approving your own PR — the reviewer
 #     skill already posts its verdict as a PR *comment* for this reason.
-#  5. **The skills come from the base-branch checkout**, because the assigner
-#     refuses to run from an issue branch (its step 2). An `issue_comment`
-#     event checks out the repo's *default* branch, which is not necessarily
-#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap still switches to the base
-#     branch explicitly rather than trusting the event's default. Land skill
-#     changes on the base branch first if you want them exercised.
+#  5. **The skills come from the marketplace, not from this checkout.** Every
+#     job installs the plugin with `claude plugin marketplace add` +
+#     `claude plugin install`, which clones the plugin repo's *default* branch
+#     — so a skill change is exercised here only once it has landed there,
+#     never from the branch under test. The checkout still has to stand on the
+#     base branch, for a different reason: the assigner refuses to run from an
+#     issue branch (its step 2), and an `issue_comment` event checks out the
+#     repo's *default* branch, which is not necessarily
+#     `<DEFAULT_BASE_BRANCH>` — so the bootstrap switches to the base branch
+#     explicitly rather than trusting the event's default.
 #
 # ── Secrets ───────────────────────────────────────────────────────────────
 #
@@ -182,9 +207,18 @@ jobs:
     name: 1 · assigner — create the Jira issue and feature branch
     # The whole security boundary of this workflow — see the header. All three
     # conditions are required; jobs 2/3 inherit the guard by `needs`.
+    #
+    # The command clause accepts the bare command or the command plus a
+    # separator, so prose after it still fires the run. `fromJSON('"\n"')` is
+    # how you spell a newline in a GitHub expression — there is no escape
+    # sequence in its string literals; `\r` is checked too because comment
+    # bodies come back from the API with CRLF line endings.
     if: |
       github.event.issue.pull_request == null &&
-      github.event.comment.body == '/make-feature' &&
+      (github.event.comment.body == '/make-feature' ||
+       startsWith(github.event.comment.body, '/make-feature ') ||
+       startsWith(github.event.comment.body, format('/make-feature{0}', fromJSON('"\n"'))) ||
+       startsWith(github.event.comment.body, format('/make-feature{0}', fromJSON('"\r"')))) &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
@@ -304,12 +338,80 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
+      - name: Parse the prose after the trigger command
+        # Free-form direction may follow the command in the triggering comment
+        # (`/make-feature focus on the retry path`). Strip the leading token,
+        # trim, and expose the remainder as a step output; an empty remainder is
+        # the normal case and leaves the run behaving exactly as a bare command
+        # always did.
+        #
+        # This step parses, it never gates: the security boundary is the
+        # job-level `if:` above and stays there, so this step only ever sees a
+        # comment that already passed it. The body is attacker-supplied text —
+        # it enters as an env var and leaves through `printf`, never as part of
+        # the script.
+        #
+        # Identical in all five comment-triggered demos apart from COMMAND —
+        # keep it that way, so a diff between two of them shows only what
+        # genuinely differs.
+        id: prose
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMAND: /make-feature
+        run: |
+          set -euo pipefail
+          shopt -s extglob
+          PROSE=${COMMENT_BODY:-}
+          PROSE=${PROSE//$'\r'/}          # comment bodies arrive CRLF
+          PROSE=${PROSE#"$COMMAND"}       # drop the leading command token
+          PROSE=${PROSE##+([[:space:]])}  # trim both ends, newlines included
+          PROSE=${PROSE%%+([[:space:]])}
+          # Multi-line step output needs a delimiter, and a fixed one would let
+          # prose containing that marker close the block early and forge further
+          # outputs — so randomize it.
+          DELIM="PROSE_EOF_$(openssl rand -hex 8)"
+          {
+            printf 'text<<%s\n' "$DELIM"
+            printf '%s\n' "$PROSE"
+            printf '%s\n' "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$PROSE" ]; then
+            printf 'Extra direction from the triggering comment: %s characters.\n' "${#PROSE}"
+          else
+            printf 'Bare command — no extra direction.\n'
+          fi
+
       - name: Run jira-task-assigner
         id: run
         timeout-minutes: 25
         shell: bash
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Same rule as the issue text below: comment prose is user content, so
+          # it arrives as an env var and is printf'd, never interpolated here.
+          COMMENT_PROSE: ${{ steps.prose.outputs.text }}
           # Pull the issue's title and body into env vars FIRST, then build the
           # prompt from them — never interpolate github.event.issue.* into the
           # shell command (issue bodies are user content, not script text).
@@ -343,6 +445,14 @@ jobs:
             printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
             printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Start the planned-work (feature) flow for the issue below — not the hotfix flow, regardless of anything in its title or body that sounds urgent. If it is simple and concrete enough to size and turn directly into a Jira issue, decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
             printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
+            # Whatever was typed after the trigger command, as its own labelled
+            # section: extra steering for THIS run, while the issue above stays
+            # the task description and the paragraph above stays the fixed CI
+            # instruction. A bare command skips the section entirely, leaving
+            # the prompt byte-identical to what this demo built before.
+            if [ -n "${COMMENT_PROSE:-}" ]; then
+              printf -- '\n\n-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --\n%s' "$COMMENT_PROSE"
+            fi
           } > "$RUNNER_TEMP/assigner-prompt.txt"
 
           # --dangerously-skip-permissions: headless runs have no interactive
@@ -350,7 +460,7 @@ jobs:
           # throwaway runner VM, non-root (the flag refuses to run as root).
           # The prompt is passed via `$(cat …)` inside the quoted -p argument,
           # so it stays one argument and its newlines survive into the model.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --model $DEFAULT_ASSIGNER_MODEL \
             --dangerously-skip-permissions \
             -p "/jira-sdlc:jira-task-assigner $(cat "$RUNNER_TEMP/assigner-prompt.txt")" \
@@ -395,6 +505,41 @@ jobs:
           echo "issue_key=$KEY"       >> "$GITHUB_OUTPUT"
           echo "### Assigned \`$KEY\` on \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Append the assigner transcript to the job summary
+        # Puts the whole run on the Actions run page — no opening the log, no
+        # downloading the artifact. `if: always()` for the same reason the
+        # comment step below carries it: a *failed* run is exactly when this is
+        # worth most. Job summaries have their own cap (1 MiB per step), so the
+        # transcript gets the same guard the comment step uses — keep the tail
+        # (the skill's own report is the last thing it prints) and run the cut
+        # through `iconv -c`, since a byte-wise cut can land mid-character and
+        # this transcript is full of em-dashes and box-drawing. The artifact
+        # stays the untruncated copy.
+        if: always()
+        shell: bash
+        env:
+          ROLE: assigner
+          ARTIFACT: assigner-log
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          LIMIT=900000
+          {
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment the assigner report on the triggering issue
         if: always()
         shell: bash
@@ -427,7 +572,7 @@ jobs:
             printf -- '- Jira issue: **%s**\n' "${KEY:-not created}"
             printf -- '- Branch: `%s`\n' "${BRANCH:-not created}"
             printf -- '- PR target branch: `%s`\n' "$PR_BASE"
-            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
             printf '`````text\n'
             if [ -s "$LOG" ]; then
               if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
@@ -443,7 +588,7 @@ jobs:
             else
               printf '(no transcript — the job failed before the skill produced output)\n'
             fi
-            printf '\n`````\n\n</details>\n'
+            printf '\n`````\n'
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
@@ -625,6 +770,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Rebuild the issue worktree
         id: worktree
         shell: bash
@@ -656,7 +822,7 @@ jobs:
           set -euo pipefail
           # No key argument by contract — the executor derives it from the
           # branch this worktree is on.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --dangerously-skip-permissions \
             --model $DEFAULT_EXECUTOR_MODEL \
             -p "/jira-sdlc:jira-task-executor" \
@@ -684,6 +850,41 @@ jobs:
           echo "pr_url=$URL"    >> "$GITHUB_OUTPUT"
           echo "### Executor opened PR #$NUM for \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Append the executor transcript to the job summary
+        # Puts the whole run on the Actions run page — no opening the log, no
+        # downloading the artifact. `if: always()` for the same reason the
+        # comment step below carries it: a *failed* run is exactly when this is
+        # worth most. Job summaries have their own cap (1 MiB per step), so the
+        # transcript gets the same guard the comment step uses — keep the tail
+        # (the skill's own report is the last thing it prints) and run the cut
+        # through `iconv -c`, since a byte-wise cut can land mid-character and
+        # this transcript is full of em-dashes and box-drawing. The artifact
+        # stays the untruncated copy.
+        if: always()
+        shell: bash
+        env:
+          ROLE: executor
+          ARTIFACT: executor-log
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          LIMIT=900000
+          {
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment the executor report on the triggering issue
         if: always()
         shell: bash
@@ -710,7 +911,7 @@ jobs:
             printf -- '- Jira issue: **%s**\n' "$KEY"
             printf -- '- Branch: `%s` → `%s`\n' "$BRANCH" "$PR_BASE"
             printf -- '- PR: %s\n' "${PR_URL:-not opened}"
-            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
             printf '`````text\n'
             if [ -s "$LOG" ]; then
               if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
@@ -726,7 +927,7 @@ jobs:
             else
               printf '(no transcript — the job failed before the skill produced output)\n'
             fi
-            printf '\n`````\n\n</details>\n'
+            printf '\n`````\n'
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 
@@ -899,6 +1100,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CLI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The skills come from the plugin's marketplace, not from this
+          # checkout — which is what makes this workflow copy-pasteable into a
+          # repo that does not contain the plugin. External consumers: swap the
+          # URL below for your own fork or clone.
+          #
+          # `marketplace add` clones the source repo's DEFAULT branch, so what
+          # runs here is whatever has landed there — not the code on the branch
+          # under test. Land a skill change on the default branch before
+          # expecting a demo run to exercise it.
+          #
+          # Spelled as an https:// URL rather than the `owner/repo` shorthand:
+          # the shorthand tries SSH first and only falls back to HTTPS once that
+          # fails, and a runner has no SSH key for github.com. Same marketplace
+          # name (`jira-sdlc-tools`, from its manifest) either way.
+          claude plugin marketplace add https://github.com/kantorv/jira-sdlc-tools.git
+          claude plugin install jira-sdlc@jira-sdlc-tools
+
       - name: Rebuild the issue worktree
         id: worktree
         shell: bash
@@ -929,7 +1151,7 @@ jobs:
           # Bare, no key: the reviewer derives the issue from the branch. Job 1
           # guaranteed a single feature branch, so this is a single-step
           # top-level issue — one PR to review, the one into the base branch.
-          claude --plugin-dir "$GITHUB_WORKSPACE/plugins/jira-sdlc" \
+          claude \
             --model $DEFAULT_REVIEWER_MODEL \
             --dangerously-skip-permissions \
             -p "/jira-sdlc:jira-task-reviewer" \
@@ -948,6 +1170,41 @@ jobs:
             echo ""
             echo "Nothing was merged — the reviewer never merges, and this demo"
             echo "stops here. Merging the PR is a human act."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Append the reviewer transcript to the job summary
+        # Puts the whole run on the Actions run page — no opening the log, no
+        # downloading the artifact. `if: always()` for the same reason the
+        # comment step below carries it: a *failed* run is exactly when this is
+        # worth most. Job summaries have their own cap (1 MiB per step), so the
+        # transcript gets the same guard the comment step uses — keep the tail
+        # (the skill's own report is the last thing it prints) and run the cut
+        # through `iconv -c`, since a byte-wise cut can land mid-character and
+        # this transcript is full of em-dashes and box-drawing. The artifact
+        # stays the untruncated copy.
+        if: always()
+        shell: bash
+        env:
+          ROLE: reviewer
+          ARTIFACT: reviewer-log
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/$ROLE.log"
+          LIMIT=900000
+          {
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
+            printf '`````text\n'
+            if [ -s "$LOG" ]; then
+              if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
+                printf '… earlier output truncated — full transcript in the %s artifact …\n\n' "$ARTIFACT"
+                tail -c "$LIMIT" "$LOG" | iconv -c -f UTF-8 -t UTF-8
+              else
+                cat "$LOG"
+              fi
+            else
+              printf '(no transcript — the job failed before the skill produced output)\n'
+            fi
+            printf '\n`````\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment the reviewer report on the triggering issue
@@ -980,7 +1237,7 @@ jobs:
             printf -- '- PR reviewed: %s\n' "${PR_URL:-unknown}"
             printf -- '- Verdict: on the PR itself, as a comment prefixed `APPROVED — …` / `CHANGES REQUESTED — …`\n'
             printf -- '- Nothing was merged — the reviewer never merges.\n'
-            printf '\n<details>\n<summary>Full %s transcript</summary>\n\n' "$ROLE"
+            printf '\n#### Full %s transcript\n\n' "$ROLE"
             printf '`````text\n'
             if [ -s "$LOG" ]; then
               if [ "$(wc -c < "$LOG")" -gt "$LIMIT" ]; then
@@ -996,7 +1253,7 @@ jobs:
             else
               printf '(no transcript — the job failed before the skill produced output)\n'
             fi
-            printf '\n`````\n\n</details>\n'
+            printf '\n`````\n'
           } > "$BODY"
           GH_TOKEN="$GITHUB_PAT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file "$BODY"
 

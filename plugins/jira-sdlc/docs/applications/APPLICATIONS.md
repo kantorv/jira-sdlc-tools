@@ -130,9 +130,9 @@ want, then the implementation whose backend you have credentials for.
 
 | Scenario | What the flow does | Trigger | Approval | Implementations |
 |---|---|---|---|---|
-| [**Feature flow**](./ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](../../../../.github/workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
-| [**Hotfix flow**](./ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](../../../../.github/workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
-| [**Review a PR**](./ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](../../../../.github/workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review` |
+| [**Feature flow**](./ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](../../../../.github/workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
+| [**Hotfix flow**](./ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](../../../../.github/workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
+| [**Review a PR**](./ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](../../../../.github/workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review` |
 | [**Issue to task**](./ci-issue-to-task-demo.md) | Assigner alone. A newly opened GitHub issue becomes a Jira task with its branch and worktree, and the run stops there — no implementation, no PR. | **auto** | **Up to 1** — `environment: production` on the assigner job. ⚠️ **Effectively mandatory here**: this is the only demo with no author check, so the approval is the sole guard between any opened issue and an unattended run. | • [`demo-claude-issue-to-task.yml`](../../../../.github/workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `issues: opened` |
 | [**Smoke test**](./ci-smoke-test-demo.md) | **No skill is invoked.** Installs a coding assistant on the runner, points its config at this plugin's `skills/`, and drives one plain inference to prove the backend is wired up — the plumbing check you run *before* trusting a new client or model with a real flow. Answers "does this assistant install, authenticate, find the skills, and return a completion in CI?", nothing more. | **manual** | **None** — declares no `environment`, so it never pauses and reads no environment secrets | • [`demo-kimi-openrouter-reviewer.yml`](../../../../.github/workflows/demo-kimi-openrouter-reviewer.yml) — Kimi Code + OpenRouter · `workflow_dispatch` — installs Kimi, writes a `config.toml` whose `extra_skill_dirs` points at the plugin, then runs one hand-written review prompt over `gh pr diff` and posts the result to the PR |
 
@@ -151,7 +151,7 @@ So the counts above are the number of jobs that *would* pause — one gate per
 gated job — once Required reviewers is enabled. Toggling that one checkbox is
 what turns these demos from unattended to fully gated, with no workflow edit.
 
-Three more things the matrix makes visible:
+Four more things the matrix makes visible:
 
 - **The smoke test is the odd one out, and that's the point.** The first four
   rows all invoke skills; the last deliberately doesn't. It's the rung below
@@ -167,6 +167,25 @@ Three more things the matrix makes visible:
   `/fcc-make-feature` run the *same* scenario on different models. They're
   deliberately different words so that one comment doesn't start both
   workflows at once on a repo where both are installed.
+- **The trigger comment can carry prose, and the prose steers the run.** Every
+  comment-triggered demo above accepts its command bare *or* followed by a
+  space or a newline and free-form text:
+
+  ```
+  /make-feature split this into sub-tasks per service, and skip the docs
+  ```
+
+  The workflow strips the command token and hands the remainder to the skill —
+  appended to the assigner's prompt as a labelled `EXTRA DIRECTION FOR THIS
+  RUN` section (the GitHub issue stays the task description), or passed to the
+  reviewer as its skill argument, which `jira-task-reviewer` reads as free-form
+  notes about the run. A bare command behaves exactly as it always has.
+
+  What this does *not* loosen is the gate: the author check (OWNER/MEMBER) and
+  the issue-vs-PR check are untouched and still live in the job-level `if:`,
+  the prose is never gating input, and the command still has to be the first
+  token followed by a separator — `/reviewer-anything` and a mid-sentence
+  mention both stay inert.
 
 ---
 
