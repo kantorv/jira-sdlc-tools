@@ -136,7 +136,7 @@ jobs:
     if: needs.check_pr_exists.outputs.pr_exists == '1'
     environment: production
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: write # the reviewer posts its verdict as a PR comment

@@ -220,7 +220,7 @@ jobs:
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
-    timeout-minutes: 35
+    timeout-minutes: 70
     permissions:
       contents: write # the assigner pushes the new feature branch
       issues: write # posts the assigner report back on the triggering issue
@@ -432,7 +432,7 @@ jobs:
 
       - name: Run jira-task-assigner
         id: run
-        timeout-minutes: 25
+        timeout-minutes: 60
         shell: bash
         env:
           ANTHROPIC_BASE_URL: http://127.0.0.1:8082
@@ -691,7 +691,7 @@ jobs:
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
-    timeout-minutes: 45
+    timeout-minutes: 70
     permissions:
       contents: write # push the implementation commits
       pull-requests: write # gh pr create
@@ -861,7 +861,7 @@ jobs:
           echo "path=$WT" >> "$GITHUB_OUTPUT"
 
       - name: Run jira-task-executor
-        timeout-minutes: 35
+        timeout-minutes: 60
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
         env:
@@ -1053,7 +1053,7 @@ jobs:
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
-    timeout-minutes: 35
+    timeout-minutes: 70
     permissions:
       contents: read
       pull-requests: write # posts the review as a PR comment
@@ -1212,7 +1212,7 @@ jobs:
           echo "path=$WT" >> "$GITHUB_OUTPUT"
 
       - name: Run jira-task-reviewer
-        timeout-minutes: 25
+        timeout-minutes: 60
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
         env:
