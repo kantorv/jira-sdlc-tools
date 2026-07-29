@@ -14,16 +14,30 @@
 # AGENTS.md's win/*.ps1 parity rule, and GitHub runners are Linux. Don't move
 # it there without also porting it.
 #
-# Usage: conversation_metrics.sh [transcript.jsonl ...]
-#   No argument → glob $HOME/.claude/projects/*/*.jsonl, the same discovery the
-#   GIF steps use. Each job runs on a fresh VM with no shared filesystem, so
-#   there is normally exactly one transcript and it is that job's own skill run.
-#   An explicit path is for testing this script against a known transcript.
+# Usage: conversation_metrics.sh [CONVERSATION_ID | transcript.jsonl] ...
 #
-# NEVER fails its caller. A missing transcript, unusable JSON, or an absent jq
-# degrades to an explanatory line and exit 0 — metrics are a nicety, and a
-# green run must not redden because the nicety was unavailable. Hence
-# `set -uo pipefail` with no `-e`.
+#   CONVERSATION_ID  a bare session id — located under ~/.claude/projects with
+#                    the same `find -mindepth 2 -maxdepth 2` lookup
+#                    scripts/make_transcript.sh uses, so the two take the same
+#                    argument and you can hand either one the id you already
+#                    have:
+#                      ./make_transcript.sh        125ff9ca-0abe-…   # the GIF
+#                      ./conversation_metrics.sh   125ff9ca-0abe-…   # the cost
+#                    That depth pins the lookup to projects/<slug>/<id>.jsonl,
+#                    which is also what keeps it from matching a subagent
+#                    transcript (those are two levels deeper).
+#   transcript.jsonl an explicit path — anything containing a `/` or ending
+#                    `.jsonl` is taken as a path, not an id.
+#   no argument      glob $HOME/.claude/projects/*/*.jsonl, the same discovery
+#                    the GIF steps use, and how CI calls this. Each job runs on
+#                    a fresh VM with no shared filesystem, so there is normally
+#                    exactly one transcript and it is that job's own skill run.
+#
+# NEVER fails its caller — this is the one place it diverges from
+# make_transcript.sh, which exits 1 on a bad id. A missing transcript, an
+# unresolvable id, unusable JSON, or an absent jq degrades to an explanatory
+# line and exit 0: metrics are a nicety, and a green run must not redden
+# because the nicety was unavailable. Hence `set -uo pipefail` with no `-e`.
 set -uo pipefail
 
 # The measurement itself, lifted from the conversation-debugger skill's
@@ -116,10 +130,10 @@ metrics_filter='
     "| tool errors by tool | \(if .errtools == "" then "—" else .errtools end) |"
 '
 
-# The footnote is part of the numbers, not decoration: `turns`, the token
-# totals and the tool counts are main-chain only, with subagent work reported
-# separately as `sidechain turns`. Without this line the table quietly reads as
-# a whole-session total.
+# The footnote is part of the numbers, not decoration: `turns`, the `tokens *`
+# rows and the tool counts are main-chain only, with delegated work reported
+# separately as `subagent turns` / `subagent tokens`. Without this line the
+# table quietly reads as a whole-session total.
 FOOTNOTE='_Turns, tool calls and the `tokens *` rows cover the main chain; subagent spend is the `subagent tokens` row, read from the run’s `subagents/agent-*.jsonl` files. Token totals are deduped by `message.id`: one API response spans several transcript lines that all repeat the same usage object._'
 
 # A run's subagent turns are not in its transcript — they are written to
@@ -131,21 +145,46 @@ subagent_files() {
   find "${1%.jsonl}" -type f -name '*.jsonl' -path '*/subagents/*' 2>/dev/null
 }
 
+# An argument is a path if it looks like one, else a bare conversation id to
+# look up — same lookup as scripts/make_transcript.sh, so both take the id you
+# already have. Prints nothing when the id resolves to no session.
+resolve_transcript() {
+  case "$1" in
+    */*|*.jsonl) printf '%s\n' "$1" ;;
+    *) find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 -type f \
+         -name "$1.jsonl" -print -quit 2>/dev/null ;;
+  esac
+}
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "_Conversation metrics unavailable — \`jq\` is not installed on this runner._"
   exit 0
 fi
 
+FILES=()
 if [ "$#" -gt 0 ]; then
-  FILES=("$@")
+  for arg in "$@"; do
+    resolved=$(resolve_transcript "$arg")
+    if [ -z "$resolved" ]; then
+      # Said in the id's own terms: "missing or empty" below would send someone
+      # hunting for a file when what failed was the lookup.
+      echo "_No conversation found for id \`$arg\` under \`~/.claude/projects\` — nothing to measure._"
+      echo ""
+      continue
+    fi
+    FILES+=("$resolved")
+  done
+  # Every argument failed to resolve — each already said so; don't follow it
+  # with the no-transcripts-on-this-runner line, which would be a different
+  # (and wrong) diagnosis.
+  [ "${#FILES[@]}" -eq 0 ] && exit 0
 else
   shopt -s nullglob
   FILES=("$HOME"/.claude/projects/*/*.jsonl)
-fi
-
-if [ "${#FILES[@]}" -eq 0 ]; then
-  echo "_No Claude session transcript found on this runner — nothing to measure._"
-  exit 0
+  if [ "${#FILES[@]}" -eq 0 ]; then
+    echo "_No Claude session transcript found on this runner — nothing to measure._"
+    exit 0
+  fi
 fi
 
 rendered=0
