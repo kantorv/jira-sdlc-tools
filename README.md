@@ -184,27 +184,12 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
 
 ## Jira states - who can move a card
 
-The four statuses are configurable — `<STATUS_*>` below are the tokens you map
-onto your board's real names in `.jst/jira-sdlc-tools.env`. Full detail, including
-what each skill does at every step, is in
-**[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
-
-✅ does it · ⚠️ only with your confirmation · ❌ never
-
-| Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
-|---|---|---|---|---|
-| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `jira.sh issue transition <KEY> --to …`, or drag the card |
-| **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
-| **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
-| **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
-| **[GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
-| **[Jira Automation](plugins/jira-sdlc/docs/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
-
-The GitHub Actions row is **this repo's own CI** (`.github/workflows/`), not
-files the plugin installs — a marketplace install copies only
-`plugins/jira-sdlc/`. Copy them into your project to get that row; setup and
-secrets are in
-[Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
+The four anchor statuses (`<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
+`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`) are configurable — the tokens you map
+onto your board's real status names in `.jst/jira-sdlc-tools.env`. Who moves a
+card to which state — the three skills, GitHub Actions, a Jira automation
+app, or direct REST calls — is consolidated in
+**[Jira state movements](plugins/jira-sdlc/docs/JIRA-STATE-MOVEMENTS.md)**.
 
 ## Task lifecycle preview
 

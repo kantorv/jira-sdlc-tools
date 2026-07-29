@@ -305,7 +305,8 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   ├── JIRA-REST.md          # detailed REST client companion — rationale + commands no skill invokes
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
-        │   ├── JIRA-STATES.md     # who moves a card to which state, and when
+        │   ├── JIRA-STATE-MOVEMENTS.md  # overview hub: which of the four mechanisms moves a card where
+        │   ├── JIRA-STATES.md     # who moves a card to which state, and when (skill-side detail)
         │   ├── STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md  # driving Jira status from CI
         │   └── SDLC.md            # the branching/release policy these skills assume
         ├── LICENSE
