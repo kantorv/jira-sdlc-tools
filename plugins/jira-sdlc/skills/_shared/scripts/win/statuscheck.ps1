@@ -443,6 +443,16 @@ if ($JiraOk -and $ProjectKey) {
 Add-Row base_branch INFO "DEFAULT_BASE_BRANCH=$(if ($BaseBranch) { $BaseBranch } else { 'unset' })"
 Add-Row production_branch INFO "PRODUCTION_BRANCH=$(if ($ProductionBranch) { $ProductionBranch } else { 'unset' })"
 
+# The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
+# It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
+# as the three role tokens and the GitHub PAT — so a skill that needed it had no
+# row to read and reached for the file instead, putting live credentials in the
+# transcript (JST-224). Printing the one non-secret value here removes the
+# reason to open that file at all. Value only: Get-Cfg returns a single key,
+# never a neighbouring line.
+$JiraAccountUrl = Get-Cfg 'JIRA_ACCOUNT_URL'
+Add-Row jira_account_url INFO "JIRA_ACCOUNT_URL=$(if ($JiraAccountUrl) { $JiraAccountUrl } else { 'unset' }) (browse links: https://<JIRA_ACCOUNT_URL>/browse/<KEY>)"
+
 $WorktreesDir = Get-Cfg 'WORKTREES_DIR'
 if (-not $WorktreesDir) {
     Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"

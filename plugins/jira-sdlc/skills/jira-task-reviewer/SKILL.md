@@ -100,7 +100,10 @@ from the main checkout when missing by `ensure_local_env.sh`, called
 before this script — see the login step above),
 `env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` and
 `jira_auth` (both load-bearing, as noted above), `jira_project`, plus
-context `base_branch`, `working_tree` (WARN when dirty), and
+context `base_branch`, `jira_account_url` (INFO — the site domain for
+`https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links, read here so no step opens
+the credential-bearing `.jst/jira-sdlc-tools.local.env`), `working_tree`
+(WARN when dirty), and
 `worktrees_dir` (WARN when missing — only the assigner acts on it).
 
 This skill normally runs from the **parent worktree**

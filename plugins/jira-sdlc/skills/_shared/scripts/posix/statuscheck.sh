@@ -468,6 +468,16 @@ fi
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
 row production_branch INFO "PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-unset}"
 
+# The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
+# It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
+# as the three role tokens and the GitHub PAT — so a skill that needed it had no
+# row to read and reached for the file instead, putting live credentials in the
+# transcript (JST-224). Printing the one non-secret value here removes the
+# reason to open that file at all. Value only: cfg() returns a single key, never
+# a neighbouring line.
+JIRA_ACCOUNT_URL=$(cfg JIRA_ACCOUNT_URL || true)
+row jira_account_url INFO "JIRA_ACCOUNT_URL=${JIRA_ACCOUNT_URL:-unset} (browse links: https://<JIRA_ACCOUNT_URL>/browse/<KEY>)"
+
 # WORKTREES_DIR is where the assigner creates per-issue worktrees. Context
 # for every role (only the assigner acts on it, in prose — it stops on a
 # WARN rather than mkdir-ing); a relative value is relative to the MAIN
