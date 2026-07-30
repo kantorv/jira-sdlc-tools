@@ -56,8 +56,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" ||
 status, calls `gh pr list` / `gh pr review`, and — on the reject path —
 transitions issues; finding a busted environment mid-review wastes a
 pass and can leave an inconsistent verdict trail. Run the shared
-healthcheck first, overriding its rerun hint to name this skill instead
-of the executor default:
+healthcheck first, as the only tool call in its message, because its rows
+decide whether the next step happens at all — anything batched alongside it
+has already run before that decision existed. Override its rerun hint to
+name this skill instead of the executor default:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
@@ -115,9 +117,13 @@ line to the user, and wait — don't self-repair. The `worktree` and
 report a **linked worktree** and the `branch` row a **feature/hotfix issue
 branch** (the parent's or a sub-task's). If not — the main checkout, the
 base branch, a detached HEAD, or a non-conforming name — stop, because
-this skill runs from an issue's worktree. Otherwise the `issue_key` row's
-derived key seeds step 1 below (which resolves it to `<PARENT-KEY>`,
-climbing from a sub-task to its parent if needed).
+this skill runs from an issue's worktree. Otherwise, state what the
+role-specific rows read — `worktree`, `branch`, `issue_key`,
+`parent_branch` — before your first call after the healthcheck; a message
+batched with the healthcheck can't state them, because the values don't
+exist yet. The `issue_key` row's derived key then seeds step 1 below (which
+resolves it to `<PARENT-KEY>`, climbing from a sub-task to its parent if
+needed).
 
 ## 1. Resolve the parent, sub-tasks, and pick a track
 

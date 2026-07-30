@@ -71,8 +71,10 @@ Then run the shared pre-flight healthcheck. It
 gathers every environment fact this skill depends on — git repo, the two
 env files + their gitignore state, Jira auth (the **assigner's** credential —
 `jira.sh --role assigner whoami`), Jira project reachability, `gh` auth — in one pass and
-prints a markdown table, replacing the older per-check prose. Override the
-rerun hint so its remedies name this skill:
+prints a markdown table, replacing the older per-check prose. Send it as the
+only tool call in its message, because its rows decide whether the next step
+happens at all — anything batched alongside it has already run before that
+decision existed. Override the rerun hint so its remedies name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
@@ -133,8 +135,11 @@ worktrees dir → stop and ask; the `branch` row carries into step 2, which
 acts on it (so you don't re-run `git branch --show-current` there); and
 `parallel_instances` carries into step 7.
 
-With no FAIL row and the role-specific rows reading as above,
-continue to step 2.
+With no FAIL row and the role-specific rows reading as above, state what
+those rows read — `worktree`, `branch`, `worktrees_dir`,
+`parallel_instances` — before your first call after the healthcheck, then
+continue to step 2. A message batched with the healthcheck can't state them,
+because the values don't exist yet.
 
 ## 2. Determine context from the current branch
 
