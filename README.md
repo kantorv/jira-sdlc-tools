@@ -64,6 +64,55 @@ The three skills, one per stage of the lifecycle:
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
 
+<img src="plugins/jira-sdlc/docs/assets/conversation-example.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+*Example of what a conversation with the assigner/executor/reviewer looks
+like — this particular recording is a placeholder and will be swapped for a
+final one.*
+
+## Prerequisites
+
+### Tools
+
+| Tool   | Title           | Uses                                     | Install URL                                             | Local docs                                                                       |
+| ------ | --------------- | ----------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `git`  | Version control | commit/push                              | [git-scm.com/downloads](https://git-scm.com/downloads)  | —                                                                                 |
+| `gh`   | GitHub CLI      | pr create/update                         | [cli.github.com](https://cli.github.com/)               | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+| `jq`   | JSON processor  | parse Jira REST responses (`jira.sh`)    | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | —                                                                             |
+| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | —                                                                             |
+
+**Platform specific**
+| Platform | Needs | Tested on | Why |
+|---|---|---|---|
+| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
+| **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
+| **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
+API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
+`JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
+(see [Full Setup](#full-setup) below).
+
+### Tokens and auth
+
+| Tool | Auth type | Scopes | Shared across roles | Description | Link |
+|---|---|---|---|---|---|
+| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#jira) |
+| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#github) |
+| `git` | ⚠️ SSH key | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git/SSH setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#git) |
+
+> ⚠️ **This plugin is designed to run in a shared environment** — the same
+> checkout where a coding assistant operates *and* where you yourself still
+> run `git` commands by hand. That's why `git` auth is left shared between
+> you and the agent rather than split out: a separate agent identity would
+> otherwise fight your own commits/pushes for the same repo state. If your
+> setup doesn't need that — the agent is the only thing ever touching
+> `git` here — it can authenticate with its own PAT instead, the same way
+> `gh` already does. See
+> [GITHUB-PAT-AGENT-OWNED-ENV.md](plugins/jira-sdlc/docs/github/GITHUB-PAT-AGENT-OWNED-ENV.md)
+> for how to set that up.
+
 ## Quick install
 
 ### Claude Code
@@ -184,27 +233,12 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
 
 ## Jira states - who can move a card
 
-The four statuses are configurable — `<STATUS_*>` below are the tokens you map
-onto your board's real names in `.jst/jira-sdlc-tools.env`. Full detail, including
-what each skill does at every step, is in
-**[Jira states](plugins/jira-sdlc/docs/JIRA-STATES.md)**.
-
-✅ does it · ⚠️ only with your confirmation · ❌ never
-
-| Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
-|---|---|---|---|---|
-| **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `jira.sh issue transition <KEY> --to …`, or drag the card |
-| **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
-| **[`jira-task-executor`](plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
-| **[`jira-task-reviewer`](plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
-| **[GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
-| **[Jira Automation](plugins/jira-sdlc/docs/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
-
-The GitHub Actions row is **this repo's own CI** (`.github/workflows/`), not
-files the plugin installs — a marketplace install copies only
-`plugins/jira-sdlc/`. Copy them into your project to get that row; setup and
-secrets are in
-[Driving Jira state from GitHub Actions](plugins/jira-sdlc/docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
+The four anchor statuses (`<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
+`<STATUS_IN_REVIEW>`, `<STATUS_DONE>`) are configurable — the tokens you map
+onto your board's real status names in `.jst/jira-sdlc-tools.env`. Who moves a
+card to which state — the three skills, GitHub Actions, a Jira automation
+app, or direct REST calls — is consolidated in
+**[Jira state movements](plugins/jira-sdlc/docs/JIRA-STATE-MOVEMENTS.md)**.
 
 ## Task lifecycle preview
 

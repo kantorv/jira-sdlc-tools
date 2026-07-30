@@ -118,10 +118,8 @@ assuming you're done:
 
 ## Validating a change
 
-There's no build, and no test suite for the skills themselves — this repo
-is mostly prompt files for an LLM agent plus two JSON manifests (one per
-`.claude-plugin/` directory). The one exception is the conversation-debugger's
-executable scripts, which do have golden-file harnesses (see below).
+There's no build or test suite — this repo is prompt files for an LLM
+agent plus two JSON manifests (one per `.claude-plugin/` directory).
 Instead:
 
 ```bash
@@ -133,27 +131,6 @@ claude plugin validate .
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 ```
-
-### Touched a conversation-debugger script? Run its golden harness
-
-The `conversation-debugger` scripts are real programs, not prompts, so they
-get real tests: `plugins/jira-sdlc/skills/conversation-debugger/scripts/tests/`
-holds a golden-file harness per refactored script, each replaying captured
-fixtures through stub siblings and byte-diffing the normalized JSON against a
-committed golden.
-
-```bash
-cd plugins/jira-sdlc/skills/conversation-debugger/scripts
-bash tests/run_collect_feature_golden.sh        # every engine: sh shim, py core, ps1 port
-bash tests/run_collect_feature_golden.sh py     # or one engine
-```
-
-The `ps1` engine needs `pwsh` (7 on Linux is enough) and skips with a loud note
-otherwise — a green run that skipped it has **not** verified the Windows port.
-`--update` re-captures the goldens; use it only when an output change is
-intended, so the golden diff in that commit documents the change.
-`skills/conversation-debugger/scripts/tests/README.md` explains the staging
-model and how to add a scenario or a harness for another script.
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
 
@@ -233,19 +210,12 @@ done   # add the args each one needs: --role <role> to statuscheck; --role <role
        # role-scoped, with no default credential.
 ```
 
-⚠️ **Calling `jira.ps1` from another PowerShell script: `& …` captures
-nothing.** `jira.ps1` writes its payload with `[Console]::Out.Write`, which
-bypasses PowerShell's success stream — so `$x = & jira.ps1 …` (and
-`Receive-Job` on a job that does the same) returns empty *and* leaks the JSON
-onto the calling script's own stdout, corrupting whatever machine-readable
-output it was producing. The bash twin has no such trap: `$(…)` captures a
-subprocess's real stdout. Run it as a **child process with stdout redirected to
-a file** instead — `Start-Process -FilePath (Get-Process -Id $PID).Path
--ArgumentList @('-NoProfile','-File',$JiraCli,…) -RedirectStandardOutput $tmp
--WorkingDirectory (Get-Location).Path` — which also inherits the cwd `jira.ps1`
-needs to find `.jst/`. Both conversation-debugger call sites do it this way.
-A stub that writes to the success stream (as the golden harness's does) will
-**not** reproduce this — only a live call against the real `jira.ps1` does.
+**Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
+knowing this up front saves chasing a port bug that isn't there:
+`$env:TEMP` is unset on Linux, so export `TEMP=/tmp` before the diff, and
+`gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login
+--with-token` doesn't complete down that path) while the bash side reads OK.
+Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
