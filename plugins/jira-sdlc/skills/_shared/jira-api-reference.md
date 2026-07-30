@@ -520,7 +520,7 @@ node verbatim, so the marker survives round-trip and a `grep` over
 posting, match on it when reading:
 
 - `PR target branch: <branch>.` — the PR base for the issue's branch, posted by
-  `jira-task-assigner` (or the no-assigner bootstrap, §12) and consumed by the
+  `jira-task-assigner` (or the no-assigner provisioning, §12) and consumed by the
   §13 PR-base resolver.
 - `Task memory (jira-task-executor)` — a durable per-task memory note the
   executor leaves for future sessions (findings, gotchas, design decisions +
@@ -547,7 +547,7 @@ and takes its prefix from the base it was told to use (its step 5C):
 `feature/` by default, `hotfix/` only when the user explicitly asks for the
 emergency production flow, in which case it cuts a single leaf from
 `origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes from either that
-path or the no-assigner bootstrap below.
+path or the no-assigner provisioning below.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue key
 inside the branch name — no API call required.
@@ -560,7 +560,16 @@ git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 `"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
 
-### No-assigner bootstrap (issue with no branch/worktree yet)
+### No-assigner provisioning (issue with no branch/worktree yet)
+
+> **Two unrelated senses of "bootstrap" live in this plugin — don't conflate
+> them.** This section is *git-level* setup: creating a branch and worktree for
+> an issue the assigner never touched, done **before** the executor runs.
+> `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` is a different thing entirely — an
+> optional project-owned hook that provisions the *app's runtime* (database,
+> ports, deps) **inside** an already-existing worktree, run by the executor's
+> step 1 (`project-config.md` § *the optional worktree hook*). This section
+> creates the worktree; that hook makes one runnable.
 
 `jira-task-executor` never creates the issue branch — it derives the issue key
 *from* the branch it's standing on, so there is no state where it runs and the
@@ -626,7 +635,7 @@ output. Sources, in order:
 1. `git config branch.<current>.parentbranch` — set by the assigner when the
    branch was created; local to this clone.
 2. The issue's `PR target branch: …` Jira comment — the durable fallback the
-   assigner posts (or the no-assigner bootstrap does, §12); survives a fresh
+   assigner posts (or the no-assigner provisioning does, §12); survives a fresh
    clone or different machine.
 3. **Parent-branch search** — sub-tasks only, i.e. when the leaf's `PARENT_KEY`
    is non-empty. Searches for a `feature/<PARENT_KEY>-*` / `hotfix/<PARENT_KEY>-*`

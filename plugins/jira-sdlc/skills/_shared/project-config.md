@@ -21,7 +21,7 @@ to get them. The tables below describe what each variable means; read
 |------|---------|------------|
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
 | `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` as `.jst/jira-sdlc-tools.local.env` |
-| `.jst/PARALLEL-INSTANCES.md` | **Optional.** Prose, not variables: how to turn one of this project's worktrees into a *running* instance. Absence is normal — see below. | **Yes** — checked into the repo |
+| `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` | **Optional.** A script, not variables: turns a fresh worktree into a *runnable* instance. `jira-task-executor` runs it. Absence is normal — see below. | **Yes** — checked into the repo |
 
 Both env files are sourced by tools that need them. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
@@ -55,36 +55,78 @@ before it. Nothing matches, the command still exits 0, and the tokens are in
 the transcript with no error to notice. A filter that silently fails open is
 exactly how this leaked once already; a single-key `grep` can't fail that way.
 
-### `.jst/PARALLEL-INSTANCES.md` — optional, and free-form
+### `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` — the optional worktree hook
 
 The two env files above are required; this one is not, and **most projects
 won't have it**. Nothing warns, blocks, or fails when it's missing — the
-`parallel_instances` healthcheck row reports either way as INFO, and
-`jira-task-assigner` simply says nothing about it.
+`bootstrap` healthcheck row reports either way as INFO, and the executor says
+nothing about it.
 
-Write one when a fresh worktree of your project isn't runnable until something
-is provisioned for it — a cloned database, an instance index that picks the
-ports, a compose stack scoped to the checkout. The plugin creates N worktrees;
-it can't know what your stack needs to become N running instances, so this file
-is where your project writes that down once instead of it living in one
-developer's head. When it exists, the assigner reads it and folds its
-instructions into the report for each worktree it creates, so whoever picks a
-worktree up knows what's still to do before the app will start. The assigner
-never *runs* any of it — provisioning is environment setup for whoever works
-the issue.
+Write one when a fresh worktree of your project isn't *runnable* until
+something is provisioned for it: a cloned database, an instance index that
+picks the ports, a compose stack scoped to the checkout, installed
+dependencies. The plugin creates N worktrees; it can't know what your stack
+needs to become N running instances, so this script is where your project
+writes that down once instead of it living in one developer's head. To draft
+one, start from the shipped example pair,
+`plugins/jira-sdlc/docs/examples/bootstrap.example.sh` /
+`bootstrap.example.ps1`.
 
 It's **tracked**, unlike the gitignored `jira-sdlc-tools.local.env`, and that's
 the point: a linked worktree is born with it, with no copy step to arrange (the
-reason `ensure_local_env` exists for local.env).
+reason `ensure_local_env` exists for local.env). Ship `bootstrap.sh` on POSIX
+projects and `bootstrap.ps1` on Windows ones — both if your team spans the two;
+the OS dispatch rule is the same one every other script pair here uses, so each
+side runs its own port and the `bootstrap` row names the one resolved for the
+current OS.
 
-Nothing parses the file — no schema, no tokens, no required headings. Write it
-for a human. To draft one, start from the shipped example,
-`plugins/jira-sdlc/docs/examples/PARALLEL-INSTANCES.example.md`.
+**Who runs it, and when.** `jira-task-executor` does, in its step 1 — once per
+worktree, at the moment someone is about to work in it. Deliberately *not* the
+assigner: a multistep assigner run creates N worktrees in one unattended pass
+and would stand up N running environments at once. It runs **automatically,
+with no confirmation prompt** — that automatic execution is the whole point,
+and it's a tracked, reviewed file in your own repo. `statuscheck` only reports
+whether the file exists; it never executes it, so a hook's output lands in the
+executor's transcript rather than being swallowed inside a reporting script.
+
+**Fail-soft, always.** A non-zero exit is reported in the executor's output and
+the run continues — a broken hook never blocks the executor, fails the
+healthcheck, or aborts the issue. Provisioning is environment setup; the issue
+is still workable without it.
+
+**Idempotency is your script's job.** Re-invoking the executor in the same
+worktree (a re-run after a rejected review, say) re-runs the hook, so write it
+to tolerate running twice: create-if-missing rather than create, reuse an
+existing container/volume rather than erroring on it.
+
+**Environment contract.** The executor exports these before invoking, and both
+ports use identical names:
+
+| variable | value |
+|---|---|
+| `JST_ISSUE_KEY` | the issue key derived from the branch, e.g. `PROJ-402` |
+| `JST_WORKTREE_DIR` | absolute path of *this* worktree's root (the script's working directory), not `WORKTREES_DIR` |
+| `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
+| `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
+| `JST_PROJECT_KEY` | `<PROJECT-KEY>` from `jira-sdlc-tools.env` |
+
+Env vars rather than positional arguments so the set can grow later without
+breaking scripts already written against it — a script that ignores a variable
+it doesn't know about keeps working. A project deriving **per-instance ports
+should derive them deterministically from `JST_ISSUE_KEY`** (hash or parse the
+numeric part into an index), so the same worktree gets the same ports on every
+run and two worktrees can't collide.
 
 The companion doc is [`docs/RUNNING-MULTIPLE-COPIES.md`](../../docs/RUNNING-MULTIPLE-COPIES.md):
 that one is how to *decide* what each worktree's instance shares versus
-isolates (database, cache, storage, queue, ports); this file is where your
-project records the answer it landed on, in runnable terms.
+isolates (database, cache, storage, queue, ports); this script is where your
+project records the answer it landed on, in runnable form.
+
+⚠️ Not to be confused with the **no-assigner provisioning** procedure in
+[`jira-api-reference.md` §12](jira-api-reference.md) — that one creates a
+branch and worktree for an issue the assigner never touched (git-level setup,
+before the executor runs). This hook runs *inside* an existing worktree and
+provisions the app's runtime around it.
 
 Every skill's pre-flight healthcheck (`statuscheck`) has a `jst_dir` row that
 FAILs — before any other check runs — when `.jst/` is missing, so a checkout
