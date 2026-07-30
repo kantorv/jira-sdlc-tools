@@ -256,10 +256,24 @@ Before any branch creation, refresh from the remote. Which of the two
 commands you need follows step 5C's `<BRANCH_FROM>`:
 ```bash
 git fetch origin     # both paths — also refreshes origin/<PRODUCTION_BRANCH>
-git pull --ff-only   # planned work only: you cut from your own checkout, and a bare
+git pull --ff-only origin <DEFAULT_BASE_BRANCH>
+                     # planned work only: you cut from your own checkout, and a bare
                      # fetch moves only the remote-tracking ref, not the branch you
-                     # branch from. If it can't fast-forward, stop and ask.
+                     # branch from. Name the remote and branch: a bare `pull --ff-only`
+                     # also exits 1 on a branch with no upstream configured — nothing to
+                     # fast-forward, benign, common after a re-clone — and that failure
+                     # is indistinguishable from real divergence, so it stops the run on
+                     # a question with no content. Named, exit 1 means divergence only:
+                     # stop and ask. Don't reset, rebase, or --set-upstream-to your way
+                     # past it — that rewrites the user's history or git config to
+                     # silence a warning that isn't yours to answer.
 ```
+That pull assumes you're standing on `<DEFAULT_BASE_BRANCH>`. If step 2's
+"any other branch name" reading applies and the user accepted *that* branch as
+the base, name it in the pull instead — it's the branch you're standing on and
+the one 6A cuts from, and pulling `<DEFAULT_BASE_BRANCH>` into it would merge a
+different branch rather than refresh yours.
+
 On the hotfix path **skip the pull**: you cut from the fetched
 `origin/<PRODUCTION_BRANCH>`, which the fetch already brought up to date.
 Pulling would only move whichever branch you happen to be standing on —
