@@ -104,7 +104,11 @@ and finding a busted environment mid-flow (e.g. a logged-out `gh`
 failing at step 10, *after* the implementation is already written and
 pushed) wastes a whole run and can leave commits on the wrong branch.
 All the checks are bundled into one script, so this is a single Bash
-call rather than a sequence of separate probes:
+call rather than a sequence of separate probes — one script instead of
+many probes, which is not yet one call per message. Make it that too:
+send the statuscheck call alone, because its rows decide whether the next
+step happens at all — anything batched alongside it has already run before
+that decision existed:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role executor
@@ -166,9 +170,13 @@ skill runs only from an issue's own worktree. cd into the worktree
 Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 `issue_key` row's derived key is `<KEY>` for the rest of this run — there's
 no user-supplied key to compare it against, and the identity gate above
-already confirmed `<KEY>` is assigned to the executor. Continue to step 1,
-carrying the INFO rows forward as context (`parent_branch` feeds step 2's
-stale-branch merge and step 10's PR-base resolution).
+already confirmed `<KEY>` is assigned to the executor. Before your first
+call after the healthcheck, state what the role-specific rows read —
+`worktree`, `branch`, `issue_key`, `parent_branch`; a message batched with
+the healthcheck can't state them, because the values don't exist yet. Then
+continue to step 1, carrying the INFO rows forward as context
+(`parent_branch` feeds step 2's stale-branch merge and step 10's PR-base
+resolution).
 
 1. **Fetch the issue** — `jira.sh --role executor issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (reads print raw JSON on stdout; source of truth for this fetch-with-comments field list: `../_shared/jira-api-reference.md` §10 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
