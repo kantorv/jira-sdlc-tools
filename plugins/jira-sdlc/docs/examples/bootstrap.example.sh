@@ -44,8 +44,11 @@ cd "$WORKTREE_DIR"
 # at once would race, and the same worktree would drift between runs.
 #
 # Index 0 belongs to the main checkout's own stack, so map into 1..63 and leave
-# it alone. Modulo means two issue numbers 64 apart collide; that is a real
-# (rare) failure and the message below says so instead of corrupting a stack.
+# it alone. Modulo means two issue numbers exactly 63 apart land on the same
+# index (PROJ-226 and PROJ-289 both give 38), and nothing here detects that. It
+# only bites when both are checked out at once, which is why this example takes
+# the simple scheme — if your team runs enough parallel worktrees for it to be
+# real, widen the range or add a collision check against the other worktrees.
 # ---------------------------------------------------------------------------
 ISSUE_NUM="${ISSUE_KEY##*-}"
 INSTANCE=$(( (ISSUE_NUM % 63) + 1 ))

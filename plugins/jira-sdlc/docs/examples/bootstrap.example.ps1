@@ -51,8 +51,11 @@ Set-Location -LiteralPath $WorktreeDir
 # would race, and the same worktree would drift between runs.
 #
 # Index 0 belongs to the main checkout's own stack, so map into 1..63 and leave
-# it alone. Modulo means two issue numbers 64 apart collide; that is a real
-# (rare) failure and the message below says so instead of corrupting a stack.
+# it alone. Modulo means two issue numbers exactly 63 apart land on the same
+# index (PROJ-226 and PROJ-289 both give 38), and nothing here detects that. It
+# only bites when both are checked out at once, which is why this example takes
+# the simple scheme — if your team runs enough parallel worktrees for it to be
+# real, widen the range or add a collision check against the other worktrees.
 #
 # [int] rounds half-to-even in PowerShell where other languages truncate, so
 # parse the numeric part explicitly rather than casting a computed value.
@@ -134,8 +137,15 @@ if (-not (Test-Path -LiteralPath $seeded -PathType Leaf)) {
     } else {
         # Non-zero: this worktree isn't fully runnable, and the executor will
         # say so and carry on. Tell the human exactly how to finish the job.
-        Write-Error "bootstrap: no baseline dump at $dump — the database is empty."
-        Write-Host "bootstrap: produce one with 'pg_dump -U myapp -d myapp > appdb.sql' from the main checkout, then re-run."
+        #
+        # NOT Write-Error: $ErrorActionPreference = 'Stop' (set at the top, as
+        # every port here does) makes it a *terminating* error, so it would kill
+        # the script on the spot and the remedy line below would never print —
+        # losing exactly the half of the message that tells the human what to do.
+        # [Console]::Error.WriteLine is the faithful equivalent of the bash
+        # twin's `>&2`, and keeps the explicit `exit 1` reachable.
+        [Console]::Error.WriteLine("bootstrap: no baseline dump at $dump — the database is empty.")
+        [Console]::Error.WriteLine("bootstrap: produce one with 'pg_dump -U myapp -d myapp > appdb.sql' from the main checkout, then re-run.")
         exit 1
     }
 }
