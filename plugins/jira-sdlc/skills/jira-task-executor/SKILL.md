@@ -52,9 +52,12 @@ the issue key is derived from the current branch (see Discovery below).
   git config `parentbranch` first, then the assigner's
   `PR target branch: …` Jira comment (the durable fallback), then the env
   default.
-- `<STATUS_*>` and other `<TOKEN>`s resolve from `.jst/jira-sdlc-tools.env`
-  (team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific),
-  both under the project root.
+- `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
+  committed, secret-free file, and the only one those names live in. Every
+  other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
+  `.jst/jira-sdlc-tools.local.env`**: it holds all three role Jira API
+  tokens and the GitHub PAT (`../_shared/project-config.md` § *Reading
+  config safely*).
 
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
@@ -140,6 +143,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
+| `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
 
 The remaining rows FAIL if broken but need no per-role interpretation
 here: `git_repo`, `env_config`, `env_local` (auto-copied into a worktree
@@ -365,10 +369,10 @@ resolution).
         retargeting a production fix at staging neither ships it nor gets it
         versioned. A sub-task is exempt: its base is its parent's branch.
     - Build the issue's canonical URL as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
-      (`<JIRA_ACCOUNT_URL>` comes from `.jst/jira-sdlc-tools.local.env` under
-      the project root — there's no browse-URL subcommand, so construct the
-      link from the token) to link back to it in the PR body, rather than
-      hardcoding the Jira site domain anywhere.
+      (`<JIRA_ACCOUNT_URL>` is Discovery's `jira_account_url` row — there's no
+      browse-URL subcommand, so construct the link from the token) to link back
+      to it in the PR body, rather than hardcoding the Jira site domain
+      anywhere.
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):

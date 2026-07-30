@@ -10,9 +10,14 @@ project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
-  `<PRODUCTION_BRANCH>` — resolve these from `.jst/jira-sdlc-tools.env`
-  (team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific),
-  both under the project root, before following the rest of this skill.
+  `<PRODUCTION_BRANCH>` — read all four off step 1's healthcheck rows
+  (`env_config`, `worktrees_dir`, `base_branch`, `production_branch`), not
+  out of a config file. **Never dump `.jst/jira-sdlc-tools.local.env`** —
+  it holds all three role Jira API tokens and the GitHub PAT, so `cat`-ing
+  it writes live credentials into the transcript. A value no row carries is
+  a single-key read, never a whole-file one: see
+  `../_shared/project-config.md` § *Reading config safely* for the safe
+  form and the redaction trap that doesn't work.
 - `<WORKTREES_DIR>` — the directory where per-issue worktrees are created
   (see `../_shared/project-config.md`). It must already exist — this skill
   never `mkdir`s it; step 1's healthcheck (the `worktrees_dir` row)
@@ -122,7 +127,10 @@ interpretation: `git_repo`, `env_config`, `env_local`,
 `jira.sh --role assigner whoami`, the same pair every `jira.sh` call in
 steps 6–7 uses), `jira_project`, plus context
 `base_branch` (INFO), `production_branch` (INFO — only consumed on the
-hotfix path in step 5C, which stops if it reads `unset`), and `working_tree`
+hotfix path in step 5C, which stops if it reads `unset`),
+`jira_account_url` (INFO — the site domain for `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`
+links, read here so no step opens the credential-bearing
+`.jst/jira-sdlc-tools.local.env`), and `working_tree`
 (INFO, or WARN when the tree is dirty — that doesn't block, but mention
 it to the user before branching from a dirty base checkout).
 
@@ -364,7 +372,9 @@ comment posted before reporting back.
 
 ## 7. Report back
 
-List: created issue key(s)/link(s); the scope decision (single-step vs multistep) and why; which base path 5C took and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
+List: created issue key(s) and their links
+(`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from step 1's
+`jira_account_url` row); the scope decision (single-step vs multistep) and why; which base path 5C took and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
 
 **If step 1's `parallel_instances` row read *present*,** read
 `.jst/PARALLEL-INSTANCES.md` and fold its instructions into the report, so
