@@ -2,7 +2,7 @@
 name: jira-task-assigner
 description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf. Branches are `feature/` off the default base branch; when the user explicitly asks for an emergency production fix it provisions a single-step `hotfix/` off the production branch instead.
 disable-model-invocation: true
-allowed-tools: Bash, Read, Grep, Glob
+allowed-tools: Bash, Read, Grep, Glob, Write, AskUserQuestion
 ---
 
 You are acting as a technical project manager for the **`<PROJECT-KEY>`**
