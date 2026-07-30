@@ -132,10 +132,10 @@ touches outside it (a database, cache, storage, or port) — see
 [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own. A project records the answer it landed on in
-an optional [`.jst/PARALLEL-INSTANCES.md`](skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form)
-([example](docs/examples/PARALLEL-INSTANCES.example.md)); when that file
-exists, the assigner relays its provisioning steps with every worktree it
-creates.
+an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
+hook ([example](docs/examples/bootstrap.example.sh)); when it exists,
+`jira-task-executor` runs it in the worktree it's about to work in — once
+per worktree, automatically, fail-soft.
 
 **What the assigner creates.** The assigner runs from a long-lived branch,
 normally your base branch — invoke it from an existing feature/hotfix branch
@@ -301,7 +301,8 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │           └── list_subtasks.sh               # list a parent's sub-tasks (jira.sh wrapper)
         ├── docs/
         │   ├── examples/
-        │   │   └── PARALLEL-INSTANCES.example.md  # start here to write a project's .jst/PARALLEL-INSTANCES.md
+        │   │   ├── bootstrap.example.sh   # start here to write a project's .jst/bootstrap.sh
+        │   │   └── bootstrap.example.ps1  # …and its Windows twin, .jst/bootstrap.ps1
         │   ├── JIRA-REST.md          # detailed REST client companion — rationale + commands no skill invokes
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
@@ -507,11 +508,12 @@ Deliberately never automated, regardless of how routine a run looks:
   by default and can collide when several run at once — see
   [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
   for the per-asset share-vs-isolate decision (and the Django database
-  worked example). Projects that need per-worktree provisioning write it
-  down in an optional
-  [`.jst/PARALLEL-INSTANCES.md`](skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form),
-  which the assigner then relays per worktree — but the plugin still
-  ships nothing that provisions an instance for you.
+  worked example). Projects that need per-worktree provisioning put it in
+  an optional
+  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
+  which the executor runs per worktree — but the plugin still ships
+  nothing that provisions an instance for you; it only runs what your
+  project wrote, and reports (never blocks on) a non-zero exit.
 
 ## First-run verification checklist
 

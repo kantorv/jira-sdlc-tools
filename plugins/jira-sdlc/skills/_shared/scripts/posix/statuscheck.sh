@@ -503,18 +503,21 @@ else
   fi
 fi
 
-# .jst/PARALLEL-INSTANCES.md is the optional, conventional place a project
-# writes down how to turn a worktree into a *running* instance (cloned db,
-# per-instance ports, provisioning commands) — see project-config.md and
-# docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so it is INFO either
-# way, never WARN: most projects won't have one, and its only job here is to
-# remind whoever reads this table that the file exists. Unlike local.env it is
-# tracked, so a linked worktree is born with it — resolve it against CFG_DIR
-# (this checkout's .jst/), not the main checkout.
-if [ -f "$CFG_DIR/PARALLEL-INSTANCES.md" ]; then
-  row parallel_instances INFO "$CFG_DIR/PARALLEL-INSTANCES.md (present — the assigner relays it with each worktree)"
+# .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
+# tracked hook a project writes to turn a fresh worktree into a *runnable*
+# instance: clone the database, pick per-instance ports, install deps. See
+# project-config.md and docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so
+# it is INFO either way — never WARN or FAIL, because most projects won't have
+# one. This script only REPORTS it: jira-task-executor step 1 is what runs it,
+# which keeps a broken hook visible in that run's transcript instead of
+# swallowed in here, and keeps this script side-effect-free and role-agnostic.
+# Tracked, so a linked worktree is born with it — resolve against CFG_DIR (this
+# checkout's .jst/), not the main checkout.
+if [ "$OS" = windows ]; then BOOTSTRAP_FILE=bootstrap.ps1; else BOOTSTRAP_FILE=bootstrap.sh; fi
+if [ -f "$CFG_DIR/$BOOTSTRAP_FILE" ]; then
+  row bootstrap INFO "$CFG_DIR/$BOOTSTRAP_FILE (present — jira-task-executor runs it in step 1)"
 else
-  row parallel_instances INFO "no .jst/PARALLEL-INSTANCES.md (optional — a project adds one to record what each worktree still needs provisioned before its app runs: cloned database, per-instance ports)"
+  row bootstrap INFO "no .jst/$BOOTSTRAP_FILE (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 fi
 
 PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
