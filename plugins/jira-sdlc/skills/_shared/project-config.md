@@ -8,9 +8,12 @@ is ignored. All project-specific values live in these two files — nothing else
 should need editing after they're filled in.
 
 Each skill's "Conventions used below" section names the tokens it needs
-(e.g. `<PROJECT-KEY>`). Before following a skill's instructions, resolve
-every token it references against **both** env files; the tables below
-describe what each variable means.
+(e.g. `<PROJECT-KEY>`). Resolve them from the **healthcheck table** each
+skill prints in its first step — `statuscheck` reports `PROJECT-KEY`,
+`DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, `WORKTREES_DIR` and
+`JIRA_ACCOUNT_URL` as rows precisely so a run never has to open the files
+to get them. The tables below describe what each variable means; read
+*Reading config safely* before opening either file yourself.
 
 ## What lives in `.jst/`
 
@@ -23,6 +26,34 @@ describe what each variable means.
 Both env files are sourced by tools that need them. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
 define the same variable (though they define disjoint sets by convention).
+
+### Reading config safely
+
+The two files are **not equally sensitive**, and the split is uneven — which
+is why "just read the config" is the wrong instinct:
+
+| File | Contents | Reading it |
+|---|---|---|
+| `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names | Committed and secret-free — read it whole, freely |
+| `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `CONVERSATIONS_*` — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
+
+Almost nothing needs the second file: `statuscheck`'s rows already carry
+`PROJECT-KEY`, `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `DEFAULT_BASE_BRANCH` and
+`PRODUCTION_BRANCH`, so read the value off the row you already printed.
+
+When a value genuinely has no row, read **that one key** — the file never has
+to be opened whole:
+
+```bash
+grep -E '^[[:space:]]*JIRA_ACCOUNT_URL[[:space:]]*=' .jst/jira-sdlc-tools.local.env
+```
+
+⚠️ **Don't reach for a redaction filter instead.** The obvious one is worse
+than useless: `sed 's/=.*TOKEN.*/=<redacted>/'` requires `TOKEN` to appear
+*after* the `=`, but these lines read `JIRA_EXECUTOR_TOKEN=…` — the word is
+before it. Nothing matches, the command still exits 0, and the tokens are in
+the transcript with no error to notice. A filter that silently fails open is
+exactly how this leaked once already; a single-key `grep` can't fail that way.
 
 ### `.jst/PARALLEL-INSTANCES.md` — optional, and free-form
 
