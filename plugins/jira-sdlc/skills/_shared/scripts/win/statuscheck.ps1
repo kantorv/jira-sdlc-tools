@@ -472,19 +472,22 @@ if (-not $WorktreesDir) {
     }
 }
 
-# .jst/PARALLEL-INSTANCES.md is the optional, conventional place a project
-# writes down how to turn a worktree into a *running* instance (cloned db,
-# per-instance ports, provisioning commands) — see project-config.md and
-# docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so it is INFO either
-# way, never WARN: most projects won't have one, and its only job here is to
-# remind whoever reads this table that the file exists. Unlike local.env it is
-# tracked, so a linked worktree is born with it — resolve it against CfgDir
-# (this checkout's .jst/), not the main checkout.
-$PiPath = Join-Path $CfgDir 'PARALLEL-INSTANCES.md'
-if (Test-Path -LiteralPath $PiPath -PathType Leaf) {
-    Add-Row parallel_instances INFO "$PiPath (present — the assigner relays it with each worktree)"
+# .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
+# tracked hook a project writes to turn a fresh worktree into a *runnable*
+# instance: clone the database, pick per-instance ports, install deps. See
+# project-config.md and docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so
+# it is INFO either way — never WARN or FAIL, because most projects won't have
+# one. This script only REPORTS it: jira-task-executor step 1 is what runs it,
+# which keeps a broken hook visible in that run's transcript instead of
+# swallowed in here, and keeps this script side-effect-free and role-agnostic.
+# Tracked, so a linked worktree is born with it — resolve against CfgDir (this
+# checkout's .jst/), not the main checkout.
+$BootstrapFile = if ($OS -eq 'windows') { 'bootstrap.ps1' } else { 'bootstrap.sh' }
+$BootstrapPath = Join-Path $CfgDir $BootstrapFile
+if (Test-Path -LiteralPath $BootstrapPath -PathType Leaf) {
+    Add-Row bootstrap INFO "$BootstrapPath (present — jira-task-executor runs it in step 1)"
 } else {
-    Add-Row parallel_instances INFO "no .jst/PARALLEL-INSTANCES.md (optional — a project adds one to record what each worktree still needs provisioned before its app runs: cloned database, per-instance ports)"
+    Add-Row bootstrap INFO "no .jst/$BootstrapFile (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 }
 
 $Parent = (& git config "branch.$Br.parentbranch" 2>$null)

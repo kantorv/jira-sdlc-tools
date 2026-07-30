@@ -216,6 +216,13 @@ knowing this up front saves chasing a port bug that isn't there:
 `gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login
 --with-token` doesn't complete down that path) while the bash side reads OK.
 Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
+Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
+FAIL rows" footer under the table, so drop that block too or the diff shows
+three phantom lines:
+
+```bash
+filt() { grep -v '^| gh_auth' | sed '/^Remedies for FAIL rows/,$d'; }
+```
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on

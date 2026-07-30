@@ -38,7 +38,7 @@ project. Given a task description from the user ($ARGUMENTS):
   step 2 working no matter which branch someone checks out later.
 - `<PREFIX>`, `<BASE_BRANCH>`, `<BRANCH_FROM>` — set once by step 5C, used
   verbatim by step 6. An issue already created *without* this skill needs
-  no decision here: provision it with the no-assigner bootstrap in
+  no decision here: follow the no-assigner provisioning recipe in
   `../_shared/jira-api-reference.md` §12 and go straight to the executor.
 
 ## 1. Discovery and healthcheck
@@ -103,18 +103,16 @@ Only the rows the assigner reads in a role-specific way are spelled out
 here; the rest are role-independent preconditions defined in
 `statuscheck.sh` itself (their `detail` column is self-explanatory in the
 printed output — that live output, not this table, is what the skill
-actually acts on). The script never FAILs the rows below — it reports them
-for every role, and each skill judges them for itself. The first three are
-where the assigner's reading is the *opposite* of the executor's and
-reviewer's: it runs from the **main repo checkout** (not a per-issue
-worktree) on a long-lived branch.
+actually acts on). The script never FAILs the three rows below — it
+reports them for every role, and each skill judges them for itself; the
+assigner runs from the **main repo checkout** (not a per-issue worktree) on a
+long-lived branch, the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; a linked-worktree reading is a stop condition (see "Reading the result" below) |
 | `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **The assigner requires `<DEFAULT_BASE_BRANCH>`, or `<PRODUCTION_BRANCH>` when the run turns out to be a hotfix** — the script only knows the former by name, so it reports production as *neither*; match it against the `production_branch` row yourself. Step 2 consumes this row and resolves every reading |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
-| `parallel_instances` | INFO either way: whether this project has an optional `.jst/PARALLEL-INSTANCES.md`. Present → step 7 reads it and relays it; absent → nothing to do, and most projects won't have one |
 
 Because no issue exists yet, `branch_project`, `issue_key`, and
 `parent_branch` read as WARN/INFO here (skipped / no derivable key /
@@ -136,18 +134,16 @@ it to the user before branching from a dirty base checkout).
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
-env values, add missing files silently). The role-specific rows
+env values, add missing files silently). The three role-specific rows
 never FAIL, so judge them yourself per the table above: a linked-worktree
 reading → stop and tell the user to cd into the main checkout; a missing
 worktrees dir → stop and ask; the `branch` row carries into step 2, which
-acts on it (so you don't re-run `git branch --show-current` there); and
-`parallel_instances` carries into step 7.
+acts on it (so you don't re-run `git branch --show-current` there).
 
-With no FAIL row and the role-specific rows reading as above, state what
-those rows read — `worktree`, `branch`, `worktrees_dir`,
-`parallel_instances` — before your first call after the healthcheck, then
-continue to step 2. A message batched with the healthcheck can't state them,
-because the values don't exist yet.
+With no FAIL row and the three role-specific rows reading as above, state what
+those rows read — `worktree`, `branch`, `worktrees_dir` — before your first
+call after the healthcheck, then continue to step 2. A message batched with
+the healthcheck can't state them, because the values don't exist yet.
 
 ## 2. Determine context from the current branch
 
@@ -389,15 +385,6 @@ comment posted before reporting back.
 List: created issue key(s) and their links
 (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from step 1's
 `jira_account_url` row); the scope decision (single-step vs multistep) and why; which base path 5C took and why; each branch created; and each worktree path together with the PR-target branch it's meant to merge into (explicitly calling out the parent worktree).
-
-**If step 1's `parallel_instances` row read *present*,** read
-`.jst/PARALLEL-INSTANCES.md` and fold its instructions into the report, so
-each worktree is listed with what still has to be provisioned there (clone the
-database, pick an instance index, per-instance ports) before the app will run.
-You created source trees, not running instances, and this report is where
-whoever picks a worktree up will look for the difference. Don't run any of it —
-provisioning is environment setup for the executor/human, so step 8's boundary
-holds. Absent → say nothing and carry on.
 
 On the hotfix path, add that the fix also has to reach
 `<DEFAULT_BASE_BRANCH>` after it lands on `<PRODUCTION_BRANCH>` (SDLC.md §4

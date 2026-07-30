@@ -143,6 +143,7 @@ actually acts on).
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **This skill requires a feature/hotfix issue branch** — the reading note below makes that a stop condition |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run (the branch is the sole source of truth; this skill never passes the script's optional key argument) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2 (stale-branch merge) and step 10 (first candidate for the PR base) |
+| `bootstrap` | INFO either way: whether this project ships an optional `.jst/bootstrap.sh` (POSIX) / `.jst/bootstrap.ps1` (Windows). Present → step 1 runs it; absent → nothing to do, and most projects won't have one |
 | `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
 
 The remaining rows FAIL if broken but need no per-role interpretation
@@ -176,13 +177,36 @@ Otherwise (no FAIL row, `worktree` linked, `branch` an issue branch) the
 no user-supplied key to compare it against, and the identity gate above
 already confirmed `<KEY>` is assigned to the executor. Before your first
 call after the healthcheck, state what the role-specific rows read —
-`worktree`, `branch`, `issue_key`, `parent_branch`; a message batched with
-the healthcheck can't state them, because the values don't exist yet. Then
-continue to step 1, carrying the INFO rows forward as context
-(`parent_branch` feeds step 2's stale-branch merge and step 10's PR-base
-resolution).
+`worktree`, `branch`, `issue_key`, `parent_branch`, `bootstrap`; a message
+batched with the healthcheck can't state them, because the values don't exist
+yet. Then continue to step 1, carrying the INFO rows forward as context
+(`bootstrap` feeds step 1's hook run, `parent_branch` feeds step 2's
+stale-branch merge and step 10's PR-base resolution).
 
-1. **Fetch the issue** — `jira.sh --role executor issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (reads print raw JSON on stdout; source of truth for this fetch-with-comments field list: `../_shared/jira-api-reference.md` §10 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
+1. **Run the project's bootstrap hook, then fetch the issue.**
+
+   **1a. Bootstrap the worktree** — only if Discovery's `bootstrap` row read
+   *present*. A worktree is a source tree, not a running instance; this hook is
+   how a project closes that gap (clone the database, pick per-instance ports,
+   install deps). Run it from the worktree root, **automatically — no
+   confirmation prompt** — passing the `JST_*` contract
+   (`../_shared/project-config.md` § *the optional worktree hook* defines every
+   variable):
+   ```bash
+   cd "$(git rev-parse --show-toplevel)"
+   JST_ISSUE_KEY=<KEY> JST_WORKTREE_DIR="$PWD" JST_BRANCH="$(git branch --show-current)" \
+   JST_PARENT_BRANCH="<parent_branch row, empty when unset>" JST_PROJECT_KEY="<PROJECT-KEY>" \
+     bash .jst/bootstrap.sh; echo "bootstrap exit: $?"
+   ```
+   (Windows: set the same five as `$env:JST_*`, then
+   `pwsh -NoProfile -File .jst\bootstrap.ps1`.)
+   **Fail-soft, always**: report a non-zero exit and its output in your final
+   report, then carry on with the issue — a broken hook is the project's
+   environment problem, not a reason to abandon work the executor can still do.
+   Absent row → say nothing and go straight to 1b. Re-runs re-invoke the hook
+   by design; tolerating that is the script's job, not yours.
+
+   **1b. Fetch the issue** — `jira.sh --role executor issue view <KEY> --fields 'summary,description,issuetype,status,parent,subtasks,comment'` (reads print raw JSON on stdout; source of truth for this fetch-with-comments field list: `../_shared/jira-api-reference.md` §10 — resolve there rather than here if the two ever disagree). It's sized to everything this skill reads, including `comment` (scanned in step 4). Pull out: summary, description, issue type, current status, and `fields.parent.key` (if any) — store this as `PARENT_KEY` for the step 10 resolver.
    - Also check `fields.subtasks` (the canonical list names `subtasks`
      explicitly so the narrowed payload keeps it; see §10):
      - **Non-empty** → `<KEY>` is a parent: a merge target for its
@@ -206,7 +230,9 @@ resolution).
    the branch exists and is checked out, so there is nothing to locate or
    create here. (An issue with no branch/worktree yet — one created
    without the assigner — is provisioned *before* this skill runs; the
-   bootstrap recipe lives in `../_shared/jira-api-reference.md` §12.)
+   no-assigner provisioning recipe lives in
+   `../_shared/jira-api-reference.md` §12 — that's git-level branch/worktree
+   setup, not step 1a's `.jst/bootstrap.sh` runtime hook.)
    What the branch *can* be is **stale**: the branch it was created from
    may have moved since — most commonly a sibling sub-task's PR merging
    into the shared parent branch. Discovery's `parent_branch` row already

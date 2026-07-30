@@ -14,13 +14,22 @@ files, or templates for any of this. The patterns below are things you
 adapt to your own project's architecture.
 
 **Where the answer goes once you've made it.** This doc is the reasoning;
-the optional [`.jst/PARALLEL-INSTANCES.md`](../skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form)
-convention is where a project writes down what it decided, in terms
-someone can actually run. When that file exists, `jira-task-assigner`
-reads it and repeats its instructions for every worktree it creates, so
-the decisions below reach whoever picks a worktree up instead of staying
-in this doc. There's a full example to start from at
-[`docs/examples/PARALLEL-INSTANCES.example.md`](examples/PARALLEL-INSTANCES.example.md).
+the optional [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](../skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
+hook is where a project writes it down in *runnable* form. When that file
+exists, `jira-task-executor` runs it in its step 1 — once per worktree,
+when someone is actually about to work there — so the decisions below get
+applied instead of staying in this doc as prose someone has to remember.
+It gets the issue key, worktree path, branch, parent branch and project
+key as `JST_*` environment variables; it must be idempotent, and a
+non-zero exit is reported but never blocks the run. There's a full
+example pair to start from at
+[`docs/examples/bootstrap.example.sh`](examples/bootstrap.example.sh) /
+[`bootstrap.example.ps1`](examples/bootstrap.example.ps1).
+
+An earlier version of this convention was a markdown file the assigner
+relayed as prose. That failed in practice for a predictable reason: a
+skill treats prose as a recommendation to pass along, not a procedure to
+execute, so worktrees still came up unprovisioned. Hence a script.
 
 ## Why this matters
 
