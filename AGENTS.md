@@ -183,8 +183,8 @@ an error; the semicolon is the one that bites, and the checker will point at it.
 
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
-The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`get_assignee_email`, `check_assignee`, `jira`) ship **twice**: the
+The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`get_assignee_email`, `check_assignee`, `jira`, `pr_base`) ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
@@ -200,15 +200,25 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
+for s in statuscheck ensure_local_env get_assignee_email check_assignee jira pr_base; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
 done   # add the args each one needs: --role <role> to statuscheck; --role <role>
        # plus an issue key to check_assignee; --role <role> and a subcommand
-       # (e.g. whoami) to jira. All three now REQUIRE --role — auth is
-       # role-scoped, with no default credential.
+       # (e.g. whoami) to jira; --role <role> plus --parent-key <KEY> to
+       # pr_base. All four now REQUIRE --role — auth is role-scoped, with no
+       # default credential.
 ```
+
+`pr_base` is the one whose *result* depends on where you run it — it resolves
+from four sources in order, and a worktree with `parentbranch` set stops at the
+first, so a single diff exercises one branch out of five. Drive the rest from a
+throwaway worktree with no `parentbranch` (`git worktree add … -b probe/<KEY>-x`,
+then run `ensure_local_env` in it or the Jira-comment source can't be reached),
+varying `--parent-key` and the issue key to reach `jira-comment`,
+`branch-search`, `env-default` and `unresolved`. Compare stdout, stderr **and**
+exit code (0 / 1 / 2) on each — the exit code is half this script's contract.
 
 **Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
 knowing this up front saves chasing a port bug that isn't there:
