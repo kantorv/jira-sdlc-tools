@@ -29,11 +29,30 @@
 # Over the ceiling, the fix is progressive disclosure, not deletion: detail
 # that is not needed on every run moves to skills/_shared/*.md and is loaded
 # only when the skill says to. That is what the budget is for.
+#
+# ACCEPTED EXCEPTIONS. One skill is knowingly over target and no realistic trim
+# clears it. Left as a bare WARN it would be a warning nobody can act on — and a
+# permanent warning teaches people to ignore the checker, which costs more than
+# the words do. So an over-target file can be recorded below with a budget and a
+# reason, and it reports "WARN (accepted)" instead.
+#
+# The exception is a NUMBER, not a blanket pass: exceed the accepted budget and
+# you get a live WARN again, so the allowance cannot silently absorb growth.
+# It also ratchets — drop well under it and the script tells you to lower it.
+# Adding an entry is a deliberate act; put the reason in AGENTS.md, not just here.
 
 set -u
 
 TARGET=5000
 CEILING=6500
+
+# accepted_budget <file> -> prints "<words> <reason>", or nothing if no exception.
+accepted_budget() {
+  case "$1" in
+    jira-task-reviewer/SKILL.md|*/jira-task-reviewer/SKILL.md)
+      echo "6100 the only skill carrying two tracks plus a phase machine" ;;
+  esac
+}
 
 if [ $# -gt 0 ]; then
   FILES="$*"
@@ -49,13 +68,30 @@ printf '%-52s %7s %7s   %s\n' "$(printf '%.52s' "-------------------------------
 
 rc=0
 warned=0
+ratchet=""
 for f in $FILES; do
   [ -f "$f" ] || { echo "check-skill-size: no such file: $f" >&2; rc=2; continue; }
   w=$(wc -w < "$f" | tr -d ' ')
   l=$(wc -l < "$f" | tr -d ' ')
-  if   [ "$w" -gt "$CEILING" ]; then status="FAIL  over the $CEILING-word ceiling by $((w - CEILING))"; rc=1
-  elif [ "$w" -gt "$TARGET" ];  then status="WARN  over the $TARGET-word target by $((w - TARGET))"; warned=1
-  else status="ok"
+
+  acc=$(accepted_budget "$f")
+  acc_words=${acc%% *}
+  acc_reason=${acc#* }
+
+  if [ "$w" -gt "$CEILING" ]; then
+    # The ceiling is absolute — an accepted exception never reaches past it.
+    status="FAIL  over the $CEILING-word ceiling by $((w - CEILING))"; rc=1
+  elif [ -n "$acc" ] && [ "$w" -gt "$acc_words" ]; then
+    status="WARN  over its accepted $acc_words-word budget by $((w - acc_words))"; warned=1
+  elif [ -n "$acc" ] && [ "$w" -gt "$TARGET" ]; then
+    status="WARN (accepted)  $acc_reason"
+    # Ratchet: if it has fallen well under its allowance, tighten the allowance.
+    [ "$((acc_words - w))" -ge 200 ] && ratchet="$ratchet$f: accepted budget can drop from $acc_words to $w
+"
+  elif [ "$w" -gt "$TARGET" ]; then
+    status="WARN  over the $TARGET-word target by $((w - TARGET))"; warned=1
+  else
+    status="ok"
   fi
   printf '%-52s %7s %7s   %s\n' "$f" "$w" "$l" "$status"
 done
@@ -73,7 +109,14 @@ elif [ "$warned" -eq 1 ]; then
   echo "Over target but under the ceiling — fine to ship. Put the next addition in"
   echo "skills/_shared/*.md rather than inline, and see AGENTS.md for what belongs there."
 else
-  echo "All skills within budget."
+  echo "All skills within budget (accepted exceptions counted as within)."
+fi
+
+if [ -n "$ratchet" ]; then
+  echo
+  printf '%s' "$ratchet"
+  echo "An accepted budget is a high-water mark, not an allowance — lower it in"
+  echo "accepted_budget() so the exception can't quietly grow back."
 fi
 
 exit $rc

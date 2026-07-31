@@ -65,8 +65,14 @@ reasoning, caveats, and how we plan to test them live in
   `jira-task-reviewer` 415 → 714 lines while its word count moved by
   *five*, and the long lines it replaced had hidden a real overage for
   years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
-  width. `jira-task-reviewer` sits at ~6,100: over target, under the
-  ceiling, and first in line to trim.
+  width. `jira-task-reviewer` is a recorded exception at ~6,100 — it is
+  the only skill carrying two tracks plus a phase machine, and no
+  realistic trim clears the target — so it reports `WARN (accepted)`.
+  An exception is a number, not a pass: exceed it and the plain WARN
+  comes back, and if the file shrinks the script tells you to ratchet the
+  allowance down. Add one only when the alternative is a warning nobody
+  can act on, since a permanent warning teaches people to ignore the
+  checker — and say why here, not just in `accepted_budget()`.
 
 For any non-trivial skill change (new skill, restructure, description
 rewrite), use the **skill-creator** skill
