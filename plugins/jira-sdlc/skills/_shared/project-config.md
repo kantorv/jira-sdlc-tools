@@ -231,7 +231,7 @@ can't race.
 
 ## Optional — conversation sync (lab-only, in `jira-sdlc-tools.local.env`)
 
-Read only by the lab `jira-task-helper` `sync_conversations` builtin, which
+Read only by the lab `conversation-debugger` `sync_conversations` builtin, which
 attaches an issue's Claude Code transcripts to its Jira issue. Both are paths to
 transcript folders under `~/.claude/projects` (Claude Code names each folder after
 a session's cwd, with every path separator replaced by `-`). The core three skills
