@@ -92,7 +92,12 @@ Pick **exactly one**. Never emit two.
 
 The `S-*` and `M-*` blocks are what the **run-level** step-6 report chooses
 from. The `M-SUBTASK-*` blocks are for **per-PR** emissions only (the 3d
-verdict comment and its 3e reuse) — step 6 never selects them.
+verdict comment and its 3e reuse) — step 6 never selects them, with one
+exception: on the **sub-task-worktree path** (SKILL.md step 1's `Subtask`
+branch) the run's whole PR set is that one sub-task PR, so step 6 re-renders
+the same `M-SUBTASK-*` block at run level. No `S-*`/`M-*` block fits there —
+each asserts something about a base branch or a sub-task set that path
+deliberately never looked at.
 
 ### Single-step track
 

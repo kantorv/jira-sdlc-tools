@@ -49,10 +49,11 @@ given, is free-form notes about this run, not a key:
   (`../_shared/jira-api-reference.md` §9), invoked as `bash "$S/jira.sh"
   <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows) where
   `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`; the steps write
-  `jira.sh <cmd>` for brevity. It authenticates **per-request as `--role
-  reviewer`** — no login step and no stored credential; every Jira write
-  below carries `--role reviewer` and picks up the reviewer credential on
-  that one call.
+  `jira.sh <cmd>` for brevity. Every Bash call is a fresh shell, so re-set
+  `S` at the top of each block that needs it — an unset `S` silently becomes
+  `bash "/jira.sh"`. It authenticates **per-request as `--role reviewer`** —
+  no login step and no stored credential; every Jira write below carries
+  `--role reviewer` and picks up the reviewer credential on that one call.
 - **Your GitHub identity** = `gh api user --jq .login` — resolve it once and
   reuse it for the whole run (hold it in a shell variable, e.g. `SELF=$(gh
   api user --jq .login)`). The executor opens PRs with the *same* `gh`
@@ -74,6 +75,12 @@ given, is free-form notes about this run, not a key:
   file and pass `--body-file` (never inline `--body "…"`). The `APPROVED —
   …` / `CHANGES REQUESTED — …` body prefix is what makes a prior verdict
   machine-detectable later (see 3a) — keep it verbatim, byte-for-byte.
+- `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
+  committed, secret-free file, and the only one those names live in. Every
+  other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
+  `.jst/jira-sdlc-tools.local.env`**: it holds all three role Jira API tokens
+  and the GitHub PAT (`../_shared/project-config.md` § *Reading config
+  safely*).
 
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
@@ -150,7 +157,8 @@ actually acts on).
 The remaining rows FAIL if broken but need no per-role interpretation here:
 `git_repo`, `env_config`, `env_local` (auto-copied into a worktree from the
 main checkout when missing by `ensure_local_env.sh`, called before this
-script — see the login step above), `env_local_ignored`, `branch_project`
+script — see the credential block above), `env_local_ignored`,
+`branch_project`
 (wrong-project guard), `gh_auth` and `jira_auth` (both load-bearing, as
 noted above), `jira_project`, plus context `base_branch`, `jira_account_url`
 (INFO — the site domain for `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links,
@@ -198,9 +206,15 @@ climbing from a sub-task to its parent if needed).
     *not* re-fetch the parent as an acting issue and do *not* read its
     `fields.subtasks` — that sweep belongs to a run from the parent's
     worktree. `<PARENT-BRANCH>` (this PR's base) = §13's resolver with
-    `PARENT_KEY` = `fields.parent.key`; then skip to step 3 with that one
-    PR, and skip steps 2, 4a/4b, and 5 entirely. Note in the final report
-    (step 6) that only `<RUN-KEY>` was reviewed.
+    `PARENT_KEY` = `fields.parent.key`. There is no track to determine on
+    this path, so its walk is named here instead: step 3 with that one PR →
+    step 6, skipping 2, 3e, 4 and 5. Step 6 re-renders the same
+    `M-SUBTASK-*` block 3d just emitted — the one exception to the
+    template's "step 6 never selects them" rule, and the only outcome that
+    describes this run truthfully — noting that only `<RUN-KEY>` was
+    reviewed. It lands on `<PARENT-KEY>`, as every run-level report does,
+    which is also why 3e is skipped: that tally would post the same body to
+    the same issue.
 - **Resolve `<PARENT-BRANCH>`**: list branch names deduped to unique shorts
   — strip the local `*`/indent and the `remotes/origin/` prefix so a branch
   that exists both locally and on origin counts once — then match the key:
@@ -260,10 +274,12 @@ climbing from a sub-task to its parent if needed).
     `fields.subtasks[].key`, not bare strings). For each sub-task key run
     `jira.sh --role reviewer issue view <SUBTASK-KEY> --fields
     'summary,description,issuetype,status,parent,subtasks'` (same §10
-    review-fetch list) and keep only those whose `fields.status.name`
+    review-fetch list). The **PR set** is those whose `fields.status.name`
     matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not
-    reviewed yet, skip quietly. Walk: *Multistep phase check* → step 2 →
-    review loop (step 3) → 4a/4b → 5 → 6.
+    reviewed yet, skip them quietly. Keep **every** sub-task's status
+    though, not just that subset: the phase check below reads the whole set
+    to tell "still in flight" from "all merged". Walk: *Multistep phase
+    check* → step 2 → review loop (step 3) → 4a/4b → 5 → 6.
 
 ### Single-step phase check (only for the single-step track)
 
@@ -290,8 +306,17 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
 ```
 
-- **No parent PR exists yet** → Sub-tasks aren't all merged. Continue to
-  step 2 for a full review pass.
+- **No parent PR exists yet** → split on the sub-task statuses step 1 just
+  fetched, because "no parent PR" has two very different causes:
+  - **Any sub-task not yet `<STATUS_DONE>`** → they are genuinely still in
+    flight. Continue to step 2 for a full review pass.
+  - **Every sub-task `<STATUS_DONE>`** → their PRs have all been merged and
+    what's missing is only the parent PR → skip to step 5, which creates it
+    (5a) and reviews it (5b). This is the state a run lands in right after
+    4a's "merge them manually, then re-run": reading it as "sub-tasks
+    outstanding" instead strands the run, since step 2 would find zero open
+    PRs and exit while step 5 is the only place the parent PR is ever
+    created.
 - **A parent PR exists and is OPEN** → Sub-tasks are already merged; skip
   straight to step 5 to review the parent PR.
 - **A parent PR exists and is MERGED** → The user merged the aggregate PR
@@ -312,11 +337,18 @@ For each `<SUBTASK-KEY>` that passed the status filter:
   branch exists yet, that sub-task hasn't been implemented — flag it in the
   report and skip it.
 - Find the open PR: `gh pr list --head <subtask-branch> --base
-  <PARENT-BRANCH> --json number,title,state,url`. If no PR exists, flag and
+  <PARENT-BRANCH> --state open --json number,title,state,url`. `--state
+  open` is the intent here (unlike 5a's `--state all`) — an already-merged
+  sub-task PR is finished work, not a PR this loop should re-review; it is
+  the *phase check* that reads merged sub-tasks. If no PR exists, flag and
   skip. If more than one open PR, ask the user which one to review.
 - Record: `{ key, branch, prNumber, prUrl }`.
 
-If **zero** sub-tasks have open PRs, report and exit.
+If **zero** sub-tasks have open PRs, apply the same split as the phase check
+before exiting: every sub-task `<STATUS_DONE>` means their PRs are merged and
+the parent PR is simply missing → go to step 5. Otherwise report and exit.
+(The guard is repeated here so the two exits can't disagree if either is ever
+reordered.)
 
 ## The canonical review report
 
@@ -394,7 +426,8 @@ Do not skip any file in the diff.
 
 ### 3c. Review criteria
 
-Evaluate the diff against these dimensions (all must pass for approve):
+Evaluate the diff against these dimensions — all must pass to approve,
+except where a dimension itself carves out an exception (dimension 3 does):
 
 1. **Correctness** — Does the code fulfill the Jira description without
    bugs?
@@ -431,15 +464,17 @@ a temp file and post that same file to both destinations, so GitHub and Jira
 read identically:
 
 * **If APPROVE (all dimensions pass):** fill the canonical template with the
-  per-PR approve outcome **for this track** — **S-APPROVED** when this is
-  the single-step parent PR, **M-SUBTASK-APPROVED** when this is a multistep
-  sub-task PR (a sub-task PR merges into `<PARENT-BRANCH>`, not
+  per-PR approve outcome **for this kind of PR** — **S-APPROVED** when this
+  is the single-step parent PR, **M-SUBTASK-APPROVED** when this is a
+  sub-task PR (the multistep loop, or the sub-task-worktree path of step 1;
+  a sub-task PR merges into `<PARENT-BRANCH>`, not
   `<BASE_BRANCH>`, and a reviewer re-run *is* required afterwards to pick up
   the parent PR, so its title and `### Next step` differ from the
   single-step "final update" wording). Set `### Verdict recorded` → GitHub:
   APPROVED comment on PR #<n>, Jira: note posted, status not moved;
   verdict-header line `APPROVED — <one-line summary>`:
   ```bash
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
   APPROVED — <one-line summary>
 
@@ -449,22 +484,22 @@ read identically:
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
   (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step
-  parent PR; `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"` —
-  `win/jira.ps1` on Windows.) Don't move the Jira status *here* — mid-loop
+  parent PR.) Don't move the Jira status *here* — mid-loop
   the PR is only approved, not merged. Step 7 offers the user the
   `<STATUS_DONE>` move once at the end of the run; declining it leaves the
   issue to the GitHub-for-Jira merge automation.
 
 * **If REQUEST_CHANGES (one or more dimensions fail):** fill the same
-  canonical template with the per-PR reject outcome **for this track** —
+  canonical template with the per-PR reject outcome **for this kind of PR** —
   **S-CHANGES-REQUESTED** when this is the single-step parent PR,
-  **M-SUBTASK-CHANGES-REQUESTED** when this is a multistep sub-task PR — and
+  **M-SUBTASK-CHANGES-REQUESTED** when this is a sub-task PR — and
   verdict-header line `CHANGES REQUESTED — <one-line summary>`; the
   `file:line` findings for each failed dimension go in the report's `###
   What I reviewed` section (never dropped). Post the one body to both
   destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` —
   that is the actual gate:
   ```bash
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
   CHANGES REQUESTED — <one-line summary>
 
@@ -474,9 +509,7 @@ read identically:
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue transition <SUBTASK-KEY-or-PARENT-KEY> --to "<STATUS_IN_PROGRESS>"
   ```
-  (`S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"` — `win/jira.ps1`
-  on Windows.) Remember this PR as blocked. Continue the loop — review the
-  next PR.
+  Remember this PR as blocked. Continue the loop — review the next PR.
 
 ### 3e. Post a summary on the parent after each sub-task
 
@@ -502,6 +535,7 @@ render per run* in the template). So do **not** use `-e/--edit-last`; post a
 new comment each time:
 
 ```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
 bash "$S/jira.sh" --role reviewer issue comment add <PARENT-KEY> --body-file /tmp/<KEY>-report.md
 ```
 
@@ -563,8 +597,13 @@ the `<STATUS_DONE>` transition — there is no post-merge step.)*
 ### 5a. Find or create the parent PR
 
 ```
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --json number,title,state,url
+gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,title,state,url
 ```
+
+`--state all` is load-bearing: `gh pr list` defaults to open only, and
+without it a merged or closed parent PR reads as "No PR exists" — so the two
+branches below it would be unreachable and 5a would open a *second* PR for
+the same branch pair.
 
 - **No PR exists** → create one (write the body to a temp file — see the
   GitHub-body mechanics in the preamble):
@@ -599,11 +638,17 @@ body starts `APPROVED —` → report "Parent PR already reviewed — waiting fo
 manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the
 fresh aggregate code. Otherwise:
 
-1. Review the aggregate diff: same criteria as 3c, but lighter. The
+1. Check the PR is mergeable — `gh pr view <prNumber> --json
+   mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
+   fallen behind `<BASE_BRANCH>`: stop and report per the *parent branch is
+   behind its base* edge case, since reviewing a diff that can't merge tells
+   the user nothing they can act on. This is the only place that edge case
+   has a detection path.
+2. Review the aggregate diff: same criteria as 3c, but lighter. The
    sub-tasks were already reviewed individually — focus on integration
    issues, conflicts, and anything that only surfaces when the pieces
    combine.
-2. **If approved** → outcome **M-PARENT-READY**: post the **full canonical
+3. **If approved** → outcome **M-PARENT-READY**: post the **full canonical
    review report** (see *The canonical review report* above), scoped to the
    parent PR, with verdict-header line `APPROVED — <lighter aggregate
    summary>` as the literal first line — `gh pr review <prNumber> --comment
@@ -611,7 +656,7 @@ fresh aggregate code. Otherwise:
    just the aggregate PR). Do NOT merge. Tell the user the parent PR is
    approved and awaiting their manual merge; step 6 posts the run-level
    report.
-3. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post
+4. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post
    the same canonical report with verdict-header line `CHANGES REQUESTED —
    <one-line summary>`, the integration `file:line` findings in its `###
    What I reviewed` section, via `gh pr review <prNumber> --comment
@@ -639,7 +684,9 @@ current phase (decided in step 4, or detected in step 1/5/6). Use its
 the single-step track, `M-ALL-APPROVED` / `M-SOME-BLOCKED` /
 `M-PARENT-READY` / `M-PARENT-CHANGES-REQUESTED` / `M-FULLY-COMPLETE` on the
 multistep track. The two `M-SUBTASK-*` blocks belong to the 3d/3e per-PR
-emissions and are never this report's pick.
+emissions and are never this report's pick — except on the
+sub-task-worktree path (step 1's `Subtask` branch), where the run's whole PR
+set *is* that one sub-task PR.
 
 ## 7. Offer to close what was approved
 
@@ -651,6 +698,7 @@ Ask the user **once**, naming every issue this run approved, whether to move
 them to `<STATUS_DONE>`, and transition only the ones they say yes to:
 
 ```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
 bash "$S/jira.sh" --role reviewer issue transition <KEY> --to "<STATUS_DONE>"
 ```
 
@@ -698,9 +746,10 @@ instead.
   user --jq .login)` resolution fails, so 3a's idempotency check has no
   identity to key on — report the error and give the user the PR URLs so
   they can review/merge manually.
-- **Parent branch is behind its base**: If `<BASE_BRANCH>` has advanced, the
-  parent PR may show conflicts. Stop and report. The user can rebase
-  `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and re-run.
+- **Parent branch is behind its base**: if `<BASE_BRANCH>` has advanced, the
+  parent PR conflicts. 5b's `mergeable` check is what detects it — stop and
+  report; the user rebases `<PARENT-BRANCH>` onto `<BASE_BRANCH>` and
+  re-runs.
 - **Single-step PR merged before reviewer runs**: The phase check in step 1
   detects this and reports the merged state via step 6 (S-MERGED), then
   exits — no wrap-up; GitHub-for-Jira already handled the `<STATUS_DONE>`
