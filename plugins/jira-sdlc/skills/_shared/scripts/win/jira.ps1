@@ -52,6 +52,7 @@ usage: jira.sh --role assigner|executor|reviewer <command>
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)
   issue comment list <KEY>                       raw JSON on stdout
+  issue attach    <KEY> <FILE>                       upload a file attachment
   issue delete     <KEY> [--with-subtasks]
   raw <METHOD> </PATH> [--data-file FILE]        escape hatch; PATH is under /rest/api/3 (e.g. /myself)
 
@@ -286,6 +287,56 @@ function Op-Assign {
     return (Invoke-Request PUT "/issue/$Key/assignee" $body)
 }
 
+# issue attach — multipart file upload. This is a deliberate, narrow exception to
+# the single Invoke-Request choke point (rest-client-design.md §3): Invoke-Request is
+# JSON-only, and this one operation needs multipart/form-data. Use HttpClient +
+# MultipartFormDataContent: it builds the multipart body with a correct boundary in
+# one call, and is available under PowerShell 5.1 (.NET Framework 4.5+) as well as
+# pwsh 7 (.NET) — unlike Invoke-WebRequest's -Form parameter, which is PS 6.1+ only.
+# Keep Invoke-Request untouched for every existing op.
+function Op-IssueAttach {
+    param([string]$Key, [string]$File)
+
+    $resolved = (Resolve-Path -LiteralPath $File -ErrorAction SilentlyContinue)
+    if (-not $resolved -or -not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+        [Console]::Error.WriteLine("jira: file not found: $File"); return $EX_ERR
+    }
+    $fileName = Split-Path -Leaf $resolved
+
+    try {
+        Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
+        $client = New-Object System.Net.Http.HttpClient
+        $client.Timeout = [TimeSpan]::FromSeconds(120)
+        $credBytes = [System.Text.Encoding]::UTF8.GetBytes($script:CRED)
+        $b64 = [System.Convert]::ToBase64String($credBytes)
+        $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Basic', $b64)
+        $client.DefaultRequestHeaders.Add('X-Atlassian-Token', 'no-check')
+        $client.DefaultRequestHeaders.Accept.Add((New-Object System.Net.Http.Headers.MediaTypeWithQualityHeaderValue('application/json')))
+
+        $form = New-Object System.Net.Http.MultipartFormDataContent
+        $fileBytes = [System.IO.File]::ReadAllBytes([string]$resolved)
+        $fileContent = New-Object System.Net.Http.ByteArrayContent(,$fileBytes)
+        $fileContent.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue('application/octet-stream')
+        $form.Add($fileContent, 'file', $fileName)
+
+        $resp = $client.PostAsync("$($script:BASE)/issue/$Key/attachments", $form).GetAwaiter().GetResult()
+        $code = [int]$resp.StatusCode
+        $script:RESP = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+
+        switch ($code) {
+            200 { return $EX_OK }
+            400 { return (Fail $EX_VALIDATION $code 'validation — bad body / unknown field or issue type') }
+            401 { return (Fail $EX_AUTH $code "unauthorized — token stale/invalid for role '$($script:ROLE)'") }
+            403 { return (Fail $EX_FORBIDDEN $code 'forbidden — permission') }
+            404 { return (Fail $EX_NOTFOUND $code 'not found (or no permission — Jira masks 403 as 404)') }
+            default { return (Fail $EX_UNEXPECTED $code 'unexpected status') }
+        }
+    } catch {
+        [Console]::Error.WriteLine("jira: transport error on POST /issue/$Key/attachments: $_")
+        return $EX_ERR
+    }
+}
+
 function Op-CommentAdd  { param([string]$Key, [string]$Body) return (Invoke-Request POST "/issue/$Key/comment" $Body) }  # {"body":…ADF…}
 
 function Op-CommentList {
@@ -439,6 +490,10 @@ switch ($group) {
                     }
                     default { Usage }
                 }
+            }
+            'attach' {
+                if ($rest2.Count -ne 2) { Usage }
+                Invoke-Ready; exit (Op-IssueAttach $rest2[0] $rest2[1])
             }
             default { Usage }
         }

@@ -49,6 +49,7 @@ usage: jira.sh --role assigner|executor|reviewer <command>
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)
   issue comment list <KEY>                       raw JSON on stdout
+  issue attach    <KEY> <FILE>                       upload a file attachment
   issue delete     <KEY> [--with-subtasks]
   raw <METHOD> </PATH> [--data-file FILE]        escape hatch; PATH is under /rest/api/3 (e.g. /myself)
 
@@ -201,6 +202,30 @@ op_assign() {   # KEY <email|@me|--remove>
 op_comment_add()  { _request POST "/issue/$1/comment" "$2"; }   # $2 = {"body":…ADF…}
 op_comment_list() { _request GET  "/issue/$1/comment" && cat "$RESP_FILE"; }
 
+# issue attach — multipart file upload. This is a deliberate, narrow exception to
+# the single _request choke point (rest-client-design.md §3): _request is JSON-only,
+# and this one operation needs multipart/form-data. Keep _request untouched for
+# every existing op, and use this transport call only for attachments.
+op_issue_attach() {
+  local key="$1" file="$2" code
+  [ -f "$file" ] || die "$EX_ERR" "file not found: $file"
+  code=$(curl -sS --max-time 120 -u "$_CRED" -H "Accept: application/json" \
+    -H "X-Atlassian-Token: no-check" -X POST \
+    -o "$RESP_FILE" -w '%{http_code}' -F "file=@$file" \
+    "$_BASE/issue/$key/attachments") || {
+    echo "jira: transport error (curl failed) on POST /issue/$key/attachments" >&2
+    return "$EX_ERR"
+  }
+  case "$code" in
+    200) return "$EX_OK" ;;
+    400) _fail "$EX_VALIDATION" "$code" "validation — bad body / unknown field or issue type" ;;
+    401) _fail "$EX_AUTH"       "$code" "unauthorized — token stale/invalid for role '$_ROLE'" ;;
+    403) _fail "$EX_FORBIDDEN"  "$code" "forbidden — permission" ;;
+    404) _fail "$EX_NOTFOUND"   "$code" "not found (or no permission — Jira masks 403 as 404)" ;;
+    *)   _fail "$EX_UNEXPECTED" "$code" "unexpected status" ;;
+  esac
+}
+
 op_issue_delete() {   # KEY [with_subtasks]
   local path="/issue/$1"; [ "${2-}" = "1" ] && path="$path?deleteSubtasks=true"
   _request DELETE "$path"
@@ -332,6 +357,10 @@ case "$group" in
             op_comment_add "$key" "$(jq -n --argjson d "$doc" '{body:$d}')" ;;
           *) usage ;;
         esac ;;
+
+      attach)
+        [ $# -eq 2 ] || usage
+        _ready; op_issue_attach "$1" "$2" ;;
 
       *) usage ;;
     esac ;;
