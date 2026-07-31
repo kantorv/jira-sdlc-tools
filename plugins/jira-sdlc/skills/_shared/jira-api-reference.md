@@ -527,6 +527,11 @@ posting, match on it when reading:
   rationale, recovery context). Deliberately distinct from the executor's
   single end-of-run report and from the `PR target branch:` line, so grepping
   the marker returns only memory notes.
+- `Assignment report` — the assigner's end-of-run report (step 7): issue keys
+  and links, the scope decision, the base path taken, and the branch/worktree
+  layout. Posted on the **top-level** issue, so a sub-task's own comments won't
+  carry it — the executor reads it for the planning context behind the issue
+  it's picking up.
 
 ### List a work item's comments
 
