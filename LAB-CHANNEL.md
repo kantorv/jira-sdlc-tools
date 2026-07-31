@@ -10,17 +10,11 @@ the three core skills, reviewed, released, and tagged.
 The **lab** channel is the same plugin, sourced from the `lab` branch
 instead. It's kept synced with the default branch, so it's never
 *behind* main — it's main plus work that hasn't landed in `development`
-yet: more advanced scripts, wider permissions and rights, and two extra
-skills.
+yet: more advanced scripts, wider permissions and rights, and one extra
+skill.
 
-## The two lab-only skills
+## The lab-only skill
 
-- **`jira-task-helper`** — the utility knife for the around-the-task
-  plumbing the core three deliberately leave out: a cross-worktree
-  `status` dashboard, `cleanup` of worktrees whose work is already
-  merged, `dump_changes` to fold stray base-branch edits into a proper
-  issue + branch + worktree + PR, `sync_conversations` to attach a run's
-  transcripts to its Jira issue, and `setup` to bootstrap a machine.
 - **`conversation-debugger`** — post-mortems a recorded run of one of
   the three core skills against its own prose, verdicting each
   instruction as followed / diverged / skipped / not-reached.
@@ -61,7 +55,7 @@ Identical to the main channel — the same two env files, unchanged. See
 [README.md → Either way](README.md#either-way).
 
 **One lab-only setup step — `sync_conversations`' transcript-folder paths.**
-The `jira-task-helper` `sync_conversations` builtin attaches an issue's Claude
+The `conversation-debugger` `sync_conversations` builtin attaches an issue's Claude
 Code transcripts (`.jsonl` under `~/.claude/projects`) to its Jira issue. It reads
 two values from `jira-sdlc-tools.local.env`, set once per machine:
 

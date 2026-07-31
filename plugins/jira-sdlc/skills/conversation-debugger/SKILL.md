@@ -23,8 +23,8 @@ around is a skill-text bug.
   | `jira-task-executor` | `../jira-task-executor/SKILL.md` |
   | `jira-task-reviewer` | `../jira-task-reviewer/SKILL.md` |
 
-  Anything not in this table (including `jira-task-helper`) → stop and
-  say the name isn't one of the three analyzable skills.
+  Anything not in this table → stop and say the name isn't one of the
+  three analyzable skills.
 - `<conversation-path>` — a Claude Code session transcript (`.jsonl`),
   usually a live file under `~/.claude/projects/<flattened-cwd>/`, or an
   already-filed copy under `conversations/<issue-key>/`. The conversation

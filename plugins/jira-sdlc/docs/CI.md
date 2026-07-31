@@ -94,7 +94,7 @@ Created **only** by `release.yml` on a `release/*` or `hotfix/*` merge into
 ### Lab tags — `vX.Y.Z-lab.N`
 
 A continuously-updated pre-release channel, minted by `update_lab.yml`. For
-the user-facing side (install commands, the two lab-only skills), see
+the user-facing side (install commands, the lab-only skill), see
 [LAB-CHANNEL.md](https://github.com/kantorv/jira-sdlc-tools/blob/lab/LAB-CHANNEL.md).
 Format:
 
