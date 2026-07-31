@@ -189,7 +189,10 @@ don't exist yet.
     *not* re-fetch the parent as an acting issue and do *not* read its
     `fields.subtasks` — that sweep belongs to a run from the parent's
     worktree. `<PARENT-BRANCH>` (this PR's base) = §13's resolver with
-    `PARENT_KEY` = `fields.parent.key`. No track is determined on this path, so
+    `PARENT_KEY` = `fields.parent.key`; the `<BASE_BRANCH>` bullet below
+    still applies as written — it keys on `<PARENT-BRANCH>`, which you now
+    have, and the report's header line names it. No track is determined on
+    this path, so
     its walk is named here: step 3 with that one PR → step 6, skipping 2,
     3e, 4 and 5. Step 6 re-renders the `M-SUBTASK-*` block 3d just emitted
     — the one exception to the template's "step 6 never selects them" rule,
@@ -335,7 +338,7 @@ template, its `<VERDICT-HEADER>` rules, and the ten outcome blocks live in
 emission (normally 3d; 5b or 6 if this run skips the review loop), then fill
 it rather than composing a shape of your own.
 
-Two things from it are load-bearing enough to state here as well:
+Three things from it are load-bearing enough to state here as well:
 
 - The body's literal first line is `APPROVED — <summary>` or `CHANGES
   REQUESTED — <summary>`. On GitHub comments that prefix is a byte-for-byte
@@ -579,7 +582,11 @@ branches below become unreachable and 5a opens a *second* PR for the same
 pair.
 
 - **No PR exists** → create one (write the body to a temp file — see the
-  GitHub-body mechanics in the preamble):
+  GitHub-body mechanics in the preamble). The sub-task PR URLs come from
+  step 2's records; when the phase check jumped straight here, step 2 never
+  ran — list the sub-task keys and resolve each URL with `gh pr list --head
+  <subtask-branch> --state merged --json url`, or omit the URLs rather than
+  inventing them:
   ```bash
   cat > /tmp/<PARENT-KEY>-pr-body.md <<'EOF'
   Aggregate PR for <PARENT-KEY>.
