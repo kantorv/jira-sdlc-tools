@@ -55,10 +55,18 @@ reasoning, caveats, and how we plan to test them live in
 - **Explain why over stacking MUSTs.** ALL-CAPS ALWAYS/NEVER is a
   yellow flag; one clause of reasoning generalizes better than a bare
   imperative.
-- **Stay under ~500 lines per SKILL.md.** Detail not needed on every
-  run goes to `skills/_shared/*.md` reference files, loaded only when
-  the skill says to — the progressive-disclosure layering these skills
-  already use.
+- **Stay under ~5,000 words per SKILL.md — hard ceiling 6,500.** Run
+  `bash scripts/check-skill-size.sh` rather than counting by hand. Over
+  budget, the fix is progressive disclosure, not deletion: detail not
+  needed on every run moves to `skills/_shared/*.md`, loaded only when
+  the skill says to. Counted in **words, not the ~500 *lines* this rule
+  used to say**, because line count isn't stable under reformatting and
+  so kept failing the wrong files — JST-230's rewrap took
+  `jira-task-reviewer` 415 → 714 lines while its word count moved by
+  *five*, and the long lines it replaced had hidden a real overage for
+  years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
+  width. `jira-task-reviewer` sits at ~6,100: over target, under the
+  ceiling, and first in line to trim.
 
 For any non-trivial skill change (new skill, restructure, description
 rewrite), use the **skill-creator** skill
@@ -126,6 +134,10 @@ Instead:
 # canonical structural validation — checks marketplace.json schema,
 # source path traversal, and each plugin's plugin.json in one pass
 claude plugin validate .
+
+# skill size budget — words, not lines (see "Stay under ~5,000 words" above);
+# exits non-zero only over the hard ceiling
+bash scripts/check-skill-size.sh
 
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
