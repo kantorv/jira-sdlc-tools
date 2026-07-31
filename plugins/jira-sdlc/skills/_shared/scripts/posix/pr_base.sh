@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
 # pr_base.sh — resolve the PR base branch for the leaf issue this branch belongs to.
 #
-# Usage:  bash pr_base.sh --role <role> [--parent-key <PARENT-KEY>] [ISSUE-KEY]
+# Usage:  bash pr_base.sh --role <role> [--branch <BRANCH>]
+#                         [--parent-key <PARENT-KEY>] [ISSUE-KEY]
 #         --role        executor|assigner|reviewer. Required — jira.sh has no
 #                       default credential (jira-api-reference.md §9) — and also
 #                       read from $JIRA_ROLE when the flag is absent.
+#         --branch      resolve the base for THIS branch instead of the one
+#                       checked out. The reviewer needs it: from a sub-task's
+#                       worktree it resolves <PARENT-BRANCH>'s base, and the
+#                       checked-out branch is the sub-task's, whose parentbranch
+#                       is <PARENT-BRANCH> — not the base. Branch config lives
+#                       in the shared .git/config, so this works from any
+#                       worktree. Defaults to the current branch.
 #         --parent-key  the leaf's fields.parent.key from the issue fetch (§10).
 #                       Absent/empty means a top-level issue, which is the only
 #                       thing that makes the env default reachable.
-#         ISSUE-KEY     defaults to the key derived from the current branch
-#                       (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>), as
-#                       statuscheck.sh and check_assignee.sh do.
+#         ISSUE-KEY     defaults to the key derived from --branch (or, absent
+#                       that, the current branch): feature/<KEY>-<slug> /
+#                       hotfix/<KEY>-<slug>, as statuscheck.sh and
+#                       check_assignee.sh do.
 #
 # The implementation of jira-api-reference.md §13 — that section documents this
 # script rather than restating it, so a fix lands in one place instead of in
 # every skill that hand-copied the resolver. Sources, in order:
-#   1. git config branch.<current>.parentbranch — set by the assigner, local to
+#   1. git config branch.<branch>.parentbranch — set by the assigner, local to
 #      this clone.
 #   2. the issue's `PR target branch: …` Jira comment (§11) — the durable
 #      fallback, survives a fresh clone.
@@ -41,14 +50,17 @@ set -u
 die() { printf '%s\n' "$*" >&2; exit 2; }
 warn() { printf '%s\n' "$*" >&2; }
 
-# --- args: --role, optional --parent-key, optional ISSUE-KEY -----------------
+# --- args: --role, optional --branch/--parent-key, optional ISSUE-KEY --------
 ROLE="${JIRA_ROLE:-}"
 PARENT_KEY=""
 KEY=""
+BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --role)         ROLE="${2:-}"; shift 2 ;;
     --role=*)       ROLE="${1#--role=}"; shift ;;
+    --branch)       BRANCH="${2:-}"; shift 2 ;;
+    --branch=*)     BRANCH="${1#--branch=}"; shift ;;
     --parent-key)   PARENT_KEY="${2:-}"; shift 2 ;;
     --parent-key=*) PARENT_KEY="${1#--parent-key=}"; shift ;;
     *)              KEY="$1"; shift ;;
@@ -59,8 +71,12 @@ done
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
-CUR=$(git branch --show-current 2>/dev/null || true)
-[ -n "$CUR" ] || die "pr_base: not on a branch in a git repo — run this from the issue's worktree."
+if [ -n "$BRANCH" ]; then
+  CUR="$BRANCH"
+else
+  CUR=$(git branch --show-current 2>/dev/null || true)
+  [ -n "$CUR" ] || die "pr_base: not on a branch in a git repo — run this from the issue's worktree, or name one with --branch."
+fi
 
 if [ -z "$KEY" ]; then
   BR_TAIL=${CUR#*/}

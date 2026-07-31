@@ -613,13 +613,18 @@ them. Hand-copying the logic into a skill is what let the copies drift apart
 and left Windows with no runnable resolution at all.
 
 ```bash
-bash pr_base.sh --role <role> [--parent-key <PARENT-KEY>] [ISSUE-KEY]
+bash pr_base.sh --role <role> [--branch <BRANCH>] [--parent-key <PARENT-KEY>] [ISSUE-KEY]
 ```
 
 `--parent-key` is not an env var: it's the leaf's `fields.parent.key` from the
 issue fetch (§10), and omitting it for a sub-task is what would wrongly let the
-env default through. `ISSUE-KEY` defaults to the branch-derived key. It prints
-exactly two lines and exits non-zero when unresolved:
+env default through. `--branch` resolves the base for a branch other than the
+checked-out one — `jira-task-reviewer` needs it, because it resolves
+`<PARENT-BRANCH>`'s base while standing in a sub-task's worktree, where the
+current branch is the sub-task's; branch config lives in the shared
+`.git/config`, so this works from any worktree. `ISSUE-KEY` defaults to the key
+derived from `--branch`, or from the current branch when that is absent. It
+prints exactly two lines and exits non-zero when unresolved:
 
 ```
 base=<branch>     # empty when unresolved

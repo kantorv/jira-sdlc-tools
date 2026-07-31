@@ -2,11 +2,15 @@
 # Resolve the PR base branch for the leaf issue this branch belongs to.
 # Same args, same stdout, same stderr, same exit codes.
 #
-# Usage: pwsh -File pr_base.ps1 --role <role> [--parent-key <PARENT-KEY>] [ISSUE-KEY]
+# Usage: pwsh -File pr_base.ps1 --role <role> [--branch <BRANCH>]
+#                               [--parent-key <PARENT-KEY>] [ISSUE-KEY]
 #   --role is required (jira.ps1 has no default credential) and is also read
-#   from $env:JIRA_ROLE; --parent-key is the leaf's fields.parent.key from the
-#   issue fetch, empty for a top-level issue; ISSUE-KEY defaults to the
-#   branch-derived key.
+#   from $env:JIRA_ROLE; --branch resolves the base for that branch instead of
+#   the checked-out one (the reviewer resolves <PARENT-BRANCH>'s base from a
+#   sub-task's worktree, where the current branch is the sub-task's — see
+#   pr_base.sh's header); --parent-key is the leaf's fields.parent.key from the
+#   issue fetch, empty for a top-level issue; ISSUE-KEY defaults to the key
+#   derived from --branch, or from the current branch when it is absent.
 #
 # The implementation of jira-api-reference.md §13 — see pr_base.sh's header for
 # the four sources in order and why a sub-task never reaches the env default.
@@ -28,15 +32,18 @@ function Die  { param([string]$Msg) [Console]::Error.WriteLine($Msg); exit 2 }
 function Warn { param([string]$Msg) [Console]::Error.WriteLine($Msg) }
 function Emit { param([string]$Base, [string]$Source) Write-Output "base=$Base"; Write-Output "source=$Source" }
 
-# --- args: --role, optional --parent-key, optional ISSUE-KEY -----------------
+# --- args: --role, optional --branch/--parent-key, optional ISSUE-KEY --------
 $Role      = $env:JIRA_ROLE
 $ParentKey = ''
 $Key       = ''
+$Branch    = ''
 $i = 0
 while ($i -lt $args.Count) {
     $a = [string]$args[$i]
     if     ($a -eq '--role')          { $Role = [string]$args[$i + 1]; $i += 2 }
     elseif ($a -like '--role=*')      { $Role = $a.Substring(7); $i += 1 }
+    elseif ($a -eq '--branch')        { $Branch = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--branch=*')    { $Branch = $a.Substring(9); $i += 1 }
     elseif ($a -eq '--parent-key')    { $ParentKey = [string]$args[$i + 1]; $i += 2 }
     elseif ($a -like '--parent-key=*') { $ParentKey = $a.Substring(13); $i += 1 }
     else   { $Key = $a; $i += 1 }
@@ -53,8 +60,12 @@ if (Get-Command pwsh -ErrorAction SilentlyContinue) {
 if (-not $psExe) { Die "pr_base: no PowerShell runtime (pwsh/powershell) found to run jira.ps1." }
 
 $Cur = ''
-try { $b = (& git branch --show-current 2>$null); if ($LASTEXITCODE -eq 0 -and $b) { $Cur = ([string]$b).Trim() } } catch { }
-if (-not $Cur) { Die "pr_base: not on a branch in a git repo — run this from the issue's worktree." }
+if ($Branch) {
+    $Cur = $Branch
+} else {
+    try { $b = (& git branch --show-current 2>$null); if ($LASTEXITCODE -eq 0 -and $b) { $Cur = ([string]$b).Trim() } } catch { }
+    if (-not $Cur) { Die "pr_base: not on a branch in a git repo — run this from the issue's worktree, or name one with --branch." }
+}
 
 if (-not $Key) {
     $brTail = $Cur -replace '^[^/]*/', ''

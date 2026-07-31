@@ -219,6 +219,9 @@ then run `ensure_local_env` in it or the Jira-comment source can't be reached),
 varying `--parent-key` and the issue key to reach `jira-comment`,
 `branch-search`, `env-default` and `unresolved`. Compare stdout, stderr **and**
 exit code (0 / 1 / 2) on each — the exit code is half this script's contract.
+Cover `--branch <name>` too (both the spaced and `--branch=` forms): it swaps
+the branch every source keys on, so a port that ignored it would still look
+right on every other case.
 
 **Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
 knowing this up front saves chasing a port bug that isn't there:

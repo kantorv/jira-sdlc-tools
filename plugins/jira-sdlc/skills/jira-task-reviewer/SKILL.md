@@ -181,8 +181,8 @@ don't exist yet.
     per the rule at the top, review **this sub-task's own PR only**. Do
     *not* re-fetch the parent as an acting issue and do *not* read its
     `fields.subtasks` — that sweep belongs to a run from the parent's
-    worktree. `<PARENT-BRANCH>` (this PR's base) = §13's resolver with
-    `PARENT_KEY` = `fields.parent.key`; the `<BASE_BRANCH>` bullet below
+    worktree. `<PARENT-BRANCH>` (this PR's base) = §13's resolver run with
+    `--parent-key <fields.parent.key>`; the `<BASE_BRANCH>` bullet below
     still applies as written — it keys on `<PARENT-BRANCH>`, which you now
     have, and the report's header line names it. No track is determined on
     this path, so
@@ -201,38 +201,35 @@ don't exist yet.
   ```
   Exactly one match → that's `<PARENT-BRANCH>`. Zero or multiple → ask the
   user rather than guessing.
-- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Use
-  §13's resolver (`../_shared/jira-api-reference.md`) but keyed on
-  `<PARENT-BRANCH>`/`<PARENT-KEY>`, **not** `git branch --show-current`
-  (they coincide only in the parent worktree; from a sub-task's own worktree
-  the current branch is the sub-task's, whose `parentbranch` is
-  `<PARENT-BRANCH>` — using it would set `<BASE_BRANCH>` = `<PARENT-BRANCH>`
-  and make step 5a open a parent PR into itself). Branch config lives in the
-  shared `.git/config`, so keying off `<PARENT-BRANCH>` works from any
+- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Run
+  §13's resolver with `--branch <PARENT-BRANCH>`, which is what makes it
+  work from here: without it the script keys on `git branch --show-current`,
+  and from a sub-task's own worktree that is the sub-task's branch, whose
+  `parentbranch` is `<PARENT-BRANCH>` — so `<BASE_BRANCH>` would come back as
+  `<PARENT-BRANCH>` and 5a would open a parent PR into itself. Branch config
+  lives in the shared `.git/config`, so naming the branch works from any
   worktree:
   ```bash
-  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
-  BASE_BRANCH=$(git config branch."<PARENT-BRANCH>".parentbranch 2>/dev/null)
-  [ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(bash "$S/jira.sh" --role reviewer issue comment list <PARENT-KEY> \
-    | grep -oE 'PR target branch: [^" ]+' | head -1 \
-    | sed -e 's/PR target branch: //' -e 's/\.$//')
-  [ -z "$BASE_BRANCH" ] && BASE_BRANCH="<DEFAULT_BASE_BRANCH>"   # last resort — flag it in the report
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/pr_base.ps1 on Windows
+  OUT=$(bash "$S/pr_base.sh" --role reviewer --branch "<PARENT-BRANCH>" <PARENT-KEY>); RC=$?
+  BASE_BRANCH=$(printf '%s\n' "$OUT" | sed -n 's/^base=//p')
+  printf '%s (rc=%s)\n' "$OUT" "$RC"
   ```
-  Only ask the user if all three come up empty. Then apply §13's prefix/base
-  sanity check to the resolved pair: a `hotfix/` `<PARENT-BRANCH>` sitting
-  on `<DEFAULT_BASE_BRANCH>` means the last resort fired on a production
-  fix, so the phase check below would hunt for the PR on the wrong base and
-  5a would open a duplicate into staging. Stop and ask which base is right.
+  **Pass no `--parent-key` here** — `<PARENT-KEY>` is already the top-level
+  issue (step 1 climbed), so enabling §13's parent-branch search would match
+  `<PARENT-BRANCH>` itself and set `<BASE_BRANCH>` = `<PARENT-BRANCH>`, the
+  same PR-into-itself bug. Omitting it also keeps the env default reachable,
+  which is the correct last resort for a top-level issue. (A run from a
+  sub-task's own worktree *does* pass `--parent-key` — see the `Subtask`
+  branch above.)
 
-  **Why no parent-branch search here, unlike §13.** That step recovers a
-  *sub-task's* base by finding its parent's branch, and §13 gates it on a
-  non-empty `PARENT_KEY`. Here the key is already the top-level parent (step
-  1 climbed), so the same search would match `<PARENT-BRANCH>` itself —
-  setting `<BASE_BRANCH>` = `<PARENT-BRANCH>` and making 5a open a PR into
-  itself. `<DEFAULT_BASE_BRANCH>` is the correct last resort on this path,
-  exactly as §13 step 4 is for a top-level issue. (A run from a sub-task's
-  own worktree does use the full §13 resolver — see the `Subtask` branch
-  above.)
+  Act on `source=`: `git-config` or `jira-comment` → proceed; `env-default`
+  → proceed but flag it in the report; `unresolved` (exit 1) → ask the user.
+  Then apply §13's prefix/base sanity check to the resolved pair: a
+  `hotfix/` `<PARENT-BRANCH>` sitting on `<DEFAULT_BASE_BRANCH>` means the
+  env default fired on a production fix, so the phase check below would hunt
+  for the PR on the wrong base and 5a would open a duplicate into staging.
+  Stop and ask which base is right.
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty
   `[]` → **single-step**; anything else → **multistep**). This sets the
   run's **PR set** and the steps you will walk. Name the track explicitly so
