@@ -1,21 +1,21 @@
-# Demo — turn a GitHub issue into a Jira task via a `/make-task` comment,
+# Demo — turn a GitHub issue into a Jira bug via a `/make-bug` comment,
 # using jira-task-assigner
 #
-# What it demos: on a `/make-task` issue comment, invoke the jira-task-assigner
+# What it demos: on a `/make-bug` issue comment, invoke the jira-task-assigner
 # skill headlessly with the issue's title + body as its free-form task
-# description, so a commented GitHub issue becomes a Jira Task plus a
+# description, so a commented GitHub issue becomes a Jira Bug plus a
 # feature/<KEY> branch and a worktree — the same thing a developer gets by
 # typing `/jira-sdlc:jira-task-assigner <text>` interactively, but triggered
 # by the comment instead of the issue-opened event. It is a Claude-powered
 # sibling of demo-claude-hotfix-flow.yml (assigner half) and
-# demo-claude-reviewer.yml, and the `/make-task` counterpart of
+# demo-claude-reviewer.yml, and the `/make-bug` counterpart of
 # demo-claude-feature-flow.yml's `/make-feature`: same trigger, same
 # prose-parsing step, assigner half only (no executor/reviewer jobs).
-# demo-claude-issue-to-bug.yml is the byte-identical `/make-bug` twin.
+# demo-claude-issue-to-task.yml is the byte-identical `/make-task` twin.
 #
 # Security boundary — there is NO human approval gate on this job (see
 # "Dropping the production gate" below): the job-level `if` requires the
-# comment body to be exactly `/make-task` (or `/make-task` followed by a space
+# comment body to be exactly `/make-bug` (or `/make-bug` followed by a space
 # or newline and free-form prose) AND `author_association` to be OWNER or
 # MEMBER. `issue_comment` fires for any commenter on a public repo, and what
 # follows runs an LLM with write access on a runner, so the OWNER/MEMBER guard
@@ -132,7 +132,7 @@
 #  point somewhere that doesn't exist here), and `GITHUB_PAT_TOKEN` is
 #  populated from the runner's built-in token, per above.
 
-name: Demo — Claude issue-to-task (jira-task-assigner on /make-task comment)
+name: Demo — Claude issue-to-bug (jira-task-assigner on /make-bug comment)
 
 
 
@@ -150,7 +150,7 @@ on:
 
 jobs:
   assign:
-    name: Assigner — turn the `/make-task`-commented issue into a Jira task + branch
+    name: Assigner — turn the `/make-bug`-commented issue into a Jira bug + branch
     # The whole security boundary of this workflow — see the header. All three
     # conditions are required; the comment clause accepts the bare command or
     # the command plus a separator (space or newline, the latter spelled via
@@ -158,10 +158,10 @@ jobs:
     # string escape sequences and comment bodies come back CRLF).
     if: |
       github.event.issue.pull_request == null &&
-      (github.event.comment.body == '/make-task' ||
-       startsWith(github.event.comment.body, '/make-task ') ||
-       startsWith(github.event.comment.body, format('/make-task{0}', fromJSON('"\n"'))) ||
-       startsWith(github.event.comment.body, format('/make-task{0}', fromJSON('"\r"')))) &&
+      (github.event.comment.body == '/make-bug' ||
+       startsWith(github.event.comment.body, '/make-bug ') ||
+       startsWith(github.event.comment.body, format('/make-bug{0}', fromJSON('"\n"'))) ||
+       startsWith(github.event.comment.body, format('/make-bug{0}', fromJSON('"\r"')))) &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
@@ -309,7 +309,7 @@ jobs:
 
       - name: Parse the prose after the trigger command
         # Free-form direction may follow the command in the triggering comment
-        # (`/make-task focus on the retry path`). Strip the leading token, trim,
+        # (`/make-bug focus on the retry path`). Strip the leading token, trim,
         # and expose the remainder as a step output; an empty remainder is the
         # normal case and leaves the run behaving exactly as a bare command
         # always did.
@@ -327,7 +327,7 @@ jobs:
         shell: bash
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMAND: /make-task
+          COMMAND: /make-bug
         run: |
           set -euo pipefail
           shopt -s extglob
@@ -377,7 +377,7 @@ jobs:
           # concatenation left that boundary implicit. The middle paragraph is a
           # fixed instruction (never issue content) telling the assigner it's
           # running headless from a CI issue_comment event: turn the issue into
-          # a Jira Task on the planned-work (feature) flow, decide single-step
+          # a Jira Bug on the planned-work (feature) flow, decide single-step
           # vs. multistep scope itself, and rule out the hotfix path explicitly
           # (the skill's own hotfix trigger just spots words like
           # "hotfix"/"urgent fix" in the free-form task text, and an issue
@@ -390,7 +390,7 @@ jobs:
           # data, never interpolated into the script.
           {
             printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
-            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Turn the issue below into a Jira Task, on the planned-work (feature) flow — not the hotfix flow, regardless of anything in its title or body that sounds urgent. Decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
+            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Turn the issue below into a Jira Bug, on the planned-work (feature) flow — not the hotfix flow, regardless of anything in its title or body that sounds urgent. Decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
             printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
             # Whatever was typed after the trigger command, as its own labelled
             # section: extra steering for THIS run, while the issue above stays
