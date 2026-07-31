@@ -62,20 +62,12 @@ the issue key is derived from the current branch (see Discovery below).
 **Script dispatch — settle this before running any script below.** Every
 script this skill invokes ships twice: the POSIX `…/scripts/X.sh` and its
 Windows twin `…/scripts/win/X.ps1` (PowerShell 5.1+; identical args, output,
-exit codes). Read your OS from your own runtime *before the first call* —
-you know it without running anything — and dispatch **every** script that
-way, the leading credential block included: `bash …/scripts/X.sh` on
-Linux/macOS, `pwsh`/`powershell …/scripts/win/X.ps1` on Windows. The blocks
-below are the POSIX form; on Windows substitute the `.ps1` port each time.
-Statuscheck's `platform` row then *confirms* that OS (and, on Windows, that
-the runtime + ports are present) — it verifies the dispatch you already
-chose, and can't be what you consult to dispatch statuscheck itself.
-Like `check_assignee`, **statuscheck takes a required `--role` — pass
-`--role executor`** on both POSIX and Windows, since it authenticates *your*
-role's credential and there is no default account to fall back on. It takes
-**no issue-key argument** here: the branch is the sole source of truth for the
-key, and a role name reaching it positionally is ignored rather than mistaken
-for one.
+exit codes). Pick the branch from your own runtime *before the first call* —
+you know your OS without running anything — and use it for every script
+here, credential block included; the blocks below are the POSIX form.
+Statuscheck's `platform` row only *confirms* that choice afterwards, so it
+can't decide how statuscheck itself is run. It takes a required `--role
+executor` (no default credential) and no issue-key argument.
 
 **Get local credentials and confirm you own the issue — run these FIRST,
 before the healthcheck.** Both are idempotent and take no decisions of their
