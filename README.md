@@ -216,13 +216,17 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
   (Claude Code · `/review`) ·
   [`demo-fcc-nvidia-nim-reviewer.yml`](.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-review`)
-- **[Issue to task](plugins/jira-sdlc/docs/applications/ci-issue-to-task-demo.md)**
-  — the assigner alone: a newly opened issue becomes a Jira task with its
-  branch and worktree, and the run stops there. Fires automatically on
-  `issues: opened` and is the one demo with ⚠️ **no author check**, so its
-  single approval is the only guard.
+- **[Issue to task / bug](plugins/jira-sdlc/docs/applications/ci-issue-to-task-demo.md)**
+  — the assigner alone: a commented issue becomes a Jira Task (or Bug) with its
+  branch and worktree, and the run stops there. Comment-triggered
+  (`/make-task` / `/make-bug`), gated by the OWNER/MEMBER author check — and
+  **no approval gate**: `environment: production` was dropped, so the comment
+  guard is the only boundary and its secrets resolve from the repo level
+  (pending the environment-secret redistribution flagged by JST-225 AC#4).
   [`demo-claude-issue-to-task.yml`](.github/workflows/demo-claude-issue-to-task.yml)
-  (Claude Code)
+  (Claude Code · `/make-task`) ·
+  [`demo-claude-issue-to-bug.yml`](.github/workflows/demo-claude-issue-to-bug.yml)
+  (Claude Code · `/make-bug`)
 - **[Smoke test](plugins/jira-sdlc/docs/applications/ci-smoke-test-demo.md)** —
   **no skill runs.** It installs a coding assistant, points it at this plugin's
   `skills/`, and drives one plain inference to prove the backend is wired up —
