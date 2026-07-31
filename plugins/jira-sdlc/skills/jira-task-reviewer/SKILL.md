@@ -56,17 +56,13 @@ given, is free-form notes about this run, not a key:
   run; 3a's idempotency check and the verdict-comment detection both key on
   it. Both verdicts land as **review comments** rather than review states,
   and the Jira transition is the actual workflow gate — 3d says why.
-- **Jira-comment mechanics**: reports and updates are multi-line — write
-  them to a temp file and post with `jira.sh --role reviewer issue comment
-  add <KEY> --body-file <file>` (see `../_shared/jira-api-reference.md`
-  §11). There is no inline body — the body always comes from a file, so
-  backticks in it are never at risk of shell substitution; plain text is
-  stored as ADF, one paragraph per non-blank line.
-- **GitHub-body mechanics**: the same backtick hazard applies to `gh pr
-  review` / `gh pr create` bodies. Write every GitHub-side body to a temp
-  file and pass `--body-file` (never inline `--body "…"`). The verdict header
-  those bodies open with is a detection contract — see *The canonical review
-  report*.
+- **Body mechanics** (`../_shared/jira-api-reference.md` §11, which owns
+  them): every body this skill posts is multi-line and goes to a temp file
+  passed as `--body-file` — Jira comments via `jira.sh --role reviewer issue
+  comment add <KEY> --body-file <file>`, GitHub ones via `gh pr review` /
+  `gh pr create`. Never inline `--body "…"`: `gh` accepts it, and backticks
+  in it would hit shell substitution. The verdict header those bodies open
+  with is a detection contract — see *The canonical review report*.
 - `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
   committed, secret-free file, and the only one those names live in. Every
   other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
@@ -123,7 +119,9 @@ It prints one markdown table (`check | status | detail`), where status is
 any row is `FAIL`. `gh_auth` and `jira_auth` are load-bearing here (every
 verdict comment, `gh pr list` call, and Jira transition depends on them —
 and `jira_auth` now confirms the **reviewer's** own credential, the one
-those writes will use).
+those writes will use), and `jira_account_url` (INFO) is the site domain for
+`https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links, read here so no step opens
+the credential-bearing `.jst/jira-sdlc-tools.local.env`.
 
 Only the rows this skill reads in a role-specific way, or relies on later,
 are spelled out here; the rest are role-independent preconditions defined in
@@ -133,27 +131,10 @@ actually acts on).
 
 | row | what it verifies / gathers |
 |---|---|
-| `worktree` | INFO, never FAIL — *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Stop unless it reads linked**: the parent's worktree, or a sub-task's own |
-| `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's |
+| `worktree` | INFO, never FAIL — *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Stop unless it reads linked**: normally the parent's own (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), or a sub-task's |
+| `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — the sub-task's parent, not the base, when this is a sub-task worktree, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
-
-The remaining rows FAIL if broken but need no per-role interpretation here:
-`git_repo`, `env_config`, `env_local` (auto-copied into a worktree from the
-main checkout when missing by `ensure_local_env.sh`, called before this
-script — see the credential block above), `env_local_ignored`,
-`branch_project`
-(wrong-project guard), `gh_auth` and `jira_auth` (both load-bearing, as
-noted above), `jira_project`, plus context `base_branch`, `jira_account_url`
-(INFO — the site domain for `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links,
-read here so no step opens the credential-bearing
-`.jst/jira-sdlc-tools.local.env`), `working_tree` (WARN when dirty), and
-`worktrees_dir` (WARN when missing — only the assigner acts on it).
-
-This skill normally runs from the **parent worktree**
-(`worktree-<PARENT-KEY>`, per `jira-task-assigner`), but a sub-task's own is
-equally valid: the `branch` row can't tell the two apart, and step 1 climbs
-to the parent rather than failing.
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy line
 to the user, and wait — don't self-repair. Apply the `worktree` and `branch`
@@ -572,7 +553,7 @@ branches below become unreachable and 5a opens a *second* PR for the same
 pair.
 
 - **No PR exists** → create one (write the body to a temp file — see the
-  GitHub-body mechanics in the preamble). The sub-task PR URLs come from
+  body mechanics in the preamble). The sub-task PR URLs come from
   step 2's records; when the phase check jumped straight here, step 2 never
   ran — list the sub-task keys and resolve each URL with `gh pr list --head
   <subtask-branch> --state merged --json url`, or omit the URLs rather than
