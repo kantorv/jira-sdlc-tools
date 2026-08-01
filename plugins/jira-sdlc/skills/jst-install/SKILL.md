@@ -40,7 +40,8 @@ create-if-missing or an overwrite of a value the user just confirmed, and
   `kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/docs/` instead.
 - **Ask, don't assume.** A project key, a status name and a branch name are
   facts about the user's Jira and GitHub, not defaults you can derive. Use
-  AskUserQuestion, offering the documented default as one option.
+  AskUserQuestion, offering the documented default as one option — and where
+  the API can list the *real* options instead (section 3b), offer those.
 
 ## The two env files — the rule that shapes this whole skill
 
@@ -229,23 +230,86 @@ was tested against a plain **Kanban** board with its default columns — that's
 the known-good setup; Scrum and custom workflows should work provided 3b holds,
 but they aren't what was exercised.
 
-**3b. Collect the project key and the four status names.** The key is the
-prefix on every issue (`PROJ` in `PROJ-123`), and it's what the skills match
-branch names against, so a branch for the wrong project gets caught instead of
-worked. The four statuses are matched **literally** — `In progress` and
-`In Progress` are different statuses — so ask the user to copy them exactly as
-the board spells them, offering the Kanban defaults as the likely answer:
+**3b. Read the project key and the four status names off the board, don't ask
+for them from memory.** Both are facts about the user's Jira, and the plugin
+already ships a client that can fetch them (`raw` is `jira.sh`'s escape hatch;
+paths are under `/rest/api/3` — `../_shared/jira-api-reference.md`). Fetching
+beats asking here because statuses are matched **literally** at runtime
+(`In progress` and `In Progress` are different statuses) *and* because the
+documented defaults are often simply absent: the first real install hit a board
+whose statuses were `Backlog`, `Selected for Development`, `In Progress`,
+`In Review`, `Done` — no `To Do` at all, so the documented default for
+`STATUS_TODO` named a status that did not exist. Discovery removes that whole
+class of wrong value instead of warning about it.
 
-| variable | default | who moves the card there |
+Four steps, **in this order** — the statuses call is per-project, so it cannot
+happen until the key is settled.
+
+**STEP 1 — fetch the projects this credential can see.**
+
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
+bash "$S/jira.sh" --role executor raw GET /project/search \
+  | jq -r '.values[] | "\(.key)\t\(.name)\t\(.projectTypeKey)/\(.style)"'
+```
+
+**STEP 2 — show that list and ask which project to wire this repo to.** One
+AskUserQuestion option per project, labelled with the key, carrying name and
+`type/style` in the description so two similarly named projects stay
+distinguishable. This is the user's decision: **do not auto-select**, and do not
+silently narrow the list — not even when one project's name closely matches the
+repository's (on the first run `SUB` / `sublimationapp-mgmt-repo-v3`
+*recommending* it was right; skipping the question would not have been). Many
+visible projects → still show them rather than asking for a typed key; exactly
+one → confirm it rather than assuming it.
+
+**STEP 3 — only now, fetch the chosen project's statuses**, de-duplicated across
+its issue types:
+
+```bash
+bash "$S/jira.sh" --role executor raw GET /project/<CHOSEN-KEY>/statuses \
+  | jq -r '[.[].statuses[].name] | unique | .[]'
+```
+
+One call, for the one project that was chosen — don't fetch statuses for every
+visible project up front.
+
+**STEP 4 — ask the user to map each `STATUS_*` onto a name from that list.** The
+options are the board's real statuses, so a name that doesn't exist can no
+longer be chosen. Offer the closest documented default *first*, as an ordering
+hint — never as the answer:
+
+| variable | documented default | who moves the card there |
 |---|---|---|
-| `STATUS_TODO` | `To Do` | `jira-task-assigner`, on issues it creates |
+| `STATUS_TODO` | `To Do` | no skill does — it names where new issues land, and it's the only status the optional branch-create Action will advance *from* |
 | `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts |
 | `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
 | `STATUS_DONE` | `Done` | the reviewer's closing offer, GitHub-for-Jira on merge, or by hand |
 
-`In Review` is the one that's usually missing — several Jira templates ship
-`To Do` / `In Progress` / `Done` only. Either add the column, or point
-`STATUS_IN_REVIEW` at whatever the board calls that stage.
+A board with no match for a default is a **normal case**, not an error — so
+present what the choice costs rather than just listing names. On that first run
+`STATUS_TODO` had to become `Backlog` or `Selected for Development`, and the two
+aren't equivalent: one is a holding area, the other the ready-to-be-worked
+column. The one to pick is the status newly created issues actually land in,
+since that's where the executor takes work from. The "who moves the card there"
+column above is what makes that legible — keep it in front of the user. The
+first run did, and the user chose `Backlog` knowingly.
+
+**If a fetch fails** — the credential sees no projects, or the statuses call
+errors — say so and fall back to asking the user to type the value by hand.
+Discovery is the better path, not a hard dependency.
+
+**But a fallback is a different *way* to get the answer, never a way to proceed
+without one.** No project chosen at STEP 2 — declined, an answer that isn't one
+of the listed keys, or an empty type-in — **halts this section**: say what's
+missing and wait. Don't guess a key from the repository name, don't settle for
+the single project that happened to be visible, don't write a placeholder into
+`.jst/jira-sdlc-tools.env`, and don't advance to STEP 3 or to section 4. Every
+downstream skill matches branch names against this key, so a guessed one doesn't
+fail here — it fails later, as branches that belong to the wrong project. An
+unanswered mapping at STEP 4 halts the same way instead of quietly taking the
+documented default, which is exactly what the first run proved can be missing
+from the board.
 
 **3c. Append them** to `.jst/jira-sdlc-tools.env`:
 
@@ -257,26 +321,53 @@ STATUS_IN_REVIEW=In Review
 STATUS_DONE=Done
 ```
 
-Those are the defaults to *offer*, not values to copy: write the key and the
-four names the user confirmed in 3b. A literal `PROJECT_KEY=PROJ` left in a real
-project's config fails on the first branch-name check the skills make.
+That block is the *shape*, not the values: write the key the user chose at STEP
+2 and the four names they mapped at STEP 4. A literal `PROJECT_KEY=PROJ` left in
+a real project's config fails on the first branch-name check the skills make.
 
-**3d. Prove a status name rather than trusting it.** A name that doesn't exist
-fails the transition at runtime — mid-task, after work is committed — so spend
-one call proving it now. Ask the user for a throwaway issue key on the board
-and transition it, then put it back:
+**3d. Prove the config against the real workflow.** 3b's names exist on the
+board, but nothing has yet shown that the *workflow* permits the transitions the
+skills make, or that the credentials can create and delete. One scratch issue
+proves all of it — and unlike transitioning a borrowed issue, it doesn't depend
+on a disposable one already existing.
+
+**Ask first.** This touches a live board: a card appears and disappears,
+teammates may see it, notifications may fire. Offer the alternatives — create a
+scratch issue (the default), transition a disposable key the user names and put
+it back, or skip. Don't create issues on someone's board unannounced.
+
+On a yes, walk the **configured** names from 3c — not the documented defaults;
+the point is to test the config, not the documentation:
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
-bash "$S/jira.sh" --role executor issue transition <KEY> --to "In Review"
+KEY=$(bash "$S/jira.sh" --role assigner issue create --project <PROJECT-KEY> \
+        --type Task --summary 'jst-install smoke test — safe to delete')
+for s in "<STATUS_TODO>" "<STATUS_IN_PROGRESS>" "<STATUS_IN_REVIEW>" "<STATUS_DONE>"; do
+  if bash "$S/jira.sh" --role executor issue transition "$KEY" --to "$s"
+    then echo "allowed: $s"; else echo "not offered from the current status: $s"; fi
+done
+bash "$S/jira.sh" --role assigner issue delete "$KEY" --with-subtasks
+bash "$S/jira.sh" --role executor issue view "$KEY" --fields summary
+echo "deleted if that exited 4 (HTTP 404): $?"
 ```
 
-A wrong name fails here, at setup, where the cost is one retyped string. Then
-move the issue back where it was, if the workflow allows that transition — some
-don't, which is a fact about the board and not a problem to solve here. This
-doubles as the first real end-to-end test of the executor credential. If the
-user has no disposable issue, say plainly that the status names are unverified
-and move on — that's a warning, not a blocker.
+(Use an issue type the project actually has if it has no `Task`.) That proves
+the four names, every transition the workflow really permits, the assigner
+credential via create/delete and the executor credential via transition.
+
+Two things to get right when reading the output:
+
+- **A refused transition is a fact about the board, not a setup error.** Report
+  which ones the workflow allows and move on. The first name in the loop is
+  often the status the issue was created in already, and workflows legitimately
+  restrict which statuses reach which.
+- **Verify the delete instead of trusting it.** `delete` prints nothing on
+  success, so the follow-up `view` is the proof — exit 4 / HTTP 404 means gone.
+  A scratch card left behind on a real board is this step's failure mode.
+
+If the user skips, say plainly that the status names and the workflow are
+unverified and move on — that's a warning, not a blocker.
 
 **3e. Gate.** Run the gate. `env_config`, `jira_auth` and `jira_project`
 should all be OK now.
@@ -301,9 +392,9 @@ done
 rows named in the row map stay INFO, and `worktrees_dir` may WARN if the user
 skipped 2c. For anything still FAILing, relay the script's own remedy line
 rather than improvising — and name the two things the script structurally
-cannot see: whether the board really has the `In Review` column (3d is the only
-proof), and whether the two branch names in the env file are the branches the
-user actually meant.
+cannot see: whether the workflow permits the transitions the skills make (3b
+proved the names exist; 3d is the only proof of the transitions), and whether
+the two branch names in the env file are the branches the user actually meant.
 
 **4c. Hand off.** Setup is done. Tell them the loop from here:
 
