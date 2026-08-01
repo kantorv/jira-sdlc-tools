@@ -137,7 +137,8 @@ when missing by `ensure_local_env.sh` — the credential block above ran it),
 10's `gh pr create`), `jira_auth` (the **executor's** credential authenticates
 — `jira.sh --role executor whoami`), `jira_project`, plus context
 `base_branch`, `working_tree` (WARN when dirty) and `worktrees_dir` (WARN when
-missing — only the assigner acts on it).
+missing, FAIL when not an absolute path — otherwise only the assigner acts on
+it).
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't try to re-create worktrees, switch

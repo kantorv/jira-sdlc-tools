@@ -24,9 +24,10 @@ before moving to the next.
    Jira API token for each of the three roles — assigner, executor, reviewer
    (see the note in [SECURITY.md](SECURITY.md) on why the Jira tokens must be
    classic).
-4. **Define your main repository and worktrees dir in the settings**, e.g.:
+4. **Define your main repository and worktrees dir in the settings** — an
+   absolute path, never a relative one:
    ```
-   WORKTREES_DIR=/home/lalala/src/skills-dev/JST-worktrees
+   WORKTREES_DIR=/home/you/src/myapp-worktrees
    ```
 
 ### Verify your tokens
@@ -140,9 +141,13 @@ exist — the assigner refuses to create it:
 
 ```bash
 mkdir -p ../myapp-worktrees
+cd ../myapp-worktrees && pwd   # the absolute path to paste below
 ```
 
-Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`. From here
+Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`, **as an
+absolute path** — `/home/you/src/myapp-worktrees`, not `../myapp-worktrees`.
+A relative value resolves against a different base from inside a worktree than
+from this clone, so the healthcheck FAILs on one. From here
 on, the loop is: run the assigner in this clone, then run the executor from
 inside each issue's worktree.
 

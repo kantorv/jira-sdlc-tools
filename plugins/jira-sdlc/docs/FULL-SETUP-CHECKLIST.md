@@ -125,8 +125,11 @@ git --version; gh --version; $PSVersionTable.PSVersion
       ```
       The healthcheck's `env_local_ignored` row checks this too — but it checks
       it *after* the file already exists, so do it in this order.
-- [ ] **`WORKTREES_DIR` points somewhere sensible** — a sibling of your repo,
-      e.g. `../myapp-worktrees`. Every issue gets its own worktree there.
+- [ ] **`WORKTREES_DIR` is an absolute path** — a sibling of your repo is the
+      sensible place, but write it out in full, e.g.
+      `/home/you/src/myapp-worktrees`. A relative value means a different
+      directory depending on which checkout a skill runs from, so the
+      healthcheck FAILs on one. Every issue gets its own worktree there.
 
 ## Settings files
 
@@ -154,7 +157,7 @@ secrets:
 
 ```bash
 # GITHUB SETTINGS (machine-specific)
-WORKTREES_DIR=../myapp-worktrees
+WORKTREES_DIR=/home/you/src/myapp-worktrees
 GITHUB_PAT_TOKEN="github_pat_…"
 
 # JIRA SITE
@@ -221,7 +224,7 @@ onto this checklist:
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
-| `worktrees_dir` | `WORKTREES_DIR` exists (WARN only — the assigner creates it) |
+| `worktrees_dir` | `WORKTREES_DIR` is absolute (FAIL if not) and exists (WARN if missing — the assigner won't create it) |
 
 Every FAIL row prints its own remedy line under the table. Relay those rather
 than guessing — and note the checklist items the script *can't* see: whether
