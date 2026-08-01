@@ -40,10 +40,16 @@ project. Given a task description from the user ($ARGUMENTS):
   `../_shared/jira-api-reference.md` §12 and go straight to the executor.
 - **Script paths** — every script below lives under
   `${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/`. If
-  `CLAUDE_PLUGIN_ROOT` isn't set (e.g. a non-Claude client), resolve it
-  against the platform's provided/default skills folder — the folder it
-  loads these skills from — keeping `../_shared/scripts/posix/` relative to
-  this skill as the default; see INTEGRATIONS.md.
+  `CLAUDE_PLUGIN_ROOT` isn't set (a non-Claude client), resolve the root
+  yourself, in order: (1) this skill's own directory — given at the top of
+  the loaded SKILL.md, or the folder containing it — so the scripts are at
+  `../_shared/scripts/posix/` relative to it (correct on every platform);
+  (2) if you can't derive that, probe the platform's default skills
+  locations — project-root `.agent/skills/`, `.agents/skills/`,
+  `.codex/skills/`, `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`,
+  the home global `~/.claude/skills/`, or the path named in the platform's
+  config (`kilo.jsonc`, `settings.json`, `config.toml`). See INTEGRATIONS.md
+  → "Locating the shared scripts".
 
 ## 1. Discovery and healthcheck
 

@@ -107,11 +107,16 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role reviewer
 ```
 
-(If `CLAUDE_PLUGIN_ROOT` isn't set, resolve it against the platform's
-provided/default skills folder (the folder it loads these skills from; each
-non-Claude client is expected to have this set), keeping
-`../_shared/scripts/posix/statuscheck.sh` relative to this skill's directory
-as the default; see INTEGRATIONS.md.)
+(If `CLAUDE_PLUGIN_ROOT` isn't set, resolve the root yourself: this skill's
+own directory — given at the top of the loaded SKILL.md, or the folder
+containing it — has the scripts at
+`../_shared/scripts/posix/statuscheck.sh` relative to it, correct on every
+platform. If you can't derive that, probe the platform's default skills
+locations — project-root `.agent/skills/`, `.agents/skills/`,
+`.codex/skills/`, `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`,
+the home global `~/.claude/skills/`, or the path named in the platform's
+config (`kilo.jsonc`, `settings.json`, `config.toml`). See INTEGRATIONS.md
+→ "Locating the shared scripts".)
 
 It prints one markdown table (`check | status | detail`), where status is
 `OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
