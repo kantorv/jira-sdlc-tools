@@ -5,6 +5,9 @@ says how to check it, not just what to have. The last section is a single
 command that verifies most of the list for you.
 
 Prose walkthrough of the same ground: [STEP-BY-STEP.md](STEP-BY-STEP.md).
+Guided version of it: `/jira-sdlc:jst-install`
+([`SKILL.md`](../skills/jst-install/SKILL.md)), which ticks these items off
+with you and runs the healthcheck between stages.
 
 ## Your PC
 

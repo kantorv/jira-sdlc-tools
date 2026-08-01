@@ -4,8 +4,9 @@ This repo is a private Claude Code plugin **marketplace** that ships one
 plugin, `jira-sdlc` — three coupled skills (`jira-task-assigner`,
 `jira-task-executor`, `jira-task-reviewer`) that plan a feature into Jira
 issues + git worktrees, implement each piece in parallel, and then
-review the set. Full explanation, architecture diagram, and usage
-walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
+review the set, plus `jst-install`, which sets a project up for them and
+is not part of that lifecycle. Full explanation, architecture diagram, and
+usage walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
 is deliberately shorter and only covers what's easy to get wrong.
 
 ## The one rule that matters most
@@ -107,6 +108,12 @@ each holds a single manifest. Don't merge them into one.
   boundary) silently stops resolving after install. Don't move it up a
   level.
 - Each `SKILL.md`'s `name:` frontmatter should match its folder name.
+- `skills/_shared/templates/jira-sdlc-tools.local.env.example` is a **copy** of
+  the repo-root `.jst/jira-sdlc-tools.local.env.example`, and the two must stay
+  identical — `jst-install` copies the plugin-side one into a new project, and
+  a path climbing to the repo root wouldn't survive either install mode. Edit
+  one, `diff` the other. (`.jst/…` is also this repo's own live config
+  template, which is why the duplication exists rather than a move.)
 
 ## If you rename a skill or the plugin
 
@@ -122,7 +129,9 @@ assuming you're done:
   `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
-  override, plus steps 4a/4b/4c and 6), and the healthcheck script's
+  override, plus steps 4a/4b/4c and 6), `jst-install` (its
+  `STATUSCHECK_RERUN` overrides in the *Verification* section and step 4a,
+  plus the hand-off commands in 4c), and the healthcheck script's
   rerun remedies (`skills/_shared/scripts/posix/statuscheck.sh`), which
   currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
