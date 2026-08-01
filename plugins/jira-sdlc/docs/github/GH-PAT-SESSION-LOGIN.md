@@ -106,6 +106,25 @@ Core only). Setting `GH_TOKEN` instead is not an option here either: it lives
 only in the current process, whereas this login has to persist a session that
 the executor's later `gh pr create` — a separate process — depends on.
 
+## A login is not access: the `gh_repo_access` row
+
+`gh_auth` proves the token logs in, and nothing more. A fine-grained PAT scoped
+to **only selected repositories** logs in green, reads the org and every *other*
+repo it was granted, and still cannot see this one — and GitHub answers **404,
+not 403**, for a repository a token has no access to, so it reads like a typo in
+the repo name. With an SSH `origin`, every `git` operation keeps working, and
+the first thing to break is `gh pr create` in the executor: mid-task, after the
+work is committed and pushed.
+
+So the healthcheck also probes the repository itself, in a separate
+`gh_repo_access` row — `gh api repos/<OWNER>/<REPO>`, resolved from `origin`
+(REST; `gh repo view` goes through GraphQL and fails with a different, less
+legible error). A 404 there `FAIL`s with the real remedy: add the repo to the
+token's repository access at
+[github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens),
+keeping **Contents: read/write** and **Pull requests: read/write** — and expect
+an org-owned repository to need an org admin to approve the token as well.
+
 ## Halt on a missing token
 
 If `GITHUB_PAT_TOKEN` is not present in settings, the run **stops**: the

@@ -81,6 +81,14 @@ git --version; gh --version; $PSVersionTable.PSVersion
       start; without it the `gh_auth` healthcheck row FAILs and the run halts.
       Where to click:
       [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
+- [ ] **…and the PAT can actually reach *this* repo.** A fine-grained token
+      scoped to *only selected repositories* logs in green while 404-ing on a
+      repo missing from that list — 404, not 403, so it reads like a typo — and
+      with an SSH `origin` nothing breaks until `gh pr create` fails mid-task.
+      The `gh_repo_access` row probes it; by hand:
+      ```bash
+      gh api repos/<OWNER>/<REPO> >/dev/null && echo "PAT can see it"
+      ```
 
 ## Jira
 
@@ -217,10 +225,12 @@ onto this checklist:
 | `env_config` | `.jst/jira-sdlc-tools.env` found and parsed |
 | `env_local` | `.jst/jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
-| `gh_auth` | `GITHUB_PAT_TOKEN` works — `gh` is authenticated |
+| `gh_auth` | `GITHUB_PAT_TOKEN` logs `gh` in — a login, and nothing more |
+| `gh_repo_access` | that PAT can actually see the repo `origin` points at (`gh api repos/<OWNER>/<REPO>`) |
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
+| `branch_pair` | `DEFAULT_BASE_BRANCH` and `PRODUCTION_BRANCH` are two *different* branches |
 | `worktrees_dir` | `WORKTREES_DIR` exists (WARN only — the assigner creates it) |
 
 Every FAIL row prints its own remedy line under the table. Relay those rather
