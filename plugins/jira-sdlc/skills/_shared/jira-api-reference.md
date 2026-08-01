@@ -404,6 +404,7 @@ jira --role assigner|executor|reviewer <command>
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)   (§11)
   issue comment list <KEY>                  raw JSON on stdout
+  issue attach    <KEY> <FILE>                  upload a file attachment
   issue delete     <KEY> [--with-subtasks]
   raw <METHOD> </PATH> [--data-file FILE]   escape hatch; PATH is under /rest/api/3 (e.g. /myself)
 ```
@@ -520,13 +521,18 @@ node verbatim, so the marker survives round-trip and a `grep` over
 posting, match on it when reading:
 
 - `PR target branch: <branch>.` — the PR base for the issue's branch, posted by
-  `jira-task-assigner` (or the no-assigner bootstrap, §12) and consumed by the
+  `jira-task-assigner` (or the no-assigner provisioning, §12) and consumed by the
   §13 PR-base resolver.
 - `Task memory (jira-task-executor)` — a durable per-task memory note the
   executor leaves for future sessions (findings, gotchas, design decisions +
   rationale, recovery context). Deliberately distinct from the executor's
   single end-of-run report and from the `PR target branch:` line, so grepping
   the marker returns only memory notes.
+- `Assignment report` — the assigner's end-of-run report (step 7): issue keys
+  and links, the scope decision, the base path taken, and the branch/worktree
+  layout. Posted on the **top-level** issue, so a sub-task's own comments won't
+  carry it — the executor reads it for the planning context behind the issue
+  it's picking up.
 
 ### List a work item's comments
 
@@ -547,7 +553,7 @@ and takes its prefix from the base it was told to use (its step 5C):
 `feature/` by default, `hotfix/` only when the user explicitly asks for the
 emergency production flow, in which case it cuts a single leaf from
 `origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes from either that
-path or the no-assigner bootstrap below.
+path or the no-assigner provisioning below.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue key
 inside the branch name — no API call required.
@@ -560,7 +566,16 @@ git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 `"Fix null pointer on login!"` → `fix-null-pointer-on-login`.
 
-### No-assigner bootstrap (issue with no branch/worktree yet)
+### No-assigner provisioning (issue with no branch/worktree yet)
+
+> **Two unrelated senses of "bootstrap" live in this plugin — don't conflate
+> them.** This section is *git-level* setup: creating a branch and worktree for
+> an issue the assigner never touched, done **before** the executor runs.
+> `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` is a different thing entirely — an
+> optional project-owned hook that provisions the *app's runtime* (database,
+> ports, deps) **inside** an already-existing worktree, run by the executor's
+> step 1 (`project-config.md` § *the optional worktree hook*). This section
+> creates the worktree; that hook makes one runnable.
 
 `jira-task-executor` never creates the issue branch — it derives the issue key
 *from* the branch it's standing on, so there is no state where it runs and the
@@ -589,57 +604,60 @@ an ad-hoc `Bug`), provision it manually **before** invoking the executor:
 
 Every leaf issue's PR needs a base branch. The assigner records it in two
 places — one local (`git config branch.<branch>.parentbranch`), one durable (a
-`PR target branch: …` Jira comment that survives a fresh clone). This resolver
+`PR target branch: …` Jira comment that survives a fresh clone). The resolver
 checks both, then — for a sub-task, whose real base is its parent's branch and
-never the env default — recovers by searching for that parent branch. Run it
-verbatim whenever a skill asks for a PR base. `PARENT_KEY` is not an env var:
-it's the leaf's `fields.parent.key` from the issue fetch (§10), empty for a
-top-level issue. (POSIX form below; on Windows the skill substitutes `jira.ps1`.)
+never the env default — recovers by searching for that parent branch.
+
+**It is a script, not a snippet to copy.** `_shared/scripts/posix/pr_base.sh`
+and its `win/pr_base.ps1` twin are the implementation; this section documents
+them. Hand-copying the logic into a skill is what let the copies drift apart
+and left Windows with no runnable resolution at all.
 
 ```bash
-CUR=$(git branch --show-current)
-PR_BASE=$(git config branch."$CUR".parentbranch 2>/dev/null)
-[ -z "$PR_BASE" ] && PR_BASE=$(jira.sh issue comment list <KEY> \
-  | grep -oE 'PR target branch: [^" ]+' | head -1 \
-  | sed -e 's/PR target branch: //' -e 's/\.$//')
-# Parent-branch recovery — only for a leaf that HAS a parent (a sub-task).
-# Normalize before counting, or one branch reads as several and looks "ambiguous":
-# strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
-# (checked out in another linked worktree, the normal state of a parent branch
-# while a sub-task's worktree runs this search) — and fold the remotes/origin/
-# copy of a pushed branch into its local name (§12).
-if [ -z "$PR_BASE" ] && [ -n "$PARENT_KEY" ]; then
-  CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
-    | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
-  MATCHES=$(printf '%s' "$CANDIDATES" | grep -c .)
-  [ "$MATCHES" -eq 1 ] && PR_BASE="$CANDIDATES"
-fi
-# The env default is the right answer ONLY for a top-level issue (no parent).
-# A sub-task that reached here is unresolved — leave PR_BASE empty so the skill stops.
-[ -z "$PR_BASE" ] && [ -z "$PARENT_KEY" ] && PR_BASE="<DEFAULT_BASE_BRANCH>"  # skill flags this
-echo "$PR_BASE"   # empty ⇒ sub-task base unresolved: STOP, ask the user, do not open the PR
+bash pr_base.sh --role <role> [--branch <BRANCH>] [--parent-key <PARENT-KEY>] [ISSUE-KEY]
 ```
 
+`--parent-key` is not an env var: it's the leaf's `fields.parent.key` from the
+issue fetch (§10), and omitting it for a sub-task is what would wrongly let the
+env default through. `--branch` resolves the base for a branch other than the
+checked-out one — `jira-task-reviewer` needs it, because it resolves
+`<PARENT-BRANCH>`'s base while standing in a sub-task's worktree, where the
+current branch is the sub-task's; branch config lives in the shared
+`.git/config`, so this works from any worktree. `ISSUE-KEY` defaults to the key
+derived from `--branch`, or from the current branch when that is absent. It
+prints exactly two lines and exits non-zero when unresolved:
+
+```
+base=<branch>     # empty when unresolved
+source=git-config|jira-comment|branch-search|env-default|unresolved
+```
+
+Exit 1 with `source=unresolved` means a sub-task whose parent-branch search
+matched zero or several branches: **STOP, ask the user, do not open the PR.**
+Exit 2 is a usage or environment error. What to do with each *resolved* source
+is the calling skill's judgment, not the script's — see below.
+
 The `PR target branch:` marker sits verbatim in an ADF text node (§11), so the
-`grep` matches `jira.sh issue comment list` JSON exactly as it did the old CLI's
-output. Sources, in order:
-1. `git config branch.<current>.parentbranch` — set by the assigner when the
-   branch was created; local to this clone.
-2. The issue's `PR target branch: …` Jira comment — the durable fallback the
-   assigner posts (or the no-assigner bootstrap does, §12); survives a fresh
-   clone or different machine.
-3. **Parent-branch search** — sub-tasks only, i.e. when the leaf's `PARENT_KEY`
-   is non-empty. Searches for a `feature/<PARENT_KEY>-*` / `hotfix/<PARENT_KEY>-*`
+script's `grep` over `jira.sh issue comment list` JSON matches it exactly as it
+did the old CLI's output. Sources, in the order tried:
+1. `source=git-config` — `git config branch.<current>.parentbranch`, set by the
+   assigner when the branch was created; local to this clone.
+2. `source=jira-comment` — the issue's `PR target branch: …` comment, the
+   durable fallback the assigner posts (or the no-assigner provisioning does,
+   §12); survives a fresh clone or a different machine.
+3. `source=branch-search` — sub-tasks only, i.e. when `--parent-key` is
+   non-empty. Searches for a `feature/<PARENT-KEY>-*` / `hotfix/<PARENT-KEY>-*`
    branch, deduping the local and `remotes/origin/` copies (§12) so a pushed
    branch counts once.
    - Exactly one match → use it, and say in the report the base was **recovered
      by branch search**, not read from the primary sources.
-   - Zero or multiple matches → `PR_BASE` stays empty. **Stop before
-     `gh pr create` and ask the user** — do not fall back to
+   - Zero or multiple matches → `base=` empty, `source=unresolved`, exit 1.
+     **Stop before `gh pr create` and ask the user** — do not fall back to
      `<DEFAULT_BASE_BRANCH>`, which is never a sub-task's base.
-4. `<DEFAULT_BASE_BRANCH>` from `.jst/jira-sdlc-tools.env` — reachable **only for a
-   top-level issue** (empty `PARENT_KEY`), and correct for a planned-work one.
-   Still call it out in the report, and check it against the prefix first (below).
+4. `source=env-default` — `<DEFAULT_BASE_BRANCH>` from
+   `.jst/jira-sdlc-tools.env`, reachable **only for a top-level issue** (no
+   `--parent-key`) and correct for a planned-work one. Still call it out in the
+   report, and check it against the prefix first (below).
 
 ### Sanity check: the prefix and the base have to agree
 

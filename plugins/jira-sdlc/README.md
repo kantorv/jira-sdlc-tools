@@ -53,6 +53,12 @@ Three skills, three jobs:
 | `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, Jira status transition, investigation, implementation, tests, commit, push, PR. |
 | `jira-task-reviewer` | Once, on the parent issue | Reviews: iterates over each In Review sub-task PR, approves or requests changes per-PR (continuing past rejections), posts findings to Jira, and reviews the aggregate parent PR. Never merges anything — all merges are manual. |
 
+A fourth skill sits outside that lifecycle and runs before it:
+
+| Skill | Runs | Does |
+|---|---|---|
+| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](docs/STEP-BY-STEP.md)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
+
 ## Quick start
 
 ```
@@ -60,8 +66,8 @@ Three skills, three jobs:
 /plugin install jira-sdlc@jira-sdlc-tools
 ```
 
-Create `.jst/jira-sdlc-tools.env` in the project root for your repo (see
-[Configuration](#configuration)), then:
+Set the project up — `/jira-sdlc:jst-install` walks it with you, or do it by
+hand from [Configuration](#configuration) — then:
 
 ```
 /jira-sdlc:jira-task-assigner "Add CSV export to the reports page"
@@ -132,10 +138,10 @@ touches outside it (a database, cache, storage, or port) — see
 [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own. A project records the answer it landed on in
-an optional [`.jst/PARALLEL-INSTANCES.md`](skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form)
-([example](docs/examples/PARALLEL-INSTANCES.example.md)); when that file
-exists, the assigner relays its provisioning steps with every worktree it
-creates.
+an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
+hook ([example](docs/examples/bootstrap.example.sh)); when it exists,
+`jira-task-executor` runs it in the worktree it's about to work in — once
+per worktree, automatically, fail-soft.
 
 **What the assigner creates.** The assigner runs from a long-lived branch,
 normally your base branch — invoke it from an existing feature/hotfix branch
@@ -222,7 +228,8 @@ relying on opaque GitHub-for-Jira transition rules:
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
 - **A worktrees directory that already exists**, as a sibling of your
-  repo — the assigner refuses to create it for you.
+  repo — the assigner refuses to create it for you. `WORKTREES_DIR` must
+  name it with an **absolute** path.
 
 ## Installation
 
@@ -235,9 +242,11 @@ relying on opaque GitHub-for-Jira transition rules:
    /plugin install jira-sdlc@jira-sdlc-tools
    ```
 2. Fill in `.jst/jira-sdlc-tools.env` in the project root — see
-   [Configuration](#configuration).
-3. The three skills are now available as `/jira-sdlc:jira-task-assigner`,
-   `/jira-sdlc:jira-task-executor`, and `/jira-sdlc:jira-task-reviewer`.
+   [Configuration](#configuration), or run `/jira-sdlc:jst-install` and let it
+   walk you through the whole setup, checking each stage as it goes.
+3. The three lifecycle skills are now available as
+   `/jira-sdlc:jira-task-assigner`, `/jira-sdlc:jira-task-executor`, and
+   `/jira-sdlc:jira-task-reviewer` — plus `/jira-sdlc:jst-install` for setup.
 
    Self-hosting or forking? Push the repo to your own GitHub and
    `marketplace add` *that* `owner/repo` instead.
@@ -255,9 +264,10 @@ won't survive the copy.
 `/jira-sdlc:...` mentions inside `jira-task-assigner` (its step 1
 Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
 `jira-task-executor` (step 11 and its Discovery & healthcheck error
-messages), and `jira-task-reviewer` (its own Discovery & healthcheck
-section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 6) to
-match your new name — those are the only places the plugin name
+messages), `jira-task-reviewer` (its own Discovery & healthcheck
+section's `STATUSCHECK_RERUN` override, plus steps 4a/4b/4c and 6), and
+`jst-install` (its `STATUSCHECK_RERUN` overrides and the hand-off commands in
+step 4c) to match your new name — those are the only places the plugin name
 is hardcoded into the skill bodies themselves.
 
 ### Option B — Drop-in (no marketplace)
@@ -270,9 +280,13 @@ cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it 
 Run from the root of your `kantorv/jira-sdlc-tools` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
-`/jira-task-executor`, `/jira-task-reviewer` — there's no plugin
-namespace. If you go this route, edit the three `/jira-sdlc:...`
-references mentioned above back down to their bare form.
+`/jira-task-executor`, `/jira-task-reviewer`, `/jst-install` — there's no
+plugin namespace. If you go this route, edit the three `/jira-sdlc:...`
+references mentioned above back down to their bare form. Note that this copies
+`skills/` only, so `jst-install`'s `../../docs/…` pointers land on files that
+aren't there — the skill says to cite the GitHub copies instead, and its one
+real file dependency (the local.env template) ships inside `skills/_shared/`
+for exactly this reason.
 
 ## Repository layout
 
@@ -291,17 +305,21 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   │   └── SKILL.md
         │   ├── jira-task-reviewer/
         │   │   └── SKILL.md
+        │   ├── jst-install/
+        │   │   └── SKILL.md                 # guided first-time setup — run once, before the other three
         │   └── _shared/
         │       ├── jira-api-reference.md    # direct REST API — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
         │       ├── templates/
-        │       │   └── review-report.md     # jira-task-reviewer's report template + outcome catalogue
+        │       │   ├── review-report.md     # jira-task-reviewer's report template + outcome catalogue
+        │       │   └── jira-sdlc-tools.local.env.example  # placeholder local.env jst-install copies into place
         │       └── scripts/
         │           ├── create_parent_and_subtasks.sh  # seed a parent + sub-tasks from a manifest (jira.sh wrapper)
         │           └── list_subtasks.sh               # list a parent's sub-tasks (jira.sh wrapper)
         ├── docs/
         │   ├── examples/
-        │   │   └── PARALLEL-INSTANCES.example.md  # start here to write a project's .jst/PARALLEL-INSTANCES.md
+        │   │   ├── bootstrap.example.sh   # start here to write a project's .jst/bootstrap.sh
+        │   │   └── bootstrap.example.ps1  # …and its Windows twin, .jst/bootstrap.ps1
         │   ├── JIRA-REST.md          # detailed REST client companion — rationale + commands no skill invokes
         │   ├── JIRA-GITHUB-API.md
         │   ├── JIRA-KANBAN-BOARD.md
@@ -401,7 +419,7 @@ same as a Jira comment on `PROJ-401`.
 
 In three terminals (or three subagents, one per worktree):
 ```
-cd ../myapp-worktrees/worktree-PROJ-402 && claude
+cd /home/you/src/myapp-worktrees/worktree-PROJ-402 && claude
 > /jira-sdlc:jira-task-executor
 ```
 No key argument — it's derived from that worktree's own branch
@@ -507,11 +525,12 @@ Deliberately never automated, regardless of how routine a run looks:
   by default and can collide when several run at once — see
   [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
   for the per-asset share-vs-isolate decision (and the Django database
-  worked example). Projects that need per-worktree provisioning write it
-  down in an optional
-  [`.jst/PARALLEL-INSTANCES.md`](skills/_shared/project-config.md#jstparallel-instancesmd--optional-and-free-form),
-  which the assigner then relays per worktree — but the plugin still
-  ships nothing that provisions an instance for you.
+  worked example). Projects that need per-worktree provisioning put it in
+  an optional
+  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
+  which the executor runs per worktree — but the plugin still ships
+  nothing that provisions an instance for you; it only runs what your
+  project wrote, and reports (never blocks on) a non-zero exit.
 
 ## First-run verification checklist
 

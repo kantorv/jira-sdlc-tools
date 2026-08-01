@@ -130,7 +130,15 @@ J issue transition "$PARENT" --to "__nope__" >/dev/null 2>&1; rc "transition (ba
 # 16. raw escape hatch --------------------------------------------------------
 eq "raw GET /myself returns identity" "$(J whoami | jq -r .accountId)" "$(J raw GET /myself | jq -r .accountId)"
 
-# 17/18/19. delete sub, delete parent, confirm gone --------------------------
+# 17. attach a file ----------------------------------------------------------
+printf 'test attachment content\n' > "$TMP/attach-test.txt"
+J issue attach "$PARENT" "$TMP/attach-test.txt" >/dev/null; r=$?; rc "attach file -> 0" 0 $r
+# Verify the attachment is visible on re-fetch.
+atts=$(J issue view "$PARENT" --fields attachment)
+eq "attached file listed" "attach-test.txt" \
+  "$(jq -r '.fields.attachment[0].filename // empty' <<<"$atts" 2>/dev/null)"
+
+# 18/19/20. delete sub, delete parent, confirm gone --------------------------
 J issue delete "$SUB" >/dev/null; r=$?; rc "delete sub-task -> 0" 0 $r
 [ $r -eq 0 ] && CREATED=("$PARENT")           # sub gone; leave only parent for the trap
 J issue delete "$PARENT" >/dev/null; r=$?; rc "delete parent -> 0" 0 $r

@@ -116,7 +116,12 @@ $IsWt   = ($WtRoot -and (Test-Path -LiteralPath (Join-Path $WtRoot '.git') -Path
 # Both settings files live in <repo-root>/.jst/, and nothing reads a root-level
 # copy — so a missing .jst/ means no config at all, for every role. Check it
 # before the local.env gate below: that gate copies a file *into* .jst/.
-if ($WtRoot) {
+if (-not $WtRoot) {
+    # No repo root to look under, so this gate can't run at all. Say that in a
+    # row rather than printing nothing: the row map in jst-install lists jst_dir
+    # as a section-1 row, and a silently absent row reads like a passing one.
+    Add-Row jst_dir INFO "skipped — not inside a git repository, so there is no repo root to hold .jst/ (see git_repo)"
+} else {
     $JstDir = Join-Path $WtRoot '.jst'
     if (Test-Path -LiteralPath $JstDir -PathType Container) {
         Add-Row jst_dir OK "$JstDir"
@@ -155,9 +160,10 @@ if ($WtRoot) {
 
 # --- git repo / worktree -----------------------------------------------------
 if (-not $WtRoot) {
-    $wtKey = if ($Key) { $Key } else { '<KEY>' }
+    # Caller-neutral remedy on purpose: all four skills print this row, and a
+    # sentence about one role's worktree is wrong for the other three (JST-251).
     Add-Row git_repo FAIL "not inside a git repository (cwd: $((Get-Location).Path))" `
-        "cd into the per-issue worktree jira-task-assigner created (worktree-$wtKey) and $Rerun."
+        "cd into the project checkout these skills are configured for — its main checkout, or the issue's own worktree when you're running an issue — and $Rerun. If the project has no repository yet, create or clone one (with its GitHub 'origin' remote) first: the skills wire an existing repo up, they don't create it."
 } else {
     Add-Row git_repo OK "root: $WtRoot"
     if ($IsWt) {
@@ -325,6 +331,7 @@ if ($KeyArg) {
 # so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
 # writes the OS-user-global gh config, overwriting the developer's own gh session
 # and not restoring it afterward — see plugins/jira-sdlc/docs/github/ (JST-126/145).
+$GhOk = $false
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
         "install it (https://cli.github.com), then $Rerun."
@@ -379,6 +386,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
                 Select-Object -First 1) -replace '^[^L]*', ''
             if ($ghLine) {
+                $GhOk = $true
                 Add-Row gh_auth OK "$ghLine (PAT session login)"
             } else {
                 Add-Row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" `
@@ -390,6 +398,55 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             if (-not $err) { $err = '(no stderr from gh)' }
             Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
                 "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
+        }
+    }
+}
+
+# --- gh repo access (needed by 'gh pr create', not proved by gh_auth) --------
+# gh_auth proves a LOGIN succeeded and nothing more. A fine-grained PAT scoped
+# to "only selected repositories" logs in happily, reads the org and 20 other
+# repos, and still cannot see this one — GitHub answers 404, not 403, so it
+# looks like a typo rather than a permission (JST-251). With an SSH origin every
+# git operation keeps working, and the first thing to break is `gh pr create`
+# in the executor, mid-task, after the work is committed. So probe the actual
+# repository here. `gh api repos/<OWNER>/<REPO>` is REST; `gh repo view` goes
+# through GraphQL and fails with a different, less legible error.
+# Role-agnostic like the rest: gh uses one shared PAT, not a per-role identity.
+function Get-GhSlug {  # Get-GhSlug <remote-url> -> OWNER/REPO ; $null when not github.com
+    param([string]$Url)
+    if ($Url -notmatch 'github\.com') { return $null }
+    $s = $Url -replace '^.*github\.com', ''   # ":OWNER/REPO.git" (SSH) or "/OWNER/REPO.git" (HTTPS)
+    $s = $s -replace '^[:/]+', ''
+    $s = $s -replace '/$', ''
+    $s = $s -replace '\.git$', ''
+    if ($s -notmatch '^[^/]+/[^/]+$') { return $null }
+    return $s
+}
+if (-not $WtRoot) {
+    Add-Row gh_repo_access WARN "skipped (not in a git repository, so there is no origin to probe — see git_repo)"
+} else {
+    $originUrl = (& git -C $WtRoot remote get-url origin 2>$null)
+    $originUrl = if ($LASTEXITCODE -eq 0 -and $originUrl) { ([string]$originUrl).Trim() } else { '' }
+    $ghSlug = if ($originUrl) { Get-GhSlug $originUrl } else { $null }
+    if (-not $originUrl) {
+        Add-Row gh_repo_access FAIL "this repository has no 'origin' remote — the skills push issue branches to it and open PRs against it" `
+            "create the GitHub repository (or find the existing one) and attach it: git remote add origin git@github.com:<OWNER>/<REPO>.git — the skills don't create repositories — then $Rerun."
+    } elseif (-not $GhOk) {
+        Add-Row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a logged-in gh; see rows above)"
+    } elseif (-not $ghSlug) {
+        Add-Row gh_repo_access WARN "origin is not a github.com remote ($originUrl) — can't probe it with gh, and 'gh pr create' won't work against it"
+    } else {
+        $ghApiErr = ((& gh api "repos/$ghSlug" 2>&1) | Out-String)
+        if ($LASTEXITCODE -eq 0) {
+            Add-Row gh_repo_access OK "$ghSlug reachable with this PAT (GET /repos/$ghSlug)"
+        } elseif ($ghApiErr -match '404|Not Found|Could not resolve') {
+            Add-Row gh_repo_access FAIL "the PAT authenticates but 404s on $ghSlug — usually the fine-grained token's 'only selected repositories' list doesn't include this one (GitHub answers 404, not 403, for a repo a token can't see); a renamed or deleted repository looks identical from here" `
+                "add $ghSlug to GITHUB_PAT_TOKEN's repository access at https://github.com/settings/personal-access-tokens (keep Contents: read/write and Pull requests: read/write) — an org-owned repo may also need an org admin to approve the token — or fix the origin URL if the repository really moved. Then $Rerun."
+        } else {
+            $err = (($ghApiErr -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1)
+            $err = if ($err) { $err.Trim() } else { '(no error output from gh)' }
+            Add-Row gh_repo_access FAIL "GET /repos/$ghSlug failed: $err" `
+                "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $Rerun."
         }
     }
 }
@@ -443,38 +500,75 @@ if ($JiraOk -and $ProjectKey) {
 Add-Row base_branch INFO "DEFAULT_BASE_BRANCH=$(if ($BaseBranch) { $BaseBranch } else { 'unset' })"
 Add-Row production_branch INFO "PRODUCTION_BRANCH=$(if ($ProductionBranch) { $ProductionBranch } else { 'unset' })"
 
+# Gitflow needs the two long-lived branches to be DIFFERENT branches. Its own
+# row rather than a FAIL state on the pair above, so those two keep printing the
+# plain values several skills quote verbatim. FAIL, not WARN: a collapsed pair is
+# invalid config, not a judgement call — with one branch every feature PR targets
+# production, the assigner's hotfix path (step 5C) resolves to the same branch as
+# its planned path, and the release workflows have no branch name left to key the
+# version off (docs/SDLC.md §5). Unset is not "equal to unset": mid-install both
+# read unset until jst-install writes the file, and that is not a config error.
+if ((-not $BaseBranch) -or (-not $ProductionBranch)) {
+    Add-Row branch_pair INFO "skipped (DEFAULT_BASE_BRANCH or PRODUCTION_BRANCH unset — see the two rows above)"
+} elseif ($BaseBranch -ceq $ProductionBranch) {
+    Add-Row branch_pair FAIL "DEFAULT_BASE_BRANCH and PRODUCTION_BRANCH are both '$BaseBranch' — Gitflow needs two distinct long-lived branches, and a single-branch repo isn't a supported configuration" `
+        "point DEFAULT_BASE_BRANCH and PRODUCTION_BRANCH at two different branches in .jst/jira-sdlc-tools.env (the documented pair is development / main — any two names work, but create the second branch first), then $Rerun."
+} else {
+    Add-Row branch_pair OK "$BaseBranch (base) and $ProductionBranch (production) are distinct"
+}
+
+# The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
+# It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
+# as the three role tokens and the GitHub PAT — so a skill that needed it had no
+# row to read and reached for the file instead, putting live credentials in the
+# transcript (JST-224). Printing the one non-secret value here removes the
+# reason to open that file at all. Value only: Get-Cfg returns a single key,
+# never a neighbouring line.
+$JiraAccountUrl = Get-Cfg 'JIRA_ACCOUNT_URL'
+Add-Row jira_account_url INFO "JIRA_ACCOUNT_URL=$(if ($JiraAccountUrl) { $JiraAccountUrl } else { 'unset' }) (browse links: https://<JIRA_ACCOUNT_URL>/browse/<KEY>)"
+
+# WORKTREES_DIR must be ABSOLUTE — see the posix twin for why a relative
+# value FAILs here rather than being resolved against a per-checkout base.
 $WorktreesDir = Get-Cfg 'WORKTREES_DIR'
 if (-not $WorktreesDir) {
     Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
-} else {
-    $wdBase = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
-    if ($IsWt) {
-        $wdGitdir = (Get-Content -LiteralPath (Join-Path $WtRoot '.git') |
-            Where-Object { $_ -match '^gitdir:\s*(.*)$' } |
-            ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
-        if ($wdGitdir) { $wdBase = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $wdGitdir)) }
-    }
-    $wdPath = if ([System.IO.Path]::IsPathRooted($WorktreesDir)) { $WorktreesDir } else { Join-Path $wdBase $WorktreesDir }
-    if (Test-Path -LiteralPath $wdPath -PathType Container) {
-        Add-Row worktrees_dir INFO "$wdPath (present)"
+} elseif ([System.IO.Path]::IsPathRooted($WorktreesDir)) {
+    if (Test-Path -LiteralPath $WorktreesDir -PathType Container) {
+        Add-Row worktrees_dir INFO "$WorktreesDir (present)"
     } else {
-        Add-Row worktrees_dir WARN "$wdPath missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.env if the convention changed"
+        Add-Row worktrees_dir WARN "$WorktreesDir missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
     }
+} else {
+    # Resolved from *here* for the remedy only, and only when it really names
+    # a directory: a hint resolved against the wrong base is worse than none.
+    $wdAbs = $null
+    $wdRp = Resolve-Path -LiteralPath $WorktreesDir -ErrorAction SilentlyContinue
+    if ($wdRp -and (Test-Path -LiteralPath $wdRp.Path -PathType Container)) { $wdAbs = $wdRp.Path }
+    $wdFix = if ($wdAbs) {
+        "set WORKTREES_DIR=$wdAbs in .jst/jira-sdlc-tools.local.env"
+    } else {
+        'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. /home/you/src/myapp-worktrees)'
+    }
+    Add-Row worktrees_dir FAIL "WORKTREES_DIR=$WorktreesDir is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" `
+        "$wdFix, then $Rerun."
 }
 
-# .jst/PARALLEL-INSTANCES.md is the optional, conventional place a project
-# writes down how to turn a worktree into a *running* instance (cloned db,
-# per-instance ports, provisioning commands) — see project-config.md and
-# docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so it is INFO either
-# way, never WARN: most projects won't have one, and its only job here is to
-# remind whoever reads this table that the file exists. Unlike local.env it is
-# tracked, so a linked worktree is born with it — resolve it against CfgDir
-# (this checkout's .jst/), not the main checkout.
-$PiPath = Join-Path $CfgDir 'PARALLEL-INSTANCES.md'
-if (Test-Path -LiteralPath $PiPath -PathType Leaf) {
-    Add-Row parallel_instances INFO "$PiPath (present — the assigner relays it with each worktree)"
+# .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
+# tracked hook a project writes to turn a fresh worktree into a *runnable*
+# instance: clone the database, pick per-instance ports, install deps. See
+# project-config.md and docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so
+# it is INFO either way — never WARN or FAIL, because most projects won't have
+# one. This script only REPORTS it: jira-task-executor step 1 is what runs it,
+# which keeps a broken hook visible in that run's transcript instead of
+# swallowed in here, and keeps this script side-effect-free and role-agnostic.
+# Tracked, so a linked worktree is born with it — resolve against CfgDir (this
+# checkout's .jst/), not the main checkout.
+$BootstrapFile = if ($OS -eq 'windows') { 'bootstrap.ps1' } else { 'bootstrap.sh' }
+$BootstrapPath = Join-Path $CfgDir $BootstrapFile
+if (Test-Path -LiteralPath $BootstrapPath -PathType Leaf) {
+    Add-Row bootstrap INFO "$BootstrapPath (present — jira-task-executor runs it in step 1)"
 } else {
-    Add-Row parallel_instances INFO "no .jst/PARALLEL-INSTANCES.md (optional — a project adds one to record what each worktree still needs provisioned before its app runs: cloned database, per-instance ports)"
+    Add-Row bootstrap INFO "no .jst/$BootstrapFile (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 }
 
 $Parent = (& git config "branch.$Br.parentbranch" 2>$null)

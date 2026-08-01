@@ -4,8 +4,9 @@ This repo is a private Claude Code plugin **marketplace** that ships one
 plugin, `jira-sdlc` — three coupled skills (`jira-task-assigner`,
 `jira-task-executor`, `jira-task-reviewer`) that plan a feature into Jira
 issues + git worktrees, implement each piece in parallel, and then
-review the set. Full explanation, architecture diagram, and usage
-walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
+review the set, plus `jst-install`, which sets a project up for them and
+is not part of that lifecycle. Full explanation, architecture diagram, and
+usage walkthrough live in [README.md](plugins/jira-sdlc/README.md) — this file
 is deliberately shorter and only covers what's easy to get wrong.
 
 ## The one rule that matters most
@@ -55,10 +56,24 @@ reasoning, caveats, and how we plan to test them live in
 - **Explain why over stacking MUSTs.** ALL-CAPS ALWAYS/NEVER is a
   yellow flag; one clause of reasoning generalizes better than a bare
   imperative.
-- **Stay under ~500 lines per SKILL.md.** Detail not needed on every
-  run goes to `skills/_shared/*.md` reference files, loaded only when
-  the skill says to — the progressive-disclosure layering these skills
-  already use.
+- **Stay under ~5,000 words per SKILL.md — hard ceiling 6,500.** Run
+  `bash scripts/check-skill-size.sh` rather than counting by hand. Over
+  budget, the fix is progressive disclosure, not deletion: detail not
+  needed on every run moves to `skills/_shared/*.md`, loaded only when
+  the skill says to. Counted in **words, not the ~500 *lines* this rule
+  used to say**, because line count isn't stable under reformatting and
+  so kept failing the wrong files — JST-230's rewrap took
+  `jira-task-reviewer` 415 → 714 lines while its word count moved by
+  *five*, and the long lines it replaced had hidden a real overage for
+  years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
+  width. `jira-task-reviewer` is a recorded exception at ~6,100 — it is
+  the only skill carrying two tracks plus a phase machine, and no
+  realistic trim clears the target — so it reports `WARN (accepted)`.
+  An exception is a number, not a pass: exceed it and the plain WARN
+  comes back, and if the file shrinks the script tells you to ratchet the
+  allowance down. Add one only when the alternative is a warning nobody
+  can act on, since a permanent warning teaches people to ignore the
+  checker — and say why here, not just in `accepted_budget()`.
 
 For any non-trivial skill change (new skill, restructure, description
 rewrite), use the **skill-creator** skill
@@ -93,6 +108,12 @@ each holds a single manifest. Don't merge them into one.
   boundary) silently stops resolving after install. Don't move it up a
   level.
 - Each `SKILL.md`'s `name:` frontmatter should match its folder name.
+- `skills/_shared/templates/jira-sdlc-tools.local.env.example` is a **copy** of
+  the repo-root `.jst/jira-sdlc-tools.local.env.example`, and the two must stay
+  identical — `jst-install` copies the plugin-side one into a new project, and
+  a path climbing to the repo root wouldn't survive either install mode. Edit
+  one, `diff` the other. (`.jst/…` is also this repo's own live config
+  template, which is why the duplication exists rather than a move.)
 
 ## If you rename a skill or the plugin
 
@@ -108,7 +129,9 @@ assuming you're done:
   `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
   (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
   (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
-  override, plus steps 4a/4b/4c and 6), and the healthcheck script's
+  override, plus steps 4a/4b/4c and 6), `jst-install` (its
+  `STATUSCHECK_RERUN` overrides in the *Verification* section and step 4a,
+  plus the hand-off commands in 4c), and the healthcheck script's
   rerun remedies (`skills/_shared/scripts/posix/statuscheck.sh`), which
   currently read `/jira-sdlc:...`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
@@ -126,6 +149,10 @@ Instead:
 # canonical structural validation — checks marketplace.json schema,
 # source path traversal, and each plugin's plugin.json in one pass
 claude plugin validate .
+
+# skill size budget — words, not lines (see "Stay under ~5,000 words" above);
+# exits non-zero only over the hard ceiling
+bash scripts/check-skill-size.sh
 
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
@@ -183,8 +210,8 @@ an error; the semicolon is the one that bites, and the checker will point at it.
 
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
-The five skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`get_assignee_email`, `check_assignee`, `jira`) ship **twice**: the
+The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`get_assignee_email`, `check_assignee`, `jira`, `pr_base`) ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
@@ -200,15 +227,28 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env get_assignee_email check_assignee jira; do
+for s in statuscheck ensure_local_env get_assignee_email check_assignee jira pr_base; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
 done   # add the args each one needs: --role <role> to statuscheck; --role <role>
        # plus an issue key to check_assignee; --role <role> and a subcommand
-       # (e.g. whoami) to jira. All three now REQUIRE --role — auth is
-       # role-scoped, with no default credential.
+       # (e.g. whoami) to jira; --role <role> plus --parent-key <KEY> to
+       # pr_base. All four now REQUIRE --role — auth is role-scoped, with no
+       # default credential.
 ```
+
+`pr_base` is the one whose *result* depends on where you run it — it resolves
+from four sources in order, and a worktree with `parentbranch` set stops at the
+first, so a single diff exercises one branch out of five. Drive the rest from a
+throwaway worktree with no `parentbranch` (`git worktree add … -b probe/<KEY>-x`,
+then run `ensure_local_env` in it or the Jira-comment source can't be reached),
+varying `--parent-key` and the issue key to reach `jira-comment`,
+`branch-search`, `env-default` and `unresolved`. Compare stdout, stderr **and**
+exit code (0 / 1 / 2) on each — the exit code is half this script's contract.
+Cover `--branch <name>` too (both the spaced and `--branch=` forms): it swaps
+the branch every source keys on, so a port that ignored it would still look
+right on every other case.
 
 **Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
 knowing this up front saves chasing a port bug that isn't there:
@@ -216,6 +256,22 @@ knowing this up front saves chasing a port bug that isn't there:
 `gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login
 --with-token` doesn't complete down that path) while the bash side reads OK.
 Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
+Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
+FAIL rows" footer under the table, so drop that block too or the diff shows
+three phantom lines. `gh_repo_access` skips itself when `gh_auth` failed, so it
+inherits the same noise and needs the same filter:
+
+```bash
+filt() { grep -vE '^\| (gh_auth|gh_repo_access)' | sed '/^Remedies for FAIL rows/,$d'; }
+```
+
+**Or drop the filter entirely and exercise the real path** (JST-251): the only
+thing missing on Linux is `cmd`, which `statuscheck.ps1` shells out to for the
+stdin redirect. A three-line `cmd` stand-in on `PATH` — `[ "$1" = "/c" ] &&
+shift; exec bash -c "$*"` — makes the pwsh login succeed, and both ports then
+print byte-identical tables with nothing filtered. Pair it with a fake `gh` on
+`PATH` to drive the branches a live run can't reach (`gh_repo_access`'s 404 and
+non-404 errors, a missing/non-GitHub `origin`).
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
