@@ -20,7 +20,8 @@ to get them. The tables below describe what each variable means; read
 | File | Purpose | Committed? |
 |------|---------|------------|
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
-| `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — listed in `.gitignore` as `.jst/jira-sdlc-tools.local.env` |
+| `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — ignored by `.jst/.gitignore`, which lists it as `jira-sdlc-tools.local.env` |
+| `.jst/.gitignore` | One line, `jira-sdlc-tools.local.env` — keeps the credential file out of git. It lives here rather than in the root `.gitignore` so it travels with any copy of `.jst/`, into a worktree for instance. | **Yes** — checked into the repo |
 | `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` | **Optional.** A script, not variables: turns a fresh worktree into a *runnable* instance. `jira-task-executor` runs it. Absence is normal — see below. | **Yes** — checked into the repo |
 
 Both env files are sourced by tools that need them. Values in

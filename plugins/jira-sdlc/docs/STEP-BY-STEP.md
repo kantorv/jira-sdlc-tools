@@ -250,3 +250,21 @@ pwsh -File statuscheck.ps1 --role executor        # PowerShell 7+
 powershell -File statuscheck.ps1 --role executor  # PowerShell 5.1
 ```
 
+### What's still uncommitted — and the first task
+
+A green healthcheck doesn't mean the config is in git. The whole `.jst/` folder
+is still untracked — `jira-sdlc-tools.env` (Section 3.3, team-shared and meant
+to be committed) and the `.gitignore` beside it. Leave it and the first worktree
+`jira-task-assigner` cuts is born without `.jst/` at all, so the first executor
+run fails statuscheck's `env_config` row there. Copy the folder **whole** when
+you populate that worktree: the `.gitignore` inside it is what keeps
+`jira-sdlc-tools.local.env` and its four credentials out of the commit, and
+staging `.jst/` explicitly beats `git add -A` either way.
+
+Commit it by hand, or — recommended — make it this project's first task, so the
+fix doubles as an end-to-end smoke test of all three skills.
+[`/jira-sdlc:jst-install`](../skills/jst-install/SKILL.md) §4d closes with a
+ready-to-paste prompt for that: the assigner creates a retroactive
+**JIRA-SDLC-TOOLS setup** issue and copies `.jst/` into its worktree, the
+executor commits and pushes it, and the reviewer confirms the settings work.
+

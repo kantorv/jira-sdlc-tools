@@ -355,7 +355,7 @@ mkdir -p .jst
 cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.env .jst/
 cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.local.env.example .jst/jira-sdlc-tools.local.env
 # then fill in .jst/jira-sdlc-tools.local.env with your machine-specific values
-echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
+echo 'jira-sdlc-tools.local.env' >> .jst/.gitignore   # inside .jst/, so it travels with the folder
 ```
 
 Nothing else under `skills/` should need editing. It covers:
