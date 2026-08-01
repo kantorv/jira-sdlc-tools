@@ -44,7 +44,7 @@ Nothing is merged. The run ends with an open, reviewed PR into
 
 ```mermaid
 flowchart TB
-    C([issue comment<br>/make-hotfix — optionally plus prose]) --> GA{{"guard — body is /make-hotfix, bare or plus a separator<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    C([issue comment<br>/make-hotfix — optionally plus prose]) --> GA{{"guard — body is /make-hotfix, bare or plus a separator<br>author_association OWNER<br>not a PR comment"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira Bug + hotfix branch<br>cut from origin/PRODUCTION_BRANCH"]
@@ -75,7 +75,7 @@ the security boundary of this workflow, and it requires all three of:
 | Condition | Why it's there |
 | :--- | :--- |
 | body is `/make-hotfix`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-hotfix` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-hotfix')`, would also fire on `/make-hotfix-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
-| `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "the environment approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
+| `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-hotfix` on a pull request would hand the assigner a PR description as a bug report |
 
 Jobs 2 and 3 declare `needs`, and a skipped dependency skips its dependents, so
@@ -127,6 +127,8 @@ environment: production
 ```
 
 and the `production` environment in this repo has GitHub's **Required
+reviewers** rule checked. See [APPLICATIONS.md §3.1–3.2](../APPLICATIONS.md)
+for the full two-gate convention. The `production` environment in this repo has GitHub's **Required
 reviewers** protection rule checked. Environment protection is evaluated
 **before each job starts**, so one `/make-hotfix` comment pauses three times:
 
@@ -403,7 +405,7 @@ there either way.
    describe it to `/jira-sdlc:jira-task-assigner` interactively — phrased as
    the emergency it simulates, since the workflow's prompt wraps it in the
    explicit hotfix directive the assigner's step 5C requires.
-4. Comment `/make-hotfix` on it, as an OWNER or MEMBER — bare, or followed by
+4. Comment `/make-hotfix` on it, as an OWNER — bare, or followed by
    a space or newline and any direction you want to give *this* run (see
    *Steering one run from the comment*).
 5. Approve each of the three pauses as it arrives, inspecting the Jira
