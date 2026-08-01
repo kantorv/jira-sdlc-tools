@@ -148,7 +148,7 @@ without it halts rather than running half-configured.
 
 | Token | What it is | Example |
 |---|---|---|
-| `<WORKTREES_DIR>` | Path to the sibling directory where per-issue worktrees are created, relative to the repo root. Must already exist — `jira-task-assigner` will not create it. | `../myapp-worktrees` |
+| `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. | `/home/you/src/myapp-worktrees` |
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it constructs issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
 
 The three **role credential pairs** are required too — they're the whole of the
@@ -266,7 +266,7 @@ STATUS_DONE           = Done
 
 **`.jst/jira-sdlc-tools.local.env` (gitignored):**
 ```
-WORKTREES_DIR         = ../myapp-worktrees
+WORKTREES_DIR         = /home/you/src/myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 # All three role pairs are required — one email + one token each, no default:
 JIRA_ASSIGNER_EMAIL   = assigner@example.com

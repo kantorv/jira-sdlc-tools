@@ -18,8 +18,10 @@ project. Given a task description from the user ($ARGUMENTS):
   a single-key read, never a whole-file one: see
   `../_shared/project-config.md` § *Reading config safely* for the safe
   form and the redaction trap that doesn't work.
-- `<WORKTREES_DIR>` — where per-issue worktrees are created
-  (`../_shared/project-config.md`); step 1's `worktrees_dir` row judges it.
+- `<WORKTREES_DIR>` — where per-issue worktrees are created, always an
+  absolute path (`../_shared/project-config.md`), so it means the same
+  directory here and in the worktree the executor later runs from; step 1's
+  `worktrees_dir` row judges it.
 - `<slug>` = short kebab-case summary of the issue title, same style as
   existing branches in this repo.
 - A **leaf** is an issue that gets its own branch, worktree and PR — the
@@ -102,7 +104,7 @@ long-lived branch, the opposite reading from the executor/reviewer:
 |---|---|
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
 | `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither — the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither*; match it against the `production_branch` row yourself. **Step 2 owns which readings this skill can run from** and resolves all of them, so carry the value there rather than gating on it here |
-| `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
+| `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
 Three other rows carry an assigner-specific reading: `gh_auth` is green for the
 *executor's* benefit (this skill opens no PRs); `jira_account_url` is where
@@ -114,8 +116,8 @@ because no issue exists yet; the rest print their own remedy on FAIL.
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
-env values, add missing files silently). The three rows above never FAIL;
-judge them yourself per the table.
+env values, add missing files silently). `worktree` and `branch` never FAIL —
+judge those two yourself per the table.
 
 With no FAIL row and the three role-specific rows reading as above, state what
 those rows read — `worktree`, `branch`, `worktrees_dir` — before your first

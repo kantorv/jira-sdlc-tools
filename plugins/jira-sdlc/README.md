@@ -228,7 +228,8 @@ relying on opaque GitHub-for-Jira transition rules:
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
 - **A worktrees directory that already exists**, as a sibling of your
-  repo — the assigner refuses to create it for you.
+  repo — the assigner refuses to create it for you. `WORKTREES_DIR` must
+  name it with an **absolute** path.
 
 ## Installation
 
@@ -418,7 +419,7 @@ same as a Jira comment on `PROJ-401`.
 
 In three terminals (or three subagents, one per worktree):
 ```
-cd ../myapp-worktrees/worktree-PROJ-402 && claude
+cd /home/you/src/myapp-worktrees/worktree-PROJ-402 && claude
 > /jira-sdlc:jira-task-executor
 ```
 No key argument — it's derived from that worktree's own branch

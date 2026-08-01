@@ -158,8 +158,10 @@ both install modes.
 **1c. Hand the file over.** Tell the user to open
 `.jst/jira-sdlc-tools.local.env` in their editor and fill in, by hand:
 
-- `WORKTREES_DIR` — a sibling directory of this repo, e.g. `../myapp-worktrees`
-  (section 2 creates it)
+- `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`
+  (a sibling of this repo is the sensible place; section 2 creates it). A
+  relative value means a different directory depending on which checkout a
+  skill runs from, so the gate FAILs on one
 - `JIRA_ACCOUNT_URL` — their Cloud site, `your-site.atlassian.net`, no scheme
 - `GITHUB_PAT_TOKEN` — a fine-grained PAT with **Contents: read/write** and
   **Pull requests: read/write** on this repo. Where to click:
@@ -231,10 +233,13 @@ through a reviewed PR, which is the flow the skills already produce — but don'
 do it for them.
 
 **2c. Create the worktrees directory** the user pointed `WORKTREES_DIR` at in
-1c — a sibling of this repo, e.g. `mkdir -p ../myapp-worktrees`. You don't know
-the path they typed, and this is the moment the forbidden file looks most
-tempting: don't open it, read the path off the `worktrees_dir` row of the gate
-you already ran in 1d, which prints it resolved for exactly this reason. The
+1c — `mkdir -p` the absolute path they gave (a sibling of this repo is the
+usual choice). You don't know the path they typed, and this is the moment the
+forbidden file looks most tempting: don't open it, read the path off the
+`worktrees_dir` row of the gate you already ran in 1d. If that row FAILed on a
+relative value, its remedy line carries the absolute form — relay it and have
+them fix the file before creating anything, since the relative path would
+create the directory in the wrong place. The
 directory must exist before the assigner runs — it refuses to create one, so a
 missing directory is a first-run failure rather than a self-repair.
 
@@ -429,7 +434,8 @@ done
 
 **4b. Read the result.** Every row should be OK or INFO. The install-irrelevant
 rows named in the row map stay INFO, and `worktrees_dir` may WARN if the user
-skipped 2c. For anything still FAILing, relay the script's own remedy line
+skipped 2c — it FAILs, though, if they wrote a relative `WORKTREES_DIR`, and
+that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
 rather than improvising — and name the two things the script structurally
 cannot see: whether the workflow permits the transitions the skills make (3b
 proved the names exist; 3d is the only proof of the transitions), and whether
