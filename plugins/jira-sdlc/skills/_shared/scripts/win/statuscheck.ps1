@@ -453,23 +453,30 @@ Add-Row production_branch INFO "PRODUCTION_BRANCH=$(if ($ProductionBranch) { $Pr
 $JiraAccountUrl = Get-Cfg 'JIRA_ACCOUNT_URL'
 Add-Row jira_account_url INFO "JIRA_ACCOUNT_URL=$(if ($JiraAccountUrl) { $JiraAccountUrl } else { 'unset' }) (browse links: https://<JIRA_ACCOUNT_URL>/browse/<KEY>)"
 
+# WORKTREES_DIR must be ABSOLUTE — see the posix twin for why a relative
+# value FAILs here rather than being resolved against a per-checkout base.
 $WorktreesDir = Get-Cfg 'WORKTREES_DIR'
 if (-not $WorktreesDir) {
     Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
-} else {
-    $wdBase = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
-    if ($IsWt) {
-        $wdGitdir = (Get-Content -LiteralPath (Join-Path $WtRoot '.git') |
-            Where-Object { $_ -match '^gitdir:\s*(.*)$' } |
-            ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
-        if ($wdGitdir) { $wdBase = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $wdGitdir)) }
-    }
-    $wdPath = if ([System.IO.Path]::IsPathRooted($WorktreesDir)) { $WorktreesDir } else { Join-Path $wdBase $WorktreesDir }
-    if (Test-Path -LiteralPath $wdPath -PathType Container) {
-        Add-Row worktrees_dir INFO "$wdPath (present)"
+} elseif ([System.IO.Path]::IsPathRooted($WorktreesDir)) {
+    if (Test-Path -LiteralPath $WorktreesDir -PathType Container) {
+        Add-Row worktrees_dir INFO "$WorktreesDir (present)"
     } else {
-        Add-Row worktrees_dir WARN "$wdPath missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.env if the convention changed"
+        Add-Row worktrees_dir WARN "$WorktreesDir missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
     }
+} else {
+    # Resolved from *here* for the remedy only, and only when it really names
+    # a directory: a hint resolved against the wrong base is worse than none.
+    $wdAbs = $null
+    $wdRp = Resolve-Path -LiteralPath $WorktreesDir -ErrorAction SilentlyContinue
+    if ($wdRp -and (Test-Path -LiteralPath $wdRp.Path -PathType Container)) { $wdAbs = $wdRp.Path }
+    $wdFix = if ($wdAbs) {
+        "set WORKTREES_DIR=$wdAbs in .jst/jira-sdlc-tools.local.env"
+    } else {
+        'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. /home/you/src/myapp-worktrees)'
+    }
+    Add-Row worktrees_dir FAIL "WORKTREES_DIR=$WorktreesDir is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" `
+        "$wdFix, then $Rerun."
 }
 
 # .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
