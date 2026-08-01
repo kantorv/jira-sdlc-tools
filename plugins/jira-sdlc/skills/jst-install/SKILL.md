@@ -449,6 +449,41 @@ the two branch names in the env file are the branches the user actually meant.
 /jira-sdlc:jira-task-reviewer                         # from the parent issue's worktree
 ```
 
+**4d. Name what's still uncommitted — and offer it as the first task.** Two
+changes are sitting untracked in the working tree: `.jst/jira-sdlc-tools.env`
+(2d and 3c wrote it — team-shared, meant to be committed) and the `.gitignore`
+line 1b appended. This skill leaves both on purpose; they're the payload of the
+first task below. Say so, because the consequence isn't one the user will
+predict — **a worktree cut from `<DEFAULT_BASE_BRANCH>` is born without `.jst/`
+at all**, so the first executor run FAILs statuscheck's `env_config` row there.
+`ensure_local_env.sh` doesn't rescue it: it carries only the gitignored
+`.jst/jira-sdlc-tools.local.env` over from the main checkout, and the tracked
+file is git's job — git simply has nothing to carry yet.
+
+Recommend committing them *as* this project's first real task, so the fix and
+an end-to-end test of all three skills are the same run; committing the two
+files by hand instead is a fine alternative, and setup is complete either way.
+For the first-task route, hand them this to paste into a **new** Claude
+session, run from the project root on `<DEFAULT_BASE_BRANCH>`:
+
+```
+/jira-sdlc:jira-task-assigner "JIRA-SDLC-TOOLS setup — a retroactive first
+task, and this repo's first run of these skills. The plugin's config is
+written but uncommitted: .jst/jira-sdlc-tools.env and the .gitignore line that
+ignores .jst/jira-sdlc-tools.local.env. Create the issue, branch and worktree
+as usual, then copy both of those changes into the worktree — the executor's
+job is only to commit and push them, and the reviewer's is to confirm the
+settings work. That worktree does not inherit the .gitignore change, so stage
+those two paths explicitly and never 'git add -A';
+.jst/jira-sdlc-tools.local.env holds four live credentials and must never be
+committed. Treat this run as the smoke test that all three skills interact
+correctly."
+```
+
+The credential clause in that prompt is load-bearing, not boilerplate: until
+1b's `.gitignore` line is committed, `local.env` is an ordinary untracked file
+in that worktree, and one `git add -A` stages three Jira role tokens and the
+GitHub PAT.
 
 Reference: `../../docs/STEP-BY-STEP.md` (the prose walkthrough this skill
 follows), `../../docs/FULL-SETUP-CHECKLIST.md` (the same ground as a tickable
