@@ -94,8 +94,15 @@ You only create the first two by hand. The skills create `feature/` and
 
 ### 2.2 Split production from base
 
-Gitflow needs two long-lived branches. If your repo only has `main`, create
-the base branch off it once:
+Gitflow needs two **distinct** long-lived branches, and a single-branch repo
+isn't a supported configuration: point `DEFAULT_BASE_BRANCH` and
+`PRODUCTION_BRANCH` at the same branch and every feature PR targets production,
+the assigner's hotfix path becomes indistinguishable from its planned one, and
+the release workflows lose the branch name they key the version off ([SDLC.md
+§5](SDLC.md)). The healthcheck's `branch_pair` row FAILs on it. The names are
+yours — `master`/`develop` or anything else works — but there have to be two.
+
+If your repo only has `main`, create the base branch off it once:
 
 ```bash
 git switch main

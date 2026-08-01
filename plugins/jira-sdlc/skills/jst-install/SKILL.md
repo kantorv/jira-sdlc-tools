@@ -21,7 +21,8 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 - Run from the **project root of the repo the user will build features in** —
   not a clone of this toolkit itself, which is the easy mistake: the skills read
   config from *your project's* root. If `git remote get-url origin` names
-  `jira-sdlc-tools`, you're in the toolkit clone — stop and ask.
+  `jira-sdlc-tools`, you're in the toolkit clone — stop and ask. If that command
+  *errors* instead, there is no origin at all: that's 1a's gate, not this one.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root; every script path below hangs
   off it. If it isn't set — reading this skill on a non-Claude client — resolve
   it against the platform's skills folder, keeping `../_shared/scripts/posix/`
@@ -86,8 +87,8 @@ purpose, and saying so keeps the user from chasing them:
 
 | section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
 |---|---|---|
-| 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `jira_*` |
-| 2 · GitHub | `gh_auth`, `git_repo`, `base_branch`, `worktrees_dir` | `jira_auth`, `jira_project` |
+| 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
+| 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir` | `jira_auth`, `jira_project` |
 | 3 · Jira | `env_config`, `jira_auth`, `jira_project` | — |
 | 4 · healthcheck | every row, for all three roles | — |
 
@@ -100,7 +101,7 @@ exactly right for this skill.
 
 ## Section 1 · Local tooling and the `.jst/` scaffold
 
-**1a. Check the CLIs.** `git` and `gh` on every platform; `jq` additionally on
+**1a. Check the CLIs *and the repository*.** `git` and `gh` on every platform; `jq` additionally on
 Linux/macOS (the bash scripts can't parse JSON without it), `python3`
 recommended. Windows needs `pwsh` 7+ or `powershell` 5.1 instead — its ports
 parse JSON natively, so `jq` isn't needed there. There is nothing to install
@@ -116,6 +117,21 @@ git --version; gh --version; $PSVersionTable.PSVersion
 them, so scan for the one that errored. Report what's missing with its install
 URL (`../../docs/FULL-SETUP-CHECKLIST.md` § *Your PC* has them) and stop until
 the user has it — the later sections all shell out to these.
+
+Then check the prerequisite this skill **cannot create for them** — a git repo
+with a GitHub remote attached:
+
+```bash
+git rev-parse --show-toplevel && git remote get-url origin
+```
+
+Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir
+-p .jst`, the `.gitignore` append and the template copy all succeed happily in
+whatever directory the user is standing in, and they'd only find out at 1d —
+with a stray half-scaffold left behind. Say plainly what's missing: a GitHub
+repository, created and then cloned (or `git init` plus
+`git remote add origin git@github.com:<OWNER>/<REPO>.git`). This skill wires an
+existing repo and an existing Jira board together; it makes neither.
 
 **1b. Create the scaffold.** From the project root:
 
@@ -172,19 +188,31 @@ sections are the real verification.
 ## Section 2 · GitHub repository preparation
 
 The skills assume Gitflow (`../../docs/SDLC.md`): they never invent branch
-names, they follow the policy. Two long-lived branches are yours to create —
-`PRODUCTION_BRANCH` (releases land here, default `main`) and
+names, they follow the policy. Two **distinct** long-lived branches are yours to
+create — `PRODUCTION_BRANCH` (releases land here, default `main`) and
 `DEFAULT_BASE_BRANCH` (feature work branches from and merges back into it,
 default `development`). The skills create `feature/<KEY>-<slug>` and
 `hotfix/<KEY>-<slug>` themselves, one per issue.
+
+**A single-branch repo is not a configuration this plugin supports**, so never
+offer one: collapse the pair and the assigner's planned path and its hotfix path
+(step 5C) resolve to the same branch — every feature PR targets production, and
+the emergency route stops being distinguishable from ordinary work — while the
+release workflows, which key the version off `release/sprint-<X.Y.Z>` and
+`hotfix/*` branch names (`../../docs/SDLC.md` §5), have nothing left to key on.
+When a repo has only `main`, the open question is what the *second* branch is
+called, never whether to have one. Ask-don't-assume still holds for the names —
+`development` is the documented default, `develop`/`staging`/anything else is
+fine — but the choice on offer is two names, never one.
 
 **2a. Find out what exists** — `git branch -a` plus
 `git remote get-url origin`. The base branch is the one people are missing: a
 repo with only `main` gives the assigner nowhere to branch from.
 
-**2b. Create the base branch if it's absent.** Ask first — this pushes a new
-branch and changes the repo default, which is outward-facing and other people
-see it:
+**2b. Create the base branch if it's absent** — not optional, per the rule
+above; only its name is the user's call. Ask first anyway, because this pushes a
+new branch and changes the repo default, which is outward-facing and other
+people see it:
 
 ```bash
 git switch main && git switch -c development && git push -u origin development
@@ -193,7 +221,10 @@ gh repo edit <OWNER>/<REPO> --default-branch development
 
 Substitute the two names the user confirmed — `main`/`development` are this
 plugin's documented defaults, not a naming rule, and a repo using `master` or
-`develop` keeps its own names in the env file.
+`develop` keeps its own names in the env file. A `404` from `gh repo edit` is
+almost never a wrong repo name: it's the PAT that can't see this repository,
+the same cause `gh_repo_access` names in 2e — fix the token's repository
+access rather than retyping `<OWNER>/<REPO>`.
 
 Mention that protecting both branches is recommended — everything reaches them
 through a reviewed PR, which is the flow the skills already produce — but don't
@@ -216,10 +247,18 @@ DEFAULT_BASE_BRANCH=development
 PRODUCTION_BRANCH=main
 ```
 
-**2e. Gate.** Run the gate. `gh_auth` is the real test of the PAT from 1c —
-the script logs `gh` out and back in with it, so a FAIL here means the token,
-not the CLI. `base_branch` should now read what 2d wrote, and `worktrees_dir` the
-directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
+**2e. Gate.** Run the gate. Two rows cover the PAT from 1c and they prove
+different things: `gh_auth` only proves a **login** succeeded, while
+`gh_repo_access` calls `gh api repos/<OWNER>/<REPO>` and is the one that proves
+the PAT can do the executor's job. A fine-grained token scoped to *selected
+repositories* logs in green, reads the org, and still 404s on this repo — 404,
+not 403, so it reads like a typo — and with an SSH `origin` nothing breaks until
+`gh pr create` fails mid-task. On a FAIL there, relay the row's remedy: add the
+repo at github.com/settings/personal-access-tokens, keeping Contents and Pull
+requests at read/write, and expect org-owned repos to need admin approval.
+`base_branch`/`production_branch` should now read what 2d wrote, with
+`branch_pair` OK — it FAILs if those two names are equal — and `worktrees_dir`
+the directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
 
 ---
 

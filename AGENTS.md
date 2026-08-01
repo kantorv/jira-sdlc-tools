@@ -258,11 +258,20 @@ knowing this up front saves chasing a port bug that isn't there:
 Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
 Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
 FAIL rows" footer under the table, so drop that block too or the diff shows
-three phantom lines:
+three phantom lines. `gh_repo_access` skips itself when `gh_auth` failed, so it
+inherits the same noise and needs the same filter:
 
 ```bash
-filt() { grep -v '^| gh_auth' | sed '/^Remedies for FAIL rows/,$d'; }
+filt() { grep -vE '^\| (gh_auth|gh_repo_access)' | sed '/^Remedies for FAIL rows/,$d'; }
 ```
+
+**Or drop the filter entirely and exercise the real path** (JST-251): the only
+thing missing on Linux is `cmd`, which `statuscheck.ps1` shells out to for the
+stdin redirect. A three-line `cmd` stand-in on `PATH` — `[ "$1" = "/c" ] &&
+shift; exec bash -c "$*"` — makes the pwsh login succeed, and both ports then
+print byte-identical tables with nothing filtered. Pair it with a fake `gh` on
+`PATH` to drive the branches a live run can't reach (`gh_repo_access`'s 404 and
+non-404 errors, a missing/non-GitHub `origin`).
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
