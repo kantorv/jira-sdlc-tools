@@ -162,7 +162,15 @@ try {
     # 16. raw escape hatch ----------------------------------------------------
     Eq 'raw GET /myself returns identity' (Json (J whoami)).accountId (Json (J raw GET /myself)).accountId
 
-    # 17/18/19. delete sub, delete parent, confirm gone ----------------------
+    # 17. attach a file -------------------------------------------------------
+    $attachFile = Join-Path $TMP 'attach-test.txt'
+    [IO.File]::WriteAllText($attachFile, "test attachment content`n")
+    J issue attach $PARENT $attachFile | Out-Null; $r = $script:RC; Rc 'attach file -> 0' 0 $r
+    $atts = Json (J issue view $PARENT --fields attachment)
+    $attName = if ($atts.fields.attachment -and $atts.fields.attachment.Count -gt 0) { [string]$atts.fields.attachment[0].filename } else { '' }
+    Eq 'attached file listed' 'attach-test.txt' $attName
+
+    # 18/19/20. delete sub, delete parent, confirm gone ----------------------
     J issue delete $SUB | Out-Null; $r = $script:RC; Rc 'delete sub-task -> 0' 0 $r
     if ($r -eq 0) { $script:CREATED = @($PARENT) }          # sub gone; leave only parent
     J issue delete $PARENT | Out-Null; $r = $script:RC; Rc 'delete parent -> 0' 0 $r
