@@ -5,6 +5,11 @@
 Detailed setup lives in [INSTALLATION.md](INSTALLATION.md) — this page is the
 short, ordered version.
 
+Would rather be walked through it? `/jira-sdlc:jst-install`
+([`SKILL.md`](../skills/jst-install/SKILL.md)) follows these same four
+sections, in this order, and verifies each one with the Section 4 healthcheck
+before moving to the next.
+
 ## Section 1. Preparing environment
 
 1. **Install the required tools** — `git` and `gh`. There is nothing to
