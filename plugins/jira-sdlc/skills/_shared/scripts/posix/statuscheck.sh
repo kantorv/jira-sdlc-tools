@@ -146,7 +146,12 @@ fi
 # role. Check it before the local.env gate below: that gate copies a file
 # *into* .jst/, and without this row a missing folder would surface as a
 # confusing "can't copy local.env" instead of the real cause.
-if [ -n "$WT_ROOT" ]; then
+if [ -z "$WT_ROOT" ]; then
+  # No repo root to look under, so this gate can't run at all. Say that in a
+  # row rather than printing nothing: the row map in jst-install lists jst_dir
+  # as a section-1 row, and a silently absent row reads like a passing one.
+  row jst_dir INFO "skipped — not inside a git repository, so there is no repo root to hold .jst/ (see git_repo)"
+else
   if [ -d "$WT_ROOT/.jst" ]; then
     row jst_dir OK "$WT_ROOT/.jst"
   else
@@ -190,8 +195,10 @@ fi
 # --- git repo / worktree -------------------------------------------------
 # WT_ROOT and IS_WORKTREE were set by the mandatory-file gate above.
 if [ -z "$WT_ROOT" ]; then
+  # Caller-neutral remedy on purpose: all four skills print this row, and a
+  # sentence about one role's worktree is wrong for the other three (JST-251).
   row git_repo FAIL "not inside a git repository (cwd: $PWD)" \
-    "cd into the per-issue worktree jira-task-assigner created (worktree-${KEY:-<KEY>}) and $RERUN."
+    "cd into the project checkout these skills are configured for — its main checkout, or the issue's own worktree when you're running an issue — and $RERUN. If the project has no repository yet, create or clone one (with its GitHub 'origin' remote) first: the skills wire an existing repo up, they don't create it."
 else
   row git_repo OK "root: $WT_ROOT"
   # Context only — the caller decides if this is the right place for its
@@ -391,6 +398,7 @@ fi
 # Accepted tradeoff: this writes ~/.config/gh/hosts.yml, global to the OS user,
 # so it overwrites the developer's own gh session and is not restored afterward —
 # see plugins/jira-sdlc/docs/github/ (JST-126/145).
+GH_OK=""
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
     "install it (https://cli.github.com), then $RERUN."
@@ -415,6 +423,7 @@ else
     if LOGIN_ERR=$(printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token 2>&1 >/dev/null); then
       GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
       if [ -n "$GH_LINE" ]; then
+        GH_OK=1
         row gh_auth OK "$GH_LINE (PAT session login)"
       else
         row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" \
@@ -428,6 +437,47 @@ else
         "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $RERUN."
     fi
   fi
+fi
+
+# --- gh repo access (needed by 'gh pr create', not proved by gh_auth) ------
+# gh_auth proves a LOGIN succeeded and nothing more. A fine-grained PAT scoped
+# to "only selected repositories" logs in happily, reads the org and 20 other
+# repos, and still cannot see this one — GitHub answers 404, not 403, so it
+# looks like a typo rather than a permission (JST-251). With an SSH origin every
+# git operation keeps working, and the first thing to break is `gh pr create`
+# in the executor, mid-task, after the work is committed. So probe the actual
+# repository here. `gh api repos/<OWNER>/<REPO>` is REST; `gh repo view` goes
+# through GraphQL and fails with a different, less legible error.
+# Role-agnostic like the rest: gh uses one shared PAT, not a per-role identity.
+gh_slug() { # gh_slug <remote-url> -> OWNER/REPO ; non-zero when not github.com
+  local u="$1" s
+  case "$u" in *github.com*) ;; *) return 1 ;; esac
+  s=${u#*github.com}          # ":OWNER/REPO.git" (SSH) or "/OWNER/REPO.git" (HTTPS)
+  s=${s#:}; s=${s#/}; s=${s%/}; s=${s%.git}
+  printf '%s' "$s" | grep -qE '^[^/]+/[^/]+$' || return 1
+  printf '%s' "$s"
+}
+if [ -z "$WT_ROOT" ]; then
+  row gh_repo_access WARN "skipped (not in a git repository, so there is no origin to probe — see git_repo)"
+elif ! ORIGIN_URL=$(git -C "$WT_ROOT" remote get-url origin 2>/dev/null) || [ -z "$ORIGIN_URL" ]; then
+  row gh_repo_access FAIL "this repository has no 'origin' remote — the skills push issue branches to it and open PRs against it" \
+    "create the GitHub repository (or find the existing one) and attach it: git remote add origin git@github.com:<OWNER>/<REPO>.git — the skills don't create repositories — then $RERUN."
+elif [ -z "$GH_OK" ]; then
+  row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a logged-in gh; see rows above)"
+elif ! GH_SLUG=$(gh_slug "$ORIGIN_URL"); then
+  row gh_repo_access WARN "origin is not a github.com remote ($ORIGIN_URL) — can't probe it with gh, and 'gh pr create' won't work against it"
+elif GH_API_ERR=$($TMOUT_CMD gh api "repos/$GH_SLUG" 2>&1 >/dev/null); then
+  row gh_repo_access OK "$GH_SLUG reachable with this PAT (GET /repos/$GH_SLUG)"
+else
+  case "$GH_API_ERR" in
+    *404*|*"Not Found"*|*"Could not resolve"*)
+      row gh_repo_access FAIL "the PAT authenticates but 404s on $GH_SLUG — usually the fine-grained token's 'only selected repositories' list doesn't include this one (GitHub answers 404, not 403, for a repo a token can't see); a renamed or deleted repository looks identical from here" \
+        "add $GH_SLUG to GITHUB_PAT_TOKEN's repository access at https://github.com/settings/personal-access-tokens (keep Contents: read/write and Pull requests: read/write) — an org-owned repo may also need an org admin to approve the token — or fix the origin URL if the repository really moved. Then $RERUN." ;;
+    *)
+      ERR=$(printf '%s' "$GH_API_ERR" | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
+      row gh_repo_access FAIL "GET /repos/$GH_SLUG failed: ${ERR:-(no error output from gh)}" \
+        "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $RERUN." ;;
+  esac
 fi
 
 # --- Jira auth (needed by every 'jira.sh …' call) -------------------------
@@ -467,6 +517,23 @@ fi
 # --- context rows (never block) -------------------------------------------
 row base_branch INFO "DEFAULT_BASE_BRANCH=${BASE_BRANCH:-unset}"
 row production_branch INFO "PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-unset}"
+
+# Gitflow needs the two long-lived branches to be DIFFERENT branches. Its own
+# row rather than a FAIL state on the pair above, so those two keep printing the
+# plain values several skills quote verbatim. FAIL, not WARN: a collapsed pair is
+# invalid config, not a judgement call — with one branch every feature PR targets
+# production, the assigner's hotfix path (step 5C) resolves to the same branch as
+# its planned path, and the release workflows have no branch name left to key the
+# version off (docs/SDLC.md §5). Unset is not "equal to unset": mid-install both
+# read unset until jst-install writes the file, and that is not a config error.
+if [ -z "$BASE_BRANCH" ] || [ -z "$PRODUCTION_BRANCH" ]; then
+  row branch_pair INFO "skipped (DEFAULT_BASE_BRANCH or PRODUCTION_BRANCH unset — see the two rows above)"
+elif [ "$BASE_BRANCH" = "$PRODUCTION_BRANCH" ]; then
+  row branch_pair FAIL "DEFAULT_BASE_BRANCH and PRODUCTION_BRANCH are both '$BASE_BRANCH' — Gitflow needs two distinct long-lived branches, and a single-branch repo isn't a supported configuration" \
+    "point DEFAULT_BASE_BRANCH and PRODUCTION_BRANCH at two different branches in .jst/jira-sdlc-tools.env (the documented pair is development / main — any two names work, but create the second branch first), then $RERUN."
+else
+  row branch_pair OK "$BASE_BRANCH (base) and $PRODUCTION_BRANCH (production) are distinct"
+fi
 
 # The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
 # It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
