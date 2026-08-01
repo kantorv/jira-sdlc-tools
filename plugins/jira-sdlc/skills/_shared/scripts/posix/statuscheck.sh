@@ -547,28 +547,33 @@ row jira_account_url INFO "JIRA_ACCOUNT_URL=${JIRA_ACCOUNT_URL:-unset} (browse l
 
 # WORKTREES_DIR is where the assigner creates per-issue worktrees. Context
 # for every role (only the assigner acts on it, in prose — it stops on a
-# WARN rather than mkdir-ing); a relative value is relative to the MAIN
-# checkout root (see project-config.md), not to a linked worktree that may
-# itself live inside that directory.
+# WARN rather than mkdir-ing). The value MUST be absolute, so a relative one
+# FAILs here instead of being resolved into agreement: it means a different
+# directory depending on which checkout a skill runs from (the main one for
+# the assigner, a linked worktree for the executor and reviewer), and the
+# assigner writes it verbatim into each leaf's Jira "Worktree: …" comment,
+# which the executor then reads from inside a worktree. The remedy prints
+# the value resolved from *here* so the fix is a paste — but only when that
+# actually names a directory, since a hint resolved against the wrong base
+# would be worse than none.
 WORKTREES_DIR=$(cfg WORKTREES_DIR || true)
-if [ -z "$WORKTREES_DIR" ]; then
-  row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
-else
-  WD_BASE="${WT_ROOT:-$PWD}"
-  if [ -n "$IS_WORKTREE" ]; then
-    WD_GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
-    [ -n "$WD_GITDIR" ] && WD_BASE=$(dirname "$(dirname "$(dirname "$WD_GITDIR")")")
-  fi
-  case "$WORKTREES_DIR" in
-    /*) WD_PATH="$WORKTREES_DIR" ;;
-    *)  WD_PATH="$WD_BASE/$WORKTREES_DIR" ;;
-  esac
-  if [ -d "$WD_PATH" ]; then
-    row worktrees_dir INFO "$WD_PATH (present)"
-  else
-    row worktrees_dir WARN "$WD_PATH missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.env if the convention changed"
-  fi
-fi
+case "$WORKTREES_DIR" in
+  "")
+    row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
+    ;;
+  /*)
+    if [ -d "$WORKTREES_DIR" ]; then
+      row worktrees_dir INFO "$WORKTREES_DIR (present)"
+    else
+      row worktrees_dir WARN "$WORKTREES_DIR missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
+    fi
+    ;;
+  *)
+    WD_ABS=$(CDPATH= cd -- "$WORKTREES_DIR" 2>/dev/null && pwd)
+    row worktrees_dir FAIL "WORKTREES_DIR=$WORKTREES_DIR is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" \
+      "$(if [ -n "$WD_ABS" ]; then printf 'set WORKTREES_DIR=%s in .jst/jira-sdlc-tools.local.env' "$WD_ABS"; else printf 'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. /home/you/src/myapp-worktrees)'; fi), then $RERUN."
+    ;;
+esac
 
 # .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
 # tracked hook a project writes to turn a fresh worktree into a *runnable*

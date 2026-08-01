@@ -65,7 +65,7 @@ running a second copy is close to free. There's no shared-state problem
 to solve, only a port to move:
 
 ```bash
-cd ../myapp-worktrees/worktree-PROJ-403
+cd /home/you/src/myapp-worktrees/worktree-PROJ-403
 npm install          # each worktree has its own node_modules
 npm run dev -- --port 5175   # first copy is on 5174, this one on 5175
 ```
