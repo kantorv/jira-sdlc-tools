@@ -11,10 +11,17 @@ sections, same order — with a verification gate between each, which is the
 whole point: the prose docs let someone work the whole list and only discover at
 the first real run that the board has no `In Review` column.
 
+Re-running this later — after a token rotation, a branch rename, a half-finished
+first attempt — is normal and safe. Finding `.jst/` already populated means
+confirm what's there and move on, not start over: every write below is
+create-if-missing or an overwrite of a value the user just confirmed, and
+`.jst/jira-sdlc-tools.local.env` is never touched once it exists.
+
 **Conventions used below:**
 - Run from the **project root of the repo the user will build features in** —
-  not a clone of this toolkit (the skills read config from *your project's*
-  root). Confirm which repo you're in before writing anything.
+  not a clone of this toolkit itself, which is the easy mistake: the skills read
+  config from *your project's* root. If `git remote get-url origin` names
+  `jira-sdlc-tools`, you're in the toolkit clone — stop and ask.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root; every script path below hangs
   off it. If it isn't set — reading this skill on a non-Claude client — resolve
   it against the platform's skills folder, keeping `../_shared/scripts/posix/`
@@ -27,11 +34,10 @@ the first real run that the board has no `In Review` column.
 - **`<TOKEN>`s** (`<PROJECT-KEY>`, `<DEFAULT_BASE_BRANCH>`, `<STATUS_*>`, …)
   are what you are *collecting* here; they don't exist yet. Every one of them
   is described in `../_shared/project-config.md`.
-- **`../../docs/…` paths** point inside the plugin. A drop-in install that
-  copied only `skills/` has no `docs/` — nothing here breaks (they're reading
-  material, not inputs), but cite the GitHub copy under
-  `kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/docs/` when the local
-  file isn't there, so the user still gets a link that works.
+- **`../../docs/…` paths** point inside the plugin, and a drop-in install that
+  copied only `skills/` won't have them. They're reading material rather than
+  inputs, so nothing breaks — just cite the GitHub copy under
+  `kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/docs/` instead.
 - **Ask, don't assume.** A project key, a status name and a branch name are
   facts about the user's Jira and GitHub, not defaults you can derive. Use
   AskUserQuestion, offering the documented default as one option.
@@ -59,10 +65,10 @@ STATUSCHECK_RERUN='rerun /jira-sdlc:jst-install' \
   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role executor
 ```
 
-Set `STATUSCHECK_RERUN` on every call here. Its default names the executor, and
-under each FAIL the script prints a remedy ending "…then rerun
-`/jira-sdlc:jira-task-executor`" — advice that sends a user who hasn't finished
-installing to the skill that can't run yet.
+Call that **the gate command**; the sections below say "run the gate" rather
+than repeating it. Keep the `STATUSCHECK_RERUN` override on every call — its
+default ends each remedy line with "…then rerun `/jira-sdlc:jira-task-executor`",
+sending a half-installed user to the skill that can't run yet.
 
 For the other skills a FAIL means *stop*. **Here a FAIL is the worklist** —
 mid-install most rows are supposed to be red, and the run ends when they
@@ -77,7 +83,7 @@ aren't. Two consequences worth knowing before you're surprised by them:
 Check only the rows that section owns; a later section's rows are still red on
 purpose, and saying so keeps the user from chasing them:
 
-| section | rows it must clear | rows still expected to fail |
+| section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
 |---|---|---|
 | 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `jira_*` |
 | 2 · GitHub | `gh_auth`, `git_repo`, `base_branch`, `worktrees_dir` | `jira_auth`, `jira_project` |
@@ -149,11 +155,15 @@ both install modes.
   roles at one Atlassian account is fine, just say so in all three pairs. Three
   separate accounts is what makes the board show who did what.
 
-Then **wait** for them to say it's filled in. You cannot check this yourself —
-the file is exactly the one you don't open — so the honest verification is the
-`gh_auth` and `jira_auth` rows in the sections that follow.
+Then **wait** for them to say it's filled in, and don't run the gate before they
+do. The template ships a *non-empty placeholder* PAT, and statuscheck logs `gh`
+out before logging in with whatever it finds — so gating early doesn't merely
+fail a row, it costs the user the `gh` session they already had, with nothing
+restored afterwards. You can't inspect their work either (this is the file you
+don't open), which is why the `gh_auth` and `jira_auth` rows in the next two
+sections are the real verification.
 
-**1d. Gate.** Run statuscheck. Expect `jst_dir`, `platform`, `env_local` and
+**1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local` and
 `env_local_ignored` OK; everything else red for now.
 
 ---
@@ -188,10 +198,13 @@ Mention that protecting both branches is recommended — everything reaches them
 through a reviewed PR, which is the flow the skills already produce — but don't
 do it for them.
 
-**2c. Create the worktrees directory** at the `WORKTREES_DIR` the user chose in
-1c, as a sibling of this repo: `mkdir -p ../myapp-worktrees`. It must already
-exist when the assigner runs — the assigner refuses to create it, so a missing
-one is a first-run failure rather than a self-repair.
+**2c. Create the worktrees directory** the user pointed `WORKTREES_DIR` at in
+1c — a sibling of this repo, e.g. `mkdir -p ../myapp-worktrees`. You don't know
+the path they typed, and this is the moment the forbidden file looks most
+tempting: don't open it, read the path off the `worktrees_dir` row of the gate
+you already ran in 1d, which prints it resolved for exactly this reason. The
+directory must exist before the assigner runs — it refuses to create one, so a
+missing directory is a first-run failure rather than a self-repair.
 
 **2d. Record both branches** in the team-shared file — this one you write
 yourself, so create `.jst/jira-sdlc-tools.env` now with the two confirmed
@@ -202,7 +215,7 @@ DEFAULT_BASE_BRANCH=development
 PRODUCTION_BRANCH=main
 ```
 
-**2e. Gate.** Run statuscheck. `gh_auth` is the real test of the PAT from 1c —
+**2e. Gate.** Run the gate. `gh_auth` is the real test of the PAT from 1c —
 the script logs `gh` out and back in with it, so a FAIL here means the token,
 not the CLI. `base_branch` should now read what 2d wrote, and `worktrees_dir` the
 directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
@@ -244,6 +257,10 @@ STATUS_IN_REVIEW=In Review
 STATUS_DONE=Done
 ```
 
+Those are the defaults to *offer*, not values to copy: write the key and the
+four names the user confirmed in 3b. A literal `PROJECT_KEY=PROJ` left in a real
+project's config fails on the first branch-name check the skills make.
+
 **3d. Prove a status name rather than trusting it.** A name that doesn't exist
 fails the transition at runtime — mid-task, after work is committed — so spend
 one call proving it now. Ask the user for a throwaway issue key on the board
@@ -261,7 +278,7 @@ doubles as the first real end-to-end test of the executor credential. If the
 user has no disposable issue, say plainly that the status names are unverified
 and move on — that's a warning, not a blocker.
 
-**3e. Gate.** Run statuscheck. `env_config`, `jira_auth` and `jira_project`
+**3e. Gate.** Run the gate. `env_config`, `jira_auth` and `jira_project`
 should all be OK now.
 
 ---
@@ -296,10 +313,6 @@ user actually meant.
 /jira-sdlc:jira-task-reviewer                         # from the parent issue's worktree
 ```
 
-Re-running this skill later is safe and is the right move after a token
-rotation or a branch rename: every write is create-if-missing or an
-overwrite of a value the user just confirmed, and `.jst/jira-sdlc-tools.local.env`
-is never touched once it exists.
 
 Reference: `../../docs/STEP-BY-STEP.md` (the prose walkthrough this skill
 follows), `../../docs/FULL-SETUP-CHECKLIST.md` (the same ground as a tickable
