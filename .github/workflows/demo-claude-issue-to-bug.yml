@@ -16,9 +16,9 @@
 # Security boundary — there is NO human approval gate on this job (see
 # "Dropping the production gate" below): the job-level `if` requires the
 # comment body to be exactly `/make-bug` (or `/make-bug` followed by a space
-# or newline and free-form prose) AND `author_association` to be OWNER or
-# MEMBER. `issue_comment` fires for any commenter on a public repo, and what
-# follows runs an LLM with write access on a runner, so the OWNER/MEMBER guard
+# or newline and free-form prose) AND `author_association` to be OWNER
+# `issue_comment` fires for any commenter on a public repo, and what
+# follows runs an LLM with write access on a runner, so the OWNER guard
 # is the *only* gate — do not loosen it to CONTRIBUTOR or drop it in favour of
 # "an approval will catch it" (an approval prompt is a poor place to be reading
 # attacker-supplied text for the first time). The guard also requires
@@ -29,7 +29,7 @@
 # and the fixed CI instruction, never replaces either; a bare command leaves
 # the section out entirely.
 #
-# ── Dropping the production gate ──────────────────────────────────────────────
+# ── Restoring the production gate ────────────────────────────────────────────
 #
 # Earlier revisions declared `environment: production` on this job so GitHub
 # paused for a human approval before the assigner ran — a gate this demo
@@ -37,15 +37,12 @@
 # gone: the job declares no environment, and the OWNER/MEMBER comment guard
 # above is the sole security boundary. Consequence the acceptance criteria call
 # out: the secrets below used to live as *environment* secrets on `production`,
-# so `${{ secrets.* }}` resolved from there; with `environment: production`
-# removed they now resolve from *repo-level* secrets. The bootstrap step still
+# so `${{ secrets.* }}` resolves from there
+# The bootstrap step still
 # checks the whole set up front and fails loud with
 # `::error::missing or empty secret(s) in the 'production' environment …` (the
 # message still names `production` as the redistribution signal) until those
-# same secrets also exist at the repo level (or are renamed/resourced). That
-# secret redistribution is a separate follow-up this PR deliberately flags
-# rather than fixes — the workflow can merge now but will not run a
-# comment-triggered job successfully until that is done (JST-225 AC#4).
+# same secrets also exist on the production environment. That
 #
 # ── The worktree-persistence caveat (read this before copying the file) ─────
 #
@@ -162,9 +159,9 @@ jobs:
        startsWith(github.event.comment.body, '/make-bug ') ||
        startsWith(github.event.comment.body, format('/make-bug{0}', fromJSON('"\n"'))) ||
        startsWith(github.event.comment.body, format('/make-bug{0}', fromJSON('"\r"')))) &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER')
+      github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 30
     permissions:
       contents: write # the assigner pushes the new feature branch to origin

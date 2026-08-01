@@ -27,7 +27,7 @@
 #     `startsWith(body, '/make-feature')`, which would also fire on
 #     `/make-feature-anything`; a comment that merely mentions the command
 #     mid-sentence still doesn't fire the chain;
-#   * `author_association` is OWNER or MEMBER. **This is the security
+#   * `author_association` is OWNER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
 #     and what follows runs an LLM with write permissions on a runner. Do not
 #     loosen it to CONTRIBUTOR (a merged PR earns that) or drop it in favour of
@@ -219,8 +219,7 @@ jobs:
        startsWith(github.event.comment.body, '/make-feature ') ||
        startsWith(github.event.comment.body, format('/make-feature{0}', fromJSON('"\n"'))) ||
        startsWith(github.event.comment.body, format('/make-feature{0}', fromJSON('"\r"')))) &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER')
+      github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
     environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
