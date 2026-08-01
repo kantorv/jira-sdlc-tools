@@ -140,7 +140,7 @@ without it halts rather than running half-configured.
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
-| `<STATUS_TODO>` | Status used for newly created issues. | `To Do` |
+| `<STATUS_TODO>` | Status used for newly created issues. No skill reads or transitions to this value — it exists so it can be documented/offered as the default landing status, and so the optional `jira_issue_transition_on_branch.yml` GitHub Action (see `docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md`) has a value to mirror into its hardcoded `SOURCE=` literal, since that workflow can't read this file. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state on its own: `jira-task-reviewer` step 7 offers it for approved issues at the end of a run and moves only what you approve; otherwise it is handled by automation or a manual `jira.sh issue transition <KEY> --to "<STATUS_DONE>"`. Must match your workflow's real status name exactly. | `Done` |
