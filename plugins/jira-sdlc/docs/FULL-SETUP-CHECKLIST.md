@@ -89,12 +89,23 @@ git --version; gh --version; $PSVersionTable.PSVersion
 - [ ] **You have a board and a project key.** The key is the prefix on every
       issue (`PROJ-123` → `PROJ`), and it's what the skills match branch names
       against, so a branch for the wrong project is caught rather than worked.
-- [ ] **The board has all four statuses.** `To Do`, `In Progress`, `In Review`,
-      `Done` by default — map them to whatever yours are really called. **`In
-      Review` is the one that's usually missing**: several Jira templates ship
-      only To Do / In Progress / Done. Add the column, or point
-      `STATUS_IN_REVIEW` at an existing status. A name that doesn't exist on
-      the board fails the transition at runtime, not at setup.
+      List the ones your credential can see rather than typing one blind:
+      ```bash
+      bash _shared/scripts/posix/jira.sh --role executor raw GET /project/search \
+        | jq -r '.values[] | "\(.key)\t\(.name)"'
+      ```
+- [ ] **Each of the four `STATUS_*` settings names a status your board really
+      has.** `To Do` / `In Progress` / `In Review` / `Done` are the Kanban
+      template's names, not a requirement — read yours and map onto them, since
+      matching is literal and a name that doesn't exist fails the transition at
+      runtime rather than at setup:
+      ```bash
+      bash _shared/scripts/posix/jira.sh --role executor raw GET /project/<KEY>/statuses \
+        | jq -r '[.[].statuses[].name] | unique | .[]'
+      ```
+      Expect mismatches: `In Review` is missing from several templates, and a
+      board with `Backlog` / `Selected for Development` and no `To Do` at all is
+      normal. Point `STATUS_TODO` at the status new issues actually land in.
 - [ ] **You have a Jira API token.** Create it at
       [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
       Use a **plain API token** — Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) rejects scoped tokens. If you must use a scoped token via the REST gateway, see
@@ -225,5 +236,6 @@ onto this checklist:
 
 Every FAIL row prints its own remedy line under the table. Relay those rather
 than guessing — and note the checklist items the script *can't* see: whether
-your board really has an `In Review` column, and whether your two branches are
-the ones you meant.
+your four `STATUS_*` names are the ones your board actually uses (the two
+`raw GET` calls above answer that, and `/jira-sdlc:jst-install` §3d proves the
+transitions too), and whether your two branches are the ones you meant.
