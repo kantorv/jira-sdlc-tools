@@ -404,6 +404,7 @@ jira --role assigner|executor|reviewer <command>
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)   (§11)
   issue comment list <KEY>                  raw JSON on stdout
+  issue attach    <KEY> <FILE>                  upload a file attachment
   issue delete     <KEY> [--with-subtasks]
   raw <METHOD> </PATH> [--data-file FILE]   escape hatch; PATH is under /rest/api/3 (e.g. /myself)
 ```
