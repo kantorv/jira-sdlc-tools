@@ -39,7 +39,8 @@ This repo currently hosts one plugin, **[`jira-sdlc`](plugins/jira-sdlc)**
 `jira-task-reviewer`) that turn a feature request into Jira issues and
 git worktrees, implement each piece in parallel, and then review and
 merge the result as a single unit, leaving only the final release merge
-for a human.
+for a human. A fourth, `jst-install`, is the setup skill you run once
+before any of them.
 
 This page is the front door. Everything about how the plugin actually
 works — architecture, prerequisites, configuration, a full usage
@@ -63,6 +64,15 @@ The three skills, one per stage of the lifecycle:
   changes), posts findings to Jira, and reviews the parent PR into the
   base branch once the sub-task PRs are merged. Never merges anything
   itself.
+
+Plus one that runs before all three, once per project:
+
+- **[`jst-install`](plugins/jira-sdlc/skills/jst-install/SKILL.md)** — guided
+  first-time setup. Walks the four sections of
+  [Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md) — local tooling,
+  GitHub repo prep, Jira board prep, healthcheck — verifying each with the
+  bundled `statuscheck` script before moving on, so a missing `development`
+  branch or a misspelled status name surfaces at setup rather than mid-run.
 
 <img src="plugins/jira-sdlc/docs/assets/conversation-example.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
 
@@ -134,7 +144,7 @@ claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
 ### Non Claude Code assistants
 
 Assistants that read the Claude skills spec don't need the plugin wrapper —
-copy the skills in and they discover the three directly:
+copy the skills in and they discover them directly:
 
 ```bash
 cp -r plugins/jira-sdlc/skills/* skills/
@@ -153,6 +163,8 @@ skills/
 ├── jira-task-reviewer/
 │   ├── SKILL.md
 │   └── agents/openai.yml
+├── jst-install/
+│   └── SKILL.md              ← run once, before the other three
 └── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
     ├── jira-api-reference.md
     ├── project-config.md
@@ -178,6 +190,9 @@ ending in one command that verifies most of it for you.
 
 Prefer it as prose? **[Step by step](plugins/jira-sdlc/docs/STEP-BY-STEP.md)**
 walks the same ground in the order you actually do it.
+
+Prefer to be walked through it? `/jira-sdlc:jst-install` covers the same four
+sections interactively, checking each one before moving to the next.
 
 ## Applications
 
