@@ -81,6 +81,14 @@ git --version; gh --version; $PSVersionTable.PSVersion
       start; without it the `gh_auth` healthcheck row FAILs and the run halts.
       Where to click:
       [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
+- [ ] **…and the PAT can actually reach *this* repo.** A fine-grained token
+      scoped to *only selected repositories* logs in green while 404-ing on a
+      repo missing from that list — 404, not 403, so it reads like a typo — and
+      with an SSH `origin` nothing breaks until `gh pr create` fails mid-task.
+      The `gh_repo_access` row probes it; by hand:
+      ```bash
+      gh api repos/<OWNER>/<REPO> >/dev/null && echo "PAT can see it"
+      ```
 
 ## Jira
 
@@ -89,12 +97,23 @@ git --version; gh --version; $PSVersionTable.PSVersion
 - [ ] **You have a board and a project key.** The key is the prefix on every
       issue (`PROJ-123` → `PROJ`), and it's what the skills match branch names
       against, so a branch for the wrong project is caught rather than worked.
-- [ ] **The board has all four statuses.** `To Do`, `In Progress`, `In Review`,
-      `Done` by default — map them to whatever yours are really called. **`In
-      Review` is the one that's usually missing**: several Jira templates ship
-      only To Do / In Progress / Done. Add the column, or point
-      `STATUS_IN_REVIEW` at an existing status. A name that doesn't exist on
-      the board fails the transition at runtime, not at setup.
+      List the ones your credential can see rather than typing one blind:
+      ```bash
+      bash _shared/scripts/posix/jira.sh --role executor raw GET /project/search \
+        | jq -r '.values[] | "\(.key)\t\(.name)"'
+      ```
+- [ ] **Each of the four `STATUS_*` settings names a status your board really
+      has.** `To Do` / `In Progress` / `In Review` / `Done` are the Kanban
+      template's names, not a requirement — read yours and map onto them, since
+      matching is literal and a name that doesn't exist fails the transition at
+      runtime rather than at setup:
+      ```bash
+      bash _shared/scripts/posix/jira.sh --role executor raw GET /project/<KEY>/statuses \
+        | jq -r '[.[].statuses[].name] | unique | .[]'
+      ```
+      Expect mismatches: `In Review` is missing from several templates, and a
+      board with `Backlog` / `Selected for Development` and no `To Do` at all is
+      normal. Point `STATUS_TODO` at the status new issues actually land in.
 - [ ] **You have a Jira API token.** Create it at
       [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
       Use a **plain API token** — Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) rejects scoped tokens. If you must use a scoped token via the REST gateway, see
@@ -217,13 +236,16 @@ onto this checklist:
 | `env_config` | `.jst/jira-sdlc-tools.env` found and parsed |
 | `env_local` | `.jst/jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
-| `gh_auth` | `GITHUB_PAT_TOKEN` works — `gh` is authenticated |
+| `gh_auth` | `GITHUB_PAT_TOKEN` logs `gh` in — a login, and nothing more |
+| `gh_repo_access` | that PAT can actually see the repo `origin` points at (`gh api repos/<OWNER>/<REPO>`) |
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
+| `branch_pair` | `DEFAULT_BASE_BRANCH` and `PRODUCTION_BRANCH` are two *different* branches |
 | `worktrees_dir` | `WORKTREES_DIR` exists (WARN only — the assigner creates it) |
 
 Every FAIL row prints its own remedy line under the table. Relay those rather
 than guessing — and note the checklist items the script *can't* see: whether
-your board really has an `In Review` column, and whether your two branches are
-the ones you meant.
+your four `STATUS_*` names are the ones your board actually uses (the two
+`raw GET` calls above answer that, and `/jira-sdlc:jst-install` §3d proves the
+transitions too), and whether your two branches are the ones you meant.

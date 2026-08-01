@@ -133,9 +133,11 @@ The remaining rows FAIL if broken but need no per-role interpretation here:
 `jst_dir` (a missing `.jst/` aborts the script early), `git_repo`,
 `env_config`, `env_local` (auto-copied into a worktree from the main checkout
 when missing by `ensure_local_env.sh` — the credential block above ran it),
-`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` (step
-10's `gh pr create`), `jira_auth` (the **executor's** credential authenticates
-— `jira.sh --role executor whoami`), `jira_project`, plus context
+`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` plus
+`gh_repo_access` (step 10's `gh pr create` needs both a login *and* a PAT that
+can see this repo), `jira_auth` (the **executor's** credential authenticates
+— `jira.sh --role executor whoami`), `jira_project`, `branch_pair` (the two
+long-lived branches must differ), plus context
 `base_branch`, `working_tree` (WARN when dirty) and `worktrees_dir` (WARN when
 missing — only the assigner acts on it).
 
