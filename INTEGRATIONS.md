@@ -40,12 +40,25 @@ Before opening a platform's doc, use the table above to tell which family your p
 The three skills invoke their shared helper scripts through
 `${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/…`. **Claude Code** sets
 `CLAUDE_PLUGIN_ROOT` automatically to the plugin root, so those paths resolve
-with no configuration. On a **non-Claude-compatible client** the variable may be
-unset; there, resolve it against the platform's provided or default skills
-folder — the folder it loads these skills from (every such client is expected to
-have this configured). Each skill also carries the concrete relative fallback
-(`../_shared/scripts/posix/…`, relative to the skill's own directory) as the
-default.
+with no configuration. On a **non-Claude-compatible client** the variable is
+often unset; there each skill resolves the root itself, in order:
+
+1. **This skill's own directory** — given at the top of the loaded `SKILL.md`,
+   or the folder containing it. The scripts live at
+   `../_shared/scripts/posix/` (POSIX) / `../_shared/scripts/win/` (Windows)
+   relative to it, which is correct on every platform regardless of which
+   skills tree loaded the skill. This is the default and the most reliable
+   fallback — derive it rather than searching the filesystem.
+2. **The platform's default skills locations**, if even the skill's own
+   directory can't be derived — probe the project-root trees this repo's
+   integrations use (`.agent/skills/`, `.agents/skills/`, `.codex/skills/`,
+   `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`), the home global
+   `~/.claude/skills/`, or the skills path the platform's own config names
+   (`kilo.jsonc`, `settings.json`, `config.toml`). Match whichever tree this
+   `SKILL.md` was loaded from.
+
+Each skill carries this same resolution in its own `CLAUDE_PLUGIN_ROOT` note, so
+a client that never loads this hub doc still has the fallback inline.
 
 ## Adding a new platform
 

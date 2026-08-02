@@ -24,9 +24,16 @@ create-if-missing or an overwrite of a value the user just confirmed, and
   `jira-sdlc-tools`, you're in the toolkit clone — stop and ask. If that command
   *errors* instead, there is no origin at all: that's 1a's gate, not this one.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root; every script path below hangs
-  off it. If it isn't set — reading this skill on a non-Claude client — resolve
-  it against the platform's skills folder, keeping `../_shared/scripts/posix/`
-  relative to this skill as the default.
+  off it. If it isn't set (a non-Claude client), resolve the root yourself, in
+  order: (1) this skill's own directory — given at the top of the loaded
+  SKILL.md, or the folder containing it — so the scripts are at
+  `../_shared/scripts/posix/` relative to it (correct on every platform); (2)
+  if you can't derive that, probe the platform's default skills locations —
+  project-root `.agent/skills/`, `.agents/skills/`, `.codex/skills/`,
+  `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`, the home global
+  `~/.claude/skills/`, or the path named in the platform's config
+  (`kilo.jsonc`, `settings.json`, `config.toml`). See INTEGRATIONS.md →
+  "Locating the shared scripts".
 - **Script dispatch — settle it before the first script call.** Every script
   ships twice: POSIX `…/scripts/posix/X.sh` and the Windows twin
   `…/scripts/win/X.ps1` (identical args, output, exit codes). Pick the branch
