@@ -79,10 +79,10 @@ Two, both repo-level:
 | `OPENROUTER_API_KEY` | The model backend. The step fails up front if it's empty. |
 | `GITHUB_TOKEN` | Built in. Reads the diff, posts the comment. |
 
-No Jira credentials — it writes nothing to Jira. **No `environment:` gate**,
-so it never pauses for approval and reads no environment secrets. It's the one
-demo where that's fine: it has no credentials worth gating and creates
-nothing.
+No Jira credentials — it writes nothing to Jira. **No `environment:` gate**
+(see [APPLICATIONS.md §3.1–3.2](../APPLICATIONS.md)), so it never pauses for
+approval and reads no environment secrets. It's the one demo where that's
+fine: it has no credentials worth gating and creates nothing.
 
 ## Adapting it to another assistant
 
