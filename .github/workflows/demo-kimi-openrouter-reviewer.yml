@@ -10,6 +10,9 @@ name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 # real reviewer run needs a linked-worktree checkout plus gh auth and the Jira
 # credentials in .jst/jira-sdlc-tools.local.env, which is out of scope here —
 # see demo-claude-reviewer.yml for that.
+#
+# GATES: owner-only author check on the precheck job (github.triggering_actor ==
+# github.repository_owner) and environment: production on the reviewer-smoke job.
 
 on:
   workflow_dispatch:
@@ -31,6 +34,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    if: github.triggering_actor == github.repository_owner
     outputs:
       pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
       pr_number: ${{ steps.check_pr.outputs.pr_number }}
@@ -87,6 +91,7 @@ jobs:
     # so gating here skips them instead of spinning up a runner for a no-op.
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
     # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+    environment: production
     runs-on: ubuntu-latest
     permissions:
       contents: read
