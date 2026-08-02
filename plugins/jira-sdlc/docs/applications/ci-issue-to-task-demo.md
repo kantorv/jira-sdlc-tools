@@ -34,7 +34,7 @@ a worktree. Then it stops — nothing is implemented, no PR is opened.
 
 ```mermaid
 flowchart TB
-    C(["issue comment<br>/make-task or /make-bug — optionally plus prose"]) --> GA{{"guard — body is /make-task, bare or plus a separator<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    C(["issue comment<br>/make-task or /make-bug — optionally plus prose"]) --> GA{{"guard — body is /make-task, bare or plus a separator<br>author_association OWNER<br>not a PR comment"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| J["job · assign<br>stand on base branch<br>run jira-task-assigner<br>with the issue title + body<br>(plus any extra direction)"]
     J --> R1([Jira issue created + assigned to the executor])
@@ -79,7 +79,7 @@ of:
 | Condition | Why it's there |
 | :--- | :--- |
 | body is `/make-task`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-task` mid-sentence doesn't fire the run. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-task')`, would also fire on `/make-task-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match. |
-| `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "an approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time. |
+| `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner. An approval prompt is a poor place to be reading attacker-supplied text for the first time. |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-task` on a pull request would hand the assigner a PR description as a feature request. |
 
 A comment that fails the guard produces no run at all — no failed check, no
@@ -110,7 +110,8 @@ signal — until those same secrets also exist at the repo level (or are
 renamed/resourced). That secret redistribution is a **separate follow-up this
 PR deliberately flags rather than fixes**: the workflow can merge now but will
 not run a comment-triggered job successfully until that is done. See "Secrets"
-below.
+below and [APPLICATIONS.md §3.2 and §3.5](../APPLICATIONS.md) for the updated
+two-gate convention and secret-location guidance.
 
 ### Steering one run from the comment
 
@@ -289,7 +290,7 @@ read like a task description, not a question.
 2. Confirm `.jst/jira-sdlc-tools.env` sets `DEFAULT_BASE_BRANCH`.
 3. Open a GitHub issue whose title and body read as a task description (or the
    bug report you want turned into a Jira Bug).
-4. Comment `/make-task` (or `/make-bug`) on it, as an OWNER or MEMBER — bare,
+4. Comment `/make-task` (or `/make-bug`) on it, as an OWNER — bare,
    or followed by a space and any direction you want to give *this* run.
 5. There is **no approval to click** — the guard having passed, the assigner
    runs straight through. Read the `assigner-log` artifact for the Jira key
@@ -303,7 +304,7 @@ Typical successful runs in this repo take **2–7 minutes**.
   implemented and no PR is opened — see the flow demos for the full chain.
 - **Not durable.** The only lasting artifacts are the pushed branch, the Jira
   issue, and the uploaded log. The worktree is gone with the VM.
-- **Not gated by an approval.** Its security boundary is the OWNER/MEMBER
+- **Not gated by an approval.** Its security boundary is the OWNER
   comment guard, not a human approval — the earlier `environment: production`
   gate is gone (see "Dropping the production gate").
 - **Not a triage bot.** It does not label, dedupe, or close issues, and it
