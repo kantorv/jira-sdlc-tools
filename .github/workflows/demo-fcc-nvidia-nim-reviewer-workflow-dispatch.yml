@@ -113,6 +113,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    if: github.triggering_actor == github.repository_owner
     outputs:
       pr_exists: ${{ steps.check_branch.outputs.pr_exists }}
       pr_number: ${{ steps.check_branch.outputs.pr_number }}

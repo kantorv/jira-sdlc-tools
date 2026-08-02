@@ -42,7 +42,7 @@ own.
 
 ```mermaid
 flowchart TB
-    C([issue comment<br>/make-feature — optionally plus prose]) --> GA{{"guard — body is /make-feature, bare or plus a separator<br>author_association OWNER or MEMBER<br>not a PR comment"}}
+    C([issue comment<br>/make-feature — optionally plus prose]) --> GA{{"guard — body is /make-feature, bare or plus a separator<br>author_association OWNER<br>not a PR comment"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| G1{{"approve<br>assigner run"}}
     G1 --> J1["job 1 · assigner<br>Jira issue + feature branch<br>cut from DEFAULT_BASE_BRANCH"]
@@ -88,7 +88,7 @@ the security boundary of this workflow, and it requires all three of:
 | Condition | Why it's there |
 | :--- | :--- |
 | body is `/make-feature`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-feature` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-feature')`, would also fire on `/make-feature-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
-| `author_association` is `OWNER` or `MEMBER` | the actual authorization check. **Do not** loosen it to `CONTRIBUTOR` (a single merged PR earns that association) and don't drop it in favour of "the environment approval will catch it" — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
+| `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-feature` on a pull request would hand the assigner a PR description as a feature request |
 
 Jobs 2 and 3 declare `needs`, and a skipped dependency skips its dependents,
@@ -161,7 +161,8 @@ Direction meant for the reviewer goes in a `/review` comment on the PR instead
 
 Every job declares `environment: production`, and that environment has
 GitHub's **Required reviewers** rule checked. Protection is evaluated **before
-each job starts**, so one `/make-feature` comment pauses three times:
+each job starts**, so one `/make-feature` comment pauses three times. See
+[APPLICATIONS.md §3.1–3.2](../APPLICATIONS.md) for the full two-gate convention:
 
 | Pause | Approving it releases | What has happened so far |
 | :--- | :--- | :--- |
@@ -415,7 +416,7 @@ most likely to skip its own GIF; the log artifact is always there either way.
 3. Open a GitHub issue whose title and body describe the work the way you'd
    describe it to `/jira-sdlc:jira-task-assigner` interactively. Keep it to
    one coherent, single-step piece of work (see *Headless means no questions*).
-4. Comment `/make-feature` on it, as an OWNER or MEMBER — bare, or followed by
+4. Comment `/make-feature` on it, as an OWNER — bare, or followed by
    a space or newline and any direction you want to give *this* run (see
    *Steering one run from the comment*).
 5. Approve each of the three pauses as it arrives, inspecting the Jira issue,

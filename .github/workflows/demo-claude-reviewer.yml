@@ -147,8 +147,7 @@ jobs:
        startsWith(github.event.comment.body, '/review ') ||
        startsWith(github.event.comment.body, format('/review{0}', fromJSON('"\n"'))) ||
        startsWith(github.event.comment.body, format('/review{0}', fromJSON('"\r"')))) &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER')
+      github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
     name: Check PR exists
     timeout-minutes: 5
