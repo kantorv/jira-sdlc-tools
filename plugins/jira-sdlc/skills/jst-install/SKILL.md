@@ -18,6 +18,7 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 `.jst/jira-sdlc-tools.local.env` is never touched once it exists.
 
 **Conventions used below:**
+
 - Run from the **project root of the repo the user will build features in** —
   not a clone of this toolkit itself, which is the easy mistake: the skills read
   config from *your project's* root. If `git remote get-url origin` names
@@ -53,9 +54,9 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 
 ## The two env files — the rule that shapes this whole skill
 
-| file | what's in it | what you may do |
-|---|---|---|
-| `.jst/jira-sdlc-tools.env` | project key, branch names, the four status names — **committed, secret-free** | **Write it directly.** Create it, edit it, read it back freely |
+| file                             | what's in it                                                                          | what you may do                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `.jst/jira-sdlc-tools.env`       | project key, branch names, the four status names — **committed, secret-free**         | **Write it directly.** Create it, edit it, read it back freely                                                                 |
 | `.jst/jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, **plus three Jira role tokens and a GitHub PAT** | **Never open it and never edit it.** Copy the `.example` into place when it's absent, then hand the user the key list and wait |
 
 One `cat` of the second file writes four live credentials into the transcript,
@@ -92,19 +93,19 @@ aren't. Two consequences worth knowing before you're surprised by them:
 Check only the rows that section owns; a later section's rows are still red on
 purpose, and saying so keeps the user from chasing them:
 
-| section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
-|---|---|---|
+| section                | rows this section settles (OK, or INFO where the row has no OK form)                   | rows still expected to fail                         |
+| ---------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
-| 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir` | `jira_auth`, `jira_project` |
-| 3 · Jira | `env_config`, `jira_auth`, `jira_project` | — |
-| 4 · healthcheck | every row, for all three roles | — |
+| 2 · GitHub             | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir` | `jira_auth`, `jira_project`                         |
+| 3 · Jira               | `env_config`, `jira_auth`, `jira_project`                                              | —                                                   |
+| 4 · healthcheck        | every row, for all three roles                                                         | —                                                   |
 
 `worktree`, `branch`, `branch_project`, `issue_key`, `parent_branch`,
 `working_tree` and `bootstrap` are about *running an issue*, not installing.
 Ignore them here — a main checkout on the base branch with no issue key is
 exactly right for this skill.
 
----
+______________________________________________________________________
 
 ## Section 1 · Local tooling and the `.jst/` scaffold
 
@@ -117,9 +118,11 @@ for Jira: the plugin ships its own REST client, `jira.sh` / `jira.ps1`.
 ```bash
 git --version && gh --version && jq --version && python3 --version
 ```
+
 ```powershell
 git --version; gh --version; $PSVersionTable.PSVersion
 ```
+
 `&&` stops at the first missing tool and names it; PowerShell's `;` runs all of
 them, so scan for the one that errored. Report what's missing with its install
 URL (`../../docs/FULL-SETUP-CHECKLIST.md` § *Your PC* has them) and stop until
@@ -132,8 +135,7 @@ with a GitHub remote attached:
 git rev-parse --show-toplevel && git remote get-url origin
 ```
 
-Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir
--p .jst`, the `.jst/.gitignore` write and the template copy all succeed happily in
+Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir -p .jst`, the `.jst/.gitignore` write and the template copy all succeed happily in
 whatever directory the user is standing in, and they'd only find out at 1d —
 with a stray half-scaffold left behind. Say plainly what's missing: a GitHub
 repository, created and then cloned (or `git init` plus
@@ -200,7 +202,7 @@ sections are the real verification.
 **1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local` and
 `env_local_ignored` OK; everything else red for now.
 
----
+______________________________________________________________________
 
 ## Section 2 · GitHub repository preparation
 
@@ -280,7 +282,7 @@ requests at read/write, and expect org-owned repos to need admin approval.
 `branch_pair` OK — it FAILs if those two names are equal — and `worktrees_dir`
 the directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
 
----
+______________________________________________________________________
 
 ## Section 3 · Jira board preparation
 
@@ -338,12 +340,12 @@ options are the board's real statuses, so a name that doesn't exist can no
 longer be chosen. Offer the closest documented default *first*, as an ordering
 hint — never as the answer:
 
-| variable | documented default | who moves the card there |
-|---|---|---|
-| `STATUS_TODO` | `To Do` | no skill does — it names where new issues land, and it's the only status the optional branch-create Action will advance *from* |
-| `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts |
-| `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
-| `STATUS_DONE` | `Done` | the reviewer's closing offer, GitHub-for-Jira on merge, or by hand |
+| variable             | documented default | who moves the card there                                                                                                       |
+| -------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `STATUS_TODO`        | `To Do`            | no skill does — it names where new issues land, and it's the only status the optional branch-create Action will advance *from* |
+| `STATUS_IN_PROGRESS` | `In Progress`      | `jira-task-executor`, when it starts                                                                                           |
+| `STATUS_IN_REVIEW`   | `In Review`        | `jira-task-executor`, when its PR opens                                                                                        |
+| `STATUS_DONE`        | `Done`             | the reviewer's closing offer, GitHub-for-Jira on merge, or by hand                                                             |
 
 A board with no match for a default is a **normal case**, not an error — so
 present what the choice costs rather than just listing names. On that first run
@@ -431,7 +433,7 @@ unverified and move on — that's a warning, not a blocker.
 **3e. Gate.** Run the gate. `env_config`, `jira_auth` and `jira_project`
 should all be OK now.
 
----
+______________________________________________________________________
 
 ## Section 4 · Full healthcheck
 
