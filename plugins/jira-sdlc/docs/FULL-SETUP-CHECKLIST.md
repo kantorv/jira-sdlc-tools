@@ -137,9 +137,11 @@ git --version; gh --version; $PSVersionTable.PSVersion
       machine-specific settings *and secrets*. Copy
       [`.jst/jira-sdlc-tools.local.env.example`](../../../.jst/jira-sdlc-tools.local.env.example).
 - [ ] **`.jst/jira-sdlc-tools.local.env` is gitignored.** It holds your raw Jira
-      token and GitHub PAT, so committing it leaks both.
+      token and GitHub PAT, so committing it leaks both. The rule goes *inside*
+      `.jst/`, not in your root `.gitignore` — it then travels with any copy of
+      the folder, so a worktree that gets `.jst/` gets the protection with it:
       ```bash
-      echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
+      echo 'jira-sdlc-tools.local.env' >> .jst/.gitignore
       git check-ignore -v .jst/jira-sdlc-tools.local.env   # prints the rule if ignored
       ```
       The healthcheck's `env_local_ignored` row checks this too — but it checks

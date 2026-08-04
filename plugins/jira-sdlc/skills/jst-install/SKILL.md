@@ -24,9 +24,16 @@ create-if-missing or an overwrite of a value the user just confirmed, and
   `jira-sdlc-tools`, you're in the toolkit clone — stop and ask. If that command
   *errors* instead, there is no origin at all: that's 1a's gate, not this one.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root; every script path below hangs
-  off it. If it isn't set — reading this skill on a non-Claude client — resolve
-  it against the platform's skills folder, keeping `../_shared/scripts/posix/`
-  relative to this skill as the default.
+  off it. If it isn't set (a non-Claude client), resolve the root yourself, in
+  order: (1) this skill's own directory — given at the top of the loaded
+  SKILL.md, or the folder containing it — so the scripts are at
+  `../_shared/scripts/posix/` relative to it (correct on every platform); (2)
+  if you can't derive that, probe the platform's default skills locations —
+  project-root `.agent/skills/`, `.agents/skills/`, `.codex/skills/`,
+  `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`, the home global
+  `~/.claude/skills/`, or the path named in the platform's config
+  (`kilo.jsonc`, `settings.json`, `config.toml`). See INTEGRATIONS.md →
+  "Locating the shared scripts".
 - **Script dispatch — settle it before the first script call.** Every script
   ships twice: POSIX `…/scripts/posix/X.sh` and the Windows twin
   `…/scripts/win/X.ps1` (identical args, output, exit codes). Pick the branch
@@ -126,7 +133,7 @@ git rev-parse --show-toplevel && git remote get-url origin
 ```
 
 Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir
--p .jst`, the `.gitignore` append and the template copy all succeed happily in
+-p .jst`, the `.jst/.gitignore` write and the template copy all succeed happily in
 whatever directory the user is standing in, and they'd only find out at 1d —
 with a stray half-scaffold left behind. Say plainly what's missing: a GitHub
 repository, created and then cloned (or `git init` plus
@@ -137,8 +144,8 @@ existing repo and an existing Jira board together; it makes neither.
 
 ```bash
 mkdir -p .jst
-grep -qxF '.jst/jira-sdlc-tools.local.env' .gitignore 2>/dev/null \
-  || echo '.jst/jira-sdlc-tools.local.env' >> .gitignore
+grep -qxF 'jira-sdlc-tools.local.env' .jst/.gitignore 2>/dev/null \
+  || echo 'jira-sdlc-tools.local.env' >> .jst/.gitignore
 [ -f .jst/jira-sdlc-tools.local.env ] \
   || cp "${CLAUDE_PLUGIN_ROOT}/skills/_shared/templates/jira-sdlc-tools.local.env.example" \
         .jst/jira-sdlc-tools.local.env
@@ -147,6 +154,14 @@ grep -qxF '.jst/jira-sdlc-tools.local.env' .gitignore 2>/dev/null \
 Gitignore *first*, then create the file: the order matters because a file
 created first can be caught by a `git add -A` in the gap, and the
 `env_local_ignored` row only checks a file that already exists.
+
+The rule goes in **`.jst/.gitignore`**, never the project's root `.gitignore`:
+the ignore then lives inside the folder it protects and travels with any copy
+of `.jst/` — into a worktree, for instance — instead of being a second thing to
+remember, and a `.gitignore` the team already curates is left alone. Statuscheck's
+`env_local_ignored` row calls `git check-ignore`, which doesn't care which file
+the rule came from. Appending rather than overwriting keeps a rule the user
+added there themselves.
 
 That `[ -f ]` guard is load-bearing — **an existing local.env is never
 overwritten**, since replacing a filled-in one costs the user four live
@@ -449,6 +464,41 @@ the two branch names in the env file are the branches the user actually meant.
 /jira-sdlc:jira-task-reviewer                         # from the parent issue's worktree
 ```
 
+**4d. Name what's still uncommitted — and offer it as the first task.** The
+whole `.jst/` folder is untracked: `jira-sdlc-tools.env` (2d and 3c wrote it —
+team-shared, meant to be committed) and the `.gitignore` 1b put beside it. This
+skill leaves them on purpose; they're the payload of the first task below. Say
+so, because the consequence isn't one the user will predict — **a worktree cut
+from `<DEFAULT_BASE_BRANCH>` is born without `.jst/` at all**, so the first
+executor run FAILs statuscheck's `env_config` row there. `ensure_local_env.sh`
+doesn't rescue it: it carries only the gitignored
+`.jst/jira-sdlc-tools.local.env` over from the main checkout, and the tracked
+files are git's job — git simply has nothing to carry yet.
+
+Recommend committing them *as* this project's first real task, so the fix and
+an end-to-end test of all three skills are the same run; committing the two
+files by hand instead is a fine alternative, and setup is complete either way.
+For the first-task route, hand them this to paste into a **new** Claude
+session, run from the project root on `<DEFAULT_BASE_BRANCH>`:
+
+```
+/jira-sdlc:jira-task-assigner "JIRA-SDLC-TOOLS setup — a retroactive first
+task, and this repo's first run of these skills. The plugin's config is
+written but uncommitted: the whole .jst/ folder, holding jira-sdlc-tools.env
+and a .gitignore covering jira-sdlc-tools.local.env. Create the issue, branch
+and worktree as usual, then copy .jst/ into that worktree — the executor's job
+is only to commit and push it, and the reviewer's is to confirm the settings
+work. Copy the folder whole: the .gitignore inside it is what keeps
+.jst/jira-sdlc-tools.local.env, which holds four live credentials, out of the
+commit. Stage .jst/ explicitly rather than with 'git add -A'. Treat this run
+as the smoke test that all three skills interact correctly."
+```
+
+"Copy the folder whole" is the load-bearing clause, and it's why 1b put the
+rule inside `.jst/` in the first place: `git add .jst` then stages
+`jira-sdlc-tools.env` and `.gitignore` and leaves `local.env` out on its own.
+Copy across only the env file and that worktree ends up holding three Jira role
+tokens and a GitHub PAT with nothing ignoring them.
 
 Reference: `../../docs/STEP-BY-STEP.md` (the prose walkthrough this skill
 follows), `../../docs/FULL-SETUP-CHECKLIST.md` (the same ground as a tickable

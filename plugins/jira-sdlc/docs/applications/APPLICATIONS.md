@@ -103,15 +103,15 @@ copy-pasted into another repo.
   That always scopes their secrets, and additionally makes GitHub pause for a
   human before each job *if* the environment has Required reviewers enabled.
   The issue-to-task/bug twins are the exception (see the next bullet): they
-  dropped the gate, so the OWNER/MEMBER comment guard is their only boundary.
-  See §3.
+  dropped the gate, so the OWNER comment guard is their only boundary.
+  See §3.1–3.2.
 - **Secrets are environment secrets on `production`** (named exactly as the
   `.jst/jira-sdlc-tools.local.env` keys they become — this is what lets a job's
   bootstrap step be a single loop over a `KEYS` list instead of a hand-mapped
   one), except the issue-to-task/bug twins, which dropped `environment:
   production` so their secrets resolve from the **repo** level instead — until
   redistributed from the `production` environment (JST-225 AC#4) their
-  bootstrap fails loud. See [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
+  bootstrap fails loud. See §3.5 and [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
 - **No `GH_TOKEN`/`GITHUB_TOKEN` exported into skill steps** — statuscheck
   logs `gh` in from `GITHUB_PAT_TOKEN` read out of the env file; exporting
   either token variable into the environment makes `gh auth login` refuse,
@@ -141,7 +141,7 @@ want, then the implementation whose backend you have credentials for.
 | [**Feature flow**](./ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](../../../../.github/workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
 | [**Hotfix flow**](./ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](../../../../.github/workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
 | [**Review a PR**](./ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](../../../../.github/workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
-| [**Issue to task / bug**](./ci-issue-to-task-demo.md) | Assigner alone. A commented GitHub issue becomes a Jira Task (`/make-task`) or Bug (`/make-bug`) with its branch and worktree, and the run stops there — no implementation, no PR. | **comment** — bare or with prose | **None** — the OWNER/MEMBER comment guard is the only gate; `environment: production` was dropped. ⚠️ Secrets moved from the `production` environment to repo-level, pending redistribution (JST-225 AC#4) — until done the bootstrap fails loud. | • [`demo-claude-issue-to-task.yml`](../../../../.github/workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `/make-task`<br>• [`demo-claude-issue-to-bug.yml`](../../../../.github/workflows/demo-claude-issue-to-bug.yml) — Claude Code CLI · `/make-bug` |
+| [**Issue to task / bug**](./ci-issue-to-task-demo.md) | Assigner alone. A commented GitHub issue becomes a Jira Task (`/make-task`) or Bug (`/make-bug`) with its branch and worktree, and the run stops there — no implementation, no PR. | **comment** — bare or with prose | **None** — the OWNER comment guard is the only gate; `environment: production` was dropped. ⚠️ Secrets moved from the `production` environment to repo-level, pending redistribution (JST-225 AC#4) — until done the bootstrap fails loud. | • [`demo-claude-issue-to-task.yml`](../../../../.github/workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `/make-task`<br>• [`demo-claude-issue-to-bug.yml`](../../../../.github/workflows/demo-claude-issue-to-bug.yml) — Claude Code CLI · `/make-bug` |
 | [**Smoke test**](./ci-smoke-test-demo.md) | **No skill is invoked.** Installs a coding assistant on the runner, points its config at this plugin's `skills/`, and drives one plain inference to prove the backend is wired up — the plumbing check you run *before* trusting a new client or model with a real flow. Answers "does this assistant install, authenticate, find the skills, and return a completion in CI?", nothing more. | **manual** | **None** — declares no `environment`, so it never pauses and reads no environment secrets | • [`demo-kimi-openrouter-reviewer.yml`](../../../../.github/workflows/demo-kimi-openrouter-reviewer.yml) — Kimi Code + OpenRouter · `workflow_dispatch` — installs Kimi, writes a `config.toml` whose `extra_skill_dirs` points at the plugin, then runs one hand-written review prompt over `gh pr diff` and posts the result to the PR |
 
 **"Up to" is doing real work in that column.** `environment: production` in a
@@ -151,7 +151,7 @@ workflow file does two separable things, and only one of them is automatic:
   empty strings for every environment secret and fails its own up-front check.
 - **Only if you ask for it** — it pauses for a human. The pause comes from the
   **Required reviewers** protection rule on the environment itself
-  ([§3.1](#31-create-the-environment)), not from the workflow file. Leave that
+  ([§3.3](#33-create-the-environment)), not from the workflow file. Leave that
   box unchecked and every one of these runs start to finish with no approval
   prompt at all, still correctly scoped to the environment's secrets.
 
@@ -189,7 +189,7 @@ Four more things the matrix makes visible:
   reviewer as its skill argument, which `jira-task-reviewer` reads as free-form
   notes about the run. A bare command behaves exactly as it always has.
 
-  What this does *not* loosen is the gate: the author check (OWNER/MEMBER) and
+  What this does *not* loosen is the gate: the author check (OWNER) and
   the issue-vs-PR check are untouched and still live in the job-level `if:`,
   the prose is never gating input, and the command still has to be the first
   token followed by a separator — `/reviewer-anything` and a mid-sentence
@@ -197,16 +197,176 @@ Four more things the matrix makes visible:
 
 ---
 
-## 3. Production environment settings
+## 3. The two-gate convention for assistant workflows
 
-Every demo except the smoke test and the issue-to-task/bug twins binds its
-skill jobs to a GitHub **Environment** named `production`. That binding is
-what scopes their secrets, and — once you add the Required reviewers rule —
-what implements one manual approval per skill run. The issue-to-* twins
-dropped it: they declare no `environment: production`, so the OWNER/MEMBER
-comment guard is their only gate and their secrets resolve from the repo
-(pending the redistribution from environment secrets flagged by JST-225 AC#4)
-— see [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
+Every workflow that executes a coding assistant declares **two separable gates**
+to control when and by whom the assistant can be invoked. The convention is
+named and linkable so every new workflow added to this repo gets both gates
+by construction rather than by someone remembering.
+
+### 3.1 Rule 1: Environment gate — scopes secrets and pauses for approval
+
+Every job that executes a coding assistant declares `environment: production`.
+That does two separable things:
+
+- **Always** — it scopes which secrets the job can read. A job without it sees
+  empty strings for every environment secret and fails its own up-front check.
+- **Only if you ask for it** — it pauses for a human. The pause comes from the
+  **Required reviewers** protection rule on the environment itself (see §3.3
+  below), not from the workflow file. Leave that box unchecked and every one
+  of these runs start to finish with no approval prompt at all, still correctly
+  scoped to the environment's secrets.
+
+The **exception that proves the rule**: precheck and gating jobs (e.g.,
+`check_pr_exists`, `check_branch`, and equivalents) stay **ungated and
+secret-free** deliberately. They must run before the environment gate so a bad
+trigger is rejected without asking a human to approve anything and without
+spending a model token.
+
+### 3.2 Rule 2: Owner-only author gate — cheap precheck before the environment gate
+
+Every workflow reachable by someone other than the repository owner carries an
+owner-only author gate on a cheap, secret-free precheck job that runs **before**
+the environment gate. The predicate depends on the trigger:
+
+- **`issue_comment`** — `github.event.comment.author_association == 'OWNER'`.
+  `MEMBER` is **not** accepted — a single merged PR earns `MEMBER` association,
+  which is too loose for a trigger that runs an LLM with write permissions.
+- **`workflow_dispatch`** — `github.triggering_actor == github.repository_owner`,
+  because there is no comment and therefore no `author_association`. Prefer
+  `triggering_actor` over `actor` so a non-owner cannot re-run an owner's
+  earlier dispatch.
+
+### 3.3 Create the environment
+
+1. Repo **Settings → Environments → New environment**.
+2. Name it **`production`** — this exact name is hardcoded in the workflows.
+3. *(Optional, but the point of the demos)* Check **Required reviewers** and
+   add the approver(s). **This is the step the approval gates come from — with
+   it unchecked the workflows still run, just unattended.** Steps 1–2 alone
+   only give the jobs access to the environment's secrets.
+4. Click **Save protection rules**.
+
+### 3.4 What each gate buys you
+
+Assuming Required reviewers is enabled on the `production` environment:
+
+| Job | Pauses before | What you can inspect at that point |
+|---|---|---|
+| **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
+| **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
+| **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
+
+One `production` environment reused by every job is enough — the rule fires
+per job, so it still yields one checkpoint per skill.
+
+### 3.5 Environment secrets
+
+All credentials live as **environment secrets on `production`**, not
+repo-level secrets — a job that forgets `environment: production` reads
+empty strings and fails its own up-front secret check rather than silently
+running with the wrong identity. The issue-to-task/bug twins are the one
+exception: they read **repo-level** secrets (the gate is gone), pending the
+redistribution from `production` called out in
+[ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
+
+| Secret | Used by | Notes |
+|---|---|---|
+| `JIRA_ACCOUNT_URL` | every job | e.g. `<your-site>.atlassian.net`, no scheme. |
+| `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | assigner job | Assigner's own Jira identity. |
+| `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | executor job (+ `_EMAIL` also read by the assigner job, as the assignment target, not a credential) | Executor's own Jira identity. |
+| `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | reviewer job | Reviewer's own Jira identity. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | every job on the Claude-Code-backed demos | Read by the `claude` CLI from the environment — never written into the env file. Not used by the FCC + NVIDIA NIM demos, which authenticate to NIM instead (see below). |
+| `NVIDIA_NIM_API_KEY` | `demo-fcc-nvidia-nim-feature-flow.yml`, `demo-fcc-nvidia-nim-reviewer.yml`, `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` | The FCC + NIM demos' equivalent of `CLAUDE_CODE_OAUTH_TOKEN` — model backend credential instead of the Claude Code CLI's. |
+
+`GITHUB_PAT_TOKEN` is not a secret to create here: every workflow always
+populates it from the runner's built-in `secrets.GITHUB_TOKEN`, which can
+push, open a PR, and comment given each job's `permissions:` block. It stays
+an env-file key (see "Common patterns across the CI demos" above) because
+the skills' `statuscheck` reads it from
+`.jst/jira-sdlc-tools.local.env` to log `gh` in — a real PAT is only needed
+there, for local/dev use. One limitation of the built-in token carries over
+unchanged in CI: PRs it opens don't trigger other workflows.
+
+### 3.6 Setting secrets via GitHub CLI
+
+```bash
+gh secret set JIRA_ACCOUNT_URL      --repo <OWNER>/<REPO> --body "<your-site>.atlassian.net" --env production
+gh secret set JIRA_ASSIGNER_EMAIL   --repo <OWNER>/<REPO> --body "<assigner-identity-email>"  --env production
+gh secret set JIRA_ASSIGNER_TOKEN   --repo <OWNER>/<REPO> --body "<assigner-api-token>"        --env production
+gh secret set JIRA_EXECUTOR_EMAIL   --repo <OWNER>/<REPO> --body "<executor-identity-email>"  --env production
+gh secret set JIRA_EXECUTOR_TOKEN   --repo <OWNER>/<REPO> --body "<executor-api-token>"        --env production
+gh secret set JIRA_REVIEWER_EMAIL   --repo <OWNER>/<REPO> --body "<reviewer-identity-email>"  --env production
+gh secret set JIRA_REVIEWER_TOKEN   --repo <OWNER>/<REPO> --body "<reviewer-api-token>"        --env production
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <OWNER>/<REPO> --body "<claude-code-oauth-token>" --env production
+# Only for the FCC + NVIDIA NIM demos, in place of CLAUDE_CODE_OAUTH_TOKEN
+gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-api-key>"         --env production
+```
+
+`--env production` scopes each secret to that environment, so it's only
+readable from jobs that declare `environment: production`. The issue-to-task
+and issue-to-bug twins are the exception — those jobs dropped `environment:
+production`, so set the same keys as **repo** secrets (drop the `--env
+production`) rather than environment ones, until the redistribution called out
+by JST-225 AC#4 is done.
+
+### 3.7 Copy-pasteable gate snippets
+
+#### For `issue_comment`-triggered workflows
+
+```yaml
+jobs:
+  check_comment:
+    name: guard — comment gate
+    runs-on: ubuntu-latest
+    # No environment: production — this is the precheck gate
+    outputs:
+      should_run: ${{ steps.guard.outputs.should_run }}
+    steps:
+      - id: guard
+        if: >-
+          contains(github.event.comment.body, '/make-feature') &&
+          (github.event.comment.author_association == 'OWNER') &&
+          (github.event.issue.pull_request == null)
+        run: echo "should_run=true" >> $GITHUB_OUTPUT
+
+  assign:
+    name: assigner
+    needs: check_comment
+    if: needs.check_comment.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    environment: production  # ← environment gate here
+    steps:
+      # ... skill steps
+```
+
+#### For `workflow_dispatch`-triggered workflows
+
+```yaml
+on:
+  workflow_dispatch:
+
+jobs:
+  check_actor:
+    name: guard — dispatch gate
+    runs-on: ubuntu-latest
+    # No environment: production — this is the precheck gate
+    outputs:
+      should_run: ${{ steps.guard.outputs.should_run }}
+    steps:
+      - id: guard
+        if: github.triggering_actor == github.repository_owner
+        run: echo "should_run=true" >> $GITHUB_OUTPUT
+
+  assign:
+    name: assigner
+    needs: check_actor
+    if: needs.check_actor.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    environment: production  # ← environment gate here
+    steps:
+      # ... skill steps
+```
 
 ### 3.1 Create the environment
 

@@ -20,12 +20,17 @@ the issue key is derived from the current branch (see Discovery below).
   implementation (step 6) alongside the Jira issue description; it
   supplements, never replaces, that description.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root, and every script path below
-  hangs off it. If it isn't set — e.g. reading this skill on a non-Claude
-  client — resolve it against the platform's provided/default skills folder
-  (the folder it loads these skills from; each non-Claude client is expected to
-  have this set), keeping `../_shared/scripts/posix/` relative to this skill as
-  the default. `jira.sh` and every other script the steps call live there; see
-  INTEGRATIONS.md.
+  hangs off it. If it isn't set (a non-Claude client), resolve the root
+  yourself, in order: (1) this skill's own directory — given at the top of the
+  loaded SKILL.md, or the folder containing it — so the scripts are at
+  `../_shared/scripts/posix/` relative to it (correct on every platform); (2) if
+  you can't derive that, probe the platform's default skills locations —
+  project-root `.agent/skills/`, `.agents/skills/`, `.codex/skills/`,
+  `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`, the home global
+  `~/.claude/skills/`, or the path named in the platform's config
+  (`kilo.jsonc`, `settings.json`, `config.toml`). `jira.sh` and every other
+  script the steps call live there; see INTEGRATIONS.md → "Locating the shared
+  scripts".
 - **Jira access is the `jira.sh` / `jira.ps1` client, not a global CLI.** It
   lives at `$S/jira.sh` (POSIX) / the `win/jira.ps1` port (Windows), where `S`
   is the scripts dir set in the credential block below. The steps write Jira

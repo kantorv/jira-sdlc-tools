@@ -57,7 +57,7 @@ is created, no code is written, nothing is merged.
 
 ```mermaid
 flowchart TB
-    C([comment /review on a PR — optionally plus prose]) --> GA{{"guard — body is /review, bare or plus a separator<br>author_association OWNER or MEMBER<br>comment is on a PR, not a plain issue"}}
+    C([comment /review on a PR — optionally plus prose]) --> GA{{"guard — body is /review, bare or plus a separator<br>author_association OWNER<br>comment is on a PR, not a plain issue"}}
     GA -->|no match| X([no run — silently skipped])
     GA -->|match| J1["job 1 · check_pr_exists<br>resolve branch → issue key<br>find the open PR"]
     J1 -->|no PR| X2([nothing to review — stop])
@@ -98,7 +98,7 @@ The intended trigger is a comment. The guard has three clauses, all necessary:
 |---|---|
 | `github.event.issue.pull_request` | `issue_comment` fires for plain issues too. This is what restricts it to PR comments. |
 | body is `/review`, bare or followed by a space or newline | The command, which must be the comment's first token. Written out as an exact match plus three `startsWith` forms rather than the bare `startsWith(body, '/review')` this used to be — that one also fired on `/reviewer-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match. |
-| `author_association == 'OWNER' \|\| 'MEMBER'` | The security boundary. `issue_comment` fires for *any* commenter on a public repo; without this, a stranger's comment would spend your tokens and your Jira credentials. |
+| `author_association == 'OWNER'` | The security boundary. `issue_comment` fires for *any* commenter on a public repo; without this, a stranger's comment would spend your tokens and your Jira credentials. `MEMBER` is **not** accepted — a single merged PR earns `MEMBER` association, which is too loose. |
 
 The trigger word differs per backend so that one comment can't start two
 workflows on a repo where both are installed: `/review` for the Claude
@@ -154,7 +154,8 @@ enabled — makes GitHub pause for a human before it starts. There is only one
 skill here, so there is at most one gate: the point at which you can eyeball
 the diff before the review spends tokens on it. With Required reviewers left
 unchecked the job runs unattended, still correctly scoped to the environment's
-secrets. Setup is
+secrets. See [APPLICATIONS.md §3.1–3.2](../APPLICATIONS.md) for the full
+two-gate convention. Setup is
 [APPLICATIONS.md §3](./APPLICATIONS.md#3-production-environment-settings).
 
 The gating job runs *before* the environment gate, deliberately: resolving the
@@ -285,7 +286,7 @@ Nothing is ever merged. That stays a human act.
    See [APPLICATIONS.md §3.4](./APPLICATIONS.md#34-setting-secrets-via-github-cli).
 2. Open a PR from a `feature/<KEY>-…` or `hotfix/<KEY>-…` branch.
 3. Comment `/review` on it (`/fcc-review` for the FCC variant) as an OWNER or
-   MEMBER of the repo — bare, or followed by a space or newline and whatever
+   OWNER of the repo — bare, or followed by a space or newline and whatever
    you want this review to focus on (see *Steering the review from the
    comment*).
 4. Approve the `production` gate if GitHub pauses (it will only pause when the
