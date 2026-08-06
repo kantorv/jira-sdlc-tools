@@ -14,7 +14,8 @@ and PRs.
 - Installing the app from the Atlassian Marketplace and connecting the GitHub
   org to the Jira site.
 - What the integration buys this plugin: branch/PR-to-issue linking (the
-  skills name branches `feature/<KEY>-slug` precisely so this works), and the
+  skills name branches `<prefix>/<KEY>-slug` precisely so this works — the
+  key is what links, whichever of the four prefixes it carries), and the
   automation that moves an issue to `<STATUS_DONE>` on merge — no skill
   transitions to that status itself, per
   [../skills/_shared/project-config.md](../skills/_shared/project-config.md).

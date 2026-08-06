@@ -3,7 +3,8 @@
 Phase 1 of the task lifecycle, run by the **`jira-task-assigner`** skill.
 Triggered once per task, **invoked from the default base branch** (or from
 the production branch, which is accepted only for an emergency hotfix) — the
-assigner refuses to run on an existing `feature/`/`hotfix/` issue branch,
+assigner refuses to run on an existing issue branch of any prefix
+(`feature/`, `bugfix/`, `chore/`, `hotfix/`),
 and asks the user how to proceed on any other branch.
 
 This phase ends when the assigner reports back: issues exist, branches
@@ -37,9 +38,9 @@ sequenceDiagram
     Assigner->>JIRA: get_assignee_email.sh (resolve executor email)
     Note right of Assigner: login fails → stop.<br/>Everything below is now filed BY the assigner<br/>(Jira sets creator + reporter from it)
     Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
-    Assigner->>GIT: read current branch (base? production? feature/hotfix? other?)
+    Assigner->>GIT: read current branch (base? production? issue branch? other?)
     GIT-->>Assigner: current branch
-    Note right of Assigner: base → continue · production → continue, hotfix only (step 5C decides)<br/>feature/hotfix → stop · other → ask user
+    Note right of Assigner: base → continue · production → continue, hotfix only (step 5C decides)<br/>issue branch (feature/bugfix/chore/hotfix) → stop · other → ask user
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled
@@ -47,7 +48,7 @@ sequenceDiagram
         User-->>Assigner: answers
     end
 
-    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)<br/>+ base — planned work (default) or explicit hotfix
+    Assigner->>Assigner: decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)<br/>+ prefix from type + intent (feature/bugfix/chore)<br/>+ base — planned work (default) or explicit hotfix
 
     Assigner->>Assigner: get_assignee_email.sh — resolve ASSIGNEE_EMAIL<br/>(the executor's identity — no email configured → stop)
     Note right of Assigner: every create below carries<br/>--assignee ASSIGNEE_EMAIL
@@ -55,7 +56,7 @@ sequenceDiagram
     alt Multistep (split into parallel sub-tasks)
         Assigner->>JIRA: create <PARENT-KEY> issue (Task / Story / Bug)<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: <PARENT-KEY>
-        Assigner->>GIT: create branch feature/<PARENT-KEY>-<slug><br/>(multistep is always the planned path — feature/ from development),<br/>set parentbranch config, push, add parent worktree
+        Assigner->>GIT: create branch <prefix>/<PARENT-KEY>-<slug><br/>(multistep is always the planned path — feature/bugfix/chore from development),<br/>set parentbranch config, push, add parent worktree
         GIT-->>Assigner: branch + worktree ready
         loop per sub-task
             Assigner->>JIRA: create sub-task issue (link parent <PARENT-KEY>)<br/>--assignee ASSIGNEE_EMAIL
@@ -68,7 +69,7 @@ sequenceDiagram
     else Single-step (one cohesive task, and every hotfix)
         Assigner->>JIRA: create single top-level issue<br/>--assignee ASSIGNEE_EMAIL
         JIRA-->>Assigner: issue key
-        Assigner->>GIT: create branch + worktree from the chosen base<br/>(feature/ off development — hotfix/ off origin/main),<br/>set parentbranch config, push
+        Assigner->>GIT: create branch + worktree from the chosen base<br/>(feature/bugfix/chore off development — hotfix/ off origin/main),<br/>set parentbranch config, push
         GIT-->>Assigner: branch + worktree ready
         Assigner->>JIRA: post "PR target branch: ... Worktree: ..." comment
     end
@@ -109,7 +110,9 @@ sequenceDiagram
   multistep loop it provisions each sub-task's issue (JIRA) then branch
   + worktree (GIT) uniformly.
 - **The base decision rides along with scope** — planned work (the
-  default) branches `feature/` off `development`, while an *explicitly
+  default) branches off `development` under whichever prefix the issue type
+  and intent call for (`feature/`, `bugfix/` or `chore/` — SDLC.md §2),
+  while an *explicitly
   requested* emergency production fix branches a single `hotfix/` off
   `origin/main` (SDLC.md §4). Because it cuts from the fetched remote ref
   rather than checking production out, the hotfix works the same whether

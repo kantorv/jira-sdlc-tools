@@ -1,6 +1,7 @@
 > **Note on this document:** this is the branching and release policy the
 > `jira-sdlc` skills (in `../skills/`) were written against — it's what
-> "the default base branch," the `feature/`/`hotfix/` split, and the
+> "the default base branch," the four work-branch prefixes
+> (`feature/`, `bugfix/`, `chore/`, `hotfix/`), and the
 > squash-merge-into-parent-then-manual-release logic all assume. It's
 > already generic (no project names, no company specifics — reviewed
 > before publishing this repo). If your process differs, adapt this
@@ -28,9 +29,33 @@ This document defines the standard operating procedures for the Software Develop
 | :--- | :---: | :--- | :--- | :--- |
 | `main` | ✅ Yes | `release/*`, `hotfix/*` | `development` | Represents the current production state. Strictly tagged with Semantic Versioning (e.g., `v1.2.3`). |
 | `development` | ✅ Yes | `main` | `release/*` | The default working branch. Represents Staging/Integration. Code here is continuously deployed to the staging environment. |
-| `feature/ISSUE-KEY-slug` | ❌ No | `development` | `development` | Used for new features and non-critical bug fixes. |
+| `feature/ISSUE-KEY-slug` | ❌ No | `development` | `development` | New capability or product-facing work. |
+| `bugfix/ISSUE-KEY-slug` | ❌ No | `development`, **or** the current `release/*` | whichever branch it was cut from | Defect fixes. Off `development` for a defect found pre-production; off `release/*` for one found during QA hardening (Phase 3), merging back into that *same* release branch. |
+| `chore/ISSUE-KEY-slug` | ❌ No | `development` | `development` | Maintenance with no product code: dependencies, CI/CD, build scripts, tooling. |
 | `hotfix/ISSUE-KEY-slug` | ❌ No | `main` | `main` & `development` | Used **only** for critical production bugs that cannot wait for the next sprint release. |
 | `release/sprint-<X.Y.Z>` | ❌ No | `development` | `main` | Temporary branch created at the end of a sprint for QA hardening and final bug fixes before production release. Named after the intended release version (computed from latest `v*` tag + chosen bump level, default `minor` — see §5). |
+
+The four `<prefix>/ISSUE-KEY-slug` rows are the **work branches**, one per
+issue. Their prefix is metadata
+about the *intent* of the work — it is what lets release notes categorise (or
+exclude) a change and what tells a reviewer which mindset a PR needs. Pick it
+from the issue type plus intent, not from the base branch:
+
+| Issue | Prefix |
+| :--- | :--- |
+| `Bug` | `bugfix/` |
+| `Task`, maintenance only (deps, CI/CD, build scripts, tooling) | `chore/` |
+| `Task`, product-facing | `feature/` |
+| `Story` | `feature/` |
+| explicit emergency production fix | `hotfix/` (overrides the rows above) |
+
+Sub-tasks inherit their parent's prefix. The base branch still *constrains*
+which prefixes are legal — `hotfix/` and only `hotfix/` comes off `main` — it
+just no longer determines the prefix on its own.
+
+Gitflow mechanics are unchanged by the split: `bugfix/` and `chore/` branch
+from and merge back to exactly where `feature/` already did, and `hotfix/`
+keeps its production path (§4).
 
 ---
 
@@ -39,7 +64,7 @@ This document defines the standard operating procedures for the Software Develop
 Our development cycles run in 14-day sprints. The Git workflow strictly follows this cadence.
 
 ### Phase 1: Active Development (Days 1 to 11)
-- Developers branch off `development` to create `feature/*` branches.
+- Developers branch off `development` to create `feature/*`, `bugfix/*` or `chore/*` branches — whichever the §2 prefix table calls for.
 - Pull Requests (PRs) are opened against `development`.
 - Once approved, PRs are merged immediately. 
 - *Rule:* If a feature is incomplete, it MUST be wrapped in a Feature Flag before merging into `development`.
@@ -51,7 +76,8 @@ Our development cycles run in 14-day sprints. The Git workflow strictly follows 
 
 ### Phase 3: QA & Hardening (Days 12 to 14)
 - QA tests the `release/*` branch in the staging environment.
-- If bugs are found, developers branch directly off the `release/*` branch, fix the bug, and open a PR back into the `release/*` branch.
+- If bugs are found, developers cut a `bugfix/<ISSUE-KEY>-<slug>` branch directly off the `release/*` branch, fix the bug, and open a PR back into that *same* `release/*` branch — never into `development`, which is already open for the next sprint.
+- The fix reaches `development` with the rest of the release, when `main` is merged back in Phase 4.
 
 ### Phase 4: Production Deployment (Day 14)
 - The `release/*` branch is merged into `main` via a PR.
@@ -124,6 +150,8 @@ The version for each release is taken from the **branch name** — no PR label i
 * A `release/sprint-<X.Y.Z>` branch carries its SemVer version in the name (set at cut time by `cut-release.yml`). `release.yml` parses that version back out at merge time; a malformed name (anything other than `release/sprint-<X.Y.Z>`, including a leading `v`) fails the release. To ship a different version, rename or re-cut the branch.
 * A `hotfix/*` branch always takes a **patch** bump on the latest `v*` tag. A hotfix is by §4's definition an emergency fix for a critical production bug — that IS a patch; work needing a minor or major bump belongs in a `release/*` branch, where the version is explicit.
 
+`release/*` and `hotfix/*` are the **only** version-bearing branches — they are the only two that merge into `main`, which is the only branch that carries tags. A `feature/*`, `bugfix/*` or `chore/*` merge never tags and never publishes a release; its change is versioned later, by the `release/*` branch that carries it to production.
+
 Commit-message conventions play no part in version resolution.
 
 * **MAJOR (`v2.0.0`):** Breaking changes, massive UI overhauls, or major architectural shifts.
@@ -154,7 +182,7 @@ To prevent merge conflicts and "branch rot", long-running feature branches are d
 
 *Instructions for AI coding assistants (Copilot, Cursor, Gemini, etc.) reading this document:*
 
-1. **Branch Naming:** Work branched off `development` is **always** named `feature/<ISSUE-KEY>-<kebab-case-description>` (e.g. `git checkout -b feature/PROJ-123-add-user-auth`) — `feature/` is the only branch type cut from `development`, and it covers all planned work, features and bug fixes alike. The one exception is an emergency `hotfix/` off `main` (see #2); never create a `hotfix/` branch from `development`.
-2. **Target Branches:** Always default PR creation scripts or git merge targets to `development`, unless explicitly told it is a production **hotfix** — those (and only those) branch from `main`, are named `hotfix/<ISSUE-KEY>-<kebab-case-description>`, and target `main`.
+1. **Branch Naming:** Every work branch is `<prefix>/<ISSUE-KEY>-<kebab-case-description>` (e.g. `git checkout -b feature/PROJ-123-add-user-auth`), and the prefix is one of exactly four — `feature/`, `bugfix/`, `chore/`, `hotfix/` — chosen from the issue type and intent per §2's prefix table, not from the base branch. Three of them (`feature/`, `bugfix/`, `chore/`) are cut from `development`; `hotfix/` is the one exception and is cut from `main` (see #2), never from `development`. The one other legal base is a `release/*` branch, which takes `bugfix/` only (Phase 3).
+2. **Target Branches:** Always default PR creation scripts or git merge targets to `development`, with two exceptions: a production **hotfix** — those (and only those) branch from `main`, are named `hotfix/<ISSUE-KEY>-<kebab-case-description>`, and target `main`; and a QA-hardening `bugfix/` cut from a `release/*` branch, which targets that same `release/*` branch.
 3. **Feature Flags:** Do **not** add feature-flag wrapping on your own initiative. Whether incomplete work ships behind a flag (§6) is a deliberate human/product decision — wrap an entry point in a flag only when the issue or the user explicitly asks for it, and then follow the codebase's existing flag pattern rather than inventing one.
 4. **Commit Messages & Versioning:** SemVer bumps are driven by the **branch name** (`release/sprint-<X.Y.Z>` carries the version; `hotfix/*` is always a patch), **not** by PR labels or commit-message parsing — so Conventional Commits are not required. Prefix each commit with its Jira issue key (`<ISSUE-KEY> <short imperative summary>`, e.g. `PROJ-123 add user auth`) so history stays traceable to the issue; `release.yml` resolves the version from the head ref on the merge (see §5).
