@@ -142,9 +142,10 @@ between a commenter and the run, which is also why it stays entirely inside the
 job-level `if:`.
 
 Then `check_pr_exists` validates the branch name against
-`^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+-`, extracts the issue key from it,
-and looks for an open PR on that branch. If there is no PR, the reviewer job
-is skipped rather than failed — there is simply nothing to review.
+`^(feature|bugfix|chore|hotfix)/[A-Z][A-Z0-9_]*-[0-9]+-`, extracts the issue
+key from it, and looks for an open PR on that branch. If there is no PR, the
+reviewer job is skipped rather than failed — there is simply nothing to
+review.
 
 ## The `environment: production` gate
 
