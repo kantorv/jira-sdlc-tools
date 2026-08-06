@@ -49,9 +49,10 @@ jobs:
           BRANCH_NAME="${{ github.ref_name }}"
           REPO_NAME="${{ github.repository }}"
 
-          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
-          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
-            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+          # Validate branch name format: must be <prefix>/PROJ-NNN-slug, where
+          # <prefix> is one of the four work-branch prefixes (JST-271).
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|bugfix|chore|hotfix)/[A-Z][A-Z0-9_]*-[0-9]+- ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug, bugfix/PROJ-NNN-slug, chore/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
             echo "pr_number=0" >> "$GITHUB_OUTPUT"
             echo "issue_key=" >> "$GITHUB_OUTPUT"
@@ -59,7 +60,7 @@ jobs:
           fi
 
           # Extract issue key from branch name (PROJ-NNN)
-          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9_]*-[0-9]+)-.*$#\2#p')
           if [ -z "$ISSUE_KEY" ]; then
             echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
@@ -90,7 +91,7 @@ jobs:
     # draft PR into main) and other non-issue head branches carry no Jira key,
     # so gating here skips them instead of spinning up a runner for a no-op.
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
-    # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+    # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'bugfix/') || startsWith(github.head_ref, 'chore/') || startsWith(github.head_ref, 'hotfix/')
     environment: production
     runs-on: ubuntu-latest
     permissions:
