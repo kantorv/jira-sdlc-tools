@@ -29,7 +29,8 @@ given, is free-form notes about this run, not a key:
   areas, constraints, context) — fold them into the review criteria (3c);
   never parsed as an issue key.
 - `<PARENT-BRANCH>` = the git branch for `<PARENT-KEY>`, always named
-  `feature/<PARENT-KEY>-<slug>` or `hotfix/<PARENT-KEY>-<slug>`.
+  `<PREFIX><PARENT-KEY>-<slug>`, where `<PREFIX>` is one of §12's four:
+  `feature/`, `bugfix/`, `chore/`, `hotfix/`.
 - `<BASE_BRANCH>` = whatever `<PARENT-BRANCH>` itself should merge into.
   Step 1 resolves it with §13's mechanics
   (`../_shared/jira-api-reference.md`), keyed on `<PARENT-BRANCH>` rather
@@ -137,7 +138,7 @@ actually acts on).
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO, never FAIL — *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Stop unless it reads linked**: normally the parent's own (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), or a sub-task's |
-| `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
+| `branch` | INFO, never FAIL — base branch vs. *issue branch* (any of §12's four prefixes) vs. neither. **Stop unless it reads an issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — the sub-task's parent, not the base, when this is a sub-task worktree, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
 
@@ -211,8 +212,10 @@ don't exist yet.
 
   Act on `source=`: `git-config` or `jira-comment` → proceed; `env-default`
   → proceed but flag it in the report; `unresolved` (exit 1) → ask the user.
-  Then apply §13's prefix/base sanity check to the resolved pair: a
-  `hotfix/` `<PARENT-BRANCH>` sitting on `<DEFAULT_BASE_BRANCH>` means the
+  Then apply §13's prefix/base sanity table to the resolved pair (`hotfix/`
+  ⇔ `<PRODUCTION_BRANCH>`; `feature/`/`chore/` → `<DEFAULT_BASE_BRANCH>`;
+  `bugfix/` → that or a `release/*` branch). The realistic break is a
+  `hotfix/` `<PARENT-BRANCH>` sitting on `<DEFAULT_BASE_BRANCH>`: the
   env default fired on a production fix, so the phase check below would hunt
   for the PR on the wrong base and 5a would open a duplicate into staging.
   Stop and ask which base is right.
