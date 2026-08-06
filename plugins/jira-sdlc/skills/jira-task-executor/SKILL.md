@@ -11,7 +11,8 @@ the issue key is derived from the current branch (see Discovery below).
 
 **Conventions used below:**
 - `<KEY>` = the Jira issue key derived from the current branch
-  (`feature/<KEY>-<slug>` / `hotfix/<KEY>-<slug>`), read from the
+  (`<PREFIX><KEY>-<slug>`, where `<PREFIX>` is one of `feature/`, `bugfix/`,
+  `chore/`, `hotfix/` — `../_shared/jira-api-reference.md` §12), read from the
   Discovery healthcheck's `issue_key` row below — the branch is the sole
   source of truth, there is no user-supplied key to compare it against.
 - `$ARGUMENTS`, when non-empty, is free-form notes about this run
@@ -127,7 +128,7 @@ note below**:
 | row | what it verifies / gathers |
 |---|---|
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Anything but a linked worktree → stop**: this skill runs only from an issue's own worktree. `cd` into the one `jira-task-assigner` created (`worktree-<KEY>`) and rerun |
-| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **Anything but an issue branch → stop** (same remedy) — sitting on `<DEFAULT_BASE_BRANCH>` means you're not in an issue's worktree |
+| `branch` | INFO: base branch vs. *issue branch* — any of §12's four prefixes, `feature/`, `bugfix/`, `chore/`, `hotfix/` (`../_shared/jira-api-reference.md`) — vs. neither. **Anything but an issue branch → stop** (same remedy) — sitting on `<DEFAULT_BASE_BRANCH>` means you're not in an issue's worktree |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2's stale-branch merge (step 10's resolver reads it for itself) |
 | `production_branch` | INFO: `<PRODUCTION_BRANCH>` — this skill's only source for it, consumed by step 10's prefix/base sanity check |
@@ -373,12 +374,15 @@ forward as context.
         explicitly in the final report.
       - **`source=env-default`** — top-level issues only. Proceed, and say so
         explicitly in the final report.
-      - **Prefix and base disagree** (top-level issues only — the §13 sanity
-        check): you're on `hotfix/…` but `PR_BASE` isn't `<PRODUCTION_BRANCH>`
-        (Discovery's `production_branch` row), or on `feature/…` but it is.
-        §12 ties the prefix to the base, so one of
-        the two is wrong — **stop and ask.** A hotfix that fell through to
-        `source=env-default` is the realistic case, and
+      - **Prefix and base disagree** (top-level issues only — §13's sanity
+        table is the authority; this is what it comes to here, with
+        `<PRODUCTION_BRANCH>` from Discovery's `production_branch` row):
+        `hotfix/` ⇔ `PR_BASE` is `<PRODUCTION_BRANCH>`, either without the
+        other being wrong; `feature/` and `chore/` expect
+        `<DEFAULT_BASE_BRANCH>`; `bugfix/` legitimately takes either
+        `<DEFAULT_BASE_BRANCH>` or a `release/*` branch. On any other pairing
+        one of the two is wrong — **stop and ask.** A hotfix that fell through
+        to `source=env-default` is the realistic case, and
         retargeting a production fix at staging neither ships it nor gets it
         versioned. A sub-task is exempt: its base is its parent's branch.
     - Link the issue from the PR body as
