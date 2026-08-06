@@ -144,9 +144,10 @@ hook ([example](docs/examples/bootstrap.example.sh)); when it exists,
 per worktree, automatically, fail-soft.
 
 **What the assigner creates.** The assigner runs from a long-lived branch,
-normally your base branch — invoke it from an existing feature/hotfix branch
-and it stops, telling you to checkout the base branch first (it doesn't append
-sub-tasks to an existing parent). It always provisions one top-level issue
+normally your base branch — invoke it from an existing issue branch (any of
+`feature/`, `bugfix/`, `chore/`, `hotfix/`) and it stops, telling you to
+checkout the base branch first (it doesn't append sub-tasks to an existing
+parent). It always provisions one top-level issue
 (`Task`/`Story`/`Bug`) with a matching branch and a `git worktree`, then:
 
 - **Single-step** — the top-level issue is the only issue. The executor
@@ -157,8 +158,15 @@ sub-tasks to an existing parent). It always provisions one top-level issue
   The parent branch (and its worktree) is the merge target for the
   sub-tasks' PRs.
 
-**Emergency hotfixes.** Branches are `feature/` off the base branch by
-default. When you *explicitly* ask for an emergency production fix, the
+**Branch prefixes.** Work branches carry one of four prefixes, picked from the
+issue type and the work's intent rather than from the base branch: a `Bug`
+gets `bugfix/`, a maintenance-only `Task` (deps, CI/CD, build, tooling) gets
+`chore/`, and a product-facing `Task` or a `Story` gets `feature/`. All three
+are cut off the base branch and target it; sub-tasks inherit their parent's
+prefix, so one run is uniform.
+
+**Emergency hotfixes.** The fourth prefix is the exception to all of that.
+When you *explicitly* ask for an emergency production fix, the
 assigner instead cuts a single-step `hotfix/` branch from
 `origin/<PRODUCTION_BRANCH>` and points its PR at production
 ([SDLC.md](docs/SDLC.md) §4) — urgency wording alone won't trigger it, and it
@@ -472,8 +480,9 @@ mid-flight is safe by design:
 
 - **Assigner**, run again from the base branch → a fresh planning pass
   that provisions a brand-new top-level issue. It aborts if invoked from
-  an existing feature/hotfix branch — it doesn't append sub-tasks to an
-  existing parent, so checkout the base branch first.
+  an existing issue branch (`feature/`, `bugfix/`, `chore/`, `hotfix/`) — it
+  doesn't append sub-tasks to an existing parent, so checkout the base branch
+  first.
 - **Executor**, run again on an issue with an existing branch → resumes
   it rather than creating a second branch for the same issue.
 - **Reviewer** — no parent PR yet → full review pass. Parent PR open →
@@ -508,7 +517,7 @@ Deliberately never automated, regardless of how routine a run looks:
   `Story`, `Task`, and `Bug` (peers) are the top-level types it creates.
 - The assigner runs **only from a long-lived branch** — your base branch,
   or the production branch when you're asking for an emergency hotfix.
-  Invoked from an existing feature/hotfix branch, it stops and tells you to
+  Invoked from an existing issue branch of any prefix, it stops and tells you to
   checkout the base branch first — it doesn't append sub-tasks to an existing
   parent (that case is TBD per the skill).
 - The reviewer works through sub-task PRs **sequentially, by design** —
@@ -600,7 +609,7 @@ inside `jira-task-assigner` and `jira-task-reviewer` hardcode the
 
 [`docs/SDLC.md`](docs/SDLC.md) is the full branching and release policy
 these skills were written against: `main` / `development` /
-`feature/*` / `hotfix/*` / `release/*` branches, a two-week sprint
+`feature/*` / `bugfix/*` / `chore/*` / `hotfix/*` / `release/*` branches, a two-week sprint
 cadence with a feature-freeze cut, an emergency hotfix flow that bypasses
 `development` entirely, SemVer tagging on `main`, and feature flags for
 anything that spans more than one sprint. It also includes a short set of
@@ -610,7 +619,7 @@ name — not PR labels or commit messages — drives the version bump).
 
 If your branching model differs, adapt that document to match yours, then
 update `<DEFAULT_BASE_BRANCH>` in `.jst/jira-sdlc-tools.env` and the
-`feature/`/`hotfix/` prefix logic in `jira-task-assigner` and
+work-branch prefix logic in `jira-task-assigner` and
 `jira-api-reference.md` §12 accordingly — the skills follow whatever
 policy `docs/SDLC.md` describes, not the other way around.
 

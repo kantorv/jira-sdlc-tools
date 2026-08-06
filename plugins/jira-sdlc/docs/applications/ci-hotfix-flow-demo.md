@@ -186,8 +186,9 @@ next section.
 Both the executor job and the reviewer job run the same
 `Rebuild the issue worktree` step immediately before their skill step. It is a
 **precondition, not setup convenience**: the executor and reviewer each
-hard-stop unless they are running in a *linked worktree* on a `feature/*` or
-`hotfix/*` branch. Skip it and the run dies in the skill's healthcheck before
+hard-stop unless they are running in a *linked worktree* on an issue branch
+(`feature/*`, `bugfix/*`, `chore/*`, `hotfix/*`). Skip it and the run dies in
+the skill's healthcheck before
 any work happens.
 
 The step is byte-identical in both jobs:

@@ -205,7 +205,8 @@ sequenceDiagram
   findings comment, and the summary/report comments posted on the parent
   after every review.
 - **Parent via climb (sub-task branches climb up)** — the reviewer derives
-  the key from the current branch (feature/<KEY>-slug or hotfix/<KEY>-slug)
+  the key from the current branch (<prefix>/<KEY>-slug, any of the four
+  prefixes)
   and `jira.sh` fetches the issue. If the issue is a Subtask, step 1 climbs
   to its parent via `fields.parent.key` and continues from there — the
   `opt branch key is a Subtask` block right after the initial Jira fetch.

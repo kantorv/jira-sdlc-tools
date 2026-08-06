@@ -78,20 +78,24 @@ it. Every variable above is described in
 ### 2.1 The branching model
 
 The skills are written against **Gitflow** — they don't invent branch names,
-they follow the policy in [SDLC.md](SDLC.md). The five branches that matter:
+they follow the policy in [SDLC.md](SDLC.md). The branches that matter:
 
 | Branch | Source | Merges to | Purpose |
 |---|---|---|---|
 | `main` | `release/*`, `hotfix/*` | `development` | Production state, tagged `vX.Y.Z` |
 | `development` | `main` | `release/*` | The **base branch** — where day-to-day work starts and lands |
 | `feature/<KEY>-slug` | `development` | `development` | One per Jira issue, created by `jira-task-assigner` |
+| `bugfix/<KEY>-slug` | `development`, or a `release/*` | whichever it was cut from | Defect fixes, including QA-hardening fixes off a release branch |
+| `chore/<KEY>-slug` | `development` | `development` | Maintenance only — deps, CI/CD, build, tooling |
 | `hotfix/<KEY>-slug` | `main` | `main` + `development` | Critical production fixes only |
 | `release/sprint-<X.Y.Z>` | `development` | `main` | Sprint QA branch, cut at release time |
 
-You only create the first two by hand. The skills create `feature/` and
-`hotfix/` branches themselves, one per issue, each with its own worktree —
-`feature/` by default, and `hotfix/` when you explicitly ask
-`jira-task-assigner` for an emergency production fix.
+You only create the first two by hand. The skills create the work branches
+themselves, one per issue, each with its own worktree. The prefix comes from
+the issue type and intent — `Bug` → `bugfix/`, maintenance-only `Task` →
+`chore/`, product-facing `Task` or `Story` → `feature/` — except `hotfix/`,
+which happens only when you explicitly ask `jira-task-assigner` for an
+emergency production fix.
 
 ### 2.2 Split production from base
 

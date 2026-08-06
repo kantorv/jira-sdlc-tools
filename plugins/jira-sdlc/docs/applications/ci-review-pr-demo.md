@@ -166,7 +166,8 @@ approve anything.
 ## The one constraint that shapes the whole job
 
 **The reviewer skill hard-stops unless it runs in a linked worktree** (`.git`
-is a *file*) on a `feature/*` or `hotfix/*` branch. A bare `actions/checkout`
+is a *file*) on an issue branch — `feature/*`, `bugfix/*`, `chore/*` or
+`hotfix/*`. A bare `actions/checkout`
 produces a *main checkout* (`.git` is a *directory*), which fails the
 `worktree` row of the skill's healthcheck before any review happens.
 
@@ -284,7 +285,8 @@ Nothing is ever merged. That stays a human act.
    `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`,
    `CLAUDE_CODE_OAUTH_TOKEN` (or `NVIDIA_NIM_API_KEY` for the FCC variant).
    See [APPLICATIONS.md §3.4](./APPLICATIONS.md#34-setting-secrets-via-github-cli).
-2. Open a PR from a `feature/<KEY>-…` or `hotfix/<KEY>-…` branch.
+2. Open a PR from an issue branch — `feature/<KEY>-…`, `bugfix/<KEY>-…`,
+   `chore/<KEY>-…` or `hotfix/<KEY>-…`.
 3. Comment `/review` on it (`/fcc-review` for the FCC variant) as an OWNER or
    OWNER of the repo — bare, or followed by a space or newline and whatever
    you want this review to focus on (see *Steering the review from the

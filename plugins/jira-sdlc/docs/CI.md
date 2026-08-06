@@ -24,8 +24,8 @@ syncing**.
 | `cut-release.yml` | manual `workflow_dispatch` (bump: patch/minor/major, default minor) | Computes the next SemVer from the latest **stable** tag + bump, cuts `release/sprint-<X.Y.Z>` off `development`, opens a **draft** PR into `main`. SDLC Phase 2. |
 | `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch. SDLC Phase 4 / §4. |
 | `update_lab.yml` | push to `development` or `lab` | Merges `development`→`lab` to keep the lab channel current, stamps the plugin manifests with a `X.Y.Z-lab.N` version **on the branch**, and tags the build `vX.Y.Z-lab.N`. See [Tagging Mechanics](#tagging-mechanics). |
-| `jira_issue_transition_on_branch.yml` | `create` (a `feature/*` or `hotfix/*` branch) | Advances the issue **To Do → In Progress**. |
-| `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from `feature/*` / `hotfix/*` | Advances the issue **→ In Review**. |
+| `jira_issue_transition_on_branch.yml` | `create` (a `feature/*`, `bugfix/*`, `chore/*` or `hotfix/*` branch) | Advances the issue **To Do → In Progress**. |
+| `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from `feature/*` / `bugfix/*` / `chore/*` / `hotfix/*` | Advances the issue **→ In Review**. |
 | `jira_issue_transition_on_merge.yml` | PR closed (merged) on an issue branch | Advances the issue **→ Done**. |
 
 ### How the pieces connect
@@ -80,6 +80,9 @@ Created **only** by `release.yml` on a `release/*` or `hotfix/*` merge into
   is the single source of truth — to ship a different version, rename or
   re-cut the branch.
 - **`hotfix/*`** is always a **patch** bump of the latest stable tag.
+- **Nothing else tags.** `release/*` and `hotfix/*` are the only
+  version-bearing heads; a `feature/*`, `bugfix/*` or `chore/*` merge never
+  reaches `release.yml` and never produces a tag or a Release.
 - The first ever release (no `v*` tag exists) is **`v0.1.0`**.
 - `cut-release.yml` computes the *next* stable version = latest stable tag +
   bump level (default `minor`) and bakes it into the release branch name.

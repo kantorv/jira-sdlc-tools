@@ -314,7 +314,8 @@ Order of operations, the short version:
 1. Run `cut-release` → `release/sprint-<X.Y.Z>` and a draft PR appear
    (version computed from latest `v*` tag + chosen bump level, default `minor`,
    baked into the branch name).
-2. QA on that branch; fix PRs land back into `release/sprint-<X.Y.Z>` (SDLC Phase 3).
+2. QA on that branch; fix PRs — `bugfix/<KEY>-<slug>` branches cut from the
+   release branch — land back into `release/sprint-<X.Y.Z>` (SDLC Phase 3).
 3. Mark the draft PR ready and merge it into `main`.
 4. `release.yml` tags, releases, syncs back to `development`, and deletes the
    branch automatically.
@@ -325,7 +326,8 @@ re-cut to change the version), and `hotfix/*` is always a **patch** on the
 latest `v*` tag. No PR label is read for versioning. Tags are pure SemVer, no
 sprint suffix. The first release (no `v*` tag exists) is `v0.1.0`. A
 `hotfix/*` merge runs the same tag→release→sync-back→cleanup steps with a
-patch bump.
+patch bump. Those two are the only version-bearing branches — a `feature/*`,
+`bugfix/*` or `chore/*` merge must never tag or publish a release.
 
 Auth: the default `GITHUB_TOKEN` suffices while `main`/`development` are
 unprotected (the workflows push tags, delete branches, create releases, and
