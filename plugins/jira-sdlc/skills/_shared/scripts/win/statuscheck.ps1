@@ -9,7 +9,8 @@
 #   (there is no default credential), so the jira_auth / jira_project rows can
 #   only probe a credential once they know whose it is. A missing or unknown
 #   role is a usage error (exit 2, no table).
-#   The issue key is normally derived from the branch and reported in the
+#   The issue key is normally derived from the branch name
+#   (feature|bugfix|chore|hotfix/<KEY>-<slug>) and reported in the
 #   `issue_key` row; passing an issue-key-shaped ISSUE-KEY (PROJ-123) makes the
 #   script compare it itself. A positional arg that is NOT issue-key-shaped —
 #   e.g. a role name passed positionally instead of via --role — is
@@ -279,11 +280,13 @@ if (-not $Br) {
     Add-Row branch INFO "detached HEAD or no current branch"
 } elseif ($BaseBranch -and ($Br -ceq $BaseBranch)) {
     Add-Row branch INFO "$Br (base branch — matches DEFAULT_BASE_BRANCH)"
-} elseif (($Br -clike 'feature/*') -or ($Br -clike 'hotfix/*')) {
+} elseif ($Br -cmatch '^(feature|bugfix|chore|hotfix)/') {
+    # Case-sensitive, mirroring the bash twin's `case` globs over the same four
+    # prefixes. $BranchOk stays set for all four so branch_project/issue_key work.
     $BranchOk = $true
-    Add-Row branch INFO "$Br (feature/hotfix issue branch)"
+    Add-Row branch INFO "$Br (issue branch)"
 } else {
-    Add-Row branch INFO "$Br (neither DEFAULT_BASE_BRANCH nor a feature/hotfix issue branch)"
+    Add-Row branch INFO "$Br (neither DEFAULT_BASE_BRANCH nor an issue branch)"
 }
 
 if ($BranchOk -and $ProjectKey) {
