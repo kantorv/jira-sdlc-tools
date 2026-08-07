@@ -7,17 +7,19 @@ a per-skill `agents/openai.yml` that reproduces `disable-model-invocation:
 true`. The tree is gitignored and maintained by manual copy; nothing
 automates it.
 
-> **Verified from a real Codex CLI run** (July 2026, `workspace-write`
-> sandbox). Everything below is first-hand unless marked **Unverified**.
+> **Verified from a real Codex CLI run** (Codex CLI 0.146.1, July 2026,
+> `workspace-write` sandbox). Everything below is first-hand unless marked
+> **Unverified**.
 
 ## Prerequisites
 
 - Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](../../skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
 - `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](../../skills/_shared/project-config.md)
-- `.codex/config.toml` at the repo root with network access enabled (see
-  **Sandboxing** in the caveats section below — without it, every `jira.sh`
-  call fails when it shells out to `curl`)
+- `.codex/config.toml` at the repo root with network access and writable roots
+  enabled (see **Sandboxing** in the caveats section below — without them,
+  `jira.sh` cannot reach `curl`, `gh auth login` cannot write its config, and
+  linked-worktree git operations cannot update the checkout metadata)
 
 ## Install / Wire-up Steps
 
@@ -78,7 +80,14 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
+# Absolute, host-specific paths: allow gh's session config and linked-worktree git metadata.
+writable_roots = ["<HOME>/.config/gh", "<REPO_ROOT>/.git"]
 ```
+
+`writable_roots` is required alongside `network_access`: the first path lets
+`gh auth login --with-token` update `~/.config/gh/hosts.yml`; the second lets
+git update the main checkout's `.git` metadata when this is a linked worktree.
+Replace both placeholders with absolute paths for the host running Codex.
 
 > **⚠️ Needs re-verification under the REST client.** The gap verified here
 > was specific to the old Atlassian CLI's `jira auth login` step — a step
@@ -154,6 +163,29 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   **Verified:** each of these needed escalated execution to proceed. This
   is not a Jira-specific allowlist; it is the sandbox's file-write boundary
   applied to the worktree's own `.git` directory.
+- **GitHub CLI config (read-only FS):** `gh auth login --with-token` writes
+  `~/.config/gh/hosts.yml`, which is outside the workspace by default. Without
+  a writable root for that directory, the `gh_auth` healthcheck row reports a
+  read-only filesystem error that can look like a bad or expired PAT; the
+  credential is not necessarily the problem. A failed `gh auth logout` can
+  leave the operator's existing session untouched under the same restriction,
+  but a writable global config lets the login overwrite it.
+- **Isolated GitHub CLI config (alternative):** set `GH_CONFIG_DIR` through
+  Codex's shell environment policy to an absolute, writable directory under
+  the worktrees root (for example, `<WORKTREES_DIR>/.ghconfig`). This keeps
+  the skill's login/logout state out of the operator's global `~/.config/gh`.
+  For example:
+
+  ```toml
+  [shell_environment_policy]
+  set = { GH_CONFIG_DIR = "<WORKTREES_DIR>/.ghconfig" }
+  ```
+
+  Landlock enforces the Linux sandbox and Seatbelt enforces the macOS one, so
+  the exact host path and writable-root configuration are platform-specific;
+  use placeholders in shared config examples. This alternative relocates
+  `gh` only — the linked-worktree `.git` writable root remains required for
+  git writes.
 - **Execution timeout:** Codex's Bash tool defaults to a short yield window.
   A `jira.sh`/`jira.ps1` call (or a `statuscheck.sh` run) that runs long
   will be reported as still running. Poll the session for output rather
