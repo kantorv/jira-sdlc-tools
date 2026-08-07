@@ -80,14 +80,15 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
-# Absolute, host-specific paths: allow gh's session config and linked-worktree git metadata.
-writable_roots = ["<HOME>/.config/gh", "<REPO_ROOT>/.git"]
+# Absolute, host-specific paths: allow gh's session config, linked-worktree git metadata, and worktree creation.
+writable_roots = ["<HOME>/.config/gh", "<REPO_ROOT>/.git", "<WORKTREES_DIR>"]
 ```
 
 `writable_roots` is required alongside `network_access`: the first path lets
 `gh auth login --with-token` update `~/.config/gh/hosts.yml`; the second lets
-git update the main checkout's `.git` metadata when this is a linked worktree.
-Replace both placeholders with absolute paths for the host running Codex.
+git update the main checkout's `.git` metadata when this is a linked worktree;
+the third lets the assigner skill create worktree folders under it. Replace
+all three placeholders with absolute paths for the host running Codex.
 
 > **⚠️ Needs re-verification under the REST client.** The gap verified here
 > was specific to the old Atlassian CLI's `jira auth login` step — a step
