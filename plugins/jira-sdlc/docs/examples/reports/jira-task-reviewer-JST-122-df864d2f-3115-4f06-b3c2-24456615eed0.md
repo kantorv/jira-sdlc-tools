@@ -7,6 +7,7 @@ plugin_version: 0.5.0-lab.2
 # Run report: jira-task-reviewer — df864d2f-3115-4f06-b3c2-24456615eed0
 
 ## Run snapshot
+
 - **When:** 2026-07-18 13:40:56Z → 14:01:25Z for the review itself; the session
   then continued under user direction to 15:33Z.
 - **cwd / OS:** `C:\Users\vboxuser\skill-dev\JST-worktrees\worktree-JST-122` —
@@ -23,8 +24,9 @@ plugin_version: 0.5.0-lab.2
   (5 commits pushed to the reviewed branch) — outside the reviewer skill.
 
 ## Run metrics
+
 | metric | value |
-|---|---|
+| -- | -- |
 | Model(s) | claude-opus-4-8 |
 | API turns (`SKILL_TURNS`) | 29 |
 | Tool calls (`TOOL_CALLS`) | 28 |
@@ -52,7 +54,7 @@ part where `jira-task-reviewer` was the acting skill. Everything from the user's
 *Divergences in detail*).
 
 | Instruction (step / rule) | Verdict | Evidence |
-|---|---|---|
+| -- | -- | -- |
 | Script dispatch — pick OS branch up front, use `win/*.ps1` on Windows for every skill script | followed | `13:40:57` "Since this is Windows, I'll use the PowerShell script ports"; all three preamble scripts invoked as `win/…​.ps1` (`4fa4eb91`, `e4fcae62`) |
 | Run `ensure_local_env` + `jira_acli_login reviewer` FIRST, unconditionally | followed | `4fa4eb91` chains `ensure_local_env.ps1` then `jira_acli_login.ps1` (login as reviewer) with `$LASTEXITCODE` guards |
 | Discovery healthcheck with `STATUSCHECK_RERUN` override, run bare | followed | `e4fcae62` sets `STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer"` then runs `statuscheck.ps1` with no role/key arg |
@@ -66,7 +68,7 @@ part where `jira-task-reviewer` was the acting skill. Everything from the user's
 | Single-step phase check `gh pr list --head --base --state all` → OPEN ⇒ step 3 | followed | `3b384093` returns PR #111; `13:49:34` "PR #111 is OPEN. Proceeding to step 3" |
 | §3 resolve `SELF` once before the loop | followed | identity `kantorv` resolved and reused; `13:49:23` "identity `kantorv`" |
 | §3a idempotency — `gh pr view … reviews` filtered by `SELF`, body-prefix | followed | `2cdea282` `gh pr view 111 --json reviews --jq '… select(.author.login=="kantorv") …'`; `13:50:54` "No prior review from me" |
-| §3b fetch full diff, read all files (<1000 lines ⇒ full) | followed | `58d83940` name-only + metadata, `921e4e2b` full `gh pr diff 111`, `3f896230` Read of diff; 8 files/+771 |
+| §3b fetch full diff, read all files (\<1000 lines ⇒ full) | followed | `58d83940` name-only + metadata, `921e4e2b` full `gh pr diff 111`, `3f896230` Read of diff; 8 files/+771 |
 | §3c evaluate the six review dimensions | followed | `14:00:12` walks correctness/pattern/scope/regressions/tests/hygiene; augmented with live end-to-end runs of the code |
 | §3d APPROVE ⇒ canonical report to temp file, post to GitHub + Jira via `--body-file`, do NOT move status | followed | `f57887c1` `gh pr review 111 --comment --body-file …` (exit 0) + `acli … comment create --key JST-122 --body-file …` (exit 0); status left untouched |
 | §3e per-sub-task parent tally | not-reached | single-step track has no sub-tasks |
@@ -80,6 +82,7 @@ part where `jira-task-reviewer` was the acting skill. Everything from the user's
 ## Divergences in detail
 
 ### The reviewer's APPROVE was invalidated by later same-session commits to the reviewed PR
+
 - **What the prose says:** the reviewer reviews `<ISSUE-KEY>` "and nothing
   else. When you have finished it, stop and report." The skill has **no step
   that edits, commits, or pushes code** — its whole contract is review + record
@@ -113,8 +116,9 @@ part where `jira-task-reviewer` was the acting skill. Everything from the user's
 ## Incidents
 
 ### Code executions
+
 | What failed (uuid) | Root cause | Agent's reaction | Workaround / fix | Suggested prose fix |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | `pwsh … 2>&1 < $null` → "`'<' operator is reserved for future use`" (`73cd69e4`, 13:53) | Internal to the agent's ad-hoc test harness — used a bash `<` redirect inside PowerShell; **not** skill prose | Recognized immediately: `13:54:48` "I'll fix the PowerShell redirection syntax" | Rewrote the one-liner without `<`; succeeded on retry | none — the reviewer skill never asks the agent to execute the code under review; this harness is emergent |
 | `bash "$base/posix/collect_feature.sh" …` → "`bash is not recognized`" inside the PowerShell tool (`8384328c`, 13:54) | Environmental — `bash` not on PATH of the PowerShell tool | Switched to the dedicated **Bash** tool for the posix stubs (`e3d617b5`, `9630f31b`) | Ran posix stubs via git-bash instead; succeeded | none — emergent testing, not skill-prescribed |
 | `feature_report … synthetic.json` → "input is not valid JSON" (`d1517048`, 13:55) | Internal — a stale/mis-copied temp `synthetic.json`; wrong Windows temp path | Rewrote the fixture to the scratchpad with a clean Windows path (`7f4da2fc`) and re-ran | Succeeded on the clean path | none — emergent test-fixture plumbing |
@@ -125,11 +129,13 @@ the Correctness dimension), each recovered within one retry with no residue and
 no effect on the verdict. No skill script or prescribed command failed.
 
 ## Helper scripts worth keeping
+
 | What the agent built | Born at (uuid) | Worked? | Suggested home |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | Synthetic `feature-report@1/@2` JSON fixtures + a multi-form input-mode test matrix for `feature_report.ps1` (file / process-pipe / native-pipe / guards) | `9630f31b`, `7f4da2fc`, `76b8d439`, `1da1528a` | yes | **None for `jira-task-reviewer`.** These belong to the JST-122 feature (`conversation-debugger`) under review, not to the reviewer skill — run-specific, not worth promoting into the reviewer's shared scripts. If anything they argue for a test fixture living beside `collect_feature.ps1`/`feature_report.ps1`, which is a separate concern from this skill. |
 
 ## Verdict
+
 Within its own scope the run is a clean, high-compliance single-step review:
 correct Windows dispatch, faithful step-1→6 walk, idempotency check, full-diff
 read, an APPROVE posted to both GitHub and Jira via `--body-file`, status left

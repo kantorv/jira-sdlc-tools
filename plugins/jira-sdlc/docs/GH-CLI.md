@@ -20,11 +20,11 @@ gh --version
 
 Then compare it with the latest release:
 
-* [GitHub CLI Releases](https://github.com/cli/cli/releases?utm_source=chatgpt.com)
+- [GitHub CLI Releases](https://github.com/cli/cli/releases?utm_source=chatgpt.com)
 
 If your installed version is reasonably recent and meets your team's requirements, no action is needed.
 
-If the installed version is significantly older than the latest release (for example, an Ubuntu-packaged version such as `2.4.0+dfsg1`), update it by installing the official GitHub CLI package as described below. Older versions may fail due to GitHub API changes. ([GitHub][1])
+If the installed version is significantly older than the latest release (for example, an Ubuntu-packaged version such as `2.4.0+dfsg1`), update it by installing the official GitHub CLI package as described below. Older versions may fail due to GitHub API changes. ([GitHub](https://github.com/cli/cli "GitHub - cli/cli: GitHub’s official command line tool · GitHub"))
 
 ## Remove the Ubuntu Package (if installed)
 
@@ -83,12 +83,7 @@ sudo apt upgrade
 
 ## Why Use the Official Repository?
 
-The `gh` package provided by Ubuntu distributions may lag several years behind the latest release. Older versions can become incompatible with GitHub due to API changes (for example, the deprecation of Projects (classic) GraphQL APIs). Installing from the official GitHub repository ensures you receive regular updates, bug fixes, new features, and compatibility with GitHub's current APIs. ([GitHub][1])
-
-[1]: https://github.com/cli/cli "GitHub - cli/cli: GitHub’s official command line tool · GitHub"
-
-
-
+The `gh` package provided by Ubuntu distributions may lag several years behind the latest release. Older versions can become incompatible with GitHub due to API changes (for example, the deprecation of Projects (classic) GraphQL APIs). Installing from the official GitHub repository ensures you receive regular updates, bug fixes, new features, and compatibility with GitHub's current APIs. ([GitHub](https://github.com/cli/cli "GitHub - cli/cli: GitHub’s official command line tool · GitHub"))
 
 # Updating GITHUB repository settings
 
@@ -98,19 +93,19 @@ By default, GitHub blocks automated workflows from creating pull requests. If yo
 ## 🛠️ Step-by-Step Instructions
 
 1. **Navigate to Settings**
-Open your repository in GitHub and click the **Settings** (gear icon) tab in the top navigation bar.
+   Open your repository in GitHub and click the **Settings** (gear icon) tab in the top navigation bar.
 2. **Go to Actions Configuration**
-In the left sidebar, locate the **Code and automation** section, click on **Actions**, and select **General**.
+   In the left sidebar, locate the **Code and automation** section, click on **Actions**, and select **General**.
 3. **Update Workflow Permissions**
-Scroll down to the **Workflow permissions** section at the bottom of the page.
-* Check the box for **"Allow GitHub Actions to create and approve pull requests"**.
-* *(Optional)* Ensure the default permission is set to **"Read and write permissions"**.
+   Scroll down to the **Workflow permissions** section at the bottom of the page.
 
+- Check the box for **"Allow GitHub Actions to create and approve pull requests"**.
+- *(Optional)* Ensure the default permission is set to **"Read and write permissions"**.
 
 4. **Save Changes**
-Click the **Save** button to apply the updates.
+   Click the **Save** button to apply the updates.
 
----
+______________________________________________________________________
 
 ## 🛑 Troubleshooting: Greyed Out Option?
 

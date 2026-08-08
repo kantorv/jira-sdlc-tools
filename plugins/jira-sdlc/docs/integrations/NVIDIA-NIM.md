@@ -99,7 +99,7 @@ names it; the alternative-proxy notes after the steps cover Router9 and the gene
 The NIM side is invisible to Claude Code behind the proxy. The proxy needs two things from NIM:
 
 | value | where it comes from | token |
-|---|---|---|
+| -- | -- | -- |
 | NIM API key | hosted NIM: `build.nvidia.com/settings/api-keys`; self-hosted NIM: your own | `<NIM_API_KEY>` |
 | NIM base URL | hosted NIM: NIM's OpenAI-compatible endpoint (see the build.nvidia.com quickstart; commonly published as `https://integrate.api.nvidia.com/v1`); self-hosted NIM: `http://<NIM_HOST>:<NIM_PORT>/v1` | `<NIM_BASE_URL>` |
 

@@ -22,6 +22,7 @@ the project root's **`.jst/` folder** — the only location read
 (see [`project-config.md`](project-config.md)):
 
 **`.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored)**
+
 - `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped)
 - three **required** role pairs `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — an account + its API token (classic **or** scoped; see §5) per role, selected by `jira.sh --role` (§9). Each role needs BOTH its own email and its own token; there is no default account and no fallback
 
@@ -42,7 +43,7 @@ the project root's **`.jst/` folder** — the only location read
 [12. Git branch convention](#12-git-branch-convention) ·
 [13. PR-base resolver](#13-pr-base-resolver)
 
----
+______________________________________________________________________
 
 ## 0. The one rule that matters: host + auth
 
@@ -50,7 +51,7 @@ Jira Cloud is reachable two ways, and **which host you use decides whether a
 scoped token works**:
 
 | Host | Auth | Classic token | Scoped token |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | `https://<JIRA_ACCOUNT_URL>` (site domain) | Basic (`-u email:token`) | ✅ | ❌ `401 AUTHENTICATED_FAILED` |
 | `https://api.atlassian.com/ex/jira/<CLOUD_ID>` (gateway) | Basic (`-u email:token`) | ✅ | ✅ |
 
@@ -188,7 +189,7 @@ cover that role's own calls:
 What each token kind grants that role:
 
 | Role | Non-scoped | Scoped classic (coarse) | Scoped granular |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | **assigner** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:field:jira`, `read:issue-type:jira`, `write:issue:jira`, `write:comment:jira`, `delete:issue:jira` — **plus** whatever else `POST /issue` demands (same bundle problem) |
 | **executor** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
 | **reviewer** | N/A | `read:jira-user`, `read:jira-work`, `write:jira-work` | `read:user:jira`, `read:project:jira`, `read:issue:jira`, `read:issue.transition:jira`, `read:comment:jira`, `write:issue:jira`, `write:comment:jira` — **plus** the whole `GET /issue` read bundle |
@@ -202,7 +203,7 @@ picking scopes.
 every role reads issues and writes something back:
 
 | Scope | Grants |
-|---|---|
+| -- | -- |
 | `read:jira-user` | `GET /myself` (identity), `GET /user/search` (email → accountId) |
 | `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions`, `GET /issue/{key}/comment`, `GET /project/search` |
 | `write:jira-work` | `POST /issue`, `POST /issue/{key}/transitions`, `POST /issue/{key}/comment`, `PUT /issue/{key}/assignee`, `DELETE /issue/{key}` |
@@ -229,7 +230,7 @@ reason a skill would reach past `jira.sh` to the raw calls below.
 The two fields differ in a way worth knowing before you plan a change:
 
 | field | mutable? | notes |
-|---|---|---|
+| -- | -- | -- |
 | `assignee` | yes | who *works* it. `jira.sh issue assign` does this — prefer it. |
 | `reporter` | yes, **with permission** | who *filed* it. Needs the project's **Modify Reporter** permission (admin-level by default). |
 | `creator` | **never** | set by Jira from the authenticated caller at create time. No API can change it, ever. |
@@ -367,7 +368,7 @@ to reconstruct it.
   can differ (or be absent) depending on where the issue is now. Always
   resolve the id from a fresh `GET …/transitions`; never hard-code it.
 
----
+______________________________________________________________________
 
 ## 9. The `jira.sh` client — command surface & `--role` auth
 
@@ -443,7 +444,7 @@ depends on. This toolkit uses two canonical field lists — the **single source
 of truth**; the skills cite them by name rather than re-listing them:
 
 | canonical list | `--fields` value | used by |
-|---|---|---|
+| -- | -- | -- |
 | **fetch-with-comments** | `summary,description,issuetype,status,parent,subtasks,comment` | `jira-task-executor` step 1 — it scans `fields.comment.comments` for the assigner's assignment report + `Task memory` notes (step 4) |
 | **review-fetch** | `summary,description,issuetype,status,parent,subtasks` | `jira-task-reviewer` — it doesn't read comments, and `comment` dominates the payload on comment-heavy issues, so omitting it shrinks the parent + every per-sub-task fetch |
 
@@ -640,6 +641,7 @@ is the calling skill's judgment, not the script's — see below.
 The `PR target branch:` marker sits verbatim in an ADF text node (§11), so the
 script's `grep` over `jira.sh issue comment list` JSON matches it exactly as it
 did the old CLI's output. Sources, in the order tried:
+
 1. `source=git-config` — `git config branch.<current>.parentbranch`, set by the
    assigner when the branch was created; local to this clone.
 2. `source=jira-comment` — the issue's `PR target branch: …` comment, the

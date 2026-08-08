@@ -43,6 +43,7 @@ behavior, not folklore. Fewer lines also means fewer places for two
 instructions to quietly contradict each other.
 
 **Caveats:**
+
 - Over-terse is a worse failure mode than over-long. A one-liner the
   model misreads costs more than three lines it follows. Cut
   redundancy and hedging — not the "why" clause on load-bearing rules.
@@ -67,6 +68,7 @@ command sequence, that's the signal to extract a script.
 
 **Why it should help:** this is the strongest of the three, for two
 independent reasons.
+
 - *Cost/latency:* when the model reproduces a procedure from prose,
   each step is a model round trip carrying the full context. A script
   collapses N model turns into one `Bash` call returning a compact
@@ -77,6 +79,7 @@ independent reasons.
   skip a step, or reorder two steps that matter.
 
 **Caveats:**
+
 - Scripts fail *differently*, not less. A bug in a script is wrong
   100% of the time and — in a repo with no test suite — rots silently,
   whereas a model following prose can notice something is off and
@@ -107,6 +110,7 @@ condition owns which action, and a reader (human or model) can verify
 the branch set is exhaustive at a glance.
 
 **Caveats — true for closed decision spaces, risky for open ones:**
+
 - Pseudo-code wins when the branch space is *closed*: every case the
   model will meet is one of the enumerated ones.
 - When reality can land outside the enumerated branches, rigid

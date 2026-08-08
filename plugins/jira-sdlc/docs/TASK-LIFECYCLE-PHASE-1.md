@@ -107,7 +107,7 @@ sequenceDiagram
 - **Scope decision first** — the assigner settles scope and the
   top-level type (`alt Multistep / else Single-step`); inside the
   multistep loop it provisions each sub-task's issue (JIRA) then branch
-  + worktree (GIT) uniformly.
+  - worktree (GIT) uniformly.
 - **The base decision rides along with scope** — planned work (the
   default) branches `feature/` off `development`, while an *explicitly
   requested* emergency production fix branches a single `hotfix/` off
@@ -120,8 +120,7 @@ sequenceDiagram
 - **Provisioning is uniform** — *every* scenario (single-step,
   multistep parent, sub-task) records `branch.<branch>.parentbranch`
   in git config via GIT, pushes the branch to the remote via GIT, and
-  ends with the assigner posting a `PR target branch: ...
-  Worktree: ...` comment to JIRA for that leaf — the durable source of
+  ends with the assigner posting a `PR target branch: ... Worktree: ...` comment to JIRA for that leaf — the durable source of
   truth the executor and reviewer will read later. In the multistep
   case this happens once per sub-task *and* once more on the parent
   issue after the sub-task loop, so it's neither one-per-leaf nor a

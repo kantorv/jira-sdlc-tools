@@ -16,6 +16,7 @@ smeared across every call site, and here there's a second hard constraint
 most shell tools don't carry (see [§1](#1-the-governing-constraints)).
 
 Precursors this builds on — read them first:
+
 - [`acli-to-rest-api-migration.md`](acli-to-rest-api-migration.md) — the
   per-command `acli`→REST map, live-verified. **This client is that map,
   packaged.** Every operation here corresponds to a row of its §2 table.
@@ -24,7 +25,7 @@ Precursors this builds on — read them first:
   auth, token scopes, people fields). The client *implements* these; it
   doesn't reinvent them.
 
----
+______________________________________________________________________
 
 ## 1. The governing constraints
 
@@ -53,7 +54,7 @@ one of these.
    does not pre-digest. Write operations return status through the **exit
    code**, which in bash is the only structured return channel.
 
----
+______________________________________________________________________
 
 ## 2. Architecture — four layers
 
@@ -86,7 +87,7 @@ matches the existing dispatch rule already used across the toolkit
 (`bash …/X.sh` on POSIX ↔ `pwsh/powershell …/win/X.ps1` on Windows). So:
 **dispatcher is the public interface; sourcing is not.**
 
----
+______________________________________________________________________
 
 ## 3. Layer 2 — the single HTTP choke point
 
@@ -129,7 +130,7 @@ code is the only structured return channel a subprocess has. Distinct codes
 shell analogue of typed exceptions, and it is the reason all HTTP handling
 must funnel through one function: scatter it and the codes drift.
 
----
+______________________________________________________________________
 
 ## 4. Layer 3 — typed operations (thin wrappers)
 
@@ -165,7 +166,7 @@ assign() {   # assign KEY <email|@me>   |   assign KEY --remove
 }
 ```
 
----
+______________________________________________________________________
 
 ## 5. Layer 4 — dispatcher surface, and the `raw` escape hatch
 
@@ -200,7 +201,7 @@ This is the direct analogue of the AGENTS.md guidance "script the stable
 deterministic parts; leave the rest to the model": `raw` is the seam
 between the two.
 
----
+______________________________________________________________________
 
 ## 6. Contracts — output and exit codes
 
@@ -215,7 +216,7 @@ for piping.
 **Exit codes** (stable, part of the contract the pwsh twin must match):
 
 | code | meaning | typical HTTP |
-|---|---|---|
+| -- | -- | -- |
 | 0 | success | 2xx |
 | 1 | transport error (curl failed, DNS, timeout) | — |
 | 2 | usage error (bad args, unknown subcommand) | — |
@@ -230,7 +231,7 @@ A caller that needs to distinguish "unassigned" from "assigned to someone
 else" still does the accountId comparison itself (migration doc §3.3) — the
 client surfaces the data, the skill makes the call (constraint #2).
 
----
+______________________________________________________________________
 
 ## 7. Layer 1 — cross-cutting resolution
 
@@ -250,7 +251,7 @@ client surfaces the data, the skill makes the call (constraint #2).
 - **email→accountId** (`_account_id_for`): `GET /user/search` (migration doc
   §3.7 N2), used by `assign` and `create --assignee`.
 
----
+______________________________________________________________________
 
 ## 8. Deliberately out of scope
 
@@ -269,7 +270,7 @@ Keeping these out preserves the "transport, not judgment" line (constraint
   named in jira-api-reference §10 (single source of truth), not baked in
   here.
 
----
+______________________________________________________________________
 
 ## 9. Testing & parity
 
@@ -286,7 +287,7 @@ Keeping these out preserves the "transport, not judgment" line (constraint
   sugar, testing `raw` exercises the core; named-op tests then only need to
   check the sugar (ADF encode, id/accountId resolution).
 
----
+______________________________________________________________________
 
 ## 10. Open decisions (resolve before implementing)
 

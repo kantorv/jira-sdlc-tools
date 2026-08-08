@@ -14,12 +14,12 @@
 - Prerequisites and tool installation (`git`, `gh`, plus `curl` + `jq` for
   the Jira REST client), per OS.
 - Both env files and every variable in them — currently described in
-  [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
+  [../skills/\_shared/project-config.md](../skills/_shared/project-config.md).
 - Jira credentials and `gh` authentication. Jira needs no login step — the
   `jira.sh` / `jira.ps1` client authenticates per-request from the
   `email:token` pairs in `.jst/jira-sdlc-tools.local.env`; token types and scopes
   are in
-  [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+  [../skills/\_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
   §5. For `gh`, see
   [github/GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
 - The healthcheck, and how to read a failing row.

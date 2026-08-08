@@ -9,8 +9,7 @@ swimlanes — **GIT** (anything that mutates repo state: reading the
 worktree's branch and `parentbranch` config, merging the parent branch
 current, committing, pushing, opening the PR) and
 **JIRA** (anything that mutates issue state: fetching the issue and its
-prior comments, the *In Progress* / *In Review* transitions, any `Task
-memory` comments posted along the way, and the final run-report
+prior comments, the *In Progress* / *In Review* transitions, any `Task memory` comments posted along the way, and the final run-report
 comment) — so the full interaction reads
 `User ↔ Executor ↔ GIT ↔ JIRA` left to right.
 
@@ -84,8 +83,7 @@ sequenceDiagram
 - **Status transitions the executor owns** — to *In Progress* on start,
   to *In Review* on PR open (both JIRA).
 - **Task memory is a first-class JIRA interaction, not a single comment
-  invariant** — the executor reads prior `Task memory
-  (jira-task-executor)` comments as part of the step-1 fetch, and may
+  invariant** — the executor reads prior `Task memory (jira-task-executor)` comments as part of the step-1 fetch, and may
   post its own as investigation/implementation turns up findings worth
   preserving (the `opt` block — zero or more per run, not fixed). These
   are expected companions to the **one** comprehensive run report posted

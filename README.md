@@ -84,16 +84,17 @@ final one.*
 
 ### Tools
 
-| Tool   | Title           | Uses                                     | Install URL                                             | Local docs                                                                       |
-| ------ | --------------- | ----------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `git`  | Version control | commit/push                              | [git-scm.com/downloads](https://git-scm.com/downloads)  | —                                                                                 |
-| `gh`   | GitHub CLI      | pr create/update                         | [cli.github.com](https://cli.github.com/)               | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
-| `jq`   | JSON processor  | parse Jira REST responses (`jira.sh`)    | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | —                                                                             |
-| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | —                                                                             |
+| Tool | Title | Uses | Install URL | Local docs |
+| -- | -- | -- | -- | -- |
+| `git` | Version control | commit/push | [git-scm.com/downloads](https://git-scm.com/downloads) | — |
+| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](plugins/jira-sdlc/docs/github/GH-PAT-SESSION-LOGIN.md) |
+| `jq` | JSON processor | parse Jira REST responses (`jira.sh`) | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | — |
+| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | — |
 
 **Platform specific**
+
 | Platform | Needs | Tested on | Why |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
 | **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
 | **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
@@ -107,7 +108,7 @@ API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
 ### Tokens and auth
 
 | Tool | Auth type | Scopes | Shared across roles | Description | Link |
-|---|---|---|---|---|---|
+| -- | -- | -- | -- | -- | -- |
 | Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#jira) |
 | `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#github) |
 | `git` | ⚠️ SSH key | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git/SSH setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#git) |
@@ -337,6 +338,7 @@ time, so changes to your clone won't show up in an installed copy until
 you reinstall.
 
 1. **Clone the repo:**
+
    ```bash
    git clone https://github.com/kantorv/jira-sdlc-tools.git
    cd jira-sdlc-tools
@@ -344,18 +346,22 @@ you reinstall.
 
 2. **Load it manually**, pointing at the plugin's own root — not the
    toolkit repo root, which only holds `marketplace.json`:
+
    ```bash
    claude --plugin-dir ./plugins/jira-sdlc
    ```
+
    No install step, no marketplace. If `jira-sdlc` is already installed
    from a marketplace elsewhere on the same machine, `--plugin-dir`
    takes precedence for that session, so you're never testing against a
    stale cached copy without realizing it.
 
 3. **After each edit, reload instead of restarting:**
+
    ```
    /reload-plugins
    ```
+
    Picks up changes to skills, agents, hooks, and MCP/LSP servers
    without a full session restart.
 
@@ -424,7 +430,7 @@ platform-by-platform table — each one's spec, wiring, integration status,
 and a link to its detailed doc.
 
 | Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
-|---|---|---|---|---|---|
+| -- | -- | -- | -- | -- | -- |
 | [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
 | [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
 | [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
@@ -452,14 +458,14 @@ main — it's main plus work that hasn't landed yet: more advanced scripts,
 wider permissions, and an extra skill.
 
 | Name | Type | Description | Example reports |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | [`conversation-debugger`](https://github.com/kantorv/jira-sdlc-tools/blob/lab/plugins/jira-sdlc/skills/conversation-debugger/SKILL.md) | skill | Post-mortems a recorded run of one of the three core skills against its own prose, verdicting each instruction as followed / diverged / skipped / not-reached. | TBD |
 | [`feature_report`](https://github.com/kantorv/jira-sdlc-tools/blob/lab/plugins/jira-sdlc/skills/conversation-debugger/scripts/feature_report.md) | script | Rolls a whole feature's runs up into a single report. | TBD |
 
 ### Example reports
 
 | Report | Generated by | Source | Description |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | [`jira-task-assigner-JST-126`](plugins/jira-sdlc/docs/examples/reports/jira-task-assigner-JST-126-e0471131-44aa-44cb-9ed8-9ca85852bc89.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-assigner` conversation for JST-126, verdicting each instruction as followed / diverged / skipped / not-reached. |
 | [`jira-task-executor-JST-125`](plugins/jira-sdlc/docs/examples/reports/jira-task-executor-JST-125-bb91775f-028f-48b1-acdb-9eaec28d6d9b.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-executor` conversation for JST-125, run on the Windows/PowerShell dispatch path. |
 | [`jira-task-reviewer-JST-122`](plugins/jira-sdlc/docs/examples/reports/jira-task-reviewer-JST-122-df864d2f-3115-4f06-b3c2-24456615eed0.md) | ai | `conversation-debugger` | Single-run post-mortem of a `jira-task-reviewer` conversation for JST-122, run on the Windows/PowerShell dispatch path. |
