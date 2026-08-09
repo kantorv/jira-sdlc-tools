@@ -41,7 +41,7 @@ jobs:
       # executor's environment at author time.
       - name: Install cedit (pinned)
         run: |
-          pip install 'cedit==0.3.1.dev1'
+          pip install 'cedit==0.3.2'
 
       - name: Find changed Markdown files
         id: changes
