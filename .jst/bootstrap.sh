@@ -32,4 +32,10 @@ python3 -m venv "$WORKTREE/venv"
 set +u; . "$WORKTREE/venv/bin/activate"; set -u
 pip install cedit
 
+# actionlint isn't a PyPI package — it's a Go binary, fetched via its own
+# install script straight into venv/bin so `source venv/bin/activate` puts
+# it on PATH next to cedit.
+log "installing actionlint into $WORKTREE/venv/bin"
+bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest "$WORKTREE/venv/bin"
+
 log "bootstrap complete — activate in your shell with: source $WORKTREE/venv/bin/activate"
