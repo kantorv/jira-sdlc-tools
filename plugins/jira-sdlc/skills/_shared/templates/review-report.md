@@ -62,7 +62,7 @@ Always the literal first line of the body, starting with `APPROVED — ` or
 
 - On a **GitHub verdict comment** (3d, 5b) this prefix is a byte-for-byte
   contract — 3a's idempotency detection matches on it. Keep it verbatim;
-  never reword the two-word prefix or the ` — ` separator.
+  never reword the two-word prefix or the `—` separator.
 - On the **Jira per-issue comment** (3d), the **parent tally** (3e), and
   the **end-of-run report** (6), the same line leads the body so every
   destination opens identically. On a per-PR emission it is that PR's

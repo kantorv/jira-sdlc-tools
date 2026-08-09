@@ -1,0 +1,92 @@
+# Gates the repository's Markdown files on canonical form when changes touch
+# any *.md file. Mirrors the style and pinning strategy of validator.yml:
+#   - pinned tool version so "canonical" doesn't drift across runs
+#   - permissions: contents: read (this is a read-only gate — no commit back)
+#   - explanatory comments, actions/checkout@v6, runs-on ubuntu-latest
+# The exit code 1 from `cedit md canonicalize --check` is the signal;
+# xargs propagates non-zero (exits 123) so the job fails on any non-canonical
+# file. If no Markdown files changed, the job passes (no-op).
+name: Markdown canonicalization gate
+
+on:
+  push:
+    paths:
+      - '**.md'
+  pull_request:
+    paths:
+      - '**.md'
+
+permissions:
+  contents: read
+
+jobs:
+  canonicalize-gate:
+    name: Gate on canonical Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need full history for git diff BASE..HEAD to work on PRs
+          fetch-depth: 0
+
+      # Install cedit pinned to the version these manifests were last
+      # confirmed green against — bump deliberately. A float would let an
+      # upstream schema change turn the gate red mid-week.
+      # The mdformat hash-stability pinning concern (cedit user guide §2)
+      # does NOT apply for stateless `md canonicalize --check` (no .cedit/
+      # state), but pinning cedit itself keeps local-dev and CI agreeing on
+      # what "canonical" means. Version from `cedit --version` in the
+      # executor's environment at author time.
+      - name: Install cedit (pinned)
+        run: |
+          pip install 'cedit==0.3.2'
+
+      - name: Find changed Markdown files
+        id: changes
+        run: |
+          # Determine BASE and HEAD for the diff.
+          # On push: use github.event.before (all-zero for first push, guarded).
+          # On PR: BASE is the merge-base with the base branch, HEAD is PR head.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE=$(git merge-base origin/${{ github.base_ref }} HEAD)
+          else
+            BASE="${{ github.event.before }}"
+            if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+              # First push to a new branch: fall back to all tracked .md files
+              CHANGED=$(git ls-files '*.md')
+              if [[ -z "$CHANGED" ]]; then
+                echo "changed_files=" >> "$GITHUB_OUTPUT"
+                echo "No Markdown files found in repository."
+                exit 0
+              fi
+              echo "changed_files<<EOF" >> "$GITHUB_OUTPUT"
+              echo "$CHANGED" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+              echo "Changed Markdown files (first push):"
+              echo "$CHANGED"
+              exit 0
+            fi
+          fi
+
+          # Find changed .md files (skip deleted with --diff-filter=d).
+          CHANGED=$(git diff --name-only --diff-filter=d "$BASE"..HEAD -- '*.md' 2>/dev/null || true)
+          if [[ -z "$CHANGED" ]]; then
+            echo "changed_files=" >> "$GITHUB_OUTPUT"
+            echo "No Markdown files changed in this push/PR."
+          else
+            # Escape newlines for GITHUB_OUTPUT
+            echo "changed_files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$CHANGED" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "Changed Markdown files:"
+            echo "$CHANGED"
+          fi
+
+      - name: Check canonical form
+        if: steps.changes.outputs.changed_files != ''
+        run: |
+          # Run cedit md canonicalize --check on each changed file.
+          # xargs -n1 runs one invocation per file; exits 123 if any returns 1.
+          # Use env var instead of direct ${{ }} interpolation to avoid script-injection surface.
+          CHANGED="${{ steps.changes.outputs.changed_files }}"
+          echo "$CHANGED" | xargs -n1 cedit md canonicalize --check

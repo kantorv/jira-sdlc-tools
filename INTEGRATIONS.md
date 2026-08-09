@@ -5,7 +5,7 @@
 ## Summary table
 
 | Platform | Specification | How it loads | Integration status | Documentation |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
 | [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
 | [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
@@ -17,6 +17,7 @@
 | [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
 
 **Status legend:**
+
 - **First-class** — the reference platform the skills are written for.
 - **Verified** — exercised in a live session against this repo's environment (per the doc's own verification notes).
 - **Working** — compatible per the platform's docs or spec behaviour; not blocked, but not run end-to-end here.

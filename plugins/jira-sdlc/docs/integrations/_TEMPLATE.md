@@ -1,4 +1,4 @@
-# <PLATFORM> Integration (<SPEC — Native Claude skills | Agent Skills>)
+# <PLATFORM> Integration (\<SPEC — Native Claude skills | Agent Skills>)
 
 > Copy this file to `<PLATFORM>.md` (match the filename convention in this
 > directory: uppercase, no spaces — e.g. `CURSOR.md`, `KILO.md`,

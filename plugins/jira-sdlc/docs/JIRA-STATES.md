@@ -10,19 +10,13 @@ which they ask about, and which belong to you.
 ✅ does it · ⚠️ only with your confirmation · ❌ never
 
 | Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `jira.sh issue transition <KEY> --to …`, or drag the card |
 | **[`jira-task-assigner`](../skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
 | **[`jira-task-executor`](../skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
 | **[`jira-task-reviewer`](../skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
 | **[GitHub Actions](STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** [^ci] | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
 | **[Jira Automation](INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
-
-[^ci]: These three workflows are **this repo's own CI** (`.github/workflows/`),
-not files the plugin installs — a marketplace install copies only
-`plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
-secrets and guards are in
-[STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
 Read the three skill rows down a column and you get that state's whole
 skill-side story — `<STATUS_IN_REVIEW>`, for instance, is written by the
@@ -37,7 +31,7 @@ there first wins and the other stands down.
 ## The three transitions a skill makes
 
 | # | Skill | When | Transition |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | 1 | `jira-task-executor` | it picks the issue up (step 3) | → `<STATUS_IN_PROGRESS>` |
 | 2 | `jira-task-executor` | it has just opened the PR (step 11) | → `<STATUS_IN_REVIEW>` |
 | 3 | `jira-task-reviewer` | verdict is CHANGES REQUESTED on a sub-task or single-step PR (step 3d) | → `<STATUS_IN_PROGRESS>` |
@@ -97,3 +91,9 @@ PRs merge — expected, not a bug.
 - **Nothing moves a card through intermediate states** your board may have
   between these anchors. That's the anchor-mapping contract: the skills
   touch the anchors, everything between them is yours.
+
+[^ci]: These three workflows are **this repo's own CI** (`.github/workflows/`),
+    not files the plugin installs — a marketplace install copies only
+    `plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
+    secrets and guards are in
+    [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
