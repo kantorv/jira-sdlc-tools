@@ -87,6 +87,6 @@ jobs:
         run: |
           # Run cedit md canonicalize --check on each changed file.
           # xargs -n1 runs one invocation per file; exits 123 if any returns 1.
-          # Use env var instead of direct ${{ }} interpolation to avoid script-injection surface.
+          # Use env var instead of direct step-output interpolation to avoid script-injection surface.
           CHANGED="${{ steps.changes.outputs.changed_files }}"
           echo "$CHANGED" | xargs -n1 cedit md canonicalize --check
