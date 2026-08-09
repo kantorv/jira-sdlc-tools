@@ -22,6 +22,7 @@ Kimi Code reads Claude-spec skills natively from paths declared in `extra_skill_
    ```
 
 2. Replace `</PATH>` with the absolute path where this plugin lives on your machine:
+
    - **Installed via marketplace**: `~/.claude/plugins/cache/jira-sdlc-tools/jira-sdlc/<version>/skills` — pin to a specific versioned directory (Kimi Code does not auto-update this path; re-point it after a plugin upgrade)
    - **Local clone**: the absolute path to `plugins/jira-sdlc/skills`
 

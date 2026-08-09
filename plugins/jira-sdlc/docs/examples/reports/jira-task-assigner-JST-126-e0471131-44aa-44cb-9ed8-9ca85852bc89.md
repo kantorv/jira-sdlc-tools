@@ -7,6 +7,7 @@ plugin_version: 0.5.0-lab.2
 # Run report: jira-task-assigner — e0471131-44aa-44cb-9ed8-9ca85852bc89
 
 ## Run snapshot
+
 - **When:** 2026-07-18 15:53:03Z → 16:01:39Z (elapsed 516s / ~8.6 min)
 - **cwd:** `/home/lalala/src/skills-dev/claude-code-plugins` (main repo checkout)
 - **Branch:** `development` (base branch)
@@ -26,8 +27,9 @@ plugin_version: 0.5.0-lab.2
   after the user explicitly chose "New issue, global login."
 
 ## Run metrics
+
 | metric | value |
-|---|---|
+| -- | -- |
 | model(s) | claude-opus-4-8 |
 | API turns (SKILL_TURNS) | 16 |
 | tool calls (TOOL_CALLS) | 15 |
@@ -46,8 +48,9 @@ transcript's `is_error` flags only; one command printed an acli error into
 stdout (masked from the exit code by `| head`) — see Incidents.
 
 ## Compliance walk
+
 | Instruction (step / rule) | Verdict | Evidence |
-|---|---|---|
+| -- | -- | -- |
 | Conventions: resolve `<PROJECT-KEY>`/`<WORKTREES_DIR>`/base branches from env | followed | statuscheck resolved `PROJECT-KEY=JST`, `DEFAULT_BASE_BRANCH=development`, `WORKTREES_DIR=…/JST-worktrees` (`ba2b6aa2`); narration lists resolved tokens (`cda9a4d0` turn) |
 | Conventions: never `mkdir` `<WORKTREES_DIR>`; rely on healthcheck row | followed | `worktrees_dir … (present)` INFO consumed, no mkdir issued |
 | Conventions: `<slug>` = kebab-case of title | followed | `gh-pat-session-login` (`2932a90a`) |
@@ -74,6 +77,7 @@ stdout (masked from the exit code by `| head`) — see Incidents.
 | §8 Don't implement; point user to `cd` into worktree + run executor with no key | followed | No code written; final report: "cd …/worktree-JST-126 and run /jira-sdlc:jira-task-executor (no key argument)" |
 
 ## Divergences in detail
+
 No **diverged** or **skipped** rows. Every instruction that applied was
 followed; the only two not-reached rows are the multistep-only branches on a
 single-step run. The one item worth writing up is a **prose gap**, not a
@@ -81,6 +85,7 @@ divergence — recorded below because the good outcome here depended on agent
 judgment the skill doesn't guarantee.
 
 ### Duplicate-issue detection is not in the prose (agent caught JST-118 by luck)
+
 - **What the prose says:** §6 opens with "you are always creating a
   brand-new top-level issue," and the "Re-run / partial-failure safety —
   deferred" note only contemplates *this run's* orphans, not a pre-existing
@@ -109,16 +114,18 @@ judgment the skill doesn't guarantee.
 ## Incidents
 
 ### Code executions
+
 | What failed (uuid) | Root cause | Agent's reaction | Workaround / fix | Suggested prose fix |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | `acli jira workitem view --key JST-118` → `✗ Error: unknown flag: --key` (`be785034`) | External-ish: acli's `view` takes the key **positionally**, not via `--key` (unlike `comment create`/`edit`). The command was an ad-hoc investigation call, not one the skill prescribes. Error was captured into stdout by `2>&1 \| head`, so the tool result was not flagged `is_error` (hence `TOOL_ERRORS=0`). | Recognized immediately; next call (`2fd1b7f7`) used positional `acli jira workitem view JST-118` and succeeded. One-try recovery, no thrash. | Positional retry; investigation continued uninterrupted (JST-118 details obtained). | Minor / optional: `jira-acli-reference.md` documents create/comment/edit syntax but not `view`. A one-line "read: `acli jira workitem view <KEY>` (positional)" would pre-empt the `--key` guess if `view` ever becomes part of the flow (e.g. the duplicate-check above). |
 
 Aside from that single self-corrected syntax guess, every command behaved as
 the prose expected.
 
 ## Helper scripts worth keeping
+
 | What the agent built | Born at (uuid) | Worked? | Suggested home |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | `jst-desc.txt` — issue description written to a temp file for `--description-file` | `cda9a4d0` | Yes | None — this is the prescribed §6 pattern (plain-text description-file), not reinvented tooling |
 | `jst-report.txt` — multi-line report written to a temp file for `--body-file` | `6eaaa895` | Yes | None — prescribed §7 pattern |
 | Chained `git branch && push -u && git config && git worktree add` one-liner | `2932a90a` | Yes | None — standard §6A steps composed inline; deterministic but already spelled out in prose |
@@ -128,6 +135,7 @@ Nothing novel was reinvented this run. The only candidate the transcript
 capability, not something the agent hand-rolled here.
 
 ## Verdict
+
 Textbook-compliant run: every applicable instruction was followed in order,
 the single-step path was chosen and executed correctly, and the run finished
 through step 8 with issue, branch, worktree, both comments, and the report all

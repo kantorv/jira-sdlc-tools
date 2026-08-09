@@ -77,7 +77,7 @@ is therefore the security boundary of this workflow, and it requires all three
 of:
 
 | Condition | Why it's there |
-| :--- | :--- |
+| :- | :- |
 | body is `/make-task`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-task` mid-sentence doesn't fire the run. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-task')`, would also fire on `/make-task-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match. |
 | `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner. An approval prompt is a poor place to be reading attacker-supplied text for the first time. |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-task` on a pull request would hand the assigner a PR description as a feature request. |
@@ -123,8 +123,7 @@ free-form guidance for *this run*, on one line or several:
 ```
 
 A parse step strips the command token, trims the surrounding whitespace, and
-the assigner prompt gains one labelled `-- EXTRA DIRECTION FOR THIS RUN (from
-the triggering comment) --` section **after** the issue body. It supplements
+the assigner prompt gains one labelled `-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --` section **after** the issue body. It supplements
 the issue text and the fixed CI instruction rather than replacing either. A
 bare `/make-task` omits the section entirely, leaving the prompt byte-identical
 to what a bare command always built. The comment body is attacker-supplied text
@@ -138,8 +137,8 @@ The reviewer and executor demos go to real trouble to build a **linked
 worktree** — those skills hard-stop unless `.git` is a *file*. The assigner
 inverts that requirement:
 
-| | Assigner | Executor / Reviewer |
-|---|---|---|
+|  | Assigner | Executor / Reviewer |
+| -- | -- | -- |
 | Required checkout | **Main checkout** (`.git` is a directory) | **Linked worktree** (`.git` is a file) |
 | Required branch | The base branch | The issue's `feature/*` or `hotfix/*` branch |
 | Why | It *creates* worktrees — it doesn't run inside one. A linked-worktree reading is a stop condition. | They derive their issue key *from* the worktree's branch. |
@@ -231,7 +230,7 @@ exactly as the `.jst/jira-sdlc-tools.local.env` key it becomes, so the bootstrap
 is one loop over a `KEYS` list:
 
 | Secret | Role here |
-|---|---|
+| -- | -- |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Read by the CLI from the environment — the only one never written to the file. |
 | `JIRA_ACCOUNT_URL` | Jira site. |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | The assigner's own Jira identity. |

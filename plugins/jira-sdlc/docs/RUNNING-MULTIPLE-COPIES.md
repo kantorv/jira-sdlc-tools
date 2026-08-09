@@ -93,7 +93,7 @@ yes, isolate it. If no, sharing is usually fine and saves the duplication
 cost.
 
 | Asset | Usually | Why |
-|---|---|---|
+| -- | -- | -- |
 | Relational database (with migrations) | **Isolate** | A schema migration in one worktree changes the shape another worktree's still-running old code depends on. This is the canonical reason to duplicate. |
 | Cache (Redis / Memcached) | Depends | Fine to share if keys are namespaced per app version; isolate if two versions would write incompatible values to the same key. |
 | Object / file storage | Depends | Share for read-mostly assets; isolate when one worktree writes files another worktree's code would misread (changed layout, changed format). |

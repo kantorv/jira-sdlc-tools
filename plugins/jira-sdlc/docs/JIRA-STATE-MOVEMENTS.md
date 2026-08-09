@@ -15,7 +15,7 @@ status names in `.jst/jira-sdlc-tools.env`.
 ✅ does it · ⚠️ only with your confirmation · ❌ never
 
 | Who | `<STATUS_TODO>` | `<STATUS_IN_PROGRESS>` | `<STATUS_IN_REVIEW>` | `<STATUS_DONE>` |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | **You** | ✅ anytime — usually just the creation default | ✅ anytime | ✅ anytime | ✅ anytime — `jira.sh issue transition <KEY> --to …`, or drag the card |
 | **[`jira-task-assigner`](../skills/jira-task-assigner/SKILL.md)** | ❌ it creates the issue and lets your workflow's creation default stand | ❌ | ❌ | ❌ transitions nothing at all — issues, branches and worktrees only |
 | **[`jira-task-executor`](../skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |

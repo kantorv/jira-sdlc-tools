@@ -2,12 +2,12 @@
 
 Every Mermaid diagram starts the same way:
 
-```text
+````text
     ```mermaid
     [diagram type] [direction]
         [content]
     ```
-```
+````
 
 ### 2. Main Diagram Types & Syntax Variations
 
@@ -25,12 +25,14 @@ flowchart TD
 ```
 
 **Direction variations**:
+
 - `TD` or `TB` → Top to Bottom
 - `BT` → Bottom to Top
 - `LR` → Left to Right
 - `RL` → Right to Left
 
 **Node shape variations**:
+
 - `A[Text]` → Rectangle
 - `A(Text)` → Rounded
 - `A((Text))` → Circle
@@ -72,6 +74,7 @@ classDiagram
 #### **Other Popular Types**
 
 **Mindmap**
+
 ```mermaid
 mindmap
   root((Mermaid))
@@ -84,6 +87,7 @@ mindmap
 ```
 
 **Timeline**
+
 ```mermaid
 timeline
     title Project Timeline
@@ -95,6 +99,7 @@ timeline
 ```
 
 **Gantt Chart**
+
 ```mermaid
 gantt
     title Project Schedule
@@ -104,6 +109,7 @@ gantt
 ```
 
 **Entity Relationship (ER)**
+
 ```mermaid
 erDiagram
     CUSTOMER ||--o{ ORDER : places
@@ -111,6 +117,7 @@ erDiagram
 ```
 
 **State Diagram**
+
 ```mermaid
 stateDiagram-v2
     [*] --> Still
@@ -119,6 +126,7 @@ stateDiagram-v2
 ```
 
 **Pie Chart**
+
 ```mermaid
 pie title Distribution
     "Apples" : 45
