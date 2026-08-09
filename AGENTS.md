@@ -298,6 +298,23 @@ cedit md canonicalize --check <file>    # CI-equivalent gate (exit 1 = not canon
 The workflow filename is `markdown-canonicalize.yml` — if it changes, update
 this reference.
 
+### Touched a `.github/workflows/*.yml` file? Lint it with actionlint
+
+YAML that parses fine can still fail GitHub's own schema/expression check —
+e.g. a `${{ }}` with nothing inside it, even sitting inside a shell comment
+inside a `run:` block, fails the whole workflow with a cryptic "An expression
+was expected" pointing at an unrelated line. `actionlint` catches this and
+other expression/shell/schema mistakes before you push:
+
+```bash
+actionlint .github/workflows/<file>.yml   # one file
+actionlint                                 # every workflow in the repo
+```
+
+`.jst/bootstrap.sh` installs `actionlint` into `venv/bin` (it's a Go binary,
+not a PyPI package, so it's fetched via its own install script rather than
+`pip install`) — it's on `PATH` once you `source venv/bin/activate`.
+
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
 dimension, or which track or re-run scenario your change touches (see README → Core
