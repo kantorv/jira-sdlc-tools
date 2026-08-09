@@ -12,11 +12,9 @@ on:
   push:
     paths:
       - '**.md'
-      - '.github/workflows/markdown-canonicalize.yml'
   pull_request:
     paths:
       - '**.md'
-      - '.github/workflows/markdown-canonicalize.yml'
 
 permissions:
   contents: read
@@ -47,16 +45,30 @@ jobs:
         id: changes
         run: |
           # Determine BASE and HEAD for the diff.
-          # On push: BASE is the previous commit on the branch, HEAD is current.
+          # On push: use github.event.before (all-zero for first push, guarded).
           # On PR: BASE is the merge-base with the base branch, HEAD is PR head.
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE=$(git merge-base origin/${{ github.base_ref }} HEAD)
           else
-            BASE=HEAD^
+            BASE="${{ github.event.before }}"
+            if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+              # First push to a new branch: fall back to all tracked .md files
+              CHANGED=$(git ls-files '*.md')
+              if [[ -z "$CHANGED" ]]; then
+                echo "changed_files=" >> "$GITHUB_OUTPUT"
+                echo "No Markdown files found in repository."
+                exit 0
+              fi
+              echo "changed_files<<EOF" >> "$GITHUB_OUTPUT"
+              echo "$CHANGED" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+              echo "Changed Markdown files (first push):"
+              echo "$CHANGED"
+              exit 0
+            fi
           fi
 
           # Find changed .md files (skip deleted with --diff-filter=d).
-          # If BASE..HEAD yields nothing (e.g., first commit), fall back to all tracked .md.
           CHANGED=$(git diff --name-only --diff-filter=d "$BASE"..HEAD -- '*.md' 2>/dev/null || true)
           if [[ -z "$CHANGED" ]]; then
             echo "changed_files=" >> "$GITHUB_OUTPUT"
@@ -75,4 +87,6 @@ jobs:
         run: |
           # Run cedit md canonicalize --check on each changed file.
           # xargs -n1 runs one invocation per file; exits 123 if any returns 1.
-          echo "${{ steps.changes.outputs.changed_files }}" | xargs -n1 cedit md canonicalize --check
+          # Use env var instead of direct ${{ }} interpolation to avoid script-injection surface.
+          CHANGED="${{ steps.changes.outputs.changed_files }}"
+          echo "$CHANGED" | xargs -n1 cedit md canonicalize --check
