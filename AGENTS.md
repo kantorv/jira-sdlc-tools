@@ -158,6 +158,9 @@ bash scripts/check-skill-size.sh
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
+
+# markdown canonicalization — exit 1 if any tracked .md is non-canonical
+cedit md canonicalize --check <file>
 ```
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
@@ -276,6 +279,24 @@ Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
 a real Windows 11 box, but the port logic and
 dispatch are verified here.
+
+### Touched a Markdown file? Canonicalize it — the gate checks
+
+This repo gates Markdown on change via the **markdown-canonicalize.yml**
+workflow (added by JST-281 under `.github/workflows/`). It runs
+`cedit md canonicalize --check` on every changed `**/*.md` and fails the job
+if any file is non-canonical. Stateless only: `cedit md canonicalize`
+operates on the file content alone, with no `.cedit/` snapshot/sync/state.
+
+Before pushing Markdown changes, canonicalize locally:
+
+```bash
+cedit md canonicalize -i <file>         # rewrite in place
+cedit md canonicalize --check <file>    # CI-equivalent gate (exit 1 = not canonical)
+```
+
+The workflow filename is `markdown-canonicalize.yml` — if it changes, update
+this reference.
 
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
