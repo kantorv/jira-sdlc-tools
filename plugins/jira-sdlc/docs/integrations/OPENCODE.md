@@ -55,6 +55,7 @@ Everything lives in one project-root `opencode.json` (the direct analog of Kilo 
    - `command.<name>` — registers the explicit `/<name>` slash command that runs the skill inline; its `template` points the model at the matching `SKILL.md`, and `subtask: false` keeps it in the primary session (see Caveats).
 
 2. Replace `</PATH>` with the absolute path to this plugin's `skills` directory on your machine:
+
    - **Local clone** (stable, recommended): `…/jira-sdlc-tools/plugins/jira-sdlc/skills` — the directory that contains the three skill folders plus `_shared/`.
    - **Marketplace install**: `~/.claude/plugins/cache/<MARKETPLACE>/jira-sdlc/<version>/skills` — this path is version-stamped and changes on reinstall, so it is more fragile than a clone path.
 

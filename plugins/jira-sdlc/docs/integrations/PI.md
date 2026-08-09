@@ -13,7 +13,7 @@ Uses the native Claude skills specification.
 Pi loads Claude-spec skills natively by pointing at a skills path in `settings.json`. There are two locations — project settings override global settings with field-level merging:
 
 | Scope | Path |
-|---|---|
+| -- | -- |
 | **Project** (use this) | `.pi/settings.json` |
 | Global | `~/.pi/agent/settings.json` |
 
@@ -30,6 +30,7 @@ This doc uses the **project** location. It is a **copy-me template, not a commit
    Pi's `skills` is a flat array of paths — unlike Kilo Code's `kilo.jsonc` where skills are a `{ "paths": […] }` object.
 
 2. Replace `</PATH>` with the absolute path to this plugin's `skills` directory on your machine:
+
    - **Installed via marketplace**: `~/.claude/plugins/jira-sdlc/skills`
    - **Local clone**: the absolute path to `plugins/jira-sdlc/skills`
 

@@ -9,12 +9,12 @@
 > **not** this repo's own development procedure (human-driven, see
 > [SDLC.md](../SDLC.md)).
 
----
+______________________________________________________________________
 
 ## 1. Summary — two ways to use the plugin
 
 | Mode | How it works | When to use |
-|------|--------------|-------------|
+| -- | -- | -- |
 | **Claude Code marketplace plugin** | Add the marketplace, then `/plugin install jira-sdlc@<marketplace-name>` via the `/plugin` command. The three skills become available as `/jira-sdlc:jira-task-assigner`, `/jira-sdlc:jira-task-executor`, `/jira-sdlc:jira-task-reviewer`. | Default path — skills stay versioned with the marketplace release, upgrade with a reinstall. |
 | **Loose skillset** | Copy `plugins/jira-sdlc/skills/` into a project's own skills folder (e.g. `.claude/skills/`). Invoke unprefixed — `/jira-task-assigner`, etc. | When you want to fork/edit the skills directly, or the target environment doesn't support the marketplace mechanism. Note the local-dev-loop caveat in [CLAUDE.md](../../../../CLAUDE.md): a marketplace install is a cached snapshot, so edits to a clone don't show up there until reinstalled — this is why active skill development should point `--plugin-dir` at a working copy instead. |
 
@@ -24,7 +24,7 @@ target project's root. See [INSTALLATION.md](../INSTALLATION.md) and
 [project-config.md](../../skills/_shared/project-config.md) for what each
 `<TOKEN>` resolves to.
 
----
+______________________________________________________________________
 
 ## 2. Usage applications
 
@@ -79,7 +79,7 @@ to run the skills headlessly in CI. Each is self-contained and meant to be
 copy-pasted into another repo.
 
 | Workflow file | Trigger | What it does |
-|---|---|---|
+| -- | -- | -- |
 | [`demo-claude-reviewer.yml`](../../../../.github/workflows/demo-claude-reviewer.yml) | Comment `/review` on a PR | **Reviewer only**, against an already-open PR — a standalone review gate. Deep dive: [ci-review-pr-demo.md](./ci-review-pr-demo.md). |
 | [`demo-claude-issue-to-task.yml`](../../../../.github/workflows/demo-claude-issue-to-task.yml) | Comment `/make-task` on an issue | **Assigner only** — turns the commented GitHub issue into a Jira Task + branch + worktree on the runner. Stops there (nothing persists past the job on a hosted runner). Deep dive: [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md). |
 | [`demo-claude-issue-to-bug.yml`](../../../../.github/workflows/demo-claude-issue-to-bug.yml) | Comment `/make-bug` on an issue | **Assigner only** — the byte-identical `/make-bug` twin of the row above; same run, producing a Jira Bug instead of a Task. Deep dive: [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md). |
@@ -99,7 +99,7 @@ copy-pasted into another repo.
   branch job 1 pushed; the executor and reviewer skills hard-stop unless
   they're running in a linked worktree on a `feature/*` or `hotfix/*` branch.
 - **Environment-gated approvals** — every demo except the smoke test and the
-  two issue-to-* twins declares `environment: production` on its skill jobs.
+  two issue-to-\* twins declares `environment: production` on its skill jobs.
   That always scopes their secrets, and additionally makes GitHub pause for a
   human before each job *if* the environment has Required reviewers enabled.
   The issue-to-task/bug twins are the exception (see the next bullet): they
@@ -108,16 +108,14 @@ copy-pasted into another repo.
 - **Secrets are environment secrets on `production`** (named exactly as the
   `.jst/jira-sdlc-tools.local.env` keys they become — this is what lets a job's
   bootstrap step be a single loop over a `KEYS` list instead of a hand-mapped
-  one), except the issue-to-task/bug twins, which dropped `environment:
-  production` so their secrets resolve from the **repo** level instead — until
+  one), except the issue-to-task/bug twins, which dropped `environment: production` so their secrets resolve from the **repo** level instead — until
   redistributed from the `production` environment (JST-225 AC#4) their
   bootstrap fails loud. See §3.5 and [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
 - **No `GH_TOKEN`/`GITHUB_TOKEN` exported into skill steps** — statuscheck
   logs `gh` in from `GITHUB_PAT_TOKEN` read out of the env file; exporting
   either token variable into the environment makes `gh auth login` refuse,
   since it insists the variable be cleared first.
-- **Headless, no questions** — skills run with `-p
-  --dangerously-skip-permissions`. A run where the assigner would normally
+- **Headless, no questions** — skills run with `-p --dangerously-skip-permissions`. A run where the assigner would normally
   ask a clarifying question produces no branch and fails loud (the guard
   checks for exactly one new branch).
 - **Self-review** — the reviewer posts its verdict as a PR **comment**
@@ -137,7 +135,7 @@ shape, different model backend behind them. Pick the row for the flow you
 want, then the implementation whose backend you have credentials for.
 
 | Scenario | What the flow does | Trigger | Approval | Implementations |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | [**Feature flow**](./ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](../../../../.github/workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
 | [**Hotfix flow**](./ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](../../../../.github/workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
 | [**Review a PR**](./ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](../../../../.github/workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](../../../../.github/workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
@@ -166,15 +164,18 @@ Four more things the matrix makes visible:
   them — when a run fails on a new backend, the smoke test tells you whether
   the assistant is even installed and answering before you go looking for a
   bug in the skills. Run it first on any client you haven't used here before.
+
 - **Backend coverage is uneven, deliberately.** The feature flow and the PR
   review exist on more than one backend because those are the two flows worth
-  proving portable; the hotfix and issue-to-* demos ship Claude-only. A missing
+  proving portable; the hotfix and issue-to-\* demos ship Claude-only. A missing
   cell is an un-built demo, not an unsupported combination — the skills
   themselves don't know which model is driving them.
+
 - **The trigger word encodes the backend, not the flow.** `/make-feature` and
   `/fcc-make-feature` run the *same* scenario on different models. They're
   deliberately different words so that one comment doesn't start both
   workflows at once on a repo where both are installed.
+
 - **The trigger comment can carry prose, and the prose steers the run.** Every
   comment-triggered demo above accepts its command bare *or* followed by a
   space or a newline and free-form text:
@@ -184,8 +185,7 @@ Four more things the matrix makes visible:
   ```
 
   The workflow strips the command token and hands the remainder to the skill —
-  appended to the assigner's prompt as a labelled `EXTRA DIRECTION FOR THIS
-  RUN` section (the GitHub issue stays the task description), or passed to the
+  appended to the assigner's prompt as a labelled `EXTRA DIRECTION FOR THIS RUN` section (the GitHub issue stays the task description), or passed to the
   reviewer as its skill argument, which `jira-task-reviewer` reads as free-form
   notes about the run. A bare command behaves exactly as it always has.
 
@@ -195,7 +195,7 @@ Four more things the matrix makes visible:
   token followed by a separator — `/reviewer-anything` and a mid-sentence
   mention both stay inert.
 
----
+______________________________________________________________________
 
 ## 3. The two-gate convention for assistant workflows
 
@@ -252,7 +252,7 @@ the environment gate. The predicate depends on the trigger:
 Assuming Required reviewers is enabled on the `production` environment:
 
 | Job | Pauses before | What you can inspect at that point |
-|---|---|---|
+| -- | -- | -- |
 | **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
 | **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
 | **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
@@ -271,7 +271,7 @@ redistribution from `production` called out in
 [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
 
 | Secret | Used by | Notes |
-|---|---|---|
+| -- | -- | -- |
 | `JIRA_ACCOUNT_URL` | every job | e.g. `<your-site>.atlassian.net`, no scheme. |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | assigner job | Assigner's own Jira identity. |
 | `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | executor job (+ `_EMAIL` also read by the assigner job, as the assignment target, not a credential) | Executor's own Jira identity. |
@@ -305,9 +305,7 @@ gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-ap
 
 `--env production` scopes each secret to that environment, so it's only
 readable from jobs that declare `environment: production`. The issue-to-task
-and issue-to-bug twins are the exception — those jobs dropped `environment:
-production`, so set the same keys as **repo** secrets (drop the `--env
-production`) rather than environment ones, until the redistribution called out
+and issue-to-bug twins are the exception — those jobs dropped `environment: production`, so set the same keys as **repo** secrets (drop the `--env production`) rather than environment ones, until the redistribution called out
 by JST-225 AC#4 is done.
 
 ### 3.7 Copy-pasteable gate snippets
@@ -383,7 +381,7 @@ jobs:
 Assuming Required reviewers is enabled:
 
 | Job | Pauses before | What you can inspect at that point |
-|---|---|---|
+| -- | -- | -- |
 | **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
 | **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
 | **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
@@ -402,7 +400,7 @@ redistribution from `production` called out in
 [ci-issue-to-task-demo.md](./ci-issue-to-task-demo.md).
 
 | Secret | Used by | Notes |
-|---|---|---|
+| -- | -- | -- |
 | `JIRA_ACCOUNT_URL` | every job | e.g. `<your-site>.atlassian.net`, no scheme. |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | assigner job | Assigner's own Jira identity. |
 | `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | executor job (+ `_EMAIL` also read by the assigner job, as the assignment target, not a credential) | Executor's own Jira identity. |
@@ -436,17 +434,15 @@ gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-ap
 
 `--env production` scopes each secret to that environment, so it's only
 readable from jobs that declare `environment: production`. The issue-to-task
-and issue-to-bug twins are the exception — those jobs dropped `environment:
-production`, so set the same keys as **repo** secrets (drop the `--env
-production`) rather than environment ones, until the redistribution called out
+and issue-to-bug twins are the exception — those jobs dropped `environment: production`, so set the same keys as **repo** secrets (drop the `--env production`) rather than environment ones, until the redistribution called out
 by JST-225 AC#4 is done.
 
----
+______________________________________________________________________
 
 ## 4. Quick reference — which demo to start from
 
 | Goal | Start with |
-|---|---|
+| -- | -- |
 | See a full feature flow in CI with approval gates | `demo-claude-feature-flow.yml` + [ci-feature-flow-demo.md](./ci-feature-flow-demo.md) |
 | See a hotfix flow targeting production | `demo-claude-hotfix-flow.yml` + [ci-hotfix-flow-demo.md](./ci-hotfix-flow-demo.md) |
 | Just want automated PR review on a comment | `demo-claude-reviewer.yml` |
@@ -456,7 +452,7 @@ by JST-225 AC#4 is done.
 | Review a PR on FCC + NIM with the model picked at dispatch time | `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` |
 | Just confirm a new client installs, finds the skills, and can infer at all | `demo-kimi-openrouter-reviewer.yml` (the smoke-test scenario) |
 
----
+______________________________________________________________________
 
 ## 5. What these demos are not
 
@@ -471,12 +467,12 @@ by JST-225 AC#4 is done.
   across workflow files so each one stays copy-pasteable into another repo
   without pulling in a shared helper file.
 
----
+______________________________________________________________________
 
 ## 6. Related docs
 
 | Document | Covers |
-|---|---|
+| -- | -- |
 | [ci-feature-flow-demo.md](./ci-feature-flow-demo.md) | Deep dive on `demo-claude-feature-flow.yml` |
 | [ci-hotfix-flow-demo.md](./ci-hotfix-flow-demo.md) | Deep dive on `demo-claude-hotfix-flow.yml` |
 | [ci-review-pr-demo.md](./ci-review-pr-demo.md) | Deep dive on the review-a-PR scenario and its implementations |

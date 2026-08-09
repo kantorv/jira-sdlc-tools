@@ -1,15 +1,14 @@
 # Claude Code Integration (Native Claude skills)
 
 Claude Code is the reference platform — it reads `SKILL.md` and the plugin
-manifests as shipped, with no adaptation layer, so `disable-model-invocation:
-true` and the `_shared/` relative paths behave exactly as written. Three
+manifests as shipped, with no adaptation layer, so `disable-model-invocation: true` and the `_shared/` relative paths behave exactly as written. Three
 loading routes, all first-class: a **plugin marketplace** install, a
 **drop-in copy** into a `.claude/skills/` tree, and **`--plugin-dir`** pointed
 at a local clone. They differ in how the skills are invoked and in how you
 pick up updates — pick by what you're doing, not by preference.
 
-| | How it loads | Invocation | Updates | Best for |
-|---|---|---|---|---|
+|  | How it loads | Invocation | Updates | Best for |
+| -- | -- | -- | -- | -- |
 | **Method 1 — marketplace** | `/plugin install` copies a snapshot into Claude Code's plugin cache | `/jira-sdlc:<skill-name>` | `/plugin` → update | Everyday use |
 | **Method 2 — drop-in copy** | you copy `skills/*` into `~/.claude/skills/` or `<project>/.claude/skills/` | `/<skill-name>` (no namespace) | manual re-copy | No-marketplace setups; committing skills into a project repo |
 | **Method 3 — `--plugin-dir`** | Claude Code loads the plugin live from your working copy | `/jira-sdlc:<skill-name>` | instant (`/reload-plugins`) | Editing the skills themselves |
@@ -120,7 +119,7 @@ All three skills set `disable-model-invocation: true`, so Claude Code never
 loads them on its own — you always invoke them explicitly:
 
 | Skill | Method 1 / 3 | Method 2 |
-|---|---|---|
+| -- | -- | -- |
 | Plan a feature into Jira issues + worktrees | `/jira-sdlc:jira-task-assigner` | `/jira-task-assigner` |
 | Implement one issue end to end | `/jira-sdlc:jira-task-executor` | `/jira-task-executor` |
 | Review the finished set | `/jira-sdlc:jira-task-reviewer` | `/jira-task-reviewer` |
