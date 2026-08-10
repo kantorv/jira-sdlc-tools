@@ -68,8 +68,9 @@ git --version; gh --version; $PSVersionTable.PSVersion
   a repo with only `main` needs a `development` branch created before the
   assigner has anywhere to branch from.
   `bash     git branch -a --list 'main' 'development'   # or your own two names     `
-- [ ] **It can follow Gitflow.** The skills assume `feature/<KEY>-<slug>` and
-  `hotfix/<KEY>-<slug>` branches, PRs into the base branch, and releases
+- [ ] **It can follow Gitflow.** The skills assume `<prefix>/<KEY>-<slug>`
+  branches — `feature/`, `bugfix/`, `chore/` off the base branch and
+  `hotfix/` off production — PRs into the base branch, and releases
   merging into production. If your repo uses trunk-based development with
   no long-lived integration branch, decide now whether to add one — the
   full policy is in [SDLC.md](SDLC.md).

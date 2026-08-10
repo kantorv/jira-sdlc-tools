@@ -7,8 +7,8 @@ merges the PR.
 
 | Workflow | Fires on | Transition |
 | -- | -- | -- |
-| `jira_issue_transition_on_branch.yml` | `create` of a `feature/*` or `hotfix/*` branch | `<STATUS_TODO>` → `<STATUS_IN_PROGRESS>` |
-| `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from a `feature/*` / `hotfix/*` head | → `<STATUS_IN_REVIEW>` |
+| `jira_issue_transition_on_branch.yml` | `create` of a `feature/*`, `bugfix/*`, `chore/*` or `hotfix/*` branch | `<STATUS_TODO>` → `<STATUS_IN_PROGRESS>` |
+| `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from a `feature/*` / `bugfix/*` / `chore/*` / `hotfix/*` head | → `<STATUS_IN_REVIEW>` |
 | `jira_issue_transition_on_merge.yml` | PR closed **as merged** on an issue branch | → `<STATUS_DONE>` |
 
 They live in **this repo's own `.github/workflows/`**, not inside
@@ -27,7 +27,9 @@ two things racing to set the same status — pick one.
 Every one of them follows the same five moves, so learning one is learning
 all three:
 
-1. **Derive the key from the branch name** — `^(feature|hotfix)/([A-Z]+-[0-9]+)-`.
+1. **Derive the key from the branch name** —
+   `^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9]*-[0-9]+)-`, the canonical
+   pattern from `jira-api-reference.md` §12.
    Note the trailing hyphen: `feature/PROJ-12-add-login` matches,
    `feature/PROJ-12` alone does **not**. No match → the step exits 0 quietly.
 2. **Resolve the Jira cloud id** from `https://<site>/_edge/tenant_info`, a
@@ -207,8 +209,8 @@ rows, is in [JIRA-STATES.md](JIRA-STATES.md).
 - **Squash/rebase merges still count.** `pull_request.closed` with
   `merged == true` covers all three merge strategies. Closing a PR *without*
   merging correctly does nothing.
-- **The job-level `if` is a cost guard, not just logic.** Filtering to
-  `feature/*` / `hotfix/*` at the job level means a `release/*` PR skips
+- **The job-level `if` is a cost guard, not just logic.** Filtering to the four
+  work-branch prefixes at the job level means a `release/*` PR skips
   without allocating a runner, rather than spinning one up to `exit 0`.
 - **Consider `permissions: {}`.** None of the three touches repo contents, so
   an empty permissions block drops the default `GITHUB_TOKEN` grants and

@@ -97,7 +97,8 @@ copy-pasted into another repo.
 - **No shared disk** — `WORKTREES_DIR` is rebuilt per job under
   `$RUNNER_TEMP/worktrees`. Jobs 2/3 reconstruct a *linked* worktree from the
   branch job 1 pushed; the executor and reviewer skills hard-stop unless
-  they're running in a linked worktree on a `feature/*` or `hotfix/*` branch.
+  they're running in a linked worktree on an issue branch (`feature/*`,
+  `bugfix/*`, `chore/*`, `hotfix/*`).
 - **Environment-gated approvals** — every demo except the smoke test and the
   two issue-to-\* twins declares `environment: production` on its skill jobs.
   That always scopes their secrets, and additionally makes GitHub pause for a
@@ -254,7 +255,7 @@ Assuming Required reviewers is enabled on the `production` environment:
 | Job | Pauses before | What you can inspect at that point |
 | -- | -- | -- |
 | **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
-| **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
+| **Executor** | Job starts | Jira issue exists, the issue branch (`feature/*`, `bugfix/*`, `chore/*` or `hotfix/*`) is pushed — inspect before any code gets written. |
 | **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
 
 One `production` environment reused by every job is enough — the rule fires
@@ -383,7 +384,7 @@ Assuming Required reviewers is enabled:
 | Job | Pauses before | What you can inspect at that point |
 | -- | -- | -- |
 | **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
-| **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
+| **Executor** | Job starts | Jira issue exists, the issue branch (`feature/*`, `bugfix/*`, `chore/*` or `hotfix/*`) is pushed — inspect before any code gets written. |
 | **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
 
 One `production` environment reused by every job is enough — the rule fires

@@ -29,7 +29,7 @@
 #
 #  1. check_pr_exists — resolves the commented-on PR (github.event.issue.number)
 #     via `gh pr view`, validates its head branch, and skips the rest unless
-#     that PR is OPEN on a feature/* or hotfix/* branch.
+#     that PR is OPEN on a feature/*, bugfix/*, chore/* or hotfix/* branch.
 #  2. reviewer-claude — the new job. The old Kimi install/config/invoke steps are
 #     replaced with: native claude CLI install (validator.yml's pattern), a
 #     linked-worktree checkout of the PR head branch, and a headless
@@ -38,9 +38,10 @@
 # ── The one constraint that shapes the whole job (the "solved problem") ─────
 #
 #  The reviewer skill's healthcheck hard-stops unless it runs in a LINKED
-#  WORKTREE (`.git` is a file) on a `feature/*` or `hotfix/*` branch. A bare
-#  actions/checkout is a *main checkout* (`.git` is a directory), which FAILs
-#  that check before any review happens. So this job, like
+#  WORKTREE (`.git` is a file) on a work branch — `feature/*`, `bugfix/*`,
+#  `chore/*` or `hotfix/*`. A bare actions/checkout is a *main checkout*
+#  (`.git` is a directory), which FAILs that check before any review
+#  happens. So this job, like
 #  demo-claude-hotfix-flow.yml job 3, keeps actions/checkout as the main
 #  checkout (on the PR's base branch) and rebuilds a linked worktree for the
 #  PR's HEAD branch — the skill derives its Jira issue key from that branch
@@ -132,8 +133,8 @@ env:
 jobs:
   # ── Gating job — cheap, secret-free, and runs before the environment gate ──
   # Resolves the commented-on PR and its issue key. Proceeds only when that PR
-  # is OPEN on a feature/*|hotfix/* branch, so an unqualified comment is
-  # rejected without ever asking a human to approve a run.
+  # is OPEN on a feature/*|bugfix/*|chore/*|hotfix/* branch, so an unqualified
+  # comment is rejected without ever asking a human to approve a run.
   check_pr_exists:
     #
     # The command clause accepts the bare command or the command plus a
@@ -192,9 +193,10 @@ jobs:
             exit 0
           fi
 
-          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
-          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
-            echo "::error::PR #$PR_NUMBER head branch '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug — the reviewer skill derives its issue key from the branch and hard-stops otherwise"
+          # Validate branch name format: must be <prefix>/PROJ-NNN-slug, where
+          # <prefix> is one of the four work-branch prefixes (JST-271).
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|bugfix|chore|hotfix)/[A-Z][A-Z0-9_]*-[0-9]+- ]]; then
+            echo "::error::PR #$PR_NUMBER head branch '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug, bugfix/PROJ-NNN-slug, chore/PROJ-NNN-slug or hotfix/PROJ-NNN-slug — the reviewer skill derives its issue key from the branch and hard-stops otherwise"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
             echo "pr_number=0" >> "$GITHUB_OUTPUT"
             echo "issue_key=" >> "$GITHUB_OUTPUT"
@@ -202,7 +204,7 @@ jobs:
           fi
 
           # Extract issue key from branch name (PROJ-NNN)
-          ISSUE_KEY=$(printf '%s' "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          ISSUE_KEY=$(printf '%s' "$BRANCH_NAME" | sed -nE 's#^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9_]*-[0-9]+)-.*$#\2#p')
           if [ -z "$ISSUE_KEY" ]; then
             echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
             echo "pr_exists=0" >> "$GITHUB_OUTPUT"
@@ -260,9 +262,9 @@ jobs:
           # Generic <UPPER>-<digits> key (any project), so the worktree path
           # matches the worktree-<KEY> convention the skill expects without
           # needing PROJECT_KEY from the env file.
-          KEY=$(printf '%s' "$HEAD" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]*-[0-9]+)-.+$#\2#p')
+          KEY=$(printf '%s' "$HEAD" | sed -nE 's#^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9_]*-[0-9]+)-.+$#\2#p')
           if [ -z "$KEY" ]; then
-            echo "::error::PR #$PR_NUMBER head branch '$HEAD' is not a feature/* or hotfix/* issue branch — no <KEY>-<n> to derive, and the reviewer skill hard-stops otherwise. Dispatch this workflow from the PR's issue branch."
+            echo "::error::PR #$PR_NUMBER head branch '$HEAD' is not a feature/*, bugfix/*, chore/* or hotfix/* issue branch — no <KEY>-<n> to derive, and the reviewer skill hard-stops otherwise. Dispatch this workflow from the PR's issue branch."
             exit 1
           fi
           echo "head=$HEAD"  >> "$GITHUB_OUTPUT"
