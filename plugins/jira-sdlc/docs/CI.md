@@ -19,7 +19,7 @@ means **structure validation**, **release automation**, and **Jira status
 syncing**.
 
 | Workflow | Trigger | What it does |
-| :--- | :--- | :--- |
+| :- | :- | :- |
 | `validator.yml` | push / PR to `development`, `main` | Runs `claude plugin validate .` and checks both manifests are well-formed JSON. The only gate on structural correctness. |
 | `cut-release.yml` | manual `workflow_dispatch` (bump: patch/minor/major, default minor) | Computes the next SemVer from the latest **stable** tag + bump, cuts `release/sprint-<X.Y.Z>` off `development`, opens a **draft** PR into `main`. SDLC Phase 2. |
 | `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch. SDLC Phase 4 / §4. |
@@ -53,7 +53,7 @@ syncing**.
 ### Secrets used
 
 | Secret | Used by |
-| :--- | :--- |
+| :- | :- |
 | `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
 | `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | the three Jira transition workflows |
 
@@ -62,7 +62,7 @@ skills' local auth: the skills authenticate per-request as
 `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` from
 `jira-sdlc-tools.local.env` and read nothing from these repo secrets.
 
----
+______________________________________________________________________
 
 ## Tagging Mechanics
 
@@ -147,7 +147,7 @@ version resolution. Each picker is therefore hardened to accept only strict
 `vX.Y.Z`:
 
 | Workflow | Picker | Guard against lab tags |
-| :--- | :--- | :--- |
+| :- | :- | :- |
 | `cut-release.yml` | `git ls-remote … 'v[0-9]*'` → sort → tail | strip to bare name, then `grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'` (no suffix) |
 | `release.yml` | `git describe --match 'v[0-9]*'` | `--exclude '*-*'` (drops any hyphenated tag) |
 

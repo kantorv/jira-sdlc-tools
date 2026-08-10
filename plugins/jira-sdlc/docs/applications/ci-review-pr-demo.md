@@ -95,7 +95,7 @@ as the skill's argument — see *Steering the review from the comment* below.
 The intended trigger is a comment. The guard has three clauses, all necessary:
 
 | Clause | Why |
-|---|---|
+| -- | -- |
 | `github.event.issue.pull_request` | `issue_comment` fires for plain issues too. This is what restricts it to PR comments. |
 | body is `/review`, bare or followed by a space or newline | The command, which must be the comment's first token. Written out as an exact match plus three `startsWith` forms rather than the bare `startsWith(body, '/review')` this used to be — that one also fired on `/reviewer-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match. |
 | `author_association == 'OWNER'` | The security boundary. `issue_comment` fires for *any* commenter on a public repo; without this, a stranger's comment would spend your tokens and your Jira credentials. `MEMBER` is **not** accepted — a single merged PR earns `MEMBER` association, which is too loose. |
@@ -196,16 +196,14 @@ right answer on the first source instead of falling through to a default, and
 it is correct for both shapes: a sub-task PR (base = the parent branch) and a
 single-step PR (base = `<DEFAULT_BASE_BRANCH>`).
 
-Head and base come from the PR itself (`gh pr view --json
-headRefName,baseRefName`), not from the ref the run started on — this workflow
+Head and base come from the PR itself (`gh pr view --json headRefName,baseRefName`), not from the ref the run started on — this workflow
 has no upstream assigner job to hand them forward.
 
 ## Three caveats worth knowing before copying this
 
 1. **Don't export `GH_TOKEN`/`GITHUB_TOKEN` into the step that runs the
    skill.** Every skill starts with statuscheck, which reads
-   `GITHUB_PAT_TOKEN` out of the env *file* and runs `gh auth logout && gh
-   auth login --with-token`; `gh` refuses that login while either variable is
+   `GITHUB_PAT_TOKEN` out of the env *file* and runs `gh auth logout && gh auth login --with-token`; `gh` refuses that login while either variable is
    set in the environment. The skill step exports only the model credential;
    the one step that needs `GH_TOKEN` (resolving head/base) sets it before the
    skill runs, never alongside it.
@@ -225,8 +223,8 @@ has no upstream assigner job to hand them forward.
 Both share the `check_pr_exists` gate byte-for-byte, and both invoke the skill
 identically. They differ only in what drives the model.
 
-| | `demo-claude-reviewer.yml` | `demo-fcc-nvidia-nim-reviewer.yml` |
-|---|---|---|
+|  | `demo-claude-reviewer.yml` | `demo-fcc-nvidia-nim-reviewer.yml` |
+| -- | -- | -- |
 | **Trigger** | `/review` comment, bare or plus prose | `/fcc-review` comment, bare or plus prose |
 | **Model backend** | Claude CLI, pinned `2.1.220`, default model `sonnet` | Same CLI, pointed at a local FCC proxy (`ANTHROPIC_BASE_URL=http://127.0.0.1:8082`) that fronts NVIDIA NIM; default `z-ai/glm-5.2` |
 | **Credential** | `CLAUDE_CODE_OAUTH_TOKEN` | `NVIDIA_NIM_API_KEY` |

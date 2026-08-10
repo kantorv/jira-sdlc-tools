@@ -9,6 +9,7 @@ You are acting as a technical project manager for the **`<PROJECT-KEY>`**
 project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
+
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
   `<PRODUCTION_BRANCH>` — read all four off step 1's healthcheck rows
   (`env_config`, `worktrees_dir`, `base_branch`, `production_branch`), not
@@ -63,8 +64,7 @@ exit codes). Pick the branch from your own runtime *before the first call* —
 you know your OS without running anything — and use it for every script
 here, credential block included; the blocks below are the POSIX form.
 Statuscheck's `platform` row only *confirms* that choice afterwards, so it
-can't decide how statuscheck itself is run. It takes a required `--role
-assigner` (no default credential) and no issue-key argument.
+can't decide how statuscheck itself is run. It takes a required `--role assigner` (no default credential) and no issue-key argument.
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
 `ensure_local_env` no-ops when the file already exists, so run it
@@ -110,7 +110,7 @@ assigner runs from the **main repo checkout** (not a per-issue worktree) on a
 long-lived branch, the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
-|---|---|
+| -- | -- |
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
 | `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. *issue branch* — any of the four prefixes in `../_shared/jira-api-reference.md` §12 — vs. neither. The script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` and a `release/*` branch alike as *neither*; match those against the `production_branch` row and the `release/sprint-<X.Y.Z>` convention yourself. **Step 2 owns which readings this skill can run from** and resolves all of them, so carry the value there rather than gating on it here |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
@@ -171,6 +171,7 @@ related code, similar past patterns, affected modules. **Investigate
 specifically to decide whether the work splits into pieces that can run at
 the same time** — look for shared modules, sequential dependencies, and
 single owners for interfaces. Signs it's one piece, not two:
+
 - Changes that must land in a specific order to compile/test
 - A single module that all work touches sequentially
 - One person owns the interface all pieces must conform to
@@ -196,11 +197,13 @@ decisions before moving to setup — C is what turns "which branch am I on" into
 the base the new branches actually get cut from:
 
 **A. Decide Scope: single-step or multistep**
+
 - **Multistep** — the request breaks into genuinely independent, parallelizable pieces (e.g. backend API + frontend UI + feature-flag config) that can be worked on *at the same time* in separate worktrees.
 - **Single-step** — one cohesive piece of work, even if it touches several files. If piece B can only start once piece A finishes, that's one piece, not two — don't split purely sequential work.
 
 **B. Pick the top-level issue type**
 There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types (peers), with `Sub-task` underneath. Your top-level options are `Task`, `Story`, or `Bug`.
+
 - Defect / regression / something broken → `Bug`.
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
 - **Scope (A) and issue type (B) are independent** — scope is about *can the pieces run at the same time*; issue type is about *size/value of the whole*. A multistep `Task` of parallel technical chores is valid; a single-step `Story` is valid.
@@ -227,8 +230,8 @@ code that never sat in staging:
   check it out — this path cuts locally (step 6), so the checkout *is* the
   base.
 
-| | planned work (default) | QA fix on a release branch | emergency hotfix |
-|---|---|---|---|
+|  | planned work (default) | QA fix on a release branch | emergency hotfix |
+| -- | -- | -- | -- |
 | `<BASE_BRANCH>` — what the PR targets | `<DEFAULT_BASE_BRANCH>` | that same `release/sprint-<X.Y.Z>` | `<PRODUCTION_BRANCH>` |
 | `<BRANCH_FROM>` — what you cut from | `<DEFAULT_BASE_BRANCH>` (your checkout) | that same `release/sprint-<X.Y.Z>` (your checkout) | `origin/<PRODUCTION_BRANCH>` |
 | `<PREFIX>` | derived below | `bugfix/` | `hotfix/` |
@@ -284,6 +287,7 @@ a name for the branch you're about to point a PR at.
 
 Finally, check this decision against where step 2 left you standing, since the
 three non-hotfix paths all cut from your own checkout (step 6):
+
 - started on `<PRODUCTION_BRANCH>`, decision is **not** the hotfix path → stop
   and tell the user to checkout `<DEFAULT_BASE_BRANCH>`; continuing would
   branch tomorrow's feature off production.
@@ -300,10 +304,12 @@ that issue makes the setup one unified flow regardless of the scope decision.
 
 Before any branch creation, refresh from the remote. Which of the two
 commands you need follows step 5C's `<BRANCH_FROM>`:
+
 ```bash
 git fetch origin                        # every path — also refreshes origin/<PRODUCTION_BRANCH>
 git pull --ff-only origin <BRANCH_FROM>  # only where <BRANCH_FROM> is your own checkout
 ```
+
 The pull is for the three paths that cut from your own checkout — planned
 work, the QA fix, an accepted other branch. There you cut locally, and a bare
 fetch moves the remote-tracking ref rather than the branch you branch from.
@@ -325,6 +331,7 @@ production into your checkout.
 **Assign on create** — get the assignee email once here; every issue this run
 creates (top-level AND every sub-task) is assigned to it. On non-zero, relay
 the script's stderr and **stop**.
+
 ```bash
 ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_assignee_email.sh") || exit 1
 ```
@@ -356,13 +363,14 @@ treatment — its own dedicated branch, its own worktree, and its own PR into
 commit straight to the parent branch" shortcut.
 
 For each sub-task `→ <SUBTASK-KEY>`:
- 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX><SUBTASK-KEY>-<slug> <PREFIX><PARENT-KEY>-<slug>`
-    (sub-tasks inherit the parent's `<PREFIX>` verbatim — the nesting rule in
-    `../_shared/jira-api-reference.md` §12 — so a run never mixes prefixes; do
-    not re-derive it per sub-task)
- 2. `git config branch.<PREFIX><SUBTASK-KEY>-<slug>.parentbranch <PREFIX><PARENT-KEY>-<slug>`
-    (required for executor)
- 3. Leave a PR-target comment on the sub-task (format below).
+
+1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX><SUBTASK-KEY>-<slug> <PREFIX><PARENT-KEY>-<slug>`
+   (sub-tasks inherit the parent's `<PREFIX>` verbatim — the nesting rule in
+   `../_shared/jira-api-reference.md` §12 — so a run never mixes prefixes; do
+   not re-derive it per sub-task)
+2. `git config branch.<PREFIX><SUBTASK-KEY>-<slug>.parentbranch <PREFIX><PARENT-KEY>-<slug>`
+   (required for executor)
+3. Leave a PR-target comment on the sub-task (format below).
 
 **PR-target comments** (consumed by the executor, and by the reviewer's
 fallback on a fresh clone):
@@ -371,10 +379,10 @@ should target and the worktree to run the executor in — that comment is what
 tells the executor where its PR's base is.
 
 *Single-step (top-level issue):*
-*"PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>."*
+*"PR target branch: \<BASE_BRANCH>. Worktree: \<WORKTREES_DIR>/worktree-<PARENT-KEY>."*
 
 *Multistep sub-task:*
-*"PR target branch: <PREFIX><PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+*"PR target branch: <PREFIX><PARENT-KEY>-<slug>. Worktree: \<WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
 
 In the multistep path, after creating all sub-tasks, also post the
 single-step-format comment on the **parent issue** — its PR targets
@@ -392,6 +400,7 @@ staging. Confirm the comment posted before reporting back.
 `jira.ps1` on Windows; full command surface in `../_shared/jira-api-reference.md`
 §9; the steps write `jira.sh <cmd>` for brevity — actually invoke it as
 `bash "$S/jira.sh" <cmd>` where `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`):
+
 - **Auth**: no login step — every call carries `--role assigner` and
   authenticates per-request on the assigner credential (`../_shared/jira-api-reference.md`
   §9). (Step 1's healthcheck already verified that this credential auths.)
@@ -402,8 +411,7 @@ staging. Confirm the comment posted before reporting back.
 - **Create issue**:
   `jira.sh --role assigner issue create --project "<PROJECT-KEY>" --type "Task" --summary "..." --desc-file <file> --assignee "$ASSIGNEE_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"`.
-  `create` **prints the new key on stdout** — capture it directly (`KEY=$(jira.sh
-  … issue create …)`); there is no browse URL to parse. **Always pass
+  `create` **prints the new key on stdout** — capture it directly (`KEY=$(jira.sh … issue create …)`); there is no browse URL to parse. **Always pass
   `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
   sub-task — resolved once at the top of 6A. One flag does it on create; do
   not issue a separate `issue assign`.

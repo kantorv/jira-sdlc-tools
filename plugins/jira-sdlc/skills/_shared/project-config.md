@@ -18,7 +18,7 @@ to get them. The tables below describe what each variable means; read
 ## What lives in `.jst/`
 
 | File | Purpose | Committed? |
-|------|---------|------------|
+| -- | -- | -- |
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
 | `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — ignored by `.jst/.gitignore`, which lists it as `jira-sdlc-tools.local.env` |
 | `.jst/.gitignore` | One line, `jira-sdlc-tools.local.env` — keeps the credential file out of git. It lives here rather than in the root `.gitignore` so it travels with any copy of `.jst/`, into a worktree for instance. | **Yes** — checked into the repo |
@@ -34,7 +34,7 @@ The two files are **not equally sensitive**, and the split is uneven — which
 is why "just read the config" is the wrong instinct:
 
 | File | Contents | Reading it |
-|---|---|---|
+| -- | -- | -- |
 | `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names | Committed and secret-free — read it whole, freely |
 | `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `CONVERSATIONS_*` — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
 
@@ -104,7 +104,7 @@ existing container/volume rather than erroring on it.
 ports use identical names:
 
 | variable | value |
-|---|---|
+| -- | -- |
 | `JST_ISSUE_KEY` | the issue key derived from the branch, e.g. `PROJ-402` |
 | `JST_WORKTREE_DIR` | absolute path of *this* worktree's root (the script's working directory), not `WORKTREES_DIR` |
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
@@ -136,7 +136,7 @@ without it halts rather than running half-configured.
 ## Required (in `.jst/jira-sdlc-tools.env`)
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
@@ -148,7 +148,7 @@ without it halts rather than running half-configured.
 ## Required (in `.jst/jira-sdlc-tools.local.env`)
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. | `/home/you/src/myapp-worktrees` |
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it constructs issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
 
@@ -167,8 +167,7 @@ Every token is the raw token value; a file path is not accepted. Create the
 tokens at `id.atlassian.com` → Security → API tokens (classic or scoped both
 work through the gateway — see `jira-api-reference.md` §5).
 
-Each skill picks its role identity per-request with `jira.sh --role
-assigner|executor|reviewer`, which selects that role's pair below. `--role` is
+Each skill picks its role identity per-request with `jira.sh --role assigner|executor|reviewer`, which selects that role's pair below. `--role` is
 **required** — there is no default account to fall back on. Because auth is
 per-request, different roles can run **concurrently** as different identities
 with no shared, machine-global "active account" to race over — the reason the
@@ -184,7 +183,7 @@ three accounts may of course be the same Atlassian account if you'd rather not
 split them; state it explicitly in all three pairs.
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<JIRA_ASSIGNER_EMAIL>` / `<JIRA_ASSIGNER_TOKEN>` | The account `jira-task-assigner` runs as — it creates the issues and their comments. | `assigner@example.com` / `ATATT3xFfGF0…` |
 | `<JIRA_EXECUTOR_EMAIL>` / `<JIRA_EXECUTOR_TOKEN>` | The account `jira-task-executor` runs as. Doubles as the **assignee**: the assigner puts this email on every issue it creates, and the executor refuses to work an issue that isn't assigned to it. | `executor@example.com` / `ATATT3xFfGF0…` |
 | `<JIRA_REVIEWER_EMAIL>` / `<JIRA_REVIEWER_TOKEN>` | The account `jira-task-reviewer` runs as — it posts the verdict comments. | `reviewer@example.com` / `ATATT3xFfGF0…` |
@@ -215,8 +214,7 @@ ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/posix/get_assignee_email.sh) || exi
 bash skills/_shared/scripts/posix/check_assignee.sh --role executor   # 0 = continue, non-zero = stop
 ```
 
-`check_assignee.sh` resolves its own identity by calling `jira.sh --role
-<role> whoami` (the account that role's credential authenticates as) and
+`check_assignee.sh` resolves its own identity by calling `jira.sh --role <role> whoami` (the account that role's credential authenticates as) and
 compares that account's `accountId` to the issue's assignee. `--role` is what
 decides which identity is demanded — no ambient logged-in state to consult.
 Unassigned, assigned to someone else, unreadable, or a hidden assignee email
@@ -235,6 +233,7 @@ can't race.
 The README's usage walkthrough assumes these filled-in files:
 
 **`.jst/jira-sdlc-tools.env` (committed):**
+
 ```
 PROJECT-KEY           = PROJ
 DEFAULT_BASE_BRANCH   = development
@@ -246,6 +245,7 @@ STATUS_DONE           = Done
 ```
 
 **`.jst/jira-sdlc-tools.local.env` (gitignored):**
+
 ```
 WORKTREES_DIR         = /home/you/src/myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net

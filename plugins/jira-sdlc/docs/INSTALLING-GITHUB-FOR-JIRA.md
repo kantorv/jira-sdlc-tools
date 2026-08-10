@@ -18,7 +18,7 @@ and PRs.
   key is what links, whichever of the four prefixes it carries), and the
   automation that moves an issue to `<STATUS_DONE>` on merge — no skill
   transitions to that status itself, per
-  [../skills/_shared/project-config.md](../skills/_shared/project-config.md).
+  [../skills/\_shared/project-config.md](../skills/_shared/project-config.md).
 - What breaks without it, and what to do by hand instead.
 - Non-GitHub forges — see the plugin [README.md](../README.md) → Known
   limitations: branch-to-issue linking relies on this integration

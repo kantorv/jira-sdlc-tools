@@ -20,8 +20,7 @@ swimlanes — **GIT** (anything that mutates or reads repo/PR state:
 `git fetch --prune`, resolving the parent/base branches from the
 `branch.<PARENT-BRANCH>.parentbranch` git config that the assigner
 wrote in phase 1, the phase-check `gh pr list`, the per-PR `3a`
-idempotency lookup, fetching PR diffs, `gh pr review --comment
---body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
+idempotency lookup, fetching PR diffs, `gh pr review --comment --body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
 verdicts, and finding or creating the aggregate parent PR) and **JIRA**
 (anything that mutates issue state: fetching the parent + In-Review
 sub-tasks, climbing from a sub-task branch to its parent, each rejected
@@ -197,8 +196,7 @@ sequenceDiagram
   `<PARENT-BRANCH>` + `<BASE_BRANCH>` (the latter read from the
   `parentbranch` git config the assigner wrote in phase 1 — the
   phase-1 → phase-3 thread), the phase-check `gh pr list`, the per-PR 3a
-  idempotency lookup, fetching PR diffs, the verdict comment (`gh pr
-  review --comment --body-file`), and finding or creating the aggregate
+  idempotency lookup, fetching PR diffs, the verdict comment (`gh pr review --comment --body-file`), and finding or creating the aggregate
   parent PR. **JIRA** owns issue state: fetching the parent + sub-tasks
   (filtering to `<STATUS_IN_REVIEW>`), climbing from a sub-task branch to
   its parent, each rejected sub-task → In Progress transition with its
@@ -282,8 +280,7 @@ sequenceDiagram
   the aggregate parent PR (GIT). If that PR is already **CLOSED** it stops
   and lets the user decide (5a) — it never reopens or recreates it.
   Otherwise it reviews the lighter aggregate diff (integration focus) and
-  records a verdict on the parent PR via `gh pr review --comment
-  --body-file`: **approve** → M-PARENT-READY (awaiting the human's manual
+  records a verdict on the parent PR via `gh pr review --comment --body-file`: **approve** → M-PARENT-READY (awaiting the human's manual
   merge), or **request changes** → M-PARENT-CHANGES-REQUESTED (integration
   `file:line` findings; fix on `<PARENT-BRANCH>` and re-run). Unlike a
   sub-task reject, the parent reject does **not** transition any Jira issue

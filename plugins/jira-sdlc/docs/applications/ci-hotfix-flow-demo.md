@@ -73,7 +73,7 @@ runs an LLM with write permissions on a runner. The job-level `if` is therefore
 the security boundary of this workflow, and it requires all three of:
 
 | Condition | Why it's there |
-| :--- | :--- |
+| :- | :- |
 | body is `/make-hotfix`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-hotfix` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-hotfix')`, would also fire on `/make-hotfix-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
 | `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-hotfix` on a pull request would hand the assigner a PR description as a bug report |
@@ -103,8 +103,7 @@ is free-form guidance for *this run*, on one line or several:
 ```
 
 A parse step strips the command token, trims the surrounding whitespace, and
-the assigner prompt gains one labelled `-- EXTRA DIRECTION FOR THIS RUN (from
-the triggering comment) --` section **after** the issue body. It supplements
+the assigner prompt gains one labelled `-- EXTRA DIRECTION FOR THIS RUN (from the triggering comment) --` section **after** the issue body. It supplements
 the bug report and the hotfix directive rather than replacing either — which
 matters more here than on the feature flow, since dropping that directive is
 what silently turns a hotfix run into a feature run. A bare `/make-hotfix`
@@ -133,7 +132,7 @@ reviewers** protection rule checked. Environment protection is evaluated
 **before each job starts**, so one `/make-hotfix` comment pauses three times:
 
 | Pause | Approving it releases | What has happened so far |
-| :--- | :--- | :--- |
+| :- | :- | :- |
 | before job 1 | the assigner | nothing — this is the "should this run at all" gate, and the first place a human reads the issue text with the run in mind |
 | before job 2 | the executor | a Jira Bug exists and `hotfix/<KEY>-<slug>` is pushed — the owner can inspect both before any code is written |
 | before job 3 | the reviewer | the fix is pushed and the PR is open — the owner can eyeball the diff before the automated review spends tokens on it |
@@ -149,12 +148,12 @@ that forgot its `environment:` line would see empty strings (and fail the
 explicit up-front secret check), never real credentials:
 
 | Secret | Used by | Notes |
-| :--- | :--- | :--- |
+| :- | :- | :- |
 | `CLAUDE_CODE_OAUTH_TOKEN` | every job | read from the environment by the claude CLI — the only one never written to the env file |
-| `JIRA_ACCOUNT_URL` | every job | |
+| `JIRA_ACCOUNT_URL` | every job |  |
 | `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | job 1 | the assigner's Jira identity |
 | `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | job 2 | job 1 also receives the *email* only — it is the assignment target, not a credential |
-| `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | job 3 | |
+| `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | job 3 |  |
 
 Each secret is named **exactly as the `jira-sdlc-tools.local.env` key it
 becomes**, which lets each job's env-file bootstrap be a single loop over a

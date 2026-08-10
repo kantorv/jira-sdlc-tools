@@ -26,7 +26,7 @@ the dispatch rule maps it.
 All paths below are relative to the plugin root (`plugins/jira-sdlc/`).
 
 | Script | Path | Summary | Called by |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | `statuscheck` | `skills/_shared/scripts/win/statuscheck.ps1` `--role <role>` | Pre-flight healthcheck: one markdown table of env facts (git/worktree, branch, issue key, **platform**, gh+Jira auth, project config). Exit 0 if all OK, 1 if any `FAIL`, 2 on a bad/missing `--role`. `--role` is required and selects the credential its `jira_auth` row probes; its `platform` row confirms POSIX-bash vs Windows-ps1 dispatch (already chosen by the skill up front). | **assigner, executor, reviewer** — each skill's "Discovery & healthcheck" |
 | `ensure_local_env` | `skills/_shared/scripts/win/ensure_local_env.ps1` | Ensures the gitignored `.jst/jira-sdlc-tools.local.env` exists: copies it from the main checkout into a linked worktree (creating `.jst/` there if needed); no-op in the main checkout or when already present. Exit 0/1. | **assigner, executor, reviewer** — run **first** in each skill (before login, before statuscheck); also invoked as a child by `statuscheck.ps1`'s own `env_local` gate |
 | `get_assignee_email` | `skills/_shared/scripts/win/get_assignee_email.ps1` | Prints the email every issue should be assigned to (`JIRA_EXECUTOR_EMAIL`, required — no fallback). One line on stdout. Exit 0/1, reason on stderr. | **assigner** only (to set sub-task assignees) |
@@ -115,4 +115,4 @@ side-step it.
   Windows form of the former).
 - `skills/_shared/project-config.md` — the `.jst/jira-sdlc-tools.env` /
   `.jst/jira-sdlc-tools.local.env` variables the ports resolve (PROJECT-KEY,
-  JIRA_*_EMAIL, JIRA_*_TOKEN, JIRA_ACCOUNT_URL, status names, etc.).
+  JIRA\_*_EMAIL, JIRA_*\_TOKEN, JIRA_ACCOUNT_URL, status names, etc.).

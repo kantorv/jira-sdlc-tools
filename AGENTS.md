@@ -119,6 +119,7 @@ each holds a single manifest. Don't merge them into one.
 
 Renames aren't self-contained here — grep for the old name before
 assuming you're done:
+
 - Renaming the **plugin** (`name` in
   `plugins/jira-sdlc/.claude-plugin/plugin.json`, which is also the
   skill namespace in `/jira-sdlc:...`) → rename the directory under
@@ -167,10 +168,10 @@ and they fail in a way that is **invisible in review**: a broken block still
 looks like a perfectly reasonable diagram in the diff, and only turns into an
 error box once GitHub renders it. So parse it with a real parser:
 
-```bash
+````bash
 bash scripts/check-mermaid.sh                      # every ```mermaid block in the repo
 bash scripts/check-mermaid.sh path/to/changed.md   # or just the file you touched
-```
+````
 
 It parses each block with the real mermaid parser (`npx @mermaid-js/mermaid-cli`
 — needs Node, and network on first run), exits non-zero, and names the offending
@@ -253,8 +254,7 @@ right on every other case.
 **Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
 knowing this up front saves chasing a port bug that isn't there:
 `$env:TEMP` is unset on Linux, so export `TEMP=/tmp` before the diff, and
-`gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login
---with-token` doesn't complete down that path) while the bash side reads OK.
+`gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login --with-token` doesn't complete down that path) while the bash side reads OK.
 Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
 Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
 FAIL rows" footer under the table, so drop that block too or the diff shows
@@ -267,8 +267,7 @@ filt() { grep -vE '^\| (gh_auth|gh_repo_access)' | sed '/^Remedies for FAIL rows
 
 **Or drop the filter entirely and exercise the real path** (JST-251): the only
 thing missing on Linux is `cmd`, which `statuscheck.ps1` shells out to for the
-stdin redirect. A three-line `cmd` stand-in on `PATH` — `[ "$1" = "/c" ] &&
-shift; exec bash -c "$*"` — makes the pwsh login succeed, and both ports then
+stdin redirect. A three-line `cmd` stand-in on `PATH` — `[ "$1" = "/c" ] && shift; exec bash -c "$*"` — makes the pwsh login succeed, and both ports then
 print byte-identical tables with nothing filtered. Pair it with a fake `gh` on
 `PATH` to drive the branches a live run can't reach (`gh_repo_access`'s 404 and
 non-404 errors, a missing/non-GitHub `origin`).
@@ -311,6 +310,7 @@ workflows automate the stable release:
   force-pushing) → deletes the `release/*`/`hotfix/*` branch. SDLC Phase 4 + §4.
 
 Order of operations, the short version:
+
 1. Run `cut-release` → `release/sprint-<X.Y.Z>` and a draft PR appear
    (version computed from latest `v*` tag + chosen bump level, default `minor`,
    baked into the branch name).

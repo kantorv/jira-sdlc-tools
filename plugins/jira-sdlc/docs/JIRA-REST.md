@@ -40,7 +40,7 @@ confirmed against: `1.3.22-stable`.
 
 (No §7 or §12 here — see the note above.)
 
----
+______________________________________________________________________
 
 ## 0. Auth
 
@@ -79,7 +79,7 @@ default account behind them.
 jira.sh --role executor whoami
 ```
 
----
+______________________________________________________________________
 
 ## 1. Issue type hierarchy
 
@@ -109,18 +109,18 @@ for *your* project:
 
 For this project:
 
-| Role     | Exact type name |
-|----------|-----------------|
-| Task     | `Task`          |
-| Story    | `Story`         |
-| Bug      | `Bug`           |
-| Sub-task | `Subtask`       |   ← **no hyphen** for this project (see §11)
+| Role | Exact type name |
+| -- | -- |
+| Task | `Task` |
+| Story | `Story` |
+| Bug | `Bug` |
+| Sub-task | `Subtask` |   ← **no hyphen** for this project (see §11)
 
 ⚠️ Note the **`Subtask`** spelling (no hyphen).
 
 Default project key: `<PROJECT-KEY>` (from `.jst/jira-sdlc-tools.env`).
 
----
+______________________________________________________________________
 
 ## 2. Creating issues
 
@@ -155,13 +155,17 @@ for plain prose, plain text is fine.
 ### Capturing the created issue's key
 
 Default (text) output:
+
 ```
 ✓ Work item PROJ-33 created: https://your-site.atlassian.net/browse/PROJ-33
 ```
+
 The key is embedded in that URL. Extract it in a script:
+
 ```bash
 KEY=$(echo "$out" | grep -oE '[A-Z]+-[0-9]+' | head -1)
 ```
+
 Or use `--json` and parse the returned object (`key` is a top-level
 field in the JSON output).
 
@@ -182,18 +186,18 @@ jira.sh workitem create-bulk --from-json /tmp/issues.json --yes --ignore-errors
 # inspect the expected JSON shape first:
 jira.sh workitem create-bulk --generate-json
 ```
+
 CSV is also supported (`--from-csv`); columns are summary, projectKey,
 issueType, description, label, parentIssueId, assignee.
 
----
+______________________________________________________________________
 
 ## 3. Reading / listing issues
 
 The lean file covers `view`, the key-positional gotcha, the
 default-`--json`-omits-`subtasks`/`parent`/`comment` gotcha, and the two
 canonical `--fields` fetch lists. This section holds listing (`search`,
-never invoked by a skill), the `search` flag reference, the `--fields
-'*all'` payload caution, and the type/parent check.
+never invoked by a skill), the `search` flag reference, the `--fields '*all'` payload caution, and the type/parent check.
 
 ### There is no `list` subcommand — listing is `search`
 
@@ -235,7 +239,7 @@ jira.sh workitem view <KEY> --json
 # fields.parent.key        — present only when <KEY> is itself a sub-task
 ```
 
----
+______________________________________________________________________
 
 ## 4. Editing / transitioning / assigning
 
@@ -250,7 +254,9 @@ jira.sh workitem edit --key <KEY> --summary "New summary" --yes
 jira.sh workitem edit --key <KEY> --description "Updated body"
 jira.sh workitem edit --key <KEY> --description-file /tmp/new-body --yes   # plain text/ADF, not markdown (§2)
 ```
+
 Bulk edit by JQL:
+
 ```bash
 jira.sh workitem edit --jql "project = <PROJECT-KEY> AND status = \"To Do\"" --assignee @me --yes --ignore-errors
 ```
@@ -263,7 +269,7 @@ jira.sh workitem assign --key <KEY> --assignee "teammate@example.com" --yes
 jira.sh workitem assign --key <KEY> --remove-assignee --yes
 ```
 
----
+______________________________________________________________________
 
 ## 5. Linking issues
 
@@ -280,9 +286,10 @@ jira.sh workitem link create \
 # List a work item's links:
 jira.sh workitem link list <KEY>
 ```
+
 Bulk: `--from-json` or `--from-csv` (columns: outward, inward, type).
 
----
+______________________________________________________________________
 
 ## 6. Comments & worklogs
 
@@ -312,7 +319,7 @@ jira.sh workitem comment visibility                         # get allowed visibi
 jira.sh workitem worklog add --key <KEY> --time-spent "1h 30m" --comment "note"
 ```
 
----
+______________________________________________________________________
 
 ## 8. Destructive / risky commands — use with care
 
@@ -333,7 +340,7 @@ Unlike `jira-cli` (whose `delete` can't be run non-interactively),
 run unattended. That makes the guardrails more important, not less — see
 the lean file's agent rule (never auto-run `delete`).
 
----
+______________________________________________________________________
 
 ## 9. Other useful commands
 
@@ -350,7 +357,7 @@ jira.sh field --help                        # inspect custom fields
 jira.sh filter --help                       # saved filters
 ```
 
----
+______________________________________________________________________
 
 ## 10. Helper scripts
 
@@ -394,7 +401,7 @@ create_parent_and_subtasks.sh \
 list_subtasks.sh --parent <PARENT-KEY>
 ```
 
----
+______________________________________________________________________
 
 ## 11. Cross-reference to jira-cli
 
@@ -407,8 +414,7 @@ differences that drove the choice:
 
 `jira-cli` **silently drops the parent on sub-task create in this
 project** — `-P <PARENT-KEY>` is accepted by the flag parser but never
-sent in the POST body, so Jira returns `400 Issue type is a sub-task but
-parent issue key or id not specified`. `jira.sh`'s `--parent` works
+sent in the POST body, so Jira returns `400 Issue type is a sub-task but parent issue key or id not specified`. `jira.sh`'s `--parent` works
 correctly for the same operation. This is the primary reason the jira.sh
 reference exists: the assigner/executor create sub-tasks with `--parent`,
 and `jira.sh` is the CLI that actually sends it. (Stated as a runnable

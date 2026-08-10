@@ -13,20 +13,22 @@
 # Software Development Life Cycle (SDLC) & Branching Strategy
 
 ## 1. Overview and Purpose
-This document defines the standard operating procedures for the Software Development Life Cycle (SDLC), Git branching strategy, and release management for this repository. 
+
+This document defines the standard operating procedures for the Software Development Life Cycle (SDLC), Git branching strategy, and release management for this repository.
 
 **Audience:** Human developers, DevOps engineers, and Autonomous AI/LLM coding assistants.
 
 **Core Philosophy:**
+
 - **Continuous Integration / Batched Deployment:** We merge code continuously to staging but release to production in scheduled two-week sprint batches.
 - **Decoupled Deployments:** Deployment does not equal release. We rely heavily on **Feature Flags** to merge incomplete or untested features safely into production without exposing them to end-users.
 
----
+______________________________________________________________________
 
 ## 2. Branch Architecture
 
 | Branch Name Pattern | Protected? | Source | Merges To | Purpose |
-| :--- | :---: | :--- | :--- | :--- |
+| :- | :-: | :- | :- | :- |
 | `main` | ✅ Yes | `release/*`, `hotfix/*` | `development` | Represents the current production state. Strictly tagged with Semantic Versioning (e.g., `v1.2.3`). |
 | `development` | ✅ Yes | `main` | `release/*` | The default working branch. Represents Staging/Integration. Code here is continuously deployed to the staging environment. |
 | `feature/ISSUE-KEY-slug` | ❌ No | `development` | `development` | New capability or product-facing work. |
@@ -42,7 +44,7 @@ exclude) a change and what tells a reviewer which mindset a PR needs. Pick it
 from the issue type plus intent, not from the base branch:
 
 | Issue | Prefix |
-| :--- | :--- |
+| :- | :- |
 | `Bug` | `bugfix/` |
 | `Task`, maintenance only (deps, CI/CD, build scripts, tooling) | `chore/` |
 | `Task`, product-facing | `feature/` |
@@ -57,41 +59,44 @@ Gitflow mechanics are unchanged by the split: `bugfix/` and `chore/` branch
 from and merge back to exactly where `feature/` already did, and `hotfix/`
 keeps its production path (§4).
 
----
+______________________________________________________________________
 
 ## 3. The 2-Week Sprint Lifecycle
 
 Our development cycles run in 14-day sprints. The Git workflow strictly follows this cadence.
 
 ### Phase 1: Active Development (Days 1 to 11)
+
 - Developers branch off `development` to create `feature/*`, `bugfix/*` or `chore/*` branches — whichever the §2 prefix table calls for.
 - Pull Requests (PRs) are opened against `development`.
-- Once approved, PRs are merged immediately. 
+- Once approved, PRs are merged immediately.
 - *Rule:* If a feature is incomplete, it MUST be wrapped in a Feature Flag before merging into `development`.
 
 ### Phase 2: Feature Freeze & Release Cut (Day 12)
+
 - A new release branch is cut from `development` (e.g., `release/sprint-0.3.0`). The branch name embeds the intended SemVer version — `cut-release.yml` computes it from the latest `v*` tag + the chosen bump level (`patch`/`minor`/`major`, default `minor` per §5). The version lives in the branch name from this point on; `release.yml` reads it back out at merge time (§5), so the way to change a release's version is to rename or re-cut the branch, not to relabel a PR.
-- **No new features** are allowed into this release branch. 
+- **No new features** are allowed into this release branch.
 - `development` remains open for developers to start merging features for the *next* sprint.
 
 ### Phase 3: QA & Hardening (Days 12 to 14)
+
 - QA tests the `release/*` branch in the staging environment.
 - If bugs are found, developers cut a `bugfix/<ISSUE-KEY>-<slug>` branch directly off the `release/*` branch, fix the bug, and open a PR back into that *same* `release/*` branch — never into `development`, which is already open for the next sprint.
 - The fix reaches `development` with the rest of the release, when `main` is merged back in Phase 4.
 
 ### Phase 4: Production Deployment (Day 14)
+
 - The `release/*` branch is merged into `main` via a PR.
 - A **Semantic Version Tag** (e.g., `v0.95.4`) is applied to the merge commit on `main`.
 - The CI/CD pipeline deploys `main` to Production.
 - `main` is merged back into `development` to ensure all QA bug fixes are synced.
 - The `release/*` branch is deleted.
 
----
+______________________________________________________________________
 
 ## 4. Emergency Production Bug Flow (Hotfixes)
 
 When a critical bug is discovered in production that cannot wait for the end of the 2-week sprint cycle, the **Hotfix Flow** is triggered. This process completely bypasses the `development` branch to ensure we do not accidentally deploy unreleased sprint features prematurely.
-
 
 ```
 
@@ -106,8 +111,10 @@ When a critical bug is discovered in production that cannot wait for the end of 
 ```
 
 ### Step 1: Isolate and Branch
-- Do **NOT** branch from `development`. 
+
+- Do **NOT** branch from `development`.
 - Pull the latest code from `main` and create a hotfix branch:
+
 ```bash
 git checkout main
 git pull origin main
@@ -117,19 +124,19 @@ git checkout -b hotfix/ISSUE-KEY-short-description
 
 ### Step 2: Fix and Validate
 
-* Implement the fix locally.
-* Deploy the hotfix branch to an isolated staging/preview environment for immediate QA validation.
+- Implement the fix locally.
+- Deploy the hotfix branch to an isolated staging/preview environment for immediate QA validation.
 
 ### Step 3: Production Merge and Patch Tagging
 
-* Open a Pull Request targeting `main`.
-* Once approved, merge the PR into `main`.
-* Increment the **PATCH** version of your semantic tag (e.g., `v1.2.4` becomes `v1.2.5`).
-* The CI/CD pipeline triggers an automatic immediate deployment to Production.
+- Open a Pull Request targeting `main`.
+- Once approved, merge the PR into `main`.
+- Increment the **PATCH** version of your semantic tag (e.g., `v1.2.4` becomes `v1.2.5`).
+- The CI/CD pipeline triggers an automatic immediate deployment to Production.
 
 ### Step 4: Downstream Synchronization (Crucial)
 
-* To prevent the bug from being reintroduced during the next sprint release, `main` **must** be merged back into `development` immediately following the production deployment.
+- To prevent the bug from being reintroduced during the next sprint release, `main` **must** be merged back into `development` immediately following the production deployment.
 
 ```bash
 git checkout development
@@ -139,7 +146,7 @@ git push origin development
 
 ```
 
----
+______________________________________________________________________
 
 ## 5. Versioning Strategy (SemVer)
 
@@ -147,20 +154,20 @@ We strictly adhere to [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.
 
 The version for each release is taken from the **branch name** — no PR label is read:
 
-* A `release/sprint-<X.Y.Z>` branch carries its SemVer version in the name (set at cut time by `cut-release.yml`). `release.yml` parses that version back out at merge time; a malformed name (anything other than `release/sprint-<X.Y.Z>`, including a leading `v`) fails the release. To ship a different version, rename or re-cut the branch.
-* A `hotfix/*` branch always takes a **patch** bump on the latest `v*` tag. A hotfix is by §4's definition an emergency fix for a critical production bug — that IS a patch; work needing a minor or major bump belongs in a `release/*` branch, where the version is explicit.
+- A `release/sprint-<X.Y.Z>` branch carries its SemVer version in the name (set at cut time by `cut-release.yml`). `release.yml` parses that version back out at merge time; a malformed name (anything other than `release/sprint-<X.Y.Z>`, including a leading `v`) fails the release. To ship a different version, rename or re-cut the branch.
+- A `hotfix/*` branch always takes a **patch** bump on the latest `v*` tag. A hotfix is by §4's definition an emergency fix for a critical production bug — that IS a patch; work needing a minor or major bump belongs in a `release/*` branch, where the version is explicit.
 
 `release/*` and `hotfix/*` are the **only** version-bearing branches — they are the only two that merge into `main`, which is the only branch that carries tags. A `feature/*`, `bugfix/*` or `chore/*` merge never tags and never publishes a release; its change is versioned later, by the `release/*` branch that carries it to production.
 
 Commit-message conventions play no part in version resolution.
 
-* **MAJOR (`v2.0.0`):** Breaking changes, massive UI overhauls, or major architectural shifts.
-* **MINOR (`v1.5.0`):** New sprint releases containing backward-compatible features (the standard increment for Day 14 releases — the `cut-release.yml` default).
-* **PATCH (`v1.5.1`):** Emergency `hotfix/*` branches merged directly to `main` mid-sprint.
+- **MAJOR (`v2.0.0`):** Breaking changes, massive UI overhauls, or major architectural shifts.
+- **MINOR (`v1.5.0`):** New sprint releases containing backward-compatible features (the standard increment for Day 14 releases — the `cut-release.yml` default).
+- **PATCH (`v1.5.1`):** Emergency `hotfix/*` branches merged directly to `main` mid-sprint.
 
 > *Note: Version tags must contain ONLY the semantic version number (e.g., `v1.5.0`), never sprint identifiers (e.g., `v1.5.0-sprint24`), to ensure compatibility with standard package managers and CI tools.*
 
----
+______________________________________________________________________
 
 ## 6. Feature Flags
 
@@ -172,11 +179,11 @@ Commit-message conventions play no part in version resolution.
 
 To prevent merge conflicts and "branch rot", long-running feature branches are discouraged.
 
-* All code should ideally be merged into `development` within 3-4 days.
-* If a feature spans multiple sprints, it MUST be protected by a feature flag.
-* The feature is deployed to production silently. The product team toggles the flag to `true` when the feature is ready for public consumption.
+- All code should ideally be merged into `development` within 3-4 days.
+- If a feature spans multiple sprints, it MUST be protected by a feature flag.
+- The feature is deployed to production silently. The product team toggles the flag to `true` when the feature is ready for public consumption.
 
----
+______________________________________________________________________
 
 ## 7. 🤖 LLM System Directives
 

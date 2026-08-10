@@ -62,8 +62,8 @@ The two workflows are deliberately near-identical, so the differences are
 worth naming precisely — these are exactly the places a careless copy of one
 into the other goes wrong:
 
-| | hotfix demo | this one |
-| :--- | :--- | :--- |
+|  | hotfix demo | this one |
+| :- | :- | :- |
 | trigger | `issue_comment` — `/make-hotfix` on an issue | `issue_comment` — `/make-feature` on an issue |
 | branch | `hotfix/<KEY>-<slug>` off `origin/<PRODUCTION_BRANCH>` | `feature/<KEY>-<slug>` off `<DEFAULT_BASE_BRANCH>` |
 | PR base / `parentbranch` | `<PRODUCTION_BRANCH>` | `<DEFAULT_BASE_BRANCH>` |
@@ -86,7 +86,7 @@ runs an LLM with write permissions on a runner. The job-level `if` is therefore
 the security boundary of this workflow, and it requires all three of:
 
 | Condition | Why it's there |
-| :--- | :--- |
+| :- | :- |
 | body is `/make-feature`, bare or followed by a space or newline | the command has to be the comment's first token, so a comment that merely mentions `/make-feature` mid-sentence doesn't fire the chain. Written out as an exact match plus three `startsWith` forms because the obvious one-liner, `startsWith(body, '/make-feature')`, would also fire on `/make-feature-anything`. Requiring a *separator* is what lets prose follow the command without loosening the match |
 | `author_association == 'OWNER'` | the actual authorization check. **Do not** loosen it to `MEMBER` or `CONTRIBUTOR` — a single merged PR earns `MEMBER` association, which is too loose for a trigger that runs an LLM with write permissions on a runner — an approval prompt is a poor place to be reading attacker-supplied text for the first time |
 | `github.event.issue.pull_request == null` | `issue_comment` fires for PR comments too, where `github.event.issue` *is* the PR — without this, `/make-feature` on a pull request would hand the assigner a PR description as a feature request |
@@ -165,7 +165,7 @@ each job starts**, so one `/make-feature` comment pauses three times. See
 [APPLICATIONS.md §3.1–3.2](../APPLICATIONS.md) for the full two-gate convention:
 
 | Pause | Approving it releases | What has happened so far |
-| :--- | :--- | :--- |
+| :- | :- | :- |
 | before job 1 | the assigner | nothing — this is the "should this issue become work at all" gate, and the first place a human reads the issue text with the run in mind |
 | before job 2 | the executor | a Jira issue exists and `feature/<KEY>-<slug>` is pushed — inspect both before any code is written |
 | before job 3 | the reviewer | the change is pushed and the PR is open — eyeball the diff before the automated review spends tokens on it |

@@ -3,8 +3,7 @@
 Uses the **Agent Skills** adaptation (agentskills.io), not the native Claude
 skills spec. Codex discovers skills from a `.codex/skills/` tree at the
 repository root — a hand-copied mirror of `plugins/jira-sdlc/skills/` plus
-a per-skill `agents/openai.yml` that reproduces `disable-model-invocation:
-true`. The tree is gitignored and maintained by manual copy; nothing
+a per-skill `agents/openai.yml` that reproduces `disable-model-invocation: true`. The tree is gitignored and maintained by manual copy; nothing
 automates it.
 
 > **Verified from a real Codex CLI run** (Codex CLI 0.146.1, July 2026,
@@ -156,6 +155,7 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   (`sandbox_permissions: "require_escalated"`) for any `jira.sh`/`jira.ps1`
   call or script that calls it. The skill's own preamble says: "if the
   sandbox blocks Jira, request scoped network-capable execution."
+
 - **Git metadata (read-only FS):** git's worktree metadata (`.git/` in a
   linked worktree) lives outside the sandbox's writable root. Every git
   write operation — `git restore`, `git fetch`, `git merge`, `git add`,
@@ -163,6 +163,7 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   **Verified:** each of these needed escalated execution to proceed. This
   is not a Jira-specific allowlist; it is the sandbox's file-write boundary
   applied to the worktree's own `.git` directory.
+
 - **GitHub CLI config (read-only FS):** `gh auth login --with-token` writes
   `~/.config/gh/hosts.yml`, which is outside the workspace by default. Without
   a writable root for that directory, the `gh_auth` healthcheck row reports a
@@ -170,6 +171,7 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   credential is not necessarily the problem. A failed `gh auth logout` can
   leave the operator's existing session untouched under the same restriction,
   but a writable global config lets the login overwrite it.
+
 - **Isolated GitHub CLI config (alternative):** set `GH_CONFIG_DIR` through
   Codex's shell environment policy to an absolute, writable directory under
   the worktrees root (for example, `<WORKTREES_DIR>/.ghconfig`). This keeps
@@ -186,6 +188,7 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   use placeholders in shared config examples. This alternative relocates
   `gh` only — the linked-worktree `.git` writable root remains required for
   git writes.
+
 - **Execution timeout:** Codex's Bash tool defaults to a short yield window.
   A `jira.sh`/`jira.ps1` call (or a `statuscheck.sh` run) that runs long
   will be reported as still running. Poll the session for output rather
@@ -197,6 +200,7 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   sessions that needed one or two polls — those figures were measured
   against that CLI and have not been re-timed against the equivalent
   `jira.sh` REST calls.
+
 - **File-mode loss:** a plain copy (not `cp -a`) or a Windows checkout can
   strip the executable bit from `*.sh` / `*.py` under
   `.codex/skills/_shared/scripts/`. Run `chmod +x` after copying (step 3
@@ -214,8 +218,7 @@ re-add the three `agents/openai.yml` files (step 2).
 
 ### `disable-model-invocation: true`
 
-Reproduced via `agents/openai.yml` → `policy: allow_implicit_invocation:
-false`. **Verified present** in all three skill dirs; its runtime effect
+Reproduced via `agents/openai.yml` → `policy: allow_implicit_invocation: false`. **Verified present** in all three skill dirs; its runtime effect
 (longer context needed) was **not** directly tested. Mark as checked but
 not confirmed until a second skill invocation shows the gating behaviour.
 

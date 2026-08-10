@@ -39,11 +39,14 @@ the same as invoked; the run proves the path resolves, nothing more.
 
 1. **Resolve and cache the CLI** — fetch the latest Kimi Code version, cache
    `~/.kimi-code` keyed on it, install only on a cache miss.
+
 2. **Write `~/.kimi-code/config.toml`** — the model to use, the OpenRouter
    provider and API key, and `extra_skill_dirs` pointing at
    `plugins/jira-sdlc/skills`.
+
 3. **Build one prompt file** — a hand-written review instruction block, then
    the PR's diff from `gh pr diff` appended between markers.
+
 4. **Run it, once:**
 
    ```bash
@@ -53,6 +56,7 @@ the same as invoked; the run proves the path resolves, nothing more.
    The prompt tells the model to write its answer to `/tmp/report.md`, and the
    step fails loudly if that file comes back empty — which is the actual
    assertion this smoke test makes.
+
 5. **Post and upload** — `gh pr review --comment --body-file /tmp/report.md`,
    plus the report and the Kimi session directory as artifacts.
 
@@ -75,7 +79,7 @@ understanding before copying this file
 Two, both repo-level:
 
 | Secret | For |
-|---|---|
+| -- | -- |
 | `OPENROUTER_API_KEY` | The model backend. The step fails up front if it's empty. |
 | `GITHUB_TOKEN` | Built in. Reads the diff, posts the comment. |
 

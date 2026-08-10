@@ -36,15 +36,18 @@ before moving to the next.
 Basic auth on each request, so "verifying" is just making one authenticated
 call. `_edge/tenant_info` is unauthenticated and gives you the cloud id;
 `/myself` is the part that proves the token:
+
 ```bash
 CLOUD_ID=$(curl -fsSL "https://$JIRA_ACCOUNT_URL/_edge/tenant_info" | jq -r .cloudId)
 curl -sS -u "$JIRA_EXECUTOR_EMAIL:$JIRA_EXECUTOR_TOKEN" -H "Accept: application/json" \
   "https://api.atlassian.com/ex/jira/$CLOUD_ID/rest/api/3/myself" | jq -r .emailAddress
 ```
+
 Getting your own email back means the pair works. The Section 4 healthcheck
 makes the same call, so you can also just skip ahead to it.
 
 **GitHub** — log `gh` in with your PAT:
+
 ```bash
 echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 ```
@@ -71,7 +74,7 @@ GITHUB_PAT_TOKEN="XXXXXXXXXXXXX"
 
 Each `JIRA_<ROLE>_TOKEN` is the token **value**, not a path to a file holding
 it. Every variable above is described in
-[../skills/_shared/project-config.md](../skills/_shared/project-config.md).
+[../skills/\_shared/project-config.md](../skills/_shared/project-config.md).
 
 ## Section 2. GitHub repository preparation
 
@@ -81,7 +84,7 @@ The skills are written against **Gitflow** — they don't invent branch names,
 they follow the policy in [SDLC.md](SDLC.md). The branches that matter:
 
 | Branch | Source | Merges to | Purpose |
-|---|---|---|---|
+| -- | -- | -- | -- |
 | `main` | `release/*`, `hotfix/*` | `development` | Production state, tagged `vX.Y.Z` |
 | `development` | `main` | `release/*` | The **base branch** — where day-to-day work starts and lands |
 | `feature/<KEY>-slug` | `development` | `development` | One per Jira issue, created by `jira-task-assigner` |
@@ -187,6 +190,7 @@ bash _shared/scripts/posix/jira.sh --role executor raw GET /project/search \
 bash _shared/scripts/posix/jira.sh --role executor raw GET /project/<KEY>/statuses \
   | jq -r '[.[].statuses[].name] | unique | .[]'
 ```
+
 ```powershell
 pwsh -File _shared\scripts\win\jira.ps1 --role executor raw GET /project/search
 pwsh -File _shared\scripts\win\jira.ps1 --role executor raw GET /project/<KEY>/statuses
@@ -195,7 +199,7 @@ pwsh -File _shared\scripts\win\jira.ps1 --role executor raw GET /project/<KEY>/s
 Then map each setting onto a name from that list:
 
 | Setting | Default Kanban name | Who sets it |
-|---|---|---|
+| -- | -- | -- |
 | `STATUS_TODO` | `To Do` | no skill does — it names the status new issues land in, and it's the only status the optional branch-create Action advances *from* |
 | `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts work |
 | `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
@@ -240,6 +244,7 @@ logins, your settings, and the platform in one pass:
 
 **Linux / macOS** (bash) — read it first:
 [`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh" -o statuscheck.sh
 bash statuscheck.sh --role executor   # --role is required: assigner|executor|reviewer
@@ -247,6 +252,7 @@ bash statuscheck.sh --role executor   # --role is required: assigner|executor|re
 
 **Windows** (PowerShell 7+ `pwsh`, or 5.1 `powershell`) — read it first:
 [`statuscheck.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1)
+
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/plugins/jira-sdlc/skills/_shared/scripts/win/statuscheck.ps1" -OutFile statuscheck.ps1
 # --role is required: assigner|executor|reviewer
@@ -271,4 +277,3 @@ fix doubles as an end-to-end smoke test of all three skills.
 ready-to-paste prompt for that: the assigner creates a retroactive
 **JIRA-SDLC-TOOLS setup** issue and copies `.jst/` into its worktree, the
 executor commits and pushes it, and the reviewer confirms the settings work.
-

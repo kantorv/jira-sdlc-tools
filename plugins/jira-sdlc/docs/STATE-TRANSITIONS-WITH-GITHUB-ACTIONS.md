@@ -6,7 +6,7 @@ reality when a human — not `jira-task-executor` — pushes the branch or
 merges the PR.
 
 | Workflow | Fires on | Transition |
-|---|---|---|
+| -- | -- | -- |
 | `jira_issue_transition_on_branch.yml` | `create` of a `feature/*`, `bugfix/*`, `chore/*` or `hotfix/*` branch | `<STATUS_TODO>` → `<STATUS_IN_PROGRESS>` |
 | `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from a `feature/*` / `bugfix/*` / `chore/*` / `hotfix/*` head | → `<STATUS_IN_REVIEW>` |
 | `jira_issue_transition_on_merge.yml` | PR closed **as merged** on an issue branch | → `<STATUS_DONE>` |
@@ -84,7 +84,7 @@ If you create a **scoped** token, give it the coarse `read:jira-work` and
 `write:jira-work` scopes. The granular per-issue scopes look like the right
 answer and fail with *"scope does not match"* — the same trap the skills'
 own Jira client hits (see
-[../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+[../skills/\_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
 §5).
 
 ### 3. Add three repository secrets
@@ -92,10 +92,10 @@ own Jira client hits (see
 *Settings → Secrets and variables → Actions → New repository secret.*
 
 | Secret | Value | Notes |
-|---|---|---|
+| -- | -- | -- |
 | `JIRA_ACCOUNT_URL` | `yourteam.atlassian.net` | Scheme optional — the workflows strip `https://` if present |
 | `JIRA_ACCOUNT_EMAIL` | the token owner's Atlassian email | Must be the account the token belongs to |
-| `JIRA_ISSUE_TRANSITION_TOKEN` | the API token from step 2 | |
+| `JIRA_ISSUE_TRANSITION_TOKEN` | the API token from step 2 |  |
 
 These are the **CI bot's own** repo secrets — independent of the skills' local
 per-role credentials (`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` in
@@ -115,7 +115,7 @@ this writing — if they've drifted, the variable names are the reliable
 anchor (`grep -n 'SOURCE=\|TARGET=\|DONE=' .github/workflows/jira_issue_transition_on_*.yml`):
 
 | File | Line | Literal | Role | Replace with your… |
-|---|---|---|---|---|
+| -- | -- | -- | -- | -- |
 | [`jira_issue_transition_on_branch.yml`](../../../.github/workflows/jira_issue_transition_on_branch.yml#L35) | 35 | `SOURCE="To Do"` | only status it will advance *from* | `<STATUS_TODO>` |
 | [`jira_issue_transition_on_branch.yml`](../../../.github/workflows/jira_issue_transition_on_branch.yml#L36) | 36 | `TARGET="In Progress"` | where it moves the issue | `<STATUS_IN_PROGRESS>` |
 | [`jira_issue_transition_on_pr_open.yml`](../../../.github/workflows/jira_issue_transition_on_pr_open.yml#L44) | 44 | `TARGET="In Review"` | where it moves the issue | `<STATUS_IN_REVIEW>` |
@@ -222,5 +222,5 @@ rows, is in [JIRA-STATES.md](JIRA-STATES.md).
 - [CI.md](CI.md) — every workflow in this repo, including the release path
 - [INSTALLING-GITHUB-FOR-JIRA.md](INSTALLING-GITHUB-FOR-JIRA.md) — the app
   alternative to these workflows
-- [../skills/_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
+- [../skills/\_shared/jira-api-reference.md](../skills/_shared/jira-api-reference.md)
   §5 — token types and the scope trap, from the skills' side
