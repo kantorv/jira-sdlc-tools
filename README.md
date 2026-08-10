@@ -74,11 +74,70 @@ Plus one that runs before all three, once per project:
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
 
-<img src="plugins/jira-sdlc/docs/assets/conversation-example.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+## What you need
 
-*Example of what a conversation with the assigner/executor/reviewer looks
-like — this particular recording is a placeholder and will be swapped for a
-final one.*
+- **Git account + Repository** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
+- **Jira account + Space** — a Jira Cloud instance with a project/space where issues will be created
+- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+
+## Examples
+
+### JIRA-TASK-ASSIGNER
+
+```bash
+claude
+> /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action. The action is currently separated into two perform_create methods. Investigate the code to determine whether this flow could be simplified. Additionally, check for any redundant code. Reference: cropapp/catalog/views.py, lines 1265–1676"
+```
+
+<img src="assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-EXECUTOR
+
+```bash
+# cd into each worktree it creates, run this in each one (no key —
+# derived from that worktree's branch):
+claude
+> /jira-sdlc:jira-task-executor 
+```
+
+<img src="assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-REVIEWER
+
+```bash
+# once the sub-task's PR is up, run from the same worktree:
+claude
+> /jira-sdlc:jira-task-reviewer 
+```
+
+<img src="assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+## Platform Compatibility Matrix
+
+The skills target the Claude skills spec, so `jira-sdlc` also works —
+natively or through the [Agent Skills](https://agentskills.io)
+adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
+Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
+and Kimi Code. See [**Platform Compatibility Matrix**](INTEGRATIONS.md) for the
+platform-by-platform table — each one's spec, wiring, integration status,
+and a link to its detailed doc.
+
+| Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
+| -- | -- | -- | -- | -- | -- |
+| [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
+| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
+| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
+| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
+| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
+| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
+| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
+| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
+| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
+
+**Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
+with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
+yet exercised in this environment. See [Platform Compatibility Matrix](INTEGRATIONS.md) for the
+full status legend.
 
 ## Prerequisites
 
@@ -111,7 +170,7 @@ API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
 | -- | -- | -- | -- | -- | -- |
 | Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#jira) |
 | `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#github) |
-| `git` | ⚠️ SSH key | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git/SSH setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#git) |
+| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](plugins/jira-sdlc/docs/SECURITY.md#git) |
 
 > ⚠️ **This plugin is designed to run in a shared environment** — the same
 > checkout where a coding assistant operates *and* where you yourself still
@@ -142,44 +201,11 @@ git clone https://github.com/kantorv/jira-sdlc-tools.git
 claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
 ```
 
+See full doc: [CLAUDECODE.md](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md)
+
 ### Non Claude Code assistants
 
-Assistants that read the Claude skills spec don't need the plugin wrapper —
-copy the skills in and they discover them directly:
-
-```bash
-cp -r plugins/jira-sdlc/skills/* skills/
-```
-
-What has to end up there:
-
-```text
-skills/
-├── jira-task-assigner/
-│   ├── SKILL.md
-│   └── agents/openai.yml     ← Codex + Antigravity only
-├── jira-task-executor/
-│   ├── SKILL.md
-│   └── agents/openai.yml
-├── jira-task-reviewer/
-│   ├── SKILL.md
-│   └── agents/openai.yml
-├── jst-install/
-│   └── SKILL.md              ← run once, before the other three
-└── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
-    ├── jira-api-reference.md
-    ├── project-config.md
-    ├── scripts/
-    └── templates/
-```
-
-That `skills/` folder is `.codex/skills/` for Codex, `.agent/skills/` for
-Antigravity, `~/.claude/skills/` for Cursor (shared with Claude Code), and
-whatever path `kilo.jsonc` points at for Kilo Code.
-
-For every platform's skills directory, spec, wiring and verification status,
-see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
-bottom.
+This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md), [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md), [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
 
 ## Full Setup
 
@@ -418,33 +444,6 @@ describe compatibility.
 ## License
 
 [MIT](LICENSE), covering the whole repo, including the plugin.
-
-## Platform Compatibility Matrix
-
-The skills target the Claude skills spec, so `jira-sdlc` also works —
-natively or through the [Agent Skills](https://agentskills.io)
-adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
-Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
-and Kimi Code. See [**Platform Compatibility Matrix**](INTEGRATIONS.md) for the
-platform-by-platform table — each one's spec, wiring, integration status,
-and a link to its detailed doc.
-
-| Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
-| -- | -- | -- | -- | -- | -- |
-| [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
-| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
-| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
-| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
-| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
-| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
-| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
-
-**Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
-with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
-yet exercised in this environment. See [Platform Compatibility Matrix](INTEGRATIONS.md) for the
-full status legend.
 
 ## Lab channel
 
