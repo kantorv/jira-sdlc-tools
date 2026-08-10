@@ -47,7 +47,6 @@ works — architecture, prerequisites, configuration, a full usage
 walkthrough, safety model, and troubleshooting — lives in
 [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
 
-
 The three skills, one per stage of the lifecycle:
 
 - **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** — turns a feature/task/bug description into
@@ -75,15 +74,11 @@ Plus one that runs before all three, once per project:
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
 
-
-
 ## What you need
 
 - **Git account + Repository** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
 - **Jira account + Space** — a Jira Cloud instance with a project/space where issues will be created
 - **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
-
-
 
 ## Examples
 
@@ -206,44 +201,11 @@ git clone https://github.com/kantorv/jira-sdlc-tools.git
 claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
 ```
 
+See full doc: [CLAUDECODE.md](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md)
+
 ### Non Claude Code assistants
 
-Assistants that read the Claude skills spec don't need the plugin wrapper —
-copy the skills in and they discover them directly:
-
-```bash
-cp -r plugins/jira-sdlc/skills/* skills/
-```
-
-What has to end up there:
-
-```text
-skills/
-├── jira-task-assigner/
-│   ├── SKILL.md
-│   └── agents/openai.yml     ← Codex + Antigravity only
-├── jira-task-executor/
-│   ├── SKILL.md
-│   └── agents/openai.yml
-├── jira-task-reviewer/
-│   ├── SKILL.md
-│   └── agents/openai.yml
-├── jst-install/
-│   └── SKILL.md              ← run once, before the other three
-└── _shared/                  ← sibling, not nested — SKILL.md reads ../_shared/…
-    ├── jira-api-reference.md
-    ├── project-config.md
-    ├── scripts/
-    └── templates/
-```
-
-That `skills/` folder is `.codex/skills/` for Codex, `.agent/skills/` for
-Antigravity, `~/.claude/skills/` for Cursor (shared with Claude Code), and
-whatever path `kilo.jsonc` points at for Kilo Code.
-
-For every platform's skills directory, spec, wiring and verification status,
-see the [Platform Compatibility Matrix](#platform-compatibility-matrix) at the
-bottom.
+This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md), [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md), [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
 
 ## Full Setup
 
