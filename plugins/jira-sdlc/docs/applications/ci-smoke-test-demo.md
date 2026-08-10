@@ -63,8 +63,8 @@ the same as invoked; the run proves the path resolves, nothing more.
 ## Trigger and inputs
 
 Manual `workflow_dispatch` only, with a `model` choice input (two free
-Nemotron models on OpenRouter). Dispatch it **from a `feature/<KEY>-…` or
-`hotfix/<KEY>-…` branch that has an open PR** — the gating job reads the
+Nemotron models on OpenRouter). Dispatch it **from an issue branch
+(`feature/`, `bugfix/`, `chore/`, `hotfix/`) that has an open PR** — the gating job reads the
 branch you dispatched from, validates its shape, and skips if no PR is open.
 
 That gate reads `github.ref_name`, which is correct here precisely *because*

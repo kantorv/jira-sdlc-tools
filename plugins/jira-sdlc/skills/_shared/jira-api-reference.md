@@ -543,25 +543,54 @@ jira.sh issue comment list <KEY>        # raw JSON on stdout
 
 ## 12. Git branch convention
 
-Every change goes on its own branch, `feature/<KEY>-<slug>` or
-`hotfix/<KEY>-<slug>` — no "small enough to commit straight to the working
-branch" shortcut. **The prefix follows the base branch, not the issue type**
-(SDLC.md §2): `feature/` = branched from `<DEFAULT_BASE_BRANCH>`
-(`development`), covering all planned work — features *and* bug fixes alike;
-`hotfix/` = an emergency fix branched from `<PRODUCTION_BRANCH>`.
+Every change goes on its own branch, `<prefix>/<KEY>-<slug>` — no "small
+enough to commit straight to the working branch" shortcut. There are exactly
+four prefixes, and the prefix is **metadata about the intent of the work**:
+it's what lets generated release notes categorise or exclude a change, and
+what tells a reviewer which mindset a PR needs (SDLC.md §2).
+
+| prefix | cut from | PR targets | when |
+| :- | :- | :- | :- |
+| `feature/` | `<DEFAULT_BASE_BRANCH>` | `<DEFAULT_BASE_BRANCH>` | new capability / product-facing |
+| `bugfix/` | `<DEFAULT_BASE_BRANCH>` | `<DEFAULT_BASE_BRANCH>` | defect found pre-production |
+| `bugfix/` | `release/sprint-<X.Y.Z>` | that same `release/*` | defect found in QA hardening (SDLC.md Phase 3) |
+| `chore/` | `<DEFAULT_BASE_BRANCH>` | `<DEFAULT_BASE_BRANCH>` | maintenance, no product code (deps, CI/CD, build, tooling) |
+| `hotfix/` | `origin/<PRODUCTION_BRANCH>` | `<PRODUCTION_BRANCH>` | emergency production fix (plus back-merge) |
+
+**The prefix follows the issue type plus the work's intent, not the base
+branch** — three of the four share one base, so the base can't discriminate:
+
+```
+Bug                                                   → bugfix/
+Task, maintenance only (deps, CI/CD, build, tooling)  → chore/
+Task, product-facing                                  → feature/
+Story                                                 → feature/
+explicit emergency production fix                     → hotfix/  (overrides; single-step, always)
+```
+
+Sub-tasks inherit the parent's prefix, so one assigner run is uniform. The
+base still *constrains* which prefix is legal (§13's sanity check); it just no
+longer determines it on its own.
+
+Wherever a branch is parsed for an issue key — scripts, workflows, skill prose
+— the pattern is:
+
+```
+^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9]*-[0-9]+)-
+```
+
 `jira-task-assigner` pre-creates the branch and worktree for every leaf issue
-and takes its prefix from the base it was told to use (its step 5C):
-`feature/` by default, `hotfix/` only when the user explicitly asks for the
-emergency production flow, in which case it cuts a single leaf from
-`origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes from either that
-path or the no-assigner provisioning below.
+and picks the prefix by that rule (its step 5C): `hotfix/` only when the user
+explicitly asks for the emergency production flow, in which case it cuts a
+single leaf from `origin/<PRODUCTION_BRANCH>`. So a `hotfix/` branch comes
+from either that path or the no-assigner provisioning below.
 
 GitHub-for-Jira links a branch to an issue purely by finding the issue key
 inside the branch name — no API call required.
 
 ```
-git checkout -b feature/<ISSUE-KEY>-<slugified-summary>
-git push -u origin feature/<ISSUE-KEY>-<slugified-summary>
+git checkout -b <prefix>/<ISSUE-KEY>-<slugified-summary>
+git push -u origin <prefix>/<ISSUE-KEY>-<slugified-summary>
 ```
 
 Slugify the title: lowercase, spaces → hyphens, strip punctuation.
@@ -583,9 +612,13 @@ Slugify the title: lowercase, spaces → hyphens, strip punctuation.
 branch is missing. When an issue was created without `jira-task-assigner` (e.g.
 an ad-hoc `Bug`), provision it manually **before** invoking the executor:
 
-1. Pick the prefix from the **base branch you're branching from**:
-   `<PRODUCTION_BRANCH>` (an emergency production fix) → `hotfix/`; any other
-   base, such as `<DEFAULT_BASE_BRANCH>` (`development`) → `feature/`.
+1. Pick the prefix from the **issue type and the work's intent**, per the table
+   above: `Bug` → `bugfix/`; a maintenance-only `Task` → `chore/`; a
+   product-facing `Task` or a `Story` → `feature/`; an explicit emergency
+   production fix → `hotfix/`, which is also the only one cut from
+   `<PRODUCTION_BRANCH>`. An ad-hoc `Bug` — the case that most often lands
+   here — is `bugfix/` off `<DEFAULT_BASE_BRANCH>`, or off the current
+   `release/*` when it came out of QA hardening.
 2. From the intended base branch — checked out and up to date with origin;
    this is what the PR will target:
    ```bash
@@ -648,9 +681,11 @@ did the old CLI's output. Sources, in the order tried:
    durable fallback the assigner posts (or the no-assigner provisioning does,
    §12); survives a fresh clone or a different machine.
 3. `source=branch-search` — sub-tasks only, i.e. when `--parent-key` is
-   non-empty. Searches for a `feature/<PARENT-KEY>-*` / `hotfix/<PARENT-KEY>-*`
-   branch, deduping the local and `remotes/origin/` copies (§12) so a pushed
-   branch counts once.
+   non-empty. Searches for a `<prefix>/<PARENT-KEY>-*` branch across all four
+   prefixes — `feature/`, `bugfix/`, `chore/`, `hotfix/` — deduping the local
+   and `remotes/origin/` copies (§12) so a pushed branch counts once. A
+   sub-task inherits its parent's prefix, but the *searcher* doesn't know
+   which one that was, so it has to try all four.
    - Exactly one match → use it, and say in the report the base was **recovered
      by branch search**, not read from the primary sources.
    - Zero or multiple matches → `base=` empty, `source=unresolved`, exit 1.
@@ -663,15 +698,24 @@ did the old CLI's output. Sources, in the order tried:
 
 ### Sanity check: the prefix and the base have to agree
 
-§12 ties the prefix to the base branch, so for a **top-level** issue (empty
-`PARENT_KEY` — the only case that can reach source 4) the two are a matched
-pair, and a disagreement means one of them is wrong:
+§12's prefix no longer *follows* the base, but it still constrains which bases
+are legal, so for a **top-level** issue (empty `PARENT_KEY` — the only case
+that can reach source 4) a disagreement means one of the two is wrong:
 
-- branch `hotfix/…` with a base that isn't `<PRODUCTION_BRANCH>`
-- branch `feature/…` with a base that *is* `<PRODUCTION_BRANCH>`
+| branch prefix | legal base — anything else is a stop-and-ask |
+| :- | :- |
+| `hotfix/` | `<PRODUCTION_BRANCH>`, and nothing else |
+| `feature/`, `chore/` | `<DEFAULT_BASE_BRANCH>` |
+| `bugfix/` | `<DEFAULT_BASE_BRANCH>` **or** a `release/*` branch — both legal |
 
-**Stop and ask which is right** rather than opening the PR. The first case is
-the one that actually happens: a hotfix whose `PR target branch:` comment was
+`hotfix/` and `<PRODUCTION_BRANCH>` imply each other in *both* directions: a
+`hotfix/` branch based anywhere else, and any non-`hotfix/` top-level branch
+based on `<PRODUCTION_BRANCH>`, are each a stop-and-ask. `bugfix/` is the
+first prefix with two legal bases, which is why this is a table rather than a
+pair of lines.
+
+**Stop and ask which is right** rather than opening the PR. The `hotfix/` row
+is the one that actually happens: a hotfix whose `PR target branch:` comment was
 never posted has nothing to stop it falling through to source 4, and a
 production fix quietly retargeted at staging neither reaches production nor
 gets versioned (`hotfix/*` is what CI patch-bumps — SDLC.md §5). Sub-tasks are

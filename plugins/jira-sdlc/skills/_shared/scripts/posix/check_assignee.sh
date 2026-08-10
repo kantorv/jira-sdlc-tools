@@ -6,7 +6,7 @@
 #                  caller is the executor's ownership gate — and is also read
 #                  from $JIRA_ROLE when the flag is absent.
 #         ISSUE-KEY defaults to the key derived from the current branch
-#         (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>), as statuscheck.sh does.
+#         (feature|bugfix|chore|hotfix/<KEY>-<slug>), as statuscheck.sh does.
 #
 # Identity comes from `jira.sh --role <role> whoami` (GET /myself) — per-request
 # Basic auth, no stored login, no config file to parse. Because the account is
@@ -70,10 +70,13 @@ ME=$(printf '%s' "$WHOAMI"   | jq -r '.emailAddress // .displayName // empty')
 
 # --- which issue? ------------------------------------------------------------
 if [ -z "$KEY" ]; then
+  # Prefix-agnostic by construction: everything up to the first `/` is dropped,
+  # so all four issue-branch prefixes (feature/bugfix/chore/hotfix) derive a key
+  # with no per-prefix list to keep current.
   BR=$(git branch --show-current 2>/dev/null || true)
   BR_TAIL=${BR#*/}
   KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
-  [ -n "$KEY" ] || die "check_assignee: no issue key derivable from branch '${BR:-none}' — expected feature/<KEY>-<slug> or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
+  [ -n "$KEY" ] || die "check_assignee: no issue key derivable from branch '${BR:-none}' — expected feature/, bugfix/, chore/ or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
 fi
 
 # --- assigned to me? ---------------------------------------------------------

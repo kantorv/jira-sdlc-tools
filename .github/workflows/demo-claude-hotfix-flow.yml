@@ -19,7 +19,8 @@
 # jira-task-assigner step 5C (JST-184), which on an explicit hotfix directive
 # cuts `hotfix/<KEY>-<slug>` from the fetched `origin/<PRODUCTION_BRANCH>` and
 # forces single-step scope. Before JST-184 landed, the same prompt produced a
-# plain `feature/<KEY>` branch off the base branch and a PR aimed at staging.
+# plain planned-work branch (`feature/`, and since JST-271 possibly `bugfix/`
+# for a bug report) off the base branch and a PR aimed at staging.
 #
 # Read demo-claude-feature-flow.yml next to this file: the two differ only in
 # the trigger word, the branch/PR-base semantics, and the hotfix-specific prose
@@ -470,13 +471,15 @@ jobs:
           # question — and it carries the explicit emergency-hotfix directive
           # that engages assigner step 5C (JST-184): a single-step
           # hotfix/<KEY>-<slug> branch off origin/<PRODUCTION_BRANCH>. Drop
-          # that directive and this silently becomes a feature-flow run
-          # instead (plain feature/<KEY>, PR aimed at the base branch). printf
+          # that directive and this silently becomes a planned-work run
+          # instead — and since JST-271 the branch it lands on is whichever of
+          # feature/, bugfix/ or chore/ the assigner derives (a bug report
+          # reads as bugfix/), with the PR aimed at the base branch. printf
           # from env vars so the issue text stays data, never interpolated
           # into the script.
           {
             printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
-            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. The issue below is an explicit request for an emergency production hotfix: take the hotfix path (step 5C) — create a single-step hotfix/<KEY>-<slug> branch off origin/%s, never feature/. If the bug report is simple and concrete enough to size and turn directly into a Jira issue, proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n' "$PRODUCTION_BRANCH"
+            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. The issue below is an explicit request for an emergency production hotfix: take the hotfix path (step 5C) — create a single-step hotfix/<KEY>-<slug> branch off origin/%s, never a planned-work branch (feature/, bugfix/ or chore/). If the bug report is simple and concrete enough to size and turn directly into a Jira issue, proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n' "$PRODUCTION_BRANCH"
             printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
             # Whatever was typed after the trigger command, as its own labelled
             # section: extra steering for THIS run, while the issue above stays

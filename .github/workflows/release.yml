@@ -9,8 +9,10 @@
 #   4. back-merge main -> development  (§3 Phase 4 step 6 / §4 Step 4)
 #   5. delete the release/hotfix branch (§3 Phase 4 step 7)
 #
-# Only fires for release/* and hotfix/* head branches — a feature PR merged
-# straight into main does NOT trigger a release (the `if:` guard below).
+# Only fires for release/* and hotfix/* head branches — the `if:` guard below
+# is an allowlist of those two, so no work-branch prefix (feature/, bugfix/,
+# chore/) merged straight into main triggers a release, and widening the
+# branch convention cannot reach the version resolver.
 #
 # Auth: the default GITHUB_TOKEN works while main/development are unprotected
 # (verified at implementation time). If branch protection is later enabled, or
@@ -33,7 +35,9 @@ jobs:
     name: Tag, release, sync main -> development, cleanup
     runs-on: ubuntu-latest
     # Only real merges from a release/* or hotfix/* branch, never a closed
-    # PR or a feature PR sneaking into main.
+    # PR, and never a work branch (feature/, bugfix/, chore/) sneaking into
+    # main. Allowlist, not a denylist — new branch prefixes stay excluded
+    # by construction.
     if: >-
       github.event.pull_request.merged == true
       && (

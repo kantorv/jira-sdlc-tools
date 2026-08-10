@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf. Branches are `feature/` off the default base branch; when the user explicitly asks for an emergency production fix it provisions a single-step `hotfix/` off the production branch instead.
+description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf. The branch prefix follows the work: `feature/`, `bugfix/` or `chore/` off the default base branch, `bugfix/` off a release branch for a defect found in QA, and a single-step `hotfix/` off the production branch when the user explicitly asks for an emergency production fix.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Write, AskUserQuestion
 ---
@@ -28,12 +28,15 @@ project. Given a task description from the user ($ARGUMENTS):
 - A **leaf** is an issue that gets its own branch, worktree and PR — the
   single top-level issue on the single-step path, or each sub-task on the
   multistep one.
-- **Branch prefix** — the prefix follows the **base branch, not the issue
-  type** (`../_shared/jira-api-reference.md` §12; SDLC.md §2), so it falls
-  out of step 5C's base decision and never out of picking `Bug`. It is
-  uniform within a run — a Sub-task inherits its parent's — so branch naming
-  is always `<PREFIX><KEY>-<slug>`, which keeps step 2's branch-parsing
-  regex working no matter which branch someone checks out later.
+- **Branch prefix** — one of `feature/`, `bugfix/`, `chore/`, `hotfix/`,
+  **derived from the issue type plus the work's intent** by step 5C's table
+  (`../_shared/jira-api-reference.md` §12; SDLC.md §2). It used to follow the
+  base branch; that no longer discriminates, because three of the four
+  prefixes share one base. The base still *constrains* the choice (5C's
+  sanity check) — it just doesn't decide it. The prefix is uniform within a
+  run — a Sub-task inherits its parent's — so branch naming is always
+  `<PREFIX><KEY>-<slug>`, which keeps step 2's branch-parsing regex working
+  no matter which branch someone checks out later.
 - `<PREFIX>`, `<BASE_BRANCH>`, `<BRANCH_FROM>` — set once by step 5C, used
   verbatim by step 6.
 - An issue already created *without* this skill needs no decision here:
@@ -109,7 +112,7 @@ long-lived branch, the opposite reading from the executor/reviewer:
 | row | what it verifies / gathers |
 | -- | -- |
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
-| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither — the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither*; match it against the `production_branch` row yourself. **Step 2 owns which readings this skill can run from** and resolves all of them, so carry the value there rather than gating on it here |
+| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. *issue branch* — any of the four prefixes in `../_shared/jira-api-reference.md` §12 — vs. neither. The script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` and a `release/*` branch alike as *neither*; match those against the `production_branch` row and the `release/sprint-<X.Y.Z>` convention yourself. **Step 2 owns which readings this skill can run from** and resolves all of them, so carry the value there rather than gating on it here |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
 Three other rows carry an assigner-specific reading: `gh_auth` is green for the
@@ -146,9 +149,17 @@ re-run it):
   that decision is made and confirmed with the user, and it stops there if it
   lands on planned work. (You cut from `origin/<PRODUCTION_BRANCH>` either
   way, so standing here is permitted, never required.)
-- **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch**: **STOP.** Running
-  this skill from an existing issue branch is currently not supported. Tell the
-  user to checkout the base branch first.
+- **`release/sprint-<X.Y.Z>`** (SDLC.md §2's release branch, cut for QA
+  hardening): a valid start state for a defect found during that hardening —
+  5C's QA-fix path, which cuts from and targets this same branch. It is *not*
+  the "any other branch" case below, and routing it there would ask the user a
+  question the convention already answers. Proceed and let 5C confirm; if the
+  work turns out to be planned work for the next sprint instead, 5C stops you
+  the way it does on `<PRODUCTION_BRANCH>`.
+- **An issue branch** — any of §12's four prefixes (`feature/`, `bugfix/`,
+  `chore/`, `hotfix/`) followed by `<KEY>-...`: **STOP.** Running this skill
+  from an existing issue branch is currently not supported. Tell the user to
+  checkout the base branch first.
 - **Any other branch name**: ask the user whether to treat it as a base branch
   or abort. Do not guess. If they accept it, 5C makes that branch both
   `<BRANCH_FROM>` and `<BASE_BRANCH>`.
@@ -197,16 +208,13 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 - New work, feature, or chore → If the user did not explicitly tell you which to use, **decide based on the complexity of the task**. Use a `Story` for larger, multi-faceted requests that deliver end-to-end user value, and use a `Task` for smaller, localized, or strictly technical chores.
 - **Scope (A) and issue type (B) are independent** — scope is about *can the pieces run at the same time*; issue type is about *size/value of the whole*. A multistep `Task` of parallel technical chores is valid; a single-step `Story` is valid.
 
-**C. Decide the base: planned work (default) or emergency hotfix**
+**C. Decide the base and the prefix: which of four paths this run takes**
 
-Nearly every run is planned work. Take the hotfix path **only when the user
-explicitly asks for an emergency production fix** — SDLC.md §4's flow, for a
-bug already live in production that can't wait for the next sprint release.
-Urgency words ("urgent", "asap", "this is blocking us") are not that signal;
-deliberate ones are ("hotfix", "emergency production fix", "we need to patch
-prod now"), and even then say which path you're taking and get a yes before
+Nearly every run is **planned work** off `<DEFAULT_BASE_BRANCH>`. The two
+exceptional paths each aim a PR somewhere else, so take them only on their own
+signal, and in both cases say which path you're taking and get a yes before
 creating anything — a hotfix PR aims at production, so a false positive ships
-code that never sat in staging.
+code that never sat in staging:
 
 |  | planned work (default) | emergency hotfix |
 | -- | -- | -- |
@@ -215,11 +223,36 @@ code that never sat in staging.
 | `<PREFIX>` | `feature/` | `hotfix/` |
 | scope from (A) | single-step or multistep | **single-step, always** |
 
-If step 2 landed on "any other branch" and the user accepted it as the base,
-that branch is both `<BRANCH_FROM>` and `<BASE_BRANCH>` — what you cut from and
-what the PR targets — with `<PREFIX>` = `feature/` (it isn't
-`<PRODUCTION_BRANCH>`, so it isn't the hotfix flow). This is the only place
-those three tokens are set; step 6 uses them verbatim and resolves nothing.
+|  | planned work (default) | QA fix on a release branch | emergency hotfix |
+| -- | -- | -- | -- |
+| `<BASE_BRANCH>` — what the PR targets | `<DEFAULT_BASE_BRANCH>` | that same `release/sprint-<X.Y.Z>` | `<PRODUCTION_BRANCH>` |
+| `<BRANCH_FROM>` — what you cut from | `<DEFAULT_BASE_BRANCH>` (your checkout) | that same `release/sprint-<X.Y.Z>` (your checkout) | `origin/<PRODUCTION_BRANCH>` |
+| `<PREFIX>` | derived below | `bugfix/` | `hotfix/` |
+| scope from (A) | single-step or multistep | single-step or multistep | **single-step, always** |
+
+The fourth path is step 2's **accepted other branch**: the user okayed an
+unrecognised checkout as the base, so that branch is both `<BRANCH_FROM>` and
+`<BASE_BRANCH>`, with `<PREFIX>` derived below (it isn't
+`<PRODUCTION_BRANCH>`, so it isn't the hotfix flow). This step is the only
+place those three tokens are set; step 6 uses them verbatim and resolves
+nothing.
+
+**Derive `<PREFIX>`** wherever the table says *derived* — from B's issue type
+plus the work's intent. It is deterministic, so decide it yourself and say why
+in step 7; never ask, because a headless run has no one to answer:
+
+```
+Bug                                                  -> bugfix/
+Task, maintenance only (deps, CI/CD, build scripts,
+     tooling, docs — no product code)                -> chore/
+Task, product-facing                                 -> feature/
+Story                                                -> feature/
+```
+
+The prefix is metadata about *intent* — it gives categorised release notes,
+build-vs-maintain metrics, and a reviewer who knows what kind of change a PR
+is before opening it. Gitflow mechanics don't change with it: `bugfix/` and
+`chore/` branch from and merge back to exactly where `feature/` does.
 
 The issue type still comes from B, where an emergency production fix lands on
 `Bug` like any other defect. Two entries in the hotfix column carry the weight:
@@ -236,18 +269,25 @@ The issue type still comes from B, where an emergency production fix lands on
   branch isn't a patch (SDLC.md §5) and belongs in the planned flow — say so
   rather than provisioning a hotfix parent with children.
 
-The prefix is what makes the release machinery work, not just a label: CI
-resolves the version from the branch name, patch-bumping a `hotfix/*` merge
-into `<PRODUCTION_BRANCH>` (SDLC.md §5). A `feature/` branch merged there
-matches nothing and is never tagged or released.
+On that path the prefix is release machinery, not just metadata: CI resolves
+the version from the branch name, patch-bumping a `hotfix/*` merge into
+`<PRODUCTION_BRANCH>` (SDLC.md §5). Any other prefix merged there matches
+nothing and is never tagged or released — which is exactly right for the other
+three, and silent breakage if you mislabel a production fix.
 
 If step 1's `production_branch` row read `unset`, stop and ask — don't invent
 a name for the branch you're about to point a PR at.
 
-If step 2 started you on `<PRODUCTION_BRANCH>` and this decision lands on
-**planned work**, stop and tell the user to checkout `<DEFAULT_BASE_BRANCH>`:
-the planned path cuts from your own checkout (step 6), so continuing from here
-would branch tomorrow's feature off production.
+Finally, check this decision against where step 2 left you standing, since the
+three non-hotfix paths all cut from your own checkout (step 6):
+
+- started on `<PRODUCTION_BRANCH>`, decision is **not** the hotfix path → stop
+  and tell the user to checkout `<DEFAULT_BASE_BRANCH>`; continuing would
+  branch tomorrow's feature off production.
+- started on a `release/*` branch, decision is **not** the QA-fix path → stop
+  and tell them to checkout the branch that path actually needs; continuing
+  would cut work destined for the next sprint off a branch that is about to be
+  tagged and closed.
 
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
@@ -259,11 +299,12 @@ Before any branch creation, refresh from the remote. Which of the two
 commands you need follows step 5C's `<BRANCH_FROM>`:
 
 ```bash
-git fetch origin                        # both paths — also refreshes origin/<PRODUCTION_BRANCH>
-git pull --ff-only origin <BRANCH_FROM>  # planned work only
+git fetch origin                        # every path — also refreshes origin/<PRODUCTION_BRANCH>
+git pull --ff-only origin <BRANCH_FROM>  # only where <BRANCH_FROM> is your own checkout
 ```
 
-The pull is planned-work only: there you cut from your own checkout, and a bare
+The pull is for the three paths that cut from your own checkout — planned
+work, the QA fix, an accepted other branch. There you cut locally, and a bare
 fetch moves the remote-tracking ref rather than the branch you branch from.
 Name the remote and branch — bare, `pull --ff-only` also exits 1 on a branch
 with no upstream configured (benign, common after a re-clone) and that is
@@ -317,9 +358,9 @@ commit straight to the parent branch" shortcut.
 For each sub-task `→ <SUBTASK-KEY>`:
 
 1. `git worktree add <WORKTREES_DIR>/worktree-<SUBTASK-KEY> -b <PREFIX><SUBTASK-KEY>-<slug> <PREFIX><PARENT-KEY>-<slug>`
-   (sub-tasks inherit the parent's prefix — the nesting rule in
-   `../_shared/jira-api-reference.md` §12 — and since 5C only reaches this
-   branch on the planned path, `<PREFIX>` is `feature/` here)
+   (sub-tasks inherit the parent's `<PREFIX>` verbatim — the nesting rule in
+   `../_shared/jira-api-reference.md` §12 — so a run never mixes prefixes; do
+   not re-derive it per sub-task)
 2. `git config branch.<PREFIX><SUBTASK-KEY>-<slug>.parentbranch <PREFIX><PARENT-KEY>-<slug>`
    (required for executor)
 3. Leave a PR-target comment on the sub-task (format below).
@@ -341,11 +382,12 @@ single-step-format comment on the **parent issue** — its PR targets
 `<BASE_BRANCH>` — so the reviewer's fallback can recover `<BASE_BRANCH>` even
 without `git config` (fresh clone or different machine).
 
-On the hotfix path this comment is load-bearing rather than a convenience: the
-PR-base resolver's last fallback is `<DEFAULT_BASE_BRANCH>`
-(`../_shared/jira-api-reference.md` §13), so a hotfix whose comment never
-landed can look like ordinary planned work to a later session. Confirm the
-comment posted before reporting back.
+Whenever `<BASE_BRANCH>` isn't `<DEFAULT_BASE_BRANCH>` — the hotfix and QA-fix
+paths — this comment is load-bearing rather than a convenience: the PR-base
+resolver's last fallback is `<DEFAULT_BASE_BRANCH>`
+(`../_shared/jira-api-reference.md` §13), so work whose comment never landed
+looks like ordinary planned work to a later session, and its PR gets aimed at
+staging. Confirm the comment posted before reporting back.
 
 **Client mechanics — things to never forget** (`jira.sh` on POSIX /
 `jira.ps1` on Windows; full command surface in `../_shared/jira-api-reference.md`
@@ -393,7 +435,8 @@ verbatim. Then list:
   (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from step 1's
   `jira_account_url` row)
 - the scope decision (single-step vs multistep) and why
-- which base path 5C took and why
+- which of 5C's four paths this run took and why, plus the `<PREFIX>` it
+  derived and what derived it (issue type + intent)
 - each branch created
 - each worktree path with the PR-target branch it's meant to merge into,
   explicitly calling out the parent worktree

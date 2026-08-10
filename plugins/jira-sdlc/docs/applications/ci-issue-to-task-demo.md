@@ -140,7 +140,7 @@ inverts that requirement:
 |  | Assigner | Executor / Reviewer |
 | -- | -- | -- |
 | Required checkout | **Main checkout** (`.git` is a directory) | **Linked worktree** (`.git` is a file) |
-| Required branch | The base branch | The issue's `feature/*` or `hotfix/*` branch |
+| Required branch | The base branch | The issue's own branch — `feature/*`, `bugfix/*`, `chore/*` or `hotfix/*` |
 | Why | It *creates* worktrees — it doesn't run inside one. A linked-worktree reading is a stop condition. | They derive their issue key *from* the worktree's branch. |
 
 So this workflow does the simple thing on purpose: a plain
