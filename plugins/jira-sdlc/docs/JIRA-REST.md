@@ -114,7 +114,7 @@ For this project:
 | Task | `Task` |
 | Story | `Story` |
 | Bug | `Bug` |
-| Sub-task | `Subtask` |
+| Sub-task | `Subtask` |   ← **no hyphen** for this project (see §11)
 
 ⚠️ Note the **`Subtask`** spelling (no hyphen).
 

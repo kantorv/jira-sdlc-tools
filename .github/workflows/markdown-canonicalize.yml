@@ -29,17 +29,14 @@ jobs:
           # Need full history for git diff BASE..HEAD to work on PRs
           fetch-depth: 0
 
-      # Install cedit pinned to the version these manifests were last
-      # confirmed green against — bump deliberately. A float would let an
-      # upstream schema change turn the gate red mid-week.
-      # The mdformat hash-stability pinning concern (cedit user guide §2)
-      # does NOT apply for stateless `md canonicalize --check` (no .cedit/
-      # state), but pinning cedit itself keeps local-dev and CI agreeing on
-      # what "canonical" means. Version from `cedit --version` in the
-      # executor's environment at author time.
-      - name: Install cedit (pinned)
+      # Install cedit unpinned — mirrors bootstrap.sh's approach so local
+      # dev and CI use the same version. A deliberate bump is no longer
+      # needed; if an upstream schema change occurs, the gate will catch
+      # it against the latest cedit, which is the intended behavior for
+      # stateless `md canonicalize --check` (no .cedit/ state).
+      - name: Install cedit (unpinned)
         run: |
-          pip install 'cedit==0.3.2'
+          pip install cedit
 
       - name: Find changed Markdown files
         id: changes

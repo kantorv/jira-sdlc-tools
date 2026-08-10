@@ -160,7 +160,10 @@ python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
 
 # markdown canonicalization — exit 1 if any tracked .md is non-canonical
-cedit md canonicalize --check <file>
+cedit md canonicalize --check <file>.md  # .md files only
+
+# workflows/other .yml files — exit 1 on lint failure
+actionlint path/to/<file>.yml         # .yml files only
 ```
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
