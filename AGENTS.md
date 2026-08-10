@@ -158,6 +158,12 @@ bash scripts/check-skill-size.sh
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
+
+# markdown canonicalization — exit 1 if any tracked .md is non-canonical
+cedit md canonicalize --check <file>.md  # .md files only
+
+# workflows/other .yml files — exit 1 on lint failure
+actionlint path/to/<file>.yml         # .yml files only
 ```
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
@@ -276,6 +282,41 @@ Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
 a real Windows 11 box, but the port logic and
 dispatch are verified here.
+
+### Touched a Markdown file? Canonicalize it — the gate checks
+
+This repo gates Markdown on change via the **markdown-canonicalize.yml**
+workflow (added by JST-281 under `.github/workflows/`). It runs
+`cedit md canonicalize --check` on every changed `**/*.md` and fails the job
+if any file is non-canonical. Stateless only: `cedit md canonicalize`
+operates on the file content alone, with no `.cedit/` snapshot/sync/state.
+
+Before pushing Markdown changes, canonicalize locally:
+
+```bash
+cedit md canonicalize -i <file>         # rewrite in place
+cedit md canonicalize --check <file>    # CI-equivalent gate (exit 1 = not canonical)
+```
+
+The workflow filename is `markdown-canonicalize.yml` — if it changes, update
+this reference.
+
+### Touched a `.github/workflows/*.yml` file? Lint it with actionlint
+
+YAML that parses fine can still fail GitHub's own schema/expression check —
+e.g. a `${{ }}` with nothing inside it, even sitting inside a shell comment
+inside a `run:` block, fails the whole workflow with a cryptic "An expression
+was expected" pointing at an unrelated line. `actionlint` catches this and
+other expression/shell/schema mistakes before you push:
+
+```bash
+actionlint .github/workflows/<file>.yml   # one file
+actionlint                                 # every workflow in the repo
+```
+
+`.jst/bootstrap.sh` installs `actionlint` into `venv/bin` (it's a Go binary,
+not a PyPI package, so it's fetched via its own install script rather than
+`pip install`) — it's on `PATH` once you `source venv/bin/activate`.
 
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review

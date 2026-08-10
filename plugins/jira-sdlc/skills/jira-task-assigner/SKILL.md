@@ -216,19 +216,12 @@ signal, and in both cases say which path you're taking and get a yes before
 creating anything — a hotfix PR aims at production, so a false positive ships
 code that never sat in staging:
 
-- **Emergency hotfix** — only when the user **explicitly asks for an emergency
-  production fix** (SDLC.md §4's flow, for a bug already live in production
-  that can't wait for the next sprint release). Urgency words ("urgent",
-  "asap", "this is blocking us") are not that signal; deliberate ones are
-  ("hotfix", "emergency production fix", "we need to patch prod now").
-- **QA fix** — a defect found while hardening a `release/sprint-<X.Y.Z>`
-  branch (SDLC.md §2, Phase 3). Here the signal is the *branch*, not a word:
-  step 2 read a `release/*` checkout. The fix has to ship with that release,
-  so it cuts from and targets that same branch; sending it to
-  `<DEFAULT_BASE_BRANCH>` instead would miss the release it exists to fix. If
-  the user names a release branch you aren't standing on, stop and have them
-  check it out — this path cuts locally (step 6), so the checkout *is* the
-  base.
+|  | planned work (default) | emergency hotfix |
+| -- | -- | -- |
+| `<BASE_BRANCH>` — what the PR targets | `<DEFAULT_BASE_BRANCH>` | `<PRODUCTION_BRANCH>` |
+| `<BRANCH_FROM>` — what you cut from | `<DEFAULT_BASE_BRANCH>` (your checkout) | `origin/<PRODUCTION_BRANCH>` |
+| `<PREFIX>` | `feature/` | `hotfix/` |
+| scope from (A) | single-step or multistep | **single-step, always** |
 
 |  | planned work (default) | QA fix on a release branch | emergency hotfix |
 | -- | -- | -- | -- |
