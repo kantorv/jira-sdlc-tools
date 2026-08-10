@@ -1,0 +1,62 @@
+name: Sync Upstream via PR
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at 00:00 UTC
+  workflow_dispatch:   # Adds a manual "Run workflow" button in GitHub Actions UI
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check and Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: "kantorv/jira-sdlc-tools" # <-- Change this to target repo (e.g. facebook/react)
+          UPSTREAM_BRANCH: "development"                       # <-- Target branch on upstream
+          TARGET_BRANCH: "development"                         # <-- Your local branch
+        run: |
+          # Add upstream remote
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream ${UPSTREAM_BRANCH}
+
+          # Count commits target is behind upstream
+          BEHIND_COUNT=$(git rev-list --count ${TARGET_BRANCH}..upstream/${UPSTREAM_BRANCH})
+
+          if [ "$BEHIND_COUNT" -eq 0 ]; then
+            echo "No new commits found in upstream."
+            exit 0
+          fi
+
+          echo "Upstream has $BEHIND_COUNT new commit(s)."
+
+          # Create a dedicated branch for this PR
+          SYNC_BRANCH="chore/upstream-sync-$(date +'%Y%m%d-%H%M')"
+          git checkout -b $SYNC_BRANCH
+
+          # Merge upstream changes into sync branch
+          git merge upstream/${UPSTREAM_BRANCH} -m "Merge upstream changes from ${UPSTREAM_REPO}" || true
+
+          # Push the sync branch to your fork
+          git push origin $SYNC_BRANCH
+
+          # Open Pull Request using GitHub CLI
+          gh pr create \
+            --base "${TARGET_BRANCH}" \
+            --head "${SYNC_BRANCH}" \
+            --title "Sync: Upstream changes from ${UPSTREAM_REPO}" \
+            --body "Automated PR created to sync updates from \`${UPSTREAM_REPO}:${UPSTREAM_BRANCH}\` into \`${TARGET_BRANCH}\`."
