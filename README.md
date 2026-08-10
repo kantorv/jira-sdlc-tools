@@ -47,6 +47,7 @@ works — architecture, prerequisites, configuration, a full usage
 walkthrough, safety model, and troubleshooting — lives in
 [`plugins/jira-sdlc/README.md`](plugins/jira-sdlc/README.md).
 
+
 The three skills, one per stage of the lifecycle:
 
 - **[`jira-task-assigner`](plugins/jira-sdlc/skills/jira-task-assigner/SKILL.md)** — turns a feature/task/bug description into
@@ -76,19 +77,27 @@ Plus one that runs before all three, once per project:
 
 
 
+## What you need
+
+- **Git account + Repository** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
+- **Jira account + Space** — a Jira Cloud instance with a project/space where issues will be created
+- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+
+
+
 ## Examples
 
 ### JIRA-TASK-ASSIGNER
+
 ```bash
 claude
 > /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action. The action is currently separated into two perform_create methods. Investigate the code to determine whether this flow could be simplified. Additionally, check for any redundant code. Reference: cropapp/catalog/views.py, lines 1265–1676"
 ```
 
-
 <img src="assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
 
-
 ### JIRA-TASK-EXECUTOR
+
 ```bash
 # cd into each worktree it creates, run this in each one (no key —
 # derived from that worktree's branch):
@@ -98,19 +107,15 @@ claude
 
 <img src="assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
 
-
-
 ### JIRA-TASK-REVIEWER
+
 ```bash
 # once the sub-task's PR is up, run from the same worktree:
 claude
 > /jira-sdlc:jira-task-reviewer 
 ```
 
-
 <img src="assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-
 
 ## Platform Compatibility Matrix
 
@@ -138,7 +143,6 @@ and a link to its detailed doc.
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
 yet exercised in this environment. See [Platform Compatibility Matrix](INTEGRATIONS.md) for the
 full status legend.
-
 
 ## Prerequisites
 
