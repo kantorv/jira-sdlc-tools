@@ -397,7 +397,7 @@ fi
 # a generic "no session" — so the actual auth error is named (JST-145 AC#3).
 # Accepted tradeoff: this writes ~/.config/gh/hosts.yml, global to the OS user,
 # so it overwrites the developer's own gh session and is not restored afterward —
-# see plugins/jira-sdlc/docs/github/ (JST-126/145).
+# see docs/github/ (JST-126/145).
 GH_OK=""
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
@@ -410,7 +410,7 @@ else
   GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
   if [ -z "$GH_PAT" ]; then
     row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
-      "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $RERUN."
+      "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $RERUN."
   else
     # logout FIRST — see header; non-fatal if there's nothing to log out.
     $TMOUT_CMD gh auth logout --hostname github.com >/dev/null 2>&1 || true
