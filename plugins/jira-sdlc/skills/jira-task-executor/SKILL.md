@@ -393,8 +393,9 @@ forward as context.
         versioned. A sub-task is exempt: its base is its parent's branch.
     - Link the issue from the PR body as
       `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from Discovery's
-      `jira_account_url` row — there's no browse-URL subcommand, and the Jira
-      site domain is never hardcoded.
+      `jira_account_url` row and from nothing else — not the REST `self` URL,
+      not the git remote you just read for the PR
+      (`../_shared/project-config.md` § *Issue browse links*).
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
