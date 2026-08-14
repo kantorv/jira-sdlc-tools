@@ -1,7 +1,8 @@
 ---
 title: Jira Kanban board
 slug: /jira-kanban-board
-sidebar_position: 13
+sidebar_position: 3
+sidebar_label: Kanban board
 ---
 
 **Jira Kanban Board Explained with a Real-World Web SaaS Example**

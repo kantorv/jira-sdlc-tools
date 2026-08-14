@@ -2,6 +2,8 @@
 skill: jira-task-assigner
 conversation: e0471131-44aa-44cb-9ed8-9ca85852bc89
 plugin_version: 0.5.0-lab.2
+slug: /examples/assigner-run-report
+sidebar_position: 3
 ---
 
 # Run report: jira-task-assigner — e0471131-44aa-44cb-9ed8-9ca85852bc89

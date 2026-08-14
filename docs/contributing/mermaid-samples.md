@@ -1,7 +1,8 @@
 ---
 title: Mermaid samples
 slug: /mermaid-samples
-sidebar_position: 25
+sidebar_position: 3
+sidebar_label: Mermaid samples
 ---
 
 ### 1. Basic Structure

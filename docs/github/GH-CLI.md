@@ -1,6 +1,7 @@
 ---
 slug: /gh-cli
-sidebar_position: 16
+sidebar_position: 2
+sidebar_label: Installing gh CLI
 ---
 
 Here's an updated version with the workflow you described.

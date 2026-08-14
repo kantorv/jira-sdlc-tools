@@ -1,6 +1,7 @@
 ---
 slug: /sdlc
-sidebar_position: 8
+sidebar_position: 1
+sidebar_label: SDLC & branching
 ---
 
 > **Note on this document:** this is the branching and release policy the

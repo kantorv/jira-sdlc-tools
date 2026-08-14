@@ -16,69 +16,234 @@
     "",
     "'unpublished' lists files under docs/ that Docusaurus does NOT build, so links to",
     "them from a published doc must be absolute github.com URLs like any other",
-    "category-2 link. Docusaurus excludes '_'-prefixed files by default."
+    "category-2 link. Docusaurus excludes '_'-prefixed files by default.",
+    "",
+    "'categories' lists the slugs served by a _category_.json generated-index, i.e.",
+    "routes with no backing .md file. They are slugs like any other and must never",
+    "change once shipped; they live here so scripts/check-doc-links.sh (category 4)",
+    "can validate a link that points at a category index. A published doc must reach",
+    "one by ABSOLUTE site URL, not a relative path: the file depth and the slug depth",
+    "differ once a page is grouped, so no relative form satisfies both Docusaurus'",
+    "URL-relative resolution and the file-relative checker."
   ],
-
   "site_docs_base": "https://kantorv.github.io/jira-sdlc-tools/docs",
   "blob_base": "https://github.com/kantorv/jira-sdlc-tools/blob/main",
   "tree_base": "https://github.com/kantorv/jira-sdlc-tools/tree/main",
   "raw_base": "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main",
-
   "unpublished": [
     "docs/integrations/_TEMPLATE.md"
   ],
-
+  "categories": {
+    "docs/process": {
+      "slug": "/process"
+    },
+    "docs/jira": {
+      "slug": "/jira"
+    },
+    "docs/github": {
+      "slug": "/github"
+    },
+    "docs/integrations": {
+      "slug": "/integrations"
+    },
+    "docs/contributing": {
+      "slug": "/contributing"
+    },
+    "docs/history": {
+      "slug": "/history"
+    }
+  },
   "pages": {
-    "docs/INSTALLATION.md":                          {"slug": "/installation",                          "sidebar_position": 1},
-    "docs/STEP-BY-STEP.md":                          {"slug": "/step-by-step",                          "sidebar_position": 2},
-    "docs/FULL-SETUP-CHECKLIST.md":                  {"slug": "/full-setup-checklist",                  "sidebar_position": 3},
-    "docs/TASK-LIFECYCLE.md":                        {"slug": "/task-lifecycle",                        "sidebar_position": 4},
-    "docs/TASK-LIFECYCLE-PHASE-1.md":                {"slug": "/task-lifecycle-phase-1",                "sidebar_position": 5},
-    "docs/TASK-LIFECYCLE-PHASE-2.md":                {"slug": "/task-lifecycle-phase-2",                "sidebar_position": 6},
-    "docs/TASK-LIFECYCLE-PHASE-3.md":                {"slug": "/task-lifecycle-phase-3",                "sidebar_position": 7},
-    "docs/SDLC.md":                                  {"slug": "/sdlc",                                  "sidebar_position": 8},
-    "docs/CI.md":                                    {"slug": "/ci",                                    "sidebar_position": 9},
-    "docs/SECURITY.md":                              {"slug": "/security",                              "sidebar_position": 10},
-    "docs/JIRA-STATES.md":                           {"slug": "/jira-states",                           "sidebar_position": 11},
-    "docs/JIRA-STATE-MOVEMENTS.md":                  {"slug": "/jira-state-movements",                  "sidebar_position": 12},
-    "docs/JIRA-KANBAN-BOARD.md":                     {"slug": "/jira-kanban-board",                     "sidebar_position": 13, "title": "Jira Kanban board"},
-    "docs/INSTALLING-GITHUB-FOR-JIRA.md":            {"slug": "/installing-github-for-jira",            "sidebar_position": 14},
-    "docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md": {"slug": "/state-transitions-with-github-actions", "sidebar_position": 15},
-    "docs/GH-CLI.md":                                {"slug": "/gh-cli",                                "sidebar_position": 16},
-    "docs/JIRA-REST.md":                             {"slug": "/jira-rest",                             "sidebar_position": 17},
-    "docs/JIRA-GITHUB-API.md":                       {"slug": "/jira-github-api",                       "sidebar_position": 18, "title": "Jira + GitHub integration"},
-    "docs/rest-client-design.md":                    {"slug": "/rest-client-design",                    "sidebar_position": 19},
-    "docs/acli-to-rest-api-migration.md":            {"slug": "/acli-to-rest-api-migration",            "sidebar_position": 20},
-    "docs/windows-scripts.md":                       {"slug": "/windows-scripts",                       "sidebar_position": 21},
-    "docs/RUNNING-MULTIPLE-COPIES.md":               {"slug": "/running-multiple-copies",               "sidebar_position": 22},
-    "docs/extending-sdlc-rules.md":                  {"slug": "/extending-sdlc-rules",                  "sidebar_position": 23},
-    "docs/skill-development-considerations.md":      {"slug": "/skill-development-considerations",      "sidebar_position": 24},
-    "docs/mermaid-samples.md":                       {"slug": "/mermaid-samples",                       "sidebar_position": 25, "title": "Mermaid samples"},
-
-    "docs/github/GH-PAT-SESSION-LOGIN.md":           {"slug": "/gh-pat-session-login",                  "sidebar_position": 1},
-
-    "docs/applications/APPLICATIONS.md":             {"slug": "/applications",                          "sidebar_position": 1},
-    "docs/applications/ci-issue-to-task-demo.md":    {"slug": "/applications/ci-issue-to-task-demo",    "sidebar_position": 2},
-    "docs/applications/ci-feature-flow-demo.md":     {"slug": "/applications/ci-feature-flow-demo",     "sidebar_position": 3},
-    "docs/applications/ci-review-pr-demo.md":        {"slug": "/applications/ci-review-pr-demo",        "sidebar_position": 4},
-    "docs/applications/ci-hotfix-flow-demo.md":      {"slug": "/applications/ci-hotfix-flow-demo",      "sidebar_position": 5},
-    "docs/applications/ci-smoke-test-demo.md":       {"slug": "/applications/ci-smoke-test-demo",       "sidebar_position": 6},
-
-    "docs/integrations/CLAUDECODE.md":               {"slug": "/integrations/claude-code",              "sidebar_position": 1},
-    "docs/integrations/CODEX.md":                    {"slug": "/integrations/codex",                    "sidebar_position": 2},
-    "docs/integrations/CURSOR.md":                   {"slug": "/integrations/cursor",                   "sidebar_position": 3},
-    "docs/integrations/ANTIGRAVITY.md":              {"slug": "/integrations/antigravity",              "sidebar_position": 4},
-    "docs/integrations/GROK.md":                     {"slug": "/integrations/grok",                     "sidebar_position": 5},
-    "docs/integrations/KILO.md":                     {"slug": "/integrations/kilo",                     "sidebar_position": 6},
-    "docs/integrations/KIMI-CODE.md":                {"slug": "/integrations/kimi-code",                "sidebar_position": 7},
-    "docs/integrations/NVIDIA-NIM.md":               {"slug": "/integrations/nvidia-nim",               "sidebar_position": 8},
-    "docs/integrations/OPENCODE.md":                 {"slug": "/integrations/opencode",                 "sidebar_position": 9},
-    "docs/integrations/PI.md":                       {"slug": "/integrations/pi",                       "sidebar_position": 10},
-
-    "docs/examples/reports/JST-122-story-report.md": {"slug": "/examples/story-report",                 "sidebar_position": 1},
-    "docs/examples/reports/JST-126-task-report.md":  {"slug": "/examples/task-report",                  "sidebar_position": 2},
-    "docs/examples/reports/jira-task-assigner-JST-126-e0471131-44aa-44cb-9ed8-9ca85852bc89.md": {"slug": "/examples/assigner-run-report", "sidebar_position": 3},
-    "docs/examples/reports/jira-task-executor-JST-125-bb91775f-028f-48b1-acdb-9eaec28d6d9b.md": {"slug": "/examples/executor-run-report", "sidebar_position": 4},
-    "docs/examples/reports/jira-task-reviewer-JST-122-df864d2f-3115-4f06-b3c2-24456615eed0.md": {"slug": "/examples/reviewer-run-report", "sidebar_position": 5}
+    "docs/setup/INSTALLATION.md": {
+      "slug": "/installation",
+      "sidebar_position": 1
+    },
+    "docs/setup/STEP-BY-STEP.md": {
+      "slug": "/step-by-step",
+      "sidebar_position": 2
+    },
+    "docs/setup/FULL-SETUP-CHECKLIST.md": {
+      "slug": "/full-setup-checklist",
+      "sidebar_position": 3
+    },
+    "docs/setup/INSTALLING-GITHUB-FOR-JIRA.md": {
+      "slug": "/installing-github-for-jira",
+      "sidebar_position": 4
+    },
+    "docs/setup/RUNNING-MULTIPLE-COPIES.md": {
+      "slug": "/running-multiple-copies",
+      "sidebar_position": 5
+    },
+    "docs/task-lifecycle/TASK-LIFECYCLE.md": {
+      "slug": "/task-lifecycle",
+      "sidebar_position": 1
+    },
+    "docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md": {
+      "slug": "/task-lifecycle-phase-1",
+      "sidebar_position": 2
+    },
+    "docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md": {
+      "slug": "/task-lifecycle-phase-2",
+      "sidebar_position": 3
+    },
+    "docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md": {
+      "slug": "/task-lifecycle-phase-3",
+      "sidebar_position": 4
+    },
+    "docs/process/SDLC.md": {
+      "slug": "/sdlc",
+      "sidebar_position": 1
+    },
+    "docs/process/CI.md": {
+      "slug": "/ci",
+      "sidebar_position": 2
+    },
+    "docs/process/extending-sdlc-rules.md": {
+      "slug": "/extending-sdlc-rules",
+      "sidebar_position": 3
+    },
+    "docs/process/SECURITY.md": {
+      "slug": "/security",
+      "sidebar_position": 4
+    },
+    "docs/jira/JIRA-STATES.md": {
+      "slug": "/jira-states",
+      "sidebar_position": 1
+    },
+    "docs/jira/JIRA-STATE-MOVEMENTS.md": {
+      "slug": "/jira-state-movements",
+      "sidebar_position": 2
+    },
+    "docs/jira/JIRA-KANBAN-BOARD.md": {
+      "slug": "/jira-kanban-board",
+      "sidebar_position": 3,
+      "title": "Jira Kanban board"
+    },
+    "docs/jira/JIRA-REST.md": {
+      "slug": "/jira-rest",
+      "sidebar_position": 4
+    },
+    "docs/jira/JIRA-GITHUB-API.md": {
+      "slug": "/jira-github-api",
+      "sidebar_position": 5,
+      "title": "Jira + GitHub integration"
+    },
+    "docs/github/GH-PAT-SESSION-LOGIN.md": {
+      "slug": "/gh-pat-session-login",
+      "sidebar_position": 1
+    },
+    "docs/github/GH-CLI.md": {
+      "slug": "/gh-cli",
+      "sidebar_position": 2
+    },
+    "docs/github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md": {
+      "slug": "/state-transitions-with-github-actions",
+      "sidebar_position": 3
+    },
+    "docs/integrations/CLAUDECODE.md": {
+      "slug": "/integrations/claude-code",
+      "sidebar_position": 1
+    },
+    "docs/integrations/CODEX.md": {
+      "slug": "/integrations/codex",
+      "sidebar_position": 2
+    },
+    "docs/integrations/CURSOR.md": {
+      "slug": "/integrations/cursor",
+      "sidebar_position": 3
+    },
+    "docs/integrations/ANTIGRAVITY.md": {
+      "slug": "/integrations/antigravity",
+      "sidebar_position": 4
+    },
+    "docs/integrations/GROK.md": {
+      "slug": "/integrations/grok",
+      "sidebar_position": 5
+    },
+    "docs/integrations/KILO.md": {
+      "slug": "/integrations/kilo",
+      "sidebar_position": 6
+    },
+    "docs/integrations/KIMI-CODE.md": {
+      "slug": "/integrations/kimi-code",
+      "sidebar_position": 7
+    },
+    "docs/integrations/NVIDIA-NIM.md": {
+      "slug": "/integrations/nvidia-nim",
+      "sidebar_position": 8
+    },
+    "docs/integrations/OPENCODE.md": {
+      "slug": "/integrations/opencode",
+      "sidebar_position": 9
+    },
+    "docs/integrations/PI.md": {
+      "slug": "/integrations/pi",
+      "sidebar_position": 10
+    },
+    "docs/applications/APPLICATIONS.md": {
+      "slug": "/applications",
+      "sidebar_position": 1
+    },
+    "docs/applications/ci-issue-to-task-demo.md": {
+      "slug": "/applications/ci-issue-to-task-demo",
+      "sidebar_position": 2
+    },
+    "docs/applications/ci-feature-flow-demo.md": {
+      "slug": "/applications/ci-feature-flow-demo",
+      "sidebar_position": 3
+    },
+    "docs/applications/ci-review-pr-demo.md": {
+      "slug": "/applications/ci-review-pr-demo",
+      "sidebar_position": 4
+    },
+    "docs/applications/ci-hotfix-flow-demo.md": {
+      "slug": "/applications/ci-hotfix-flow-demo",
+      "sidebar_position": 5
+    },
+    "docs/applications/ci-smoke-test-demo.md": {
+      "slug": "/applications/ci-smoke-test-demo",
+      "sidebar_position": 6
+    },
+    "docs/examples/reports/JST-122-story-report.md": {
+      "slug": "/examples/story-report",
+      "sidebar_position": 1
+    },
+    "docs/examples/reports/JST-126-task-report.md": {
+      "slug": "/examples/task-report",
+      "sidebar_position": 2
+    },
+    "docs/examples/reports/jira-task-assigner-JST-126-e0471131-44aa-44cb-9ed8-9ca85852bc89.md": {
+      "slug": "/examples/assigner-run-report",
+      "sidebar_position": 3
+    },
+    "docs/examples/reports/jira-task-executor-JST-125-bb91775f-028f-48b1-acdb-9eaec28d6d9b.md": {
+      "slug": "/examples/executor-run-report",
+      "sidebar_position": 4
+    },
+    "docs/examples/reports/jira-task-reviewer-JST-122-df864d2f-3115-4f06-b3c2-24456615eed0.md": {
+      "slug": "/examples/reviewer-run-report",
+      "sidebar_position": 5
+    },
+    "docs/contributing/skill-development-considerations.md": {
+      "slug": "/skill-development-considerations",
+      "sidebar_position": 1
+    },
+    "docs/contributing/windows-scripts.md": {
+      "slug": "/windows-scripts",
+      "sidebar_position": 2
+    },
+    "docs/contributing/mermaid-samples.md": {
+      "slug": "/mermaid-samples",
+      "sidebar_position": 3,
+      "title": "Mermaid samples"
+    },
+    "docs/history/rest-client-design.md": {
+      "slug": "/rest-client-design",
+      "sidebar_position": 1
+    },
+    "docs/history/acli-to-rest-api-migration.md": {
+      "slug": "/acli-to-rest-api-migration",
+      "sidebar_position": 2
+    }
   }
 }

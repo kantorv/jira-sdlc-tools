@@ -18,14 +18,14 @@ for Claude, `allow_implicit_invocation: false` for agentskills.io.
 **This plugin acts as an authenticated user in both git and Jira.** Given
 credentials, it will commit, create and push branches, open and update
 pull requests, and take the other actions needed to follow the
-[`gitflow`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/SDLC.md) strategy — and it will
+[`gitflow`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SDLC.md) strategy — and it will
 create, update, transition, and comment on issues in your Jira project.
 Those actions are visible to your team and land under whichever account you
 configured — your own, or a dedicated one per skill.
 
 Use it with caution: point it at a project you're comfortable having
 changed, and read
-[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/FULL-SETUP-CHECKLIST.md#settings-files)
+[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md#settings-files)
 before the first run so you know which repo and which Jira project it's wired to.
 
 What it deliberately never does on its own — merging into your base
@@ -69,7 +69,7 @@ Plus one that runs before all three, once per project:
 
 - **[`jst-install`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)** — guided
   first-time setup. Walks the four sections of
-  [Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP.md) — local tooling,
+  [Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md) — local tooling,
   GitHub repo prep, Jira board prep, healthcheck — verifying each with the
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
@@ -168,9 +168,9 @@ API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
 
 | Tool | Auth type | Scopes | Shared across roles | Description | Link |
 | -- | -- | -- | -- | -- | -- |
-| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/SECURITY.md#jira) |
-| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/SECURITY.md#github) |
-| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/SECURITY.md#git) |
+| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#jira) |
+| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#github) |
+| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#git) |
 
 > ⚠️ **This plugin is designed to run in a shared environment** — the same
 > checkout where a coding assistant operates *and* where you yourself still
@@ -210,10 +210,10 @@ This plugin can also be installed as a loose skill set with various coding assis
 Everything to have in place before the first run — the three CLIs, both API
 tokens, the two settings files, and the branches and board your project needs —
 is a tickable list in
-**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/FULL-SETUP-CHECKLIST.md)**,
+**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md)**,
 ending in one command that verifies most of it for you.
 
-Prefer it as prose? **[Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP.md)**
+Prefer it as prose? **[Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)**
 walks the same ground in the order you actually do it.
 
 Prefer to be walked through it? `/jira-sdlc:jst-install` covers the same four
@@ -282,7 +282,7 @@ The four anchor statuses (`<STATUS_TODO>`, `<STATUS_IN_PROGRESS>`,
 onto your board's real status names in `.jst/jira-sdlc-tools.env`. Who moves a
 card to which state — the three skills, GitHub Actions, a Jira automation
 app, or direct REST calls — is consolidated in
-**[Jira state movements](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/JIRA-STATE-MOVEMENTS.md)**.
+**[Jira state movements](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/jira/JIRA-STATE-MOVEMENTS.md)**.
 
 ## Task lifecycle preview
 
@@ -305,25 +305,25 @@ flowchart LR
 <td align="center" valign="top" width="33%">
 <strong>Phase 1 · Plan</strong><br>
 <code>jira-task-assigner</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-1.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
 </td>
 <td align="center" valign="top" width="33%">
 <strong>Phase 2 · Implement</strong><br>
 <code>jira-task-executor</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-2.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
 </td>
 <td align="center" valign="top" width="33%">
 <strong>Phase 3 · Review &amp; aggregate approval</strong><br>
 <code>jira-task-reviewer</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE-PHASE-3.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
 </td>
 </tr>
 </table>
 
-See **[Task lifecycle](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/TASK-LIFECYCLE.md)** for the
+See **[Task lifecycle](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE.md)** for the
 full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
 
 ## Repository layout

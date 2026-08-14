@@ -1,6 +1,7 @@
 ---
 slug: /applications/ci-review-pr-demo
 sidebar_position: 4
+sidebar_label: Review a PR
 ---
 
 # CI application: the review-a-PR demo (jira-task-reviewer alone)
@@ -18,8 +19,8 @@ sidebar_position: 4
 > scenario ([APPLICATIONS.md §2c](APPLICATIONS.md#2c-the-same-demos-by-scenario)).
 > It is an **application demo**: a worked example meant to be read next to the
 > workflow files and copied into other repos, **not** this repo's development
-> procedure ([SDLC.md](../SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../CI.md).
+> procedure ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../process/CI.md).
 >
 > Its siblings are [ci-feature-flow-demo.md](ci-feature-flow-demo.md) and
 > [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) — the full three-skill

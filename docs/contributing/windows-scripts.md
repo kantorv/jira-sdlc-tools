@@ -1,6 +1,7 @@
 ---
 slug: /windows-scripts
-sidebar_position: 21
+sidebar_position: 2
+sidebar_label: Windows scripts
 ---
 
 # Windows scripts — the `win/*.ps1` ports

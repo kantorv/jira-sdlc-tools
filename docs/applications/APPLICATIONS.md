@@ -1,6 +1,7 @@
 ---
 slug: /applications
 sidebar_position: 1
+sidebar_label: Overview
 ---
 
 # Applications — how the plugin gets consumed, and the CI demos
@@ -12,7 +13,7 @@ sidebar_position: 1
 > repo root — worked examples of running the three skills in CI, meant to be
 > read next to the workflow files and copied into other repos. They are
 > **not** this repo's own development procedure (human-driven, see
-> [SDLC.md](../SDLC.md)).
+> [SDLC.md](../process/SDLC.md)).
 
 ______________________________________________________________________
 
@@ -25,7 +26,7 @@ ______________________________________________________________________
 
 Both modes read the same configuration: `.jst/jira-sdlc-tools.env` (team-shared)
 and `.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored) in the
-target project's root. See [INSTALLATION.md](../INSTALLATION.md) and
+target project's root. See [INSTALLATION.md](../setup/INSTALLATION.md) and
 [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md) for what each
 `<TOKEN>` resolves to.
 
@@ -462,7 +463,7 @@ ______________________________________________________________________
 ## 5. What these demos are not
 
 - **Not a replacement for this repo's own SDLC** — work here is human-driven
-  end to end ([SDLC.md](../SDLC.md)).
+  end to end ([SDLC.md](../process/SDLC.md)).
 - **Not production incident response** — the hotfix demo exercises the
   *branch semantics* of a hotfix, not an actual incident process.
 - **Not a durable pipeline on hosted runners** — worktrees don't persist
@@ -483,7 +484,7 @@ ______________________________________________________________________
 | [ci-review-pr-demo.md](ci-review-pr-demo.md) | Deep dive on the review-a-PR scenario and its implementations |
 | [ci-issue-to-task-demo.md](ci-issue-to-task-demo.md) | Deep dive on `demo-claude-issue-to-task.yml` and its `/make-bug` twin `demo-claude-issue-to-bug.yml` |
 | [ci-smoke-test-demo.md](ci-smoke-test-demo.md) | The no-skill backend check — `demo-kimi-openrouter-reviewer.yml` |
-| [SDLC.md](../SDLC.md) | This repo's actual release/hotfix procedure |
-| [CI.md](../CI.md) | Workflow-by-workflow CI reference |
-| [INSTALLATION.md](../INSTALLATION.md) | Installing the plugin / loose skills |
+| [SDLC.md](../process/SDLC.md) | This repo's actual release/hotfix procedure |
+| [CI.md](../process/CI.md) | Workflow-by-workflow CI reference |
+| [INSTALLATION.md](../setup/INSTALLATION.md) | Installing the plugin / loose skills |
 | [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md) | Every `<TOKEN>` resolved from `.jst/jira-sdlc-tools.env` |

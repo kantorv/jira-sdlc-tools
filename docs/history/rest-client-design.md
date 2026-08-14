@@ -1,6 +1,7 @@
 ---
 slug: /rest-client-design
-sidebar_position: 19
+sidebar_position: 1
+sidebar_label: REST client design
 ---
 
 # Design: a bash Jira REST client (`jira.sh`)

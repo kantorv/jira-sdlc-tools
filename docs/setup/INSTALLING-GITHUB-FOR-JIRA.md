@@ -1,6 +1,7 @@
 ---
 slug: /installing-github-for-jira
-sidebar_position: 14
+sidebar_position: 4
+sidebar_label: GitHub for Jira
 ---
 
 # Installing GitHub for Jira

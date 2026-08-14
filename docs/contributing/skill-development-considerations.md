@@ -1,6 +1,7 @@
 ---
 slug: /skill-development-considerations
-sidebar_position: 24
+sidebar_position: 1
+sidebar_label: Skill development
 ---
 
 # Skill development considerations

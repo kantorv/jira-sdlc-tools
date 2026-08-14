@@ -1,6 +1,7 @@
 ---
 slug: /integrations/cursor
 sidebar_position: 3
+sidebar_label: Cursor
 ---
 
 # Cursor Integration (Native Claude Skills Spec)

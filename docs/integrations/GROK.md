@@ -1,6 +1,7 @@
 ---
 slug: /integrations/grok
 sidebar_position: 5
+sidebar_label: Grok
 ---
 
 # Grok Build Integration (Native Claude Skills Spec)
@@ -103,7 +104,7 @@ bare equivalents — same drop-in caveat documented for Cursor. Reopen `/skills`
 - **Windows** — Grok installs via the PowerShell one-liner above; config lives at
   `%USERPROFILE%\.grok\config.toml`. Discovery rules are identical; the skills'
   own OS dispatch runs the `_shared/scripts/win/*.ps1` PowerShell twins instead
-  of the `posix/*.sh` scripts (see [windows-scripts.md](../windows-scripts.md)).
+  of the `posix/*.sh` scripts (see [windows-scripts.md](../contributing/windows-scripts.md)).
 - **Environment files** are read by the plugin's own scripts (e.g.
   `ensure_local_env.sh`), not by Grok Build — no Grok-specific env support to
   configure; keep them where the scripts expect them.
