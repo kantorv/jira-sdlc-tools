@@ -150,7 +150,35 @@ without it halts rather than running half-configured.
 | Token | What it is | Example |
 | -- | -- | -- |
 | `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. | `/home/you/src/myapp-worktrees` |
-| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it constructs issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
+| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it is the only source for issue browse links — see below. | `your-site.atlassian.net` |
+
+### Issue browse links — one form, one source
+
+Every human-facing link to an issue, in a report, a Jira comment or a PR body,
+is built as:
+
+```
+https://<JIRA_ACCOUNT_URL>/browse/<ISSUE-KEY>
+```
+
+- **Domain**: always `JIRA_ACCOUNT_URL`, read off statuscheck's
+  `jira_account_url` row — never by opening the credential-bearing
+  `jira-sdlc-tools.local.env` (*Reading config safely* above).
+- **Scheme**: the value is stored **without** one
+  (`your-site.atlassian.net`), so prepend exactly one `https://` — never
+  zero, never doubled.
+- **Never assemble it from anything else**, however URL-shaped that thing
+  looks. Each of these has drifted in precisely because it's plausible: the
+  REST `self` field, which every read response hands you but is a gateway API
+  endpoint (`https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<id>`),
+  not a browsable page; the git remote or repository name from
+  `git remote get-url origin`, which the same run reads for PR work but names
+  GitHub, not your Jira site; and a hardcoded or half-remembered domain, which
+  is right on the machine it was copied from and wrong on every other install.
+
+There is no browse-URL subcommand and no browse URL in any response to lift —
+`issue create` prints the bare key — so the link is always *assembled* from
+the template above, never found.
 
 The three **role credential pairs** are required too — they're the whole of the
 auth model, so they get their own section below.

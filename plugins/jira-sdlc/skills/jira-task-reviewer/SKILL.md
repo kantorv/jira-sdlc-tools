@@ -125,7 +125,9 @@ verdict comment, `gh pr list` call, and Jira transition depends on them —
 and `jira_auth` now confirms the **reviewer's** own credential, the one
 those writes will use), and `jira_account_url` (INFO) is the site domain for
 `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links, read here so no step opens
-the credential-bearing `.jst/jira-sdlc-tools.local.env`.
+the credential-bearing `.jst/jira-sdlc-tools.local.env` — that row is the
+only source those links may be built from
+(`../_shared/project-config.md` § *Issue browse links*).
 
 Only the rows this skill reads in a role-specific way, or relies on later,
 are spelled out here; the rest are role-independent preconditions defined in

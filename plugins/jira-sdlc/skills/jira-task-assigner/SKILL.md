@@ -404,7 +404,8 @@ staging. Confirm the comment posted before reporting back.
 - **Create issue**:
   `jira.sh --role assigner issue create --project "<PROJECT-KEY>" --type "Task" --summary "..." --desc-file <file> --assignee "$ASSIGNEE_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"`.
-  `create` **prints the new key on stdout** — capture it directly (`KEY=$(jira.sh … issue create …)`); there is no browse URL to parse. **Always pass
+  `create` **prints the new key on stdout** — capture it directly (`KEY=$(jira.sh … issue create …)`); there is no browse URL to parse, links are
+  assembled (`../_shared/project-config.md` § *Issue browse links*). **Always pass
   `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
   sub-task — resolved once at the top of 6A. One flag does it on create; do
   not issue a separate `issue assign`.
@@ -433,7 +434,8 @@ verbatim. Then list:
 
 - each created issue key and its link
   (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from step 1's
-  `jira_account_url` row)
+  `jira_account_url` row and from nothing else —
+  `../_shared/project-config.md` § *Issue browse links*)
 - the scope decision (single-step vs multistep) and why
 - which of 5C's four paths this run took and why, plus the `<PREFIX>` it
   derived and what derived it (issue type + intent)
