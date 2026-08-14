@@ -30,7 +30,7 @@ an LLM re-reads on every run, so every line costs context and adds a
 place to misread. The guidelines below are working hypotheses — each
 helps in a specific way and has a known failure mode; the full
 reasoning, caveats, and how we plan to test them live in
-[docs/skill-development-considerations.md](plugins/jira-sdlc/docs/skill-development-considerations.md).
+[docs/skill-development-considerations.md](docs/skill-development-considerations.md).
 
 - **If it fits in one line, prefer one line.** The payoff is
   reliability, not tokens: instructions buried mid-file get skipped or
@@ -98,8 +98,15 @@ each holds a single manifest. Don't merge them into one.
   against the directory that contains `.claude-plugin/`.
 - **Plugin root** (`plugins/jira-sdlc/`) ships
   `.claude-plugin/plugin.json`, and that's the only file allowed in it.
-  `skills/` and `docs/` live at the plugin root, as siblings of
-  `.claude-plugin/`, never nested inside it.
+  `skills/` lives at the plugin root, as a sibling of `.claude-plugin/`,
+  never nested inside it.
+- **`docs/` is at the *repo* root, not inside the plugin** (JST-287), because
+  it is the source of a Docusaurus site whose versioning snapshots the docs
+  root and nothing else. The consequence bites in one specific place: a
+  marketplace install copies only `plugins/jira-sdlc/` into Claude Code's
+  cache, so **an installed user has no `docs/` at all**. Anything inside the
+  plugin that names a doc is therefore a dangling pointer if you write it as a
+  path — see *The published docs URL scheme* below for which form to use where.
 - `skills/_shared/` must stay **inside** `skills/` (which is inside the
   plugin root). A marketplace install only copies the plugin's own root
   directory into its cache — anything reached by a relative path that
@@ -114,6 +121,51 @@ each holds a single manifest. Don't merge them into one.
   a path climbing to the repo root wouldn't survive either install mode. Edit
   one, `diff` the other. (`.jst/…` is also this repo's own live config
   template, which is why the duplication exists rather than a move.)
+
+## The published docs URL scheme
+
+`docs/**` is published to
+`https://kantorv.github.io/jira-sdlc-tools/docs/<slug>`, and
+`scripts/docs-url-map.json` is the single source of truth for every slug. Two
+things about it are load-bearing:
+
+- **Slugs are flat and decoupled from the directory tree.** `docs/github/GH-PAT-SESSION-LOGIN.md`
+  is `/gh-pat-session-login`, not `/github/gh-pat-session-login`; the run
+  reports keep their UUID filenames but publish as `/examples/executor-run-report`.
+  The cost is one `slug:` line per page. The payoff is that the sidebar grouping
+  stays an editorial decision you can revise later without breaking a URL — and
+  some of these URLs ship *inside the plugin*, into caches nobody can correct
+  retroactively. **Never change a slug that has shipped.**
+- **`site_docs_base` in that file is a contract with `website/docusaurus.config.js`**
+  (`url` + `baseUrl` + the docs plugin's `routeBasePath`). Change one of the
+  three and every baked-in URL 404s, silently.
+
+Which form a reference takes depends on who reads it, not on where it lives:
+
+| where the reference is | form | why |
+| -- | -- | -- |
+| between two files under `docs/` | relative (`../SDLC.md`) | works on the site *and* when read on GitHub, and survives `docs:version` |
+| a published doc → anything outside `docs/` | absolute `github.com/.../blob/main/…` | there is no site route; Docusaurus emits it unchanged and warns nobody |
+| `README.md`, `INTEGRATIONS.md` | absolute | rendered by GitHub against its own domain, and fed to the site from outside the docs root |
+| anything under `plugins/jira-sdlc/` a user reads without a checkout — the plugin README, `SKILL.md` bodies, script *header* comments, strings printed to a terminal, the `.env.example` templates | published site URL | after a marketplace install the path simply isn't there |
+| code comments read while *editing* a script in a checkout | repo-relative (`docs/SDLC.md`) | the reader has the repo in front of them; a URL is noise |
+| any asset a published doc references relatively | must live under `docs/` | `docs:version` snapshots the docs root and nothing else, so a path reaching outside it means something different inside the snapshot |
+
+The root README's three GIFs (8.4 MB) are the deliberate exception to that last
+row: they stay in the repo-root `assets/` and the README names them by absolute
+`raw.githubusercontent.com` URL, because README is not under the docs root and
+copying 8.4 MB into every future version snapshot is a permanent cost for
+nothing. `docs/assets/` (the four phase diagrams plus one PNG, ~500 KB) does
+move with the docs and is referenced relatively.
+
+Files under `docs/` whose name starts with `_` are **not published** —
+Docusaurus treats them as partials, so `docs/integrations/_TEMPLATE.md` is a
+contributor template and links to it are absolute like any other unpublished
+file. `scripts/docs-url-map.json` lists them under `unpublished`.
+
+`scripts/repair-doc-links.py` applies all of the above mechanically and is
+idempotent; run it after moving or renaming a doc rather than hand-editing
+links, then verify with `scripts/check-doc-links.sh` (below).
 
 ## If you rename a skill or the plugin
 
@@ -164,11 +216,15 @@ cedit md canonicalize --check <file>.md  # .md files only
 
 # workflows/other .yml files — exit 1 on lint failure
 actionlint path/to/<file>.yml         # .yml files only
+
+# every doc reference still resolves — the four link categories, checked
+# against this checkout, no network (see "Touched a doc reference?" below)
+bash scripts/check-doc-links.sh
 ```
 
 ### Touched a mermaid diagram? Render it — don't eyeball it
 
-The lifecycle diagrams (`plugins/jira-sdlc/docs/TASK-LIFECYCLE-PHASE-*.md`,
+The lifecycle diagrams (`docs/TASK-LIFECYCLE-PHASE-*.md`,
 plus the plugin README) are the one thing here a machine can actually check,
 and they fail in a way that is **invisible in review**: a broken block still
 looks like a perfectly reasonable diagram in the diff, and only turns into an
@@ -301,6 +357,42 @@ cedit md canonicalize --check <file>    # CI-equivalent gate (exit 1 = not canon
 The workflow filename is `markdown-canonicalize.yml` — if it changes, update
 this reference.
 
+### Touched a doc reference? `check-doc-links.sh` is the only thing that sees it
+
+Links are the one thing here with no test coverage and the worst failure mode:
+they break silently and stay broken. The Docusaurus build catches exactly one
+of the four categories in *The published docs URL scheme* above — relative
+`.md` links between published docs — and is structurally blind to the other
+three. An absolute `blob/main/` URL to a file you just moved is still absolute,
+still parses, and now 404s.
+
+```bash
+bash scripts/check-doc-links.sh   # exit 1 naming every file:line that broke
+```
+
+It asserts each reference against **this checkout** rather than the network, so
+it passes on a branch before the paths exist on `main`, and it needs no
+credentials. `.github/workflows/` and `website/` are excluded — those are owned
+elsewhere.
+
+Moving or renaming a doc? Don't hand-edit the links. Add or change the entry in
+`scripts/docs-url-map.json`, then:
+
+```bash
+python3 scripts/repair-doc-links.py           # rewrite every category, idempotent
+python3 scripts/repair-doc-links.py --check   # exit 1 if anything is stale
+bash scripts/check-doc-links.sh
+```
+
+⚠️ **The trap that bites here:** a relative link is written against the
+directory the file was in *when someone typed it*. Move the file and every
+`../../…` in it silently means something else — usually a path that walks off
+the top of the repo, but sometimes a same-named file at the new depth
+(`../README.md` meant the *plugin* README, and resolved to the root one). The
+repair script handles this by resolving against the origin path; if you do it
+by hand, resolve from where the link was written, not from where the file now
+sits.
+
 ### Touched a `.github/workflows/*.yml` file? Lint it with actionlint
 
 YAML that parses fine can still fail GitHub's own schema/expression check —
@@ -332,8 +424,8 @@ SemVer git tag plus the GitHub Release that the marketplace install command
 consumes. The version lives only in git tags (no `package.json`/`VERSION` file
 to bump), which is what makes the workflow generic enough to lift into any
 repo, not just the JS app these skills came from. The branching and release
-policy is [docs/SDLC.md](plugins/jira-sdlc/docs/SDLC.md), and
-[docs/CI.md](plugins/jira-sdlc/docs/CI.md) is the workflow-by-workflow CI
+policy is [docs/SDLC.md](docs/SDLC.md), and
+[docs/CI.md](docs/CI.md) is the workflow-by-workflow CI
 reference — including the tagging mechanics and the continuous `lab`
 pre-release channel (`update_lab.yml`), which this section doesn't cover. Two
 workflows automate the stable release:

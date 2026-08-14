@@ -3,8 +3,8 @@
 # Contract pair with ../posix/jira.sh: same arguments, same stdout, same exit
 # codes, same "jira: …" stderr. Edit one port, edit the other (AGENTS.md).
 #
-# Design & rationale:  ../../../../docs/rest-client-design.md
-# Live-verified call shapes + status codes:  ../../../../docs/acli-to-rest-api-migration.md
+# Design & rationale:  https://kantorv.github.io/jira-sdlc-tools/docs/rest-client-design
+# Live-verified call shapes + status codes:  https://kantorv.github.io/jira-sdlc-tools/docs/acli-to-rest-api-migration
 #
 # Four layers (see the design doc):
 #   L1 config    — env files, --role→credential, cloud-id (cached), ADF encode, email→accountId
