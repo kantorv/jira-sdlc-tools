@@ -66,10 +66,44 @@ Our development cycles run in 14-day sprints. The Git workflow strictly follows 
 ### Phase 4: Production Deployment (Day 14)
 
 - The `release/*` branch is merged into `main` via a PR.
-- A **Semantic Version Tag** (e.g., `v0.95.4`) is applied to the merge commit on `main`.
+- A snapshot of the documentation is cut for that version (`docusaurus docs:version`) and committed on `main`, so the tagged commit carries the docs as that release published them.
+- A **Semantic Version Tag** (e.g., `v0.95.4`) is applied to that commit on `main`.
 - The CI/CD pipeline deploys `main` to Production.
+- The documentation site is republished so the new version appears on it.
 - `main` is merged back into `development` to ensure all QA bug fixes are synced.
 - The `release/*` branch is deleted.
+
+All of the above is automated by `release.yml` (see
+[CI.md](CI.md)). The one exception is below.
+
+#### Cutting the docs version by hand
+
+`release.yml` runs from the version of itself that already exists on `main`, so
+**the release that first introduces the docs-versioning step cannot run it** —
+and the same applies to any release merged before that change reaches `main`.
+That release ships without a docs snapshot unless somebody cuts one. Do it from
+`main` immediately after the release, substituting the version that was just
+tagged (no leading `v`):
+
+```bash
+git checkout main
+git pull origin main
+
+cd website
+npm ci
+npm run docusaurus -- docs:version 0.95.4
+npm run build          # snapshot-only breakage fails HERE, not in review
+
+cd ..
+git add website/versioned_docs website/versioned_sidebars website/versions.json
+git commit -m "docs: version snapshot v0.95.4"
+git push origin main
+```
+
+Two things to know while doing it:
+
+- **All three paths are committed.** An ignored snapshot is a released version that silently is not on the site; `website/.gitignore` covers build products only.
+- **That push will not republish the site on its own** if it is made with a CI token — a `GITHUB_TOKEN` push creates no workflow runs. Pushing it yourself from a laptop *does* trigger `docs.yml`. If in doubt, dispatch it explicitly: `gh workflow run "Docs site" --ref main`.
 
 ______________________________________________________________________
 
