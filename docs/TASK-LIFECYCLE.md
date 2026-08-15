@@ -55,25 +55,12 @@ flowchart LR
 
 ______________________________________________________________________
 
-<table>
-<tr>
-<td align="center" valign="top" width="33%">
-<strong>Phase 1 · Plan</strong><br>
-<code>jira-task-assigner</code><br>
-<a href="TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
-<a href="TASK-LIFECYCLE-PHASE-1.md"><img src="assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
-</td>
-<td align="center" valign="top" width="33%">
-<strong>Phase 2 · Implement</strong><br>
-<code>jira-task-executor</code><br>
-<a href="TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
-<a href="TASK-LIFECYCLE-PHASE-2.md"><img src="assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
-</td>
-<td align="center" valign="top" width="33%">
-<strong>Phase 3 · Review &amp; aggregate approval</strong><br>
-<code>jira-task-reviewer</code><br>
-<a href="TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
-<a href="TASK-LIFECYCLE-PHASE-3.md"><img src="assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
-</td>
-</tr>
-</table>
+<!-- A markdown table, not the <table> this used to be: Docusaurus resolves a
+relative `*.md` target only inside a *markdown* link. The same href in a raw
+HTML <a> is left alone, then fails the build's broken-link check — which is how
+`onBrokenLinks: 'throw'` reported this file three times. The <img> tags stay raw
+so the 260px width survives. -->
+
+| **Phase 1 · Plan**<br />`jira-task-assigner` | **Phase 2 · Implement**<br />`jira-task-executor` | **Phase 3 · Review & aggregate approval**<br />`jira-task-reviewer` |
+| :-: | :-: | :-: |
+| [Full diagram & notes →](TASK-LIFECYCLE-PHASE-1.md)<br /><br />[<img src="assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-1.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-2.md)<br /><br />[<img src="assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-2.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-3.md)<br /><br />[<img src="assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-3.md) |
