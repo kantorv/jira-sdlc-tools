@@ -1,0 +1,5 @@
+{
+  "label": "GitHub auth",
+  "position": 26,
+  "link": { "type": "generated-index", "description": "How the plugin authenticates to GitHub." }
+}
