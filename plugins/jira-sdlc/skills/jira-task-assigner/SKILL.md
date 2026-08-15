@@ -1,6 +1,6 @@
 ---
 name: jira-task-assigner
-description: Turn a feature/task/bug description into Jira issues with matching git branches and worktrees, so the pieces can be worked on in parallel. Investigates the codebase, asks clarifying questions, decides whether the request is a single self-contained task or a multistep task split into parallel sub-tasks, and creates the issue(s) via the `jira.sh`/`jira.ps1` REST client. Every leaf issue (the single task, or each sub-task) gets its own dedicated branch and git worktree, so parallel work can start immediately and the executor always opens an individual PR per leaf. Branches are `feature/` off the default base branch; when the user explicitly asks for an emergency production fix it provisions a single-step `hotfix/` off the production branch instead.
+description: Turns a task description into Jira issues plus ready-to-work git branches and worktrees — one per leaf issue, so several executors can then run in parallel. Run it from the main repo checkout on the base branch, passing the task description as the argument. It investigates the codebase, asks about what's ambiguous, and decides whether the work is one self-contained task or splits into parallel sub-tasks. Branches are `feature/` off the default base branch; on an explicit request for an emergency production fix it provisions a single `hotfix/` off the production branch instead. Writes no code and opens no PRs.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Write, AskUserQuestion
 ---
@@ -10,30 +10,29 @@ project. Given a task description from the user ($ARGUMENTS):
 
 **Conventions used below:**
 
+- `$ARGUMENTS` is the task description — free-form prose, the sole input to
+  steps 3–5. If it's empty, ask for it before running anything: there is
+  nothing to investigate or scope without it, and the healthcheck costs a
+  round trip you'd only repeat.
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
   `<PRODUCTION_BRANCH>` — read all four off step 1's healthcheck rows
-  (`env_config`, `worktrees_dir`, `base_branch`, `production_branch`), not
-  out of a config file. **Never dump `.jst/jira-sdlc-tools.local.env`** —
-  it holds all three role Jira API tokens and the GitHub PAT, so `cat`-ing
-  it writes live credentials into the transcript. A value no row carries is
-  a single-key read, never a whole-file one: see
-  `../_shared/project-config.md` § *Reading config safely* for the safe
-  form and the redaction trap that doesn't work.
-- `<WORKTREES_DIR>` — where per-issue worktrees are created, always an
-  absolute path (`../_shared/project-config.md`), so it means the same
-  directory here and in the worktree the executor later runs from; step 1's
-  `worktrees_dir` row judges it.
-- `<slug>` = short kebab-case summary of the issue title, same style as
-  existing branches in this repo.
+  (`env_config`, `worktrees_dir`, `base_branch`, `production_branch`).
+  **Never dump `.jst/jira-sdlc-tools.local.env`** — it holds three role Jira
+  tokens and the GitHub PAT. A value no row carries is a single-key `grep`,
+  never a whole-file read: `../_shared/project-config.md` § *Reading config
+  safely* has the form, and the redaction filter that silently doesn't work.
+- `<slug>` = the issue title slugified per
+  `../_shared/jira-api-reference.md` §12 (lowercase, spaces → hyphens, strip
+  punctuation).
 - A **leaf** is an issue that gets its own branch, worktree and PR — the
   single top-level issue on the single-step path, or each sub-task on the
   multistep one.
 - **Branch prefix** — the prefix follows the **base branch, not the issue
-  type** (`../_shared/jira-api-reference.md` §12; SDLC.md §2), so it falls
-  out of step 5C's base decision and never out of picking `Bug`. It is
+  type** (5C decides it; `../_shared/jira-api-reference.md` §12). It is
   uniform within a run — a Sub-task inherits its parent's — so branch naming
-  is always `<PREFIX><KEY>-<slug>`, which keeps step 2's branch-parsing
-  regex working no matter which branch someone checks out later.
+  is always `<PREFIX><KEY>-<slug>`, which is what lets statuscheck derive
+  `issue_key` from a branch, and the executor find its issue with no key
+  argument at all.
 - `<PREFIX>`, `<BASE_BRANCH>`, `<BRANCH_FROM>` — set once by step 5C, used
   verbatim by step 6.
 - An issue already created *without* this skill needs no decision here:
@@ -63,26 +62,19 @@ here, credential block included; the blocks below are the POSIX form.
 Statuscheck's `platform` row only *confirms* that choice afterwards, so it
 can't decide how statuscheck itself is run. It takes a required `--role assigner` (no default credential) and no issue-key argument.
 
-**Make sure local credentials exist — run FIRST, before the healthcheck.**
-`ensure_local_env` no-ops when the file already exists, so run it
-unconditionally; on non-zero, relay its stderr and **stop**. There is no
-login step: `jira.sh` authenticates **per-request as `--role assigner`**
-(`../_shared/jira-api-reference.md` §9), so there is no account to become —
-every issue create below carries `--role assigner` and picks up the assigner
-credential on that one call.
+There is no login step: `jira.sh` authenticates **per-request as
+`--role assigner`** (`../_shared/jira-api-reference.md` §9), so every issue
+create below carries `--role assigner` and picks up that credential on the
+one call. Statuscheck repairs a missing `.jst/jira-sdlc-tools.local.env`
+itself and reports it in `env_local`.
 
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
-```
-
-Then run the shared pre-flight healthcheck. It
-gathers every environment fact this skill depends on — git repo, the two
-env files + their gitignore state, Jira auth (the **assigner's** credential —
-`jira.sh --role assigner whoami`), Jira project reachability, `gh` auth — in one pass and
-prints a markdown table, replacing the older per-check prose. Send it as the
-only tool call in its message, because its rows decide whether the next step
-happens at all — anything batched alongside it has already run before that
-decision existed. Override the rerun hint so its remedies name this skill:
+Run the shared pre-flight healthcheck. It gathers every environment fact this
+skill depends on — git repo, the two env files + their gitignore state, Jira
+auth (the **assigner's** credential — `jira.sh --role assigner whoami`), Jira
+project reachability, `gh` auth — in one pass. Send it as the only tool call in
+its message, because its rows decide whether the next step happens at all —
+anything batched alongside it has already run before that decision existed.
+Override the rerun hint so its remedies name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
@@ -90,30 +82,29 @@ STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-assigner" \
 ```
 
 It resolves `<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from the env files
-itself, so you don't pre-resolve tokens for this section.
+itself, so you don't pre-resolve tokens here, and prints one markdown table
+(`check | status | detail`) — `OK`, `FAIL` (blocks, with a remedy printed
+under the table), `WARN` (suspicious, not blocking), `INFO` (context only) —
+exiting non-zero if any row is `FAIL`.
 
-It prints one markdown table (`check | status | detail`), where status is
-`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
-(suspicious, not blocking), or `INFO` (context only), and exits non-zero
-if any row is `FAIL`.
-
-Only the rows the assigner reads in a role-specific way are spelled out
-here; the rest are role-independent preconditions defined in
-`statuscheck.sh` itself (their `detail` column is self-explanatory in the
-printed output — that live output, not this table, is what the skill
-actually acts on). The script never FAILs the three rows below — it
-reports them for every role, and each skill judges them for itself; the
-assigner runs from the **main repo checkout** (not a per-issue worktree) on a
-long-lived branch, the opposite reading from the executor/reviewer:
+Only the rows the assigner reads in a role-specific way are spelled out here;
+the rest are role-independent preconditions defined in `statuscheck.sh`,
+self-explanatory in the printed output — and that live output, not this table,
+is what the skill acts on. The script never FAILs the first two rows below,
+leaving each skill to judge them (`worktrees_dir` is the exception: a relative
+path is a hard FAIL). The assigner runs from the **main repo checkout** on a
+long-lived branch — the opposite reading from the executor/reviewer:
 
 | row | what it verifies / gathers |
 | -- | -- |
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
-| `branch` | INFO: *base branch* (`<DEFAULT_BASE_BRANCH>`) vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither — the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither*; match it against the `production_branch` row yourself. **Step 2 owns which readings this skill can run from** and resolves all of them, so carry the value there rather than gating on it here |
+| `branch` | INFO: the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither* — match that yourself against the `production_branch` row. Step 2 judges every reading |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
 
-Three other rows carry an assigner-specific reading: `gh_auth` is green for the
-*executor's* benefit (this skill opens no PRs); `jira_account_url` is where
+Three other rows carry an assigner-specific reading: `gh_auth` still blocks
+even though this skill opens no PRs — verifying it now is what stops the
+*executor* discovering a logged-out `gh` after its implementation is already
+written and pushed; `jira_account_url` is where
 step 7's browse links come from, which is why no step opens the
 credential-bearing `.jst/jira-sdlc-tools.local.env`; and `working_tree` WARNs
 on a dirty tree — not blocking, but mention it before branching from that
@@ -127,8 +118,7 @@ judge those two yourself per the table.
 
 With no FAIL row and the three role-specific rows reading as above, state what
 those rows read — `worktree`, `branch`, `worktrees_dir` — before your first
-call after the healthcheck, then continue to step 2. A message batched with
-the healthcheck can't state them, because the values don't exist yet.
+call after the healthcheck, then continue to step 2.
 
 ## 2. Determine context from the current branch
 
@@ -146,11 +136,12 @@ re-run it):
   that decision is made and confirmed with the user, and it stops there if it
   lands on planned work. (You cut from `origin/<PRODUCTION_BRANCH>` either
   way, so standing here is permitted, never required.)
-- **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch**: **STOP.** Running
-  this skill from an existing issue branch is currently not supported. Tell the
-  user to checkout the base branch first.
-- **Any other branch name**: ask the user whether to treat it as a base branch
-  or abort. Do not guess. If they accept it, 5C makes that branch both
+- **`feature/<KEY>-...` or `hotfix/<KEY>-...` issue branch, or a detached
+  HEAD**: **STOP.** An issue branch isn't a supported starting point, and a
+  detached HEAD gives the new branches nothing nameable to be cut from. Tell
+  the user to checkout the base branch first.
+- **Any other branch name**: ask the user whether to treat it as a base
+  branch or abort. Do not guess; if they accept it, 5C makes it both
   `<BRANCH_FROM>` and `<BASE_BRANCH>`.
 
 ## 3. Investigate
@@ -172,11 +163,13 @@ Don't ask the user things you can find yourself.
 If anything material is ambiguous (scope, acceptance criteria, priority,
 or whether it's actually a defect vs. new work), ask concise, specific
 questions before creating anything. Don't proceed on guesses for anything
-that would change what you build.
+that would change what you build. Ask with `AskUserQuestion` where the options
+are closed (base-branch acceptance in step 2, the hotfix confirmation in 5C);
+use plain prose for genuinely open questions about scope.
 
 **Tie clarified acceptance criteria to the issue description.** Once you have
 the user's final answers, write them into the issue description at step 6A.1
-so the criteria are durable and visible to anyone picking up the work.
+so they're durable and visible to whoever picks the work up.
 
 ## 5. Decide the scope and issue type
 
@@ -200,8 +193,9 @@ There is no `Epic` level — `Task`, `Story`, and `Bug` are the top-level types 
 **C. Decide the base: planned work (default) or emergency hotfix**
 
 Nearly every run is planned work. Take the hotfix path **only when the user
-explicitly asks for an emergency production fix** — SDLC.md §4's flow, for a
-bug already live in production that can't wait for the next sprint release.
+explicitly asks for an emergency production fix** — the flow at
+https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §4, for a bug already
+live in production that can't wait for the next sprint release.
 Urgency words ("urgent", "asap", "this is blocking us") are not that signal;
 deliberate ones are ("hotfix", "emergency production fix", "we need to patch
 prod now"), and even then say which path you're taking and get a yes before
@@ -218,8 +212,7 @@ code that never sat in staging.
 If step 2 landed on "any other branch" and the user accepted it as the base,
 that branch is both `<BRANCH_FROM>` and `<BASE_BRANCH>` — what you cut from and
 what the PR targets — with `<PREFIX>` = `feature/` (it isn't
-`<PRODUCTION_BRANCH>`, so it isn't the hotfix flow). This is the only place
-those three tokens are set; step 6 uses them verbatim and resolves nothing.
+`<PRODUCTION_BRANCH>`, so it isn't the hotfix flow).
 
 The issue type still comes from B, where an emergency production fix lands on
 `Bug` like any other defect. Two entries in the hotfix column carry the weight:
@@ -229,20 +222,21 @@ The issue type still comes from B, where an emergency production fix lands on
   identically from either start state step 2 allows, and a stale local
   `<PRODUCTION_BRANCH>` can't poison the branch. Cutting from
   `<DEFAULT_BASE_BRANCH>` instead would carry every unreleased sprint feature
-  into a production release — the accident SDLC.md §4 exists to prevent, and
+  into a production release — the accident SDLC §4 exists to prevent, and
   it stays invisible until the release ships.
 - **Single-step overrides (A).** Splitting an emergency into parallel
   sub-tasks serializes the fix behind a stack of PRs. Work too big for one
-  branch isn't a patch (SDLC.md §5) and belongs in the planned flow — say so
+  branch isn't a patch (SDLC §5) and belongs in the planned flow — say so
   rather than provisioning a hotfix parent with children.
 
 The prefix is what makes the release machinery work, not just a label: CI
 resolves the version from the branch name, patch-bumping a `hotfix/*` merge
-into `<PRODUCTION_BRANCH>` (SDLC.md §5). A `feature/` branch merged there
+into `<PRODUCTION_BRANCH>` (SDLC §5). A `feature/` branch merged there
 matches nothing and is never tagged or released.
 
-If step 1's `production_branch` row read `unset`, stop and ask — don't invent
-a name for the branch you're about to point a PR at.
+**On the hotfix path only**, if step 1's `production_branch` row read
+`unset`, stop and ask — don't invent a name for the branch you're about to
+point a PR at. Planned work never reads it.
 
 If step 2 started you on `<PRODUCTION_BRANCH>` and this decision lands on
 **planned work**, stop and tell the user to checkout `<DEFAULT_BASE_BRANCH>`:
@@ -252,8 +246,7 @@ would branch tomorrow's feature off production.
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
 Because step 2 stopped you if you were already on an issue branch, you are
-always creating a brand-new top-level issue. Always provisioning a worktree for
-that issue makes the setup one unified flow regardless of the scope decision.
+always creating a brand-new top-level issue.
 
 Before any branch creation, refresh from the remote. Which of the two
 commands you need follows step 5C's `<BRANCH_FROM>`:
@@ -270,7 +263,10 @@ with no upstream configured (benign, common after a re-clone) and that is
 indistinguishable from real divergence; named, exit 1 means divergence only, so
 stop and ask rather than reset/rebase/`--set-upstream-to`-ing your way past it,
 which rewrites the user's history or git config to silence a warning that isn't
-yours to answer.
+yours to answer — with one residual case: a `<BRANCH_FROM>` that exists only
+locally exits 1 with `couldn't find remote ref`, which is not divergence. Read
+the message before you stop: that one means there is nothing to pull, so skip
+the pull and carry on.
 
 On the hotfix path **skip the pull**: you cut from the fetched
 `origin/<PRODUCTION_BRANCH>`, which the fetch already brought up to date.
@@ -289,7 +285,9 @@ ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_as
 ```
 
 1. Create the `Task`/`Story`/`Bug` → `<PARENT-KEY>` (if single-step, this is
-   your only issue), passing `--assignee "$ASSIGNEE_EMAIL"`.
+   your only issue), passing `--assignee "$ASSIGNEE_EMAIL"` and
+   `--desc-file <file>` holding the step 3 findings and the step 4 acceptance
+   criteria.
 2. Create the branch: `git branch <PREFIX><PARENT-KEY>-<slug> <BRANCH_FROM>`,
    then `git push -u origin <PREFIX><PARENT-KEY>-<slug>`. This is the
    `PARENT_BRANCH`.
@@ -331,10 +329,16 @@ should target and the worktree to run the executor in — that comment is what
 tells the executor where its PR's base is.
 
 *Single-step (top-level issue):*
-*"PR target branch: \<BASE_BRANCH>. Worktree: \<WORKTREES_DIR>/worktree-<PARENT-KEY>."*
+
+```
+PR target branch: <BASE_BRANCH>. Worktree: <WORKTREES_DIR>/worktree-<PARENT-KEY>.
+```
 
 *Multistep sub-task:*
-*"PR target branch: <PREFIX><PARENT-KEY>-<slug>. Worktree: \<WORKTREES_DIR>/worktree-<SUBTASK-KEY>."*
+
+```
+PR target branch: <PREFIX><PARENT-KEY>-<slug>. Worktree: <WORKTREES_DIR>/worktree-<SUBTASK-KEY>.
+```
 
 In the multistep path, after creating all sub-tasks, also post the
 single-step-format comment on the **parent issue** — its PR targets
@@ -355,10 +359,7 @@ comment posted before reporting back.
 - **Auth**: no login step — every call carries `--role assigner` and
   authenticates per-request on the assigner credential (`../_shared/jira-api-reference.md`
   §9). (Step 1's healthcheck already verified that this credential auths.)
-- **Project health check**: already verified by step 1's healthcheck. (If
-  you're picking up from a re-run and skipped step 1, run
-  `jira.sh --role assigner project exists <PROJECT-KEY>` first — exit 0 means
-  visible.)
+- **Project health check**: already verified by step 1's healthcheck.
 - **Create issue**:
   `jira.sh --role assigner issue create --project "<PROJECT-KEY>" --type "Task" --summary "..." --desc-file <file> --assignee "$ASSIGNEE_EMAIL"`
   Sub-tasks add `--type "Subtask"` and `--parent "<PARENT-KEY>"`.
@@ -375,13 +376,13 @@ comment posted before reporting back.
   paragraph per non-blank line, so markdown syntax (`##`, `-`) shows up
   literally; for real structure build an ADF `doc` and pass `--adf-file`
   instead (`../_shared/jira-api-reference.md` §11).
-- **Delete caveat**: `jira.sh issue delete <KEY> [--with-subtasks]` runs
-  unattended (no confirmation prompt), so still never auto-delete; hand back
-  the ready-to-paste command for the human to run.
-- Put investigation findings + acceptance criteria in the issue description
-  (`--desc-file <file>` for anything beyond a sentence).
-- Make sure the branch you're branching *from* is committed/pushed
-  before branching.
+- **Partial failure leaves orphans, and nothing detects them.** If a run dies
+  after creating some issues or branches, report exactly what got created
+  before you stop — don't retry from the top, which just makes a second set
+  under new keys. To undo, hand back
+  `jira.sh --role assigner issue delete <KEY> [--with-subtasks]` for the human
+  to run: it deletes unattended, with no confirmation prompt, so never run it
+  yourself.
 
 ## 7. Report back
 
@@ -401,8 +402,9 @@ verbatim. Then list:
   explicitly calling out the parent worktree
 
 On the hotfix path, add that the fix also has to reach
-`<DEFAULT_BASE_BRANCH>` after it lands on `<PRODUCTION_BRANCH>` (SDLC.md §4
-step 4) — automatically if the project's release workflow back-merges, by hand
+`<DEFAULT_BASE_BRANCH>` after it lands on `<PRODUCTION_BRANCH>`
+(https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §4 step 4) —
+automatically if the project's release workflow back-merges, by hand
 otherwise. Without it the bug returns with the next sprint release, and this
 report is the last point where anyone is thinking about it.
 
@@ -423,9 +425,5 @@ is derived from that worktree's own branch. Merging the parent branch back
 into its own base once all sub-tasks land is likewise out of scope for this
 skill.
 
-Reference: `../_shared/jira-api-reference.md` is the operational + REST
-reference — the `jira.sh` command surface, confirmed issue type names, and
-git/branch conventions this skill depends on. The
-`.jst/jira-sdlc-tools.env` (team-shared) and `.jst/jira-sdlc-tools.local.env`
-(machine-specific) files under the project root have this repo's specific
-values for every `<TOKEN>` used above.
+Reference: anything the steps don't spell out is in
+`../_shared/jira-api-reference.md`.
