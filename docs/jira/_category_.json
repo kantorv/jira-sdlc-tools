@@ -1,0 +1,9 @@
+{
+  "label": "Jira",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "slug": "/jira",
+    "description": "Statuses, board setup, and the bundled Jira REST client."
+  }
+}

@@ -1,5 +1,8 @@
 {
   "label": "Examples",
-  "position": 29,
-  "link": { "type": "generated-index", "description": "Real run reports produced by the three skills." }
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Real run reports produced by the three skills."
+  }
 }

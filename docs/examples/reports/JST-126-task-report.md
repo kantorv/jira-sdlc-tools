@@ -1,6 +1,7 @@
 ---
 slug: /examples/task-report
 sidebar_position: 2
+sidebar_label: Task report
 ---
 
 # Feature report — JST-126

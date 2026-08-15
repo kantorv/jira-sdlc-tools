@@ -1,6 +1,7 @@
 ---
 slug: /integrations/opencode
 sidebar_position: 9
+sidebar_label: OpenCode
 ---
 
 # OpenCode Integration (Native Claude Skills Spec)

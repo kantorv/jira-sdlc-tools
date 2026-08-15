@@ -1,6 +1,7 @@
 ---
 slug: /integrations/nvidia-nim
 sidebar_position: 8
+sidebar_label: NVIDIA NIM
 ---
 
 # NVIDIA NIM Integration (Native Claude Skills Spec, via fcc)
