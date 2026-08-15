@@ -1,0 +1,44 @@
+/**
+ * Site-wide CSS. Deliberately small: the classic theme's defaults are fine, and
+ * every override here is a thing to keep working across Docusaurus upgrades.
+ */
+
+:root {
+  --ifm-color-primary: #205081; /* Jira-ish blue, dark enough for AA on white */
+  --ifm-color-primary-dark: #1d488f;
+  --ifm-color-primary-darker: #1b446c;
+  --ifm-color-primary-darkest: #163859;
+  --ifm-color-primary-light: #235896;
+  --ifm-color-primary-lighter: #255c9c;
+  --ifm-color-primary-lightest: #2a68b0;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7fb2e5;
+  --ifm-color-primary-dark: #5f9fdd;
+  --ifm-color-primary-darker: #4f95da;
+  --ifm-color-primary-darkest: #2c7bcb;
+  --ifm-color-primary-light: #9fc5ed;
+  --ifm-color-primary-lighter: #afcff0;
+  --ifm-color-primary-lightest: #dfeaf9;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Several docs carry raw HTML <table>s (the phase diagrams, the config-variable
+   tables) that are wider than the content column. Let them scroll rather than
+   overflow the page. */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Mermaid diagrams are rendered client-side into an inline SVG that keeps its
+   intrinsic width; without this the wide lifecycle diagrams overflow instead of
+   scaling down. */
+.docusaurus-mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}

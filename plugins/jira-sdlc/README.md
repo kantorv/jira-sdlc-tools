@@ -1,6 +1,6 @@
 # jira-sdlc-tools
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/LICENSE)
 
 A Claude Code plugin with three skills — **`jira-task-assigner`**,
 **`jira-task-executor`**, and **`jira-task-reviewer`** — that turn a
@@ -19,7 +19,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Quick start](#quick-start)
 - [How the three skills relate](#how-the-three-skills-relate)
 - [Core concepts](#core-concepts)
-  - [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  - [Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Repository layout](#repository-layout)
@@ -57,7 +57,7 @@ A fourth skill sits outside that lifecycle and runs before it:
 
 | Skill | Runs | Does |
 | -- | -- | -- |
-| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](docs/STEP-BY-STEP.md)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
+| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
 
 ## Quick start
 
@@ -134,11 +134,11 @@ subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
 Worktrees isolate the *source tree*, but not anything the running app
 touches outside it (a database, cache, storage, or port) — see
-[Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+[Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own. A project records the answer it landed on in
-an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
-hook ([example](docs/examples/bootstrap.example.sh)); when it exists,
+an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
+hook ([example](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/examples/bootstrap.example.sh)); when it exists,
 `jira-task-executor` runs it in the worktree it's about to work in — once
 per worktree, automatically, fail-soft.
 
@@ -168,7 +168,7 @@ prefix, so one run is uniform.
 When you *explicitly* ask for an emergency production fix, the
 assigner instead cuts a single-step `hotfix/` branch from
 `origin/<PRODUCTION_BRANCH>` and points its PR at production
-([SDLC.md](docs/SDLC.md) §4) — urgency wording alone won't trigger it, and it
+([SDLC.md](https://kantorv.github.io/jira-sdlc-tools/docs/sdlc) §4) — urgency wording alone won't trigger it, and it
 confirms with you before creating anything. The cut comes from the fetched
 remote ref, so you can invoke it from either the base branch or the production
 branch; production is never required to be checked out.
@@ -549,11 +549,11 @@ Deliberately never automated, regardless of how routine a run looks:
   **running app instance**. Anything the app touches outside its source
   (a database, cache, storage, queue, or port) is shared across worktrees
   by default and can collide when several run at once — see
-  [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  [Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
   for the per-asset share-vs-isolate decision (and the Django database
   worked example). Projects that need per-worktree provisioning put it in
   an optional
-  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
+  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
   which the executor runs per worktree — but the plugin still ships
   nothing that provisions an instance for you; it only runs what your
   project wrote, and reports (never blocks on) a non-zero exit.
@@ -624,7 +624,7 @@ inside `jira-task-assigner` and `jira-task-reviewer` hardcode the
 
 ## The branching model this assumes
 
-[`docs/SDLC.md`](docs/SDLC.md) is the full branching and release policy
+[`docs/SDLC.md`](https://kantorv.github.io/jira-sdlc-tools/docs/sdlc) is the full branching and release policy
 these skills were written against: `main` / `development` /
 `feature/*` / `bugfix/*` / `chore/*` / `hotfix/*` / `release/*` branches, a two-week sprint
 cadence with a feature-freeze cut, an emergency hotfix flow that bypasses
@@ -652,7 +652,7 @@ concrete before/after scenario in the PR description goes a long way.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/LICENSE).
 
 ## Acknowledgments
 

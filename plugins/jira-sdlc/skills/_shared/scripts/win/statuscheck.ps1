@@ -333,7 +333,7 @@ if ($KeyArg) {
 # line (token redacted) rather than falling through to a generic "no session" —
 # so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
 # writes the OS-user-global gh config, overwriting the developer's own gh session
-# and not restoring it afterward — see plugins/jira-sdlc/docs/github/ (JST-126/145).
+# and not restoring it afterward — see docs/github/ (JST-126/145).
 $GhOk = $false
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
@@ -345,7 +345,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     if ($ghPat) { $ghPat = $ghPat.Trim().Trim('"').Trim("'") }
     if (-not $ghPat) {
         Add-Row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" `
-            "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and plugins/jira-sdlc/docs/github/), then $Rerun."
+            "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $Rerun."
     } else {
         # logout FIRST — see header; non-fatal if there's nothing to log out.
         & gh auth logout --hostname github.com 2>&1 | Out-Null
