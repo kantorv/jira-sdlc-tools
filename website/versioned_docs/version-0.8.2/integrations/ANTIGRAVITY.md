@@ -1,6 +1,7 @@
 ---
 slug: /integrations/antigravity
 sidebar_position: 4
+sidebar_label: Antigravity
 ---
 
 # Antigravity Integration (Agent Skills spec)

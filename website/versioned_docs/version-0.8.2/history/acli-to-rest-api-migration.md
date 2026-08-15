@@ -1,6 +1,7 @@
 ---
 slug: /acli-to-rest-api-migration
-sidebar_position: 20
+sidebar_position: 2
+sidebar_label: acli → REST migration
 ---
 
 # acli → REST API migration

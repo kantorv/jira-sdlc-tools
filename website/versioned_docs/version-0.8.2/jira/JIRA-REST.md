@@ -1,6 +1,7 @@
 ---
 slug: /jira-rest
-sidebar_position: 17
+sidebar_position: 4
+sidebar_label: REST client
 ---
 
 # JIRA-REST.md — detailed companion to the jira.sh call-site reference
@@ -119,7 +120,7 @@ For this project:
 | Task | `Task` |
 | Story | `Story` |
 | Bug | `Bug` |
-| Sub-task | `Subtask` |   ← **no hyphen** for this project (see §11)
+| Sub-task | `Subtask` |
 
 ⚠️ Note the **`Subtask`** spelling (no hyphen).
 

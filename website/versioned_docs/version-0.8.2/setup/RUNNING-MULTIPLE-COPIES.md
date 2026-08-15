@@ -1,6 +1,7 @@
 ---
 slug: /running-multiple-copies
-sidebar_position: 22
+sidebar_position: 5
+sidebar_label: Running multiple copies
 ---
 
 # Running multiple copies of the project across worktrees
@@ -28,8 +29,8 @@ It gets the issue key, worktree path, branch, parent branch and project
 key as `JST_*` environment variables; it must be idempotent, and a
 non-zero exit is reported but never blocks the run. There's a full
 example pair to start from at
-[`docs/examples/bootstrap.example.sh`](examples/bootstrap.example.sh) /
-[`bootstrap.example.ps1`](examples/bootstrap.example.ps1).
+[`docs/examples/bootstrap.example.sh`](../examples/bootstrap.example.sh) /
+[`bootstrap.example.ps1`](../examples/bootstrap.example.ps1).
 
 An earlier version of this convention was a markdown file the assigner
 relayed as prose. That failed in practice for a predictable reason: a

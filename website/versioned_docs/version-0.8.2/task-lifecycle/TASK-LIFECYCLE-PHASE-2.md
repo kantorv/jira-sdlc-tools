@@ -1,6 +1,7 @@
 ---
 slug: /task-lifecycle-phase-2
-sidebar_position: 6
+sidebar_position: 3
+sidebar_label: Phase 2 · Implement
 ---
 
 # Task Lifecycle — Phase 2: Implement

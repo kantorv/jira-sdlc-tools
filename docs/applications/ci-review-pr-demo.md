@@ -162,7 +162,7 @@ the diff before the review spends tokens on it. With Required reviewers left
 unchecked the job runs unattended, still correctly scoped to the environment's
 secrets. See [APPLICATIONS.md §3.1–3.2](APPLICATIONS.md) for the full
 two-gate convention. Setup is
-[APPLICATIONS.md §3](APPLICATIONS.md#3-production-environment-settings).
+[APPLICATIONS.md §3](APPLICATIONS.md#3-the-two-gate-convention-for-assistant-workflows).
 
 The gating job runs *before* the environment gate, deliberately: resolving the
 branch and confirming a PR exists is cheap and needs no secrets, so a comment

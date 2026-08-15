@@ -1,6 +1,7 @@
 ---
 slug: /state-transitions-with-github-actions
-sidebar_position: 15
+sidebar_position: 3
+sidebar_label: State transitions
 ---
 
 # Driving Jira state from GitHub Actions
@@ -21,7 +22,7 @@ They live in **this repo's own `.github/workflows/`**, not inside
 you won't get them by installing the plugin. Copy the three files out of this
 repository into your project.
 
-This is an alternative to [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md),
+This is an alternative to [GitHub for Jira](../setup/INSTALLING-GITHUB-FOR-JIRA.md),
 not a companion to it. The app is less setup and covers more surface; these
 workflows win when you need the exact status names, sources and guards to be
 yours, or you can't install a Marketplace app in the org. Running both means
@@ -153,7 +154,7 @@ TARGET="Shipped"
 
 Keep them consistent with the `STATUS_*` values in your `jira-sdlc-tools.env`
 — the skills read that file, these workflows don't, and the two only agree
-because you make them agree. [JIRA-STATES.md](JIRA-STATES.md) is the map of
+because you make them agree. [JIRA-STATES.md](../jira/JIRA-STATES.md) is the map of
 which one moves a card when.
 
 ### 5. Merge to the default branch before expecting `create` to fire
@@ -196,7 +197,7 @@ first, because it isn't uniform:
   skips. Decline that prompt and the merge workflow is what closes the card.
 
 The full picture of who moves what, including the human and Jira-automation
-rows, is in [JIRA-STATES.md](JIRA-STATES.md).
+rows, is in [JIRA-STATES.md](../jira/JIRA-STATES.md).
 
 ## Things that will bite you
 
@@ -221,9 +222,9 @@ rows, is in [JIRA-STATES.md](JIRA-STATES.md).
 
 ## Related
 
-- [JIRA-STATES.md](JIRA-STATES.md) — who moves a card where, all actors
-- [CI.md](CI.md) — every workflow in this repo, including the release path
-- [INSTALLING-GITHUB-FOR-JIRA.md](INSTALLING-GITHUB-FOR-JIRA.md) — the app
+- [JIRA-STATES.md](../jira/JIRA-STATES.md) — who moves a card where, all actors
+- [CI.md](../process/CI.md) — every workflow in this repo, including the release path
+- [INSTALLING-GITHUB-FOR-JIRA.md](../setup/INSTALLING-GITHUB-FOR-JIRA.md) — the app
   alternative to these workflows
 - [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
   §5 — token types and the scope trap, from the skills' side

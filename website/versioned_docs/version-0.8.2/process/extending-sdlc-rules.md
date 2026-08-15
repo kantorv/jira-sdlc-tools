@@ -1,6 +1,7 @@
 ---
 slug: /extending-sdlc-rules
-sidebar_position: 23
+sidebar_position: 3
+sidebar_label: Extending SDLC rules
 ---
 
 # Extending the Gitflow / SDLC rules
@@ -9,7 +10,7 @@ How to change what the skills consider a legal branch, base, or flow —
 without leaving half the repo believing the old rule.
 
 This is a companion to
-[skill-development-considerations.md](skill-development-considerations.md)
+[skill-development-considerations.md](../contributing/skill-development-considerations.md)
 (which covers *how to write a skill*) and to [SDLC.md](SDLC.md) (which *is*
 the policy). This document covers the mechanics of changing that policy once
 it already has six layers of machinery pointing at it.
@@ -182,7 +183,7 @@ split.
 **b. A new column in the decision table (L4).** Assigner step 5C went from a
 two-path table (planned work / hotfix) to four paths. Note it stayed a
 *table*: closed decision spaces belong in tables, per
-[skill-development-considerations.md](skill-development-considerations.md).
+[skill-development-considerations.md](../contributing/skill-development-considerations.md).
 
 **c. An invariant that quietly stops holding (L2).** This is the signature of
 a Class B change, and the thing to hunt for deliberately.

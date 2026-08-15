@@ -1,6 +1,7 @@
 ---
 slug: /task-lifecycle-phase-3
-sidebar_position: 7
+sidebar_position: 4
+sidebar_label: Phase 3 · Review
 ---
 
 # Task Lifecycle — Phase 3: Review & aggregate approval

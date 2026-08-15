@@ -1,6 +1,7 @@
 ---
 slug: /step-by-step
 sidebar_position: 2
+sidebar_label: Step by step
 ---
 
 # Step by step
@@ -27,7 +28,7 @@ before moving to the next.
    integration — but it is **not** required.
 3. **Generate your tokens:** a **granular** `GITHUB_PAT`, and a **classic**
    Jira API token for each of the three roles — assigner, executor, reviewer
-   (see the note in [SECURITY.md](SECURITY.md) on why the Jira tokens must be
+   (see the note in [SECURITY.md](../process/SECURITY.md) on why the Jira tokens must be
    classic).
 4. **Define your main repository and worktrees dir in the settings** — an
    absolute path, never a relative one:
@@ -86,7 +87,7 @@ it. Every variable above is described in
 ### 2.1 The branching model
 
 The skills are written against **Gitflow** — they don't invent branch names,
-they follow the policy in [SDLC.md](SDLC.md). The five branches that matter:
+they follow the policy in [SDLC.md](../process/SDLC.md). The five branches that matter:
 
 | Branch | Source | Merges to | Purpose |
 | -- | -- | -- | -- |
@@ -108,7 +109,7 @@ isn't a supported configuration: point `DEFAULT_BASE_BRANCH` and
 `PRODUCTION_BRANCH` at the same branch and every feature PR targets production,
 the assigner's hotfix path becomes indistinguishable from its planned one, and
 the release workflows lose the branch name they key the version off ([SDLC.md
-§5](SDLC.md)). The healthcheck's `branch_pair` row FAILs on it. The names are
+§5](../process/SDLC.md)). The healthcheck's `branch_pair` row FAILs on it. The names are
 yours — `master`/`develop` or anything else works — but there have to be two.
 
 If your repo only has `main`, create the base branch off it once:

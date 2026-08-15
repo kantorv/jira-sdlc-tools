@@ -1,6 +1,7 @@
 ---
 slug: /installation
 sidebar_position: 1
+sidebar_label: Installation
 ---
 
 # Installation
@@ -14,8 +15,9 @@ sidebar_position: 1
 ## What belongs here
 
 - The three loading routes in full — see
-  [integrations/CLAUDECODE.md](integrations/CLAUDECODE.md) for the Claude Code
-  ones, and [integrations/](integrations) for every other platform.
+  [integrations/CLAUDECODE.md](../integrations/CLAUDECODE.md) for the Claude Code
+  ones, and [Integrations](https://kantorv.github.io/jira-sdlc-tools/docs/integrations)
+  for every other platform.
 - Prerequisites and tool installation (`git`, `gh`, plus `curl` + `jq` for
   the Jira REST client), per OS.
 - Both env files and every variable in them — currently described in
@@ -26,5 +28,5 @@ sidebar_position: 1
   are in
   [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
   §5. For `gh`, see
-  [github/GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
+  [github/GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md).
 - The healthcheck, and how to read a failing row.

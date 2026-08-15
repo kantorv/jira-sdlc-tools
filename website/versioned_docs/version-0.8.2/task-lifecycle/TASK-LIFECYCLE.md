@@ -1,6 +1,7 @@
 ---
 slug: /task-lifecycle
-sidebar_position: 4
+sidebar_position: 1
+sidebar_label: Overview
 ---
 
 # Task lifecycle
@@ -63,4 +64,4 @@ so the 260px width survives. -->
 
 | **Phase 1 · Plan**<br />`jira-task-assigner` | **Phase 2 · Implement**<br />`jira-task-executor` | **Phase 3 · Review & aggregate approval**<br />`jira-task-reviewer` |
 | :-: | :-: | :-: |
-| [Full diagram & notes →](TASK-LIFECYCLE-PHASE-1.md)<br /><br />[<img src="assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-1.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-2.md)<br /><br />[<img src="assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-2.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-3.md)<br /><br />[<img src="assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-3.md) |
+| [Full diagram & notes →](TASK-LIFECYCLE-PHASE-1.md)<br /><br />[<img src="../assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-1.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-2.md)<br /><br />[<img src="../assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-2.md) | [Full diagram & notes →](TASK-LIFECYCLE-PHASE-3.md)<br /><br />[<img src="../assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260">](TASK-LIFECYCLE-PHASE-3.md) |

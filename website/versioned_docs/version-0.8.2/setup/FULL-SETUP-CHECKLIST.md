@@ -1,6 +1,7 @@
 ---
 slug: /full-setup-checklist
 sidebar_position: 3
+sidebar_label: Full setup checklist
 ---
 
 # Full setup checklist
@@ -25,10 +26,10 @@ of helpers the bundled scripts shell out to.
 - [ ] **`gh`** (GitHub CLI) — opens and updates PRs. Authenticates with
   `GITHUB_PAT_TOKEN` from your local env file.
   [cli.github.com](https://cli.github.com/) ·
-  [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md)
+  [GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md)
 - [ ] **`curl` / `Invoke-RestMethod`** — issues, comments, transitions (via `jira.sh` / `jira.ps1`).
   Authenticates per-request with the calling role's `JIRA_<ROLE>_TOKEN`.
-  [JIRA-REST.md](JIRA-REST.md)
+  [JIRA-REST.md](../jira/JIRA-REST.md)
 
 Helper tools — which ones depends on your OS:
 
@@ -77,13 +78,13 @@ git --version; gh --version; $PSVersionTable.PSVersion
   `hotfix/<KEY>-<slug>` branches, PRs into the base branch, and releases
   merging into production. If your repo uses trunk-based development with
   no long-lived integration branch, decide now whether to add one — the
-  full policy is in [SDLC.md](SDLC.md).
+  full policy is in [SDLC.md](../process/SDLC.md).
 - [ ] **You have a `GITHUB_PAT_TOKEN`.** A fine-grained PAT with **Contents →
   Read and write** and **Pull requests → Read and write** on the target
   repo (Metadata → Read-only is added for you). It logs `gh` in at session
   start; without it the `gh_auth` healthcheck row FAILs and the run halts.
   Where to click:
-  [GH-PAT-SESSION-LOGIN.md](github/GH-PAT-SESSION-LOGIN.md).
+  [GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md).
 - [ ] **…and the PAT can actually reach *this* repo.** A fine-grained token
   scoped to *only selected repositories* logs in green while 404-ing on a
   repo missing from that list — 404, not 403, so it reads like a typo — and
@@ -112,7 +113,7 @@ git --version; gh --version; $PSVersionTable.PSVersion
 - [ ] **You have a Jira API token.** Create it at
   [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
   Use a **plain API token** — Basic auth on the `*.atlassian.net` domain (which `jira.sh` uses) rejects scoped tokens. If you must use a scoped token via the REST gateway, see
-  [JIRA-REST.md](JIRA-REST.md) for the required scopes and URL changes.
+  [JIRA-REST.md](../jira/JIRA-REST.md) for the required scopes and URL changes.
 - [ ] **Per-role Jira accounts (required)** — an email **and** a token for each
   of the assigner, executor and reviewer, so the board shows who did what.
   There is no default account behind them; point all three pairs at the
@@ -199,7 +200,7 @@ it confirms both logins, your settings, and the platform in one pass. The
 settings it reads are documented in
 [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md); what it does to log
 `gh` in, and why that session lasts the whole conversation, is in
-[What the healthcheck does](github/GH-PAT-SESSION-LOGIN.md#what-the-healthcheck-does).
+[What the healthcheck does](../github/GH-PAT-SESSION-LOGIN.md#what-the-healthcheck-does).
 
 **Linux / macOS** (bash) — read it first:
 [`statuscheck.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/scripts/posix/statuscheck.sh)

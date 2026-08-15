@@ -1,6 +1,7 @@
 ---
 slug: /task-lifecycle-phase-1
-sidebar_position: 5
+sidebar_position: 2
+sidebar_label: Phase 1 · Plan
 ---
 
 # Task Lifecycle — Phase 1: Plan

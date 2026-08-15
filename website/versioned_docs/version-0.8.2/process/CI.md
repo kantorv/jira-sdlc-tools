@@ -1,6 +1,7 @@
 ---
 slug: /ci
-sidebar_position: 9
+sidebar_position: 2
+sidebar_label: CI / GitHub Actions
 ---
 
 > **Note on this document:** this describes the GitHub Actions workflows in
@@ -60,7 +61,7 @@ built is the documentation site in `website/`.
   **guarded** to only advance from the expected source status, never regress.
   To reuse these three in your own project — secrets, status-name edits, and
   how they interleave with the skills — see
-  [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
+  [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
 ### Secrets used
 
