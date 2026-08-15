@@ -1,0 +1,44 @@
+---
+slug: /integrations/kilo
+sidebar_position: 6
+---
+
+# Kilo Code Integration (Native Claude Skills Spec)
+
+Uses the native Claude skills specification.
+
+## Prerequisites
+
+- Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md) §9)
+- `gh` (GitHub CLI) authenticated
+- `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` — see [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md)
+
+## Install / Wire-up Steps
+
+Kilo Code loads Claude-spec skills natively by pointing at a skills path in `kilo.jsonc` at your project root:
+
+1. Create `kilo.jsonc` at your project root:
+   ```json
+   {
+     "$schema": "https://app.kilo.ai/config.json",
+     "skills": {
+       "paths": ["</PATH>/plugins/jira-sdlc/skills"]
+     }
+   }
+   ```
+2. Replace `</PATH>` with the absolute path where this plugin lives on your machine:
+   - Installed via marketplace: `~/.claude/plugins/jira-sdlc/skills`
+   - Local clone: the absolute path to `plugins/jira-sdlc/skills`
+3. Kilo automatically loads skills from the configured paths.
+
+## Invoking the Three Skills
+
+Call each skill using the slash-command format:
+
+- `/jira-sdlc:jira-task-assigner` — break down a task into Jira issues with branches
+- `/jira-sdlc:jira-task-executor` — implement an issue from its worktree
+- `/jira-sdlc:jira-task-reviewer` — review sub-task PRs from the parent worktree
+
+## Platform-Specific Caveats
+
+- `disable-model-invocation: true` is honoured by Kilo Code. Skills with this setting cannot be invoked by mentioning them in chat messages; they must be explicitly called via slash-command.
