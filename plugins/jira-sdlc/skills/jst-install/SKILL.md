@@ -1,12 +1,12 @@
 ---
 name: jst-install
-description: Guided first-time setup of the jira-sdlc plugin in your own project. Walks the four sections of docs/STEP-BY-STEP.md in order — local tooling, GitHub repo preparation, Jira board preparation, healthcheck — and verifies each one with the bundled statuscheck script before moving to the next, so a missing `development` branch or a misspelled status name surfaces at setup instead of mid-run. Writes the team-shared `.jst/jira-sdlc-tools.env` for you; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env` — it tells you which file to copy and which keys to fill in by hand. Run it once per project, from the project root, before the first `jira-task-assigner` run.
+description: Guided first-time setup of the jira-sdlc plugin in your own project. Walks the four sections of https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step in order — local tooling, GitHub repo preparation, Jira board preparation, healthcheck — and verifies each one with the bundled statuscheck script before moving to the next, so a missing `development` branch or a misspelled status name surfaces at setup instead of mid-run. Writes the team-shared `.jst/jira-sdlc-tools.env` for you; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env` — it tells you which file to copy and which keys to fill in by hand. Run it once per project, from the project root, before the first `jira-task-assigner` run.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion
 ---
 
 You are walking a new user through first-time setup of this plugin **in their
-own project**. Everything below follows `../../docs/STEP-BY-STEP.md` — same four
+own project**. Everything below follows https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step — same four
 sections, same order — with a verification gate between each, which is the
 whole point: the prose docs let someone work the whole list and only discover at
 the first real run that the board has no `In Review` column.
@@ -18,6 +18,7 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 `.jst/jira-sdlc-tools.local.env` is never touched once it exists.
 
 **Conventions used below:**
+
 - Run from the **project root of the repo the user will build features in** —
   not a clone of this toolkit itself, which is the easy mistake: the skills read
   config from *your project's* root. If `git remote get-url origin` names
@@ -42,10 +43,10 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 - **`<TOKEN>`s** (`<PROJECT-KEY>`, `<DEFAULT_BASE_BRANCH>`, `<STATUS_*>`, …)
   are what you are *collecting* here; they don't exist yet. Every one of them
   is described in `../_shared/project-config.md`.
-- **`../../docs/…` paths** point inside the plugin, and a drop-in install that
-  copied only `skills/` won't have them. They're reading material rather than
-  inputs, so nothing breaks — just cite the GitHub copy under
-  `kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/docs/` instead.
+- **Doc references are published-site URLs** under `https://kantorv.github.io/jira-sdlc-tools/docs/`, never plugin-relative
+  paths: the docs live at the repo root and a marketplace install copies only the
+  plugin, so nothing here can reach them on disk. They're reading material rather
+  than inputs — cite the URL and carry on.
 - **Ask, don't assume.** A project key, a status name and a branch name are
   facts about the user's Jira and GitHub, not defaults you can derive. Use
   AskUserQuestion, offering the documented default as one option — and where
@@ -54,7 +55,7 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 ## The two env files — the rule that shapes this whole skill
 
 | file | what's in it | what you may do |
-|---|---|---|
+| -- | -- | -- |
 | `.jst/jira-sdlc-tools.env` | project key, branch names, the four status names — **committed, secret-free** | **Write it directly.** Create it, edit it, read it back freely |
 | `.jst/jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, **plus three Jira role tokens and a GitHub PAT** | **Never open it and never edit it.** Copy the `.example` into place when it's absent, then hand the user the key list and wait |
 
@@ -93,7 +94,7 @@ Check only the rows that section owns; a later section's rows are still red on
 purpose, and saying so keeps the user from chasing them:
 
 | section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
-|---|---|---|
+| -- | -- | -- |
 | 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
 | 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir` | `jira_auth`, `jira_project` |
 | 3 · Jira | `env_config`, `jira_auth`, `jira_project` | — |
@@ -104,7 +105,7 @@ purpose, and saying so keeps the user from chasing them:
 Ignore them here — a main checkout on the base branch with no issue key is
 exactly right for this skill.
 
----
+______________________________________________________________________
 
 ## Section 1 · Local tooling and the `.jst/` scaffold
 
@@ -117,12 +118,14 @@ for Jira: the plugin ships its own REST client, `jira.sh` / `jira.ps1`.
 ```bash
 git --version && gh --version && jq --version && python3 --version
 ```
+
 ```powershell
 git --version; gh --version; $PSVersionTable.PSVersion
 ```
+
 `&&` stops at the first missing tool and names it; PowerShell's `;` runs all of
 them, so scan for the one that errored. Report what's missing with its install
-URL (`../../docs/FULL-SETUP-CHECKLIST.md` § *Your PC* has them) and stop until
+URL (https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist § *Your PC* has them) and stop until
 the user has it — the later sections all shell out to these.
 
 Then check the prerequisite this skill **cannot create for them** — a git repo
@@ -132,8 +135,7 @@ with a GitHub remote attached:
 git rev-parse --show-toplevel && git remote get-url origin
 ```
 
-Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir
--p .jst`, the `.jst/.gitignore` write and the template copy all succeed happily in
+Either one failing is a **stop**, and it has to happen here, before 1b: `mkdir -p .jst`, the `.jst/.gitignore` write and the template copy all succeed happily in
 whatever directory the user is standing in, and they'd only find out at 1d —
 with a stray half-scaffold left behind. Say plainly what's missing: a GitHub
 repository, created and then cloned (or `git init` plus
@@ -180,7 +182,7 @@ both install modes.
 - `JIRA_ACCOUNT_URL` — their Cloud site, `your-site.atlassian.net`, no scheme
 - `GITHUB_PAT_TOKEN` — a fine-grained PAT with **Contents: read/write** and
   **Pull requests: read/write** on this repo. Where to click:
-  `../../docs/github/GH-PAT-SESSION-LOGIN.md`
+  https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login
 - the six per-role Jira variables —
   `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}`, tokens created at
   [id.atlassian.com → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
@@ -200,11 +202,11 @@ sections are the real verification.
 **1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local` and
 `env_local_ignored` OK; everything else red for now.
 
----
+______________________________________________________________________
 
 ## Section 2 · GitHub repository preparation
 
-The skills assume Gitflow (`../../docs/SDLC.md`): they never invent branch
+The skills assume Gitflow (https://kantorv.github.io/jira-sdlc-tools/docs/sdlc): they never invent branch
 names, they follow the policy. Two **distinct** long-lived branches are yours to
 create — `PRODUCTION_BRANCH` (releases land here, default `main`) and
 `DEFAULT_BASE_BRANCH` (feature work branches from and merges back into it,
@@ -216,7 +218,7 @@ offer one: collapse the pair and the assigner's planned path and its hotfix path
 (step 5C) resolve to the same branch — every feature PR targets production, and
 the emergency route stops being distinguishable from ordinary work — while the
 release workflows, which key the version off `release/sprint-<X.Y.Z>` and
-`hotfix/*` branch names (`../../docs/SDLC.md` §5), have nothing left to key on.
+`hotfix/*` branch names (https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §5), have nothing left to key on.
 When a repo has only `main`, the open question is what the *second* branch is
 called, never whether to have one. Ask-don't-assume still holds for the names —
 `development` is the documented default, `develop`/`staging`/anything else is
@@ -280,7 +282,7 @@ requests at read/write, and expect org-owned repos to need admin approval.
 `branch_pair` OK — it FAILs if those two names are equal — and `worktrees_dir`
 the directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
 
----
+______________________________________________________________________
 
 ## Section 3 · Jira board preparation
 
@@ -339,7 +341,7 @@ longer be chosen. Offer the closest documented default *first*, as an ordering
 hint — never as the answer:
 
 | variable | documented default | who moves the card there |
-|---|---|---|
+| -- | -- | -- |
 | `STATUS_TODO` | `To Do` | no skill does — it names where new issues land, and it's the only status the optional branch-create Action will advance *from* |
 | `STATUS_IN_PROGRESS` | `In Progress` | `jira-task-executor`, when it starts |
 | `STATUS_IN_REVIEW` | `In Review` | `jira-task-executor`, when its PR opens |
@@ -431,7 +433,7 @@ unverified and move on — that's a warning, not a blocker.
 **3e. Gate.** Run the gate. `env_config`, `jira_auth` and `jira_project`
 should all be OK now.
 
----
+______________________________________________________________________
 
 ## Section 4 · Full healthcheck
 
@@ -500,7 +502,7 @@ rule inside `.jst/` in the first place: `git add .jst` then stages
 Copy across only the env file and that worktree ends up holding three Jira role
 tokens and a GitHub PAT with nothing ignoring them.
 
-Reference: `../../docs/STEP-BY-STEP.md` (the prose walkthrough this skill
-follows), `../../docs/FULL-SETUP-CHECKLIST.md` (the same ground as a tickable
+Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step (the prose walkthrough this skill
+follows), https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist (the same ground as a tickable
 list, with each item's "how to check it"), `../_shared/project-config.md`
-(every variable in both env files), `../../docs/SDLC.md` (the branching policy).
+(every variable in both env files), https://kantorv.github.io/jira-sdlc-tools/docs/sdlc (the branching policy).

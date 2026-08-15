@@ -10,6 +10,7 @@ Run this from inside the issue's own worktree — no issue-key argument;
 the issue key is derived from the current branch (see Discovery below).
 
 **Conventions used below:**
+
 - `<KEY>` = the Jira issue key derived from the current branch
   (`feature/<KEY>-<slug>` / `hotfix/<KEY>-<slug>`), read from the
   Discovery healthcheck's `issue_key` row below — the branch is the sole
@@ -74,8 +75,7 @@ exit codes). Pick the branch from your own runtime *before the first call* —
 you know your OS without running anything — and use it for every script
 here, credential block included; the blocks below are the POSIX form.
 Statuscheck's `platform` row only *confirms* that choice afterwards, so it
-can't decide how statuscheck itself is run. It takes a required `--role
-executor` (no default credential) and no issue-key argument.
+can't decide how statuscheck itself is run. It takes a required `--role executor` (no default credential) and no issue-key argument.
 
 **Get local credentials and confirm you own the issue — run these FIRST,
 before the healthcheck.** Both are idempotent and take no decisions of their
@@ -91,8 +91,7 @@ bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets loca
 bash "$S/check_assignee.sh" --role executor  || exit 1   # 2. <KEY> must be assigned to the executor
 ```
 
-(`check_assignee.sh` resolves the executor identity via `jira.sh --role
-executor whoami` and takes the key from the branch, as the healthcheck does;
+(`check_assignee.sh` resolves the executor identity via `jira.sh --role executor whoami` and takes the key from the branch, as the healthcheck does;
 pass a key explicitly only when running outside the issue's worktree.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this skill
@@ -125,7 +124,7 @@ conditions, decided in the rows themselves — there is no second reading
 note below**:
 
 | row | what it verifies / gathers |
-|---|---|
+| -- | -- |
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Anything but a linked worktree → stop**: this skill runs only from an issue's own worktree. `cd` into the one `jira-task-assigner` created (`worktree-<KEY>`) and rerun |
 | `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **Anything but an issue branch → stop** (same remedy) — sitting on `<DEFAULT_BASE_BRANCH>` means you're not in an issue's worktree |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run |
@@ -159,180 +158,191 @@ role-specific rows read — `worktree`, `branch`, `issue_key`,
 the values don't exist yet). Then continue to step 1, carrying the INFO rows
 forward as context.
 
-1. **Run the project's bootstrap hook, then fetch the issue.**
+01. **Run the project's bootstrap hook, then fetch the issue.**
 
-   **1a. Bootstrap the worktree** — only if Discovery's `bootstrap` row read
-   *present*. A worktree is a source tree, not a running instance; this hook is
-   how a project closes that gap (clone the database, pick per-instance ports,
-   install deps). Run it from the worktree root, **automatically — no
-   confirmation prompt** — passing the `JST_*` contract
-   (`../_shared/project-config.md` § *the optional worktree hook* defines every
-   variable):
-   ```bash
-   cd "$(git rev-parse --show-toplevel)"
-   JST_ISSUE_KEY=<KEY> JST_WORKTREE_DIR="$PWD" JST_BRANCH="$(git branch --show-current)" \
-   JST_PARENT_BRANCH="<parent_branch row, empty when unset>" JST_PROJECT_KEY="<PROJECT-KEY>" \
-     bash .jst/bootstrap.sh; echo "bootstrap exit: $?"
-   ```
-   (Windows: set the same five as `$env:JST_*`, then
-   `pwsh -NoProfile -File .jst\bootstrap.ps1`.)
-   **Fail-soft, always**: report a non-zero exit and its output in your final
-   report, then carry on with the issue — a broken hook is the project's
-   environment problem, not a reason to abandon work the executor can still do.
-   Absent row → say nothing and go straight to 1b. Re-runs re-invoke the hook
-   by design; tolerating that is the script's job, not yours.
+    **1a. Bootstrap the worktree** — only if Discovery's `bootstrap` row read
+    *present*. A worktree is a source tree, not a running instance; this hook is
+    how a project closes that gap (clone the database, pick per-instance ports,
+    install deps). Run it from the worktree root, **automatically — no
+    confirmation prompt** — passing the `JST_*` contract
+    (`../_shared/project-config.md` § *the optional worktree hook* defines every
+    variable):
 
-   **1b. Fetch the issue** —
-   ```bash
-   jira.sh --role executor issue view <KEY> \
-     --fields 'summary,description,issuetype,status,parent,subtasks,comment'
-   ```
-   Reads print raw JSON on stdout. The field list's source of truth is
-   `../_shared/jira-api-reference.md` §10 — resolve there rather than here if
-   the two ever disagree — and it's sized to everything this skill reads,
-   including `comment` (scanned in step 4). Pull out: summary, description,
-   issue type, current status, and `fields.parent.key` (if any) — store that as
-   `PARENT_KEY` for step 10's resolver.
-   - Also check `fields.subtasks` (§10's canonical list names it explicitly,
-     so the narrowed payload keeps it):
-     - **Non-empty** → `<KEY>` is a parent: a merge target for its
-       sub-tasks' PRs, not an implementation surface. Implementing here
-       shadows the separate PRs those sub-tasks target at this same branch
-       and breaks the "every leaf gets its own PR" invariant. Confirm with
-       the user before continuing — not on a "this one's small" call.
-     - **Empty** → `<KEY>` is a leaf: a sub-task, or a single-step top-level
-       issue the assigner provisioned for direct implementation. Proceed.
+    ```bash
+    cd "$(git rev-parse --show-toplevel)"
+    JST_ISSUE_KEY=<KEY> JST_WORKTREE_DIR="$PWD" JST_BRANCH="$(git branch --show-current)" \
+    JST_PARENT_BRANCH="<parent_branch row, empty when unset>" JST_PROJECT_KEY="<PROJECT-KEY>" \
+      bash .jst/bootstrap.sh; echo "bootstrap exit: $?"
+    ```
 
-2. **Bring the worktree branch current.** Discovery already guaranteed you're
-   on `<KEY>`'s own issue branch inside its own linked worktree, so there is
-   nothing to locate or create here. (An issue with no branch/worktree yet is
-   provisioned *before* this skill runs, by `../_shared/jira-api-reference.md`
-   §12's no-assigner recipe — which also settles the two unrelated senses of
-   "bootstrap" that git-level setup and step 1a's runtime hook trade on.)
-   What the branch *can* be is **stale**: the branch it was created from may
-   have moved since — most commonly a sibling sub-task's PR merging into the
-   shared parent. Read the parent from Discovery's `parent_branch` row rather
-   than re-running the `git config` lookup.
-   - **Set** → merge the parent's *remote* state — merging the local ref
-     would silently miss anything that landed on origin after this
-     worktree was created. A never-pushed parent has no remote ref, and
-     `git merge origin/…` then fails with an unknown-revision error that
-     reads like a broken repo, so decide which ref to merge rather than
-     guessing:
-     ```bash
-     git fetch origin
-     if git rev-parse --verify --quiet origin/<parent-branch> >/dev/null; then
-       git merge origin/<parent-branch> --no-edit
-     else
-       git merge <parent-branch> --no-edit   # never pushed — no remote ref to merge
-     fi
-     ```
-     If the merge conflicts, stop and ask the user to resolve — don't
-     attempt to resolve merge conflicts automatically.
-   - **Unset** (the branch predates the parentbranch convention, or
-     wasn't created by the assigner) → skip the merge, but flag in the
-     final report that you proceeded on a possibly-stale worktree branch.
-     Don't stop to ask which branch the PR should target — step 10's
-     resolver handles an unset parentbranch (Jira comment, then env
-     default).
+    (Windows: set the same five as `$env:JST_*`, then
+    `pwsh -NoProfile -File .jst\bootstrap.ps1`.)
+    **Fail-soft, always**: report a non-zero exit and its output in your final
+    report, then carry on with the issue — a broken hook is the project's
+    environment problem, not a reason to abandon work the executor can still do.
+    Absent row → say nothing and go straight to 1b. Re-runs re-invoke the hook
+    by design; tolerating that is the script's job, not yours.
 
-3. **Transition the issue** to in-progress:
-   `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_PROGRESS>"`
-   (transition by target status *name*; `jira.sh` resolves it to the id).
+    **1b. Fetch the issue** —
 
-4. **Investigate** — read the affected code (Grep/Read/Glob) before
-   writing anything. Understand existing patterns, not just the issue text.
-   Read the issue's prior comments first — step 1's fetch already includes
-   `fields.comment.comments` — so you inherit earlier context instead of
-   rediscovering it cold, in this order of authority:
-   - **A reviewer verdict whose body starts `CHANGES REQUESTED — `**, if
-     present. On the re-run after a reject (step 11) it outranks everything
-     else here: its per-dimension `file:line` findings *are* the
-     specification for this pass, and a run that ignores them gets rejected
-     again. That prefix is the reviewer's own detection contract, kept
-     verbatim, so matching on it is stable.
-   - **The assigner's `Assignment report`** — how this issue was scoped.
-   - **Any `Task memory (jira-task-executor)` notes** an earlier session
-     left — on a re-run, how you avoid repeating its dead ends.
-   - **The previous run report** (step 12), which deliberately carries no
-     marker: find it by position — the most recent long comment that isn't
-     one of the above — not by grepping a prefix.
+    ```bash
+    jira.sh --role executor issue view <KEY> \
+      --fields 'summary,description,issuetype,status,parent,subtasks,comment'
+    ```
 
-5. **Clarify** — if the issue's description/acceptance criteria leaves
-   something materially ambiguous (an implementation choice that would
-   change the result), ask the user before writing code. Don't guess on
-   anything that matters. Step 3's transition stands while you wait —
-   someone *has* picked the issue up — so don't roll it back to
-   `<STATUS_TODO>` even if the answer never comes.
+    Reads print raw JSON on stdout. The field list's source of truth is
+    `../_shared/jira-api-reference.md` §10 — resolve there rather than here if
+    the two ever disagree — and it's sized to everything this skill reads,
+    including `comment` (scanned in step 4). Pull out: summary, description,
+    issue type, current status, and `fields.parent.key` (if any) — store that as
+    `PARENT_KEY` for step 10's resolver.
 
-6. **Implement** the change.
-   - **Record task memory as you go — but only when it's worth preserving.**
-     Post a `Task memory (jira-task-executor)` comment (per the Task-memory
-     preamble bullet) when you learn something a later session would
-     otherwise rediscover: a finding, a design decision *and its rationale*,
-     a gotcha in already-touched code, recovery context. This is
-     task-recovery memory, **not** running commentary — skip the trivial and
-     self-evident, and one note at the end is enough if it captures
-     everything worth keeping. The first can surface as early as step 4.
+    - Also check `fields.subtasks` (§10's canonical list names it explicitly,
+      so the narrowed payload keeps it):
+      - **Non-empty** → `<KEY>` is a parent: a merge target for its
+        sub-tasks' PRs, not an implementation surface. Implementing here
+        shadows the separate PRs those sub-tasks target at this same branch
+        and breaks the "every leaf gets its own PR" invariant. Confirm with
+        the user before continuing — not on a "this one's small" call.
+      - **Empty** → `<KEY>` is a leaf: a sub-task, or a single-step top-level
+        issue the assigner provisioned for direct implementation. Proceed.
 
-7. **Test before committing:**
+02. **Bring the worktree branch current.** Discovery already guaranteed you're
+    on `<KEY>`'s own issue branch inside its own linked worktree, so there is
+    nothing to locate or create here. (An issue with no branch/worktree yet is
+    provisioned *before* this skill runs, by `../_shared/jira-api-reference.md`
+    §12's no-assigner recipe — which also settles the two unrelated senses of
+    "bootstrap" that git-level setup and step 1a's runtime hook trade on.)
+    What the branch *can* be is **stale**: the branch it was created from may
+    have moved since — most commonly a sibling sub-task's PR merging into the
+    shared parent. Read the parent from Discovery's `parent_branch` row rather
+    than re-running the `git config` lookup.
 
-   - **7a. Find this project's test commands.** Which runner a project
-     uses, how it selects a single test, and how it runs the whole suite
-     all vary too much to ship a plugin default. Look for `CLAUDE.md`,
-     `AGENTS.md`, a "Tests" section in `README.md`, or similar in the
-     repo root.
-     - **Found, and covers both forms** (run a single test, run the full
-       suite) → use those commands throughout the rest of this step.
-     - **Not documented anywhere** → ask the user whether to install a
-       test runner and the testing dependencies now. This is its own task;
-       don't decide on their behalf.
-       - If they say yes → once everything's in, fold the discovered
-         "run one test" / "run full suite" commands into `CLAUDE.md` /
-         `AGENTS.md` so the next session doesn't have to re-derive them.
-       - If they say no, or this stack genuinely has no test layer →
-         skip the rest of this step. Note in the final report that
-         testing was skipped and why, then continue to step 8 (commit).
-     - **Tests exist but the commands are missing or only half-documented**
-       — the most common case in a real repo (CI runs them but no
-       `CLAUDE.md` line says how; or the docs give the full-suite command
-       and nothing for selecting a single test) → discover the missing
-       form(s) by inspecting `package.json` scripts, `Makefile` targets,
-       README sections, and CI config, and sanity-check each candidate
-       (`--listTests`, a dry run, or one trivial pass) before relying on
-       it. **Suggest** (don't silently edit) that the user add the
-       resulting "run one test" and "run full suite" commands to
-       `CLAUDE.md` / `AGENTS.md`.
+    - **Set** → merge the parent's *remote* state — merging the local ref
+      would silently miss anything that landed on origin after this
+      worktree was created. A never-pushed parent has no remote ref, and
+      `git merge origin/…` then fails with an unknown-revision error that
+      reads like a broken repo, so decide which ref to merge rather than
+      guessing:
+      ```bash
+      git fetch origin
+      if git rev-parse --verify --quiet origin/<parent-branch> >/dev/null; then
+        git merge origin/<parent-branch> --no-edit
+      else
+        git merge <parent-branch> --no-edit   # never pushed — no remote ref to merge
+      fi
+      ```
+      If the merge conflicts, stop and ask the user to resolve — don't
+      attempt to resolve merge conflicts automatically.
+    - **Unset** (the branch predates the parentbranch convention, or
+      wasn't created by the assigner) → skip the merge, but flag in the
+      final report that you proceeded on a possibly-stale worktree branch.
+      Don't stop to ask which branch the PR should target — step 10's
+      resolver handles an unset parentbranch (Jira comment, then env
+      default).
 
-   - **7b. Run tests for this change.** If test coverage exists already,
-     identify the affected tests; if it doesn't, add the new test(s) to
-     the relevant suite file first. Run each new/affected test
-     individually, one at a time — don't move on until the current one
-     passes. Use the project's documented single-test command; if its
-     exact form doesn't fit your runner, adapt it (filter by name or
-     pattern) — the policy matters more than the exact invocation. Once
-     every individual test passes,
-     run the whole affected suite to catch regressions.
+03. **Transition the issue** to in-progress:
+    `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_PROGRESS>"`
+    (transition by target status *name*; `jira.sh` resolves it to the id).
 
-   - **7c. Handle suite-level failures.** If the full suite run reports
-     failures, don't treat that as final — timing/flakiness can fail a
-     test that's actually fine on its own. Re-run just the failed tests
-     individually (not the whole suite again):
-     - If they pass individually → treat the suite as passing overall.
-       Don't re-run the whole suite a second time.
-     - If an individually re-run test fails again → stop. Report the
-       failure and wait for instructions — don't commit, push, or open a
-       PR, and don't keep retrying on your own.
+04. **Investigate** — read the affected code (Grep/Read/Glob) before
+    writing anything. Understand existing patterns, not just the issue text.
+    Read the issue's prior comments first — step 1's fetch already includes
+    `fields.comment.comments` — so you inherit earlier context instead of
+    rediscovering it cold, in this order of authority:
 
-8. **Commit** — stage the files this change touched explicitly
-   (`git add <file>…`, not `-A`, which can sweep in strays), then
-   `git commit -m "<KEY> <short message>"`. Split into multiple commits
-   if the change has logically separate pieces; one is fine for a small
-   change.
+    - **A reviewer verdict whose body starts `CHANGES REQUESTED — `**, if
+      present. On the re-run after a reject (step 11) it outranks everything
+      else here: its per-dimension `file:line` findings *are* the
+      specification for this pass, and a run that ignores them gets rejected
+      again. That prefix is the reviewer's own detection contract, kept
+      verbatim, so matching on it is stable.
+    - **The assigner's `Assignment report`** — how this issue was scoped.
+    - **Any `Task memory (jira-task-executor)` notes** an earlier session
+      left — on a re-run, how you avoid repeating its dead ends.
+    - **The previous run report** (step 12), which deliberately carries no
+      marker: find it by position — the most recent long comment that isn't
+      one of the above — not by grepping a prefix.
 
-9. **Push** — `git push -u origin <branch-name>`.
+05. **Clarify** — if the issue's description/acceptance criteria leaves
+    something materially ambiguous (an implementation choice that would
+    change the result), ask the user before writing code. Don't guess on
+    anything that matters. Step 3's transition stands while you wait —
+    someone *has* picked the issue up — so don't roll it back to
+    `<STATUS_TODO>` even if the answer never comes.
+
+06. **Implement** the change.
+
+    - **Record task memory as you go — but only when it's worth preserving.**
+      Post a `Task memory (jira-task-executor)` comment (per the Task-memory
+      preamble bullet) when you learn something a later session would
+      otherwise rediscover: a finding, a design decision *and its rationale*,
+      a gotcha in already-touched code, recovery context. This is
+      task-recovery memory, **not** running commentary — skip the trivial and
+      self-evident, and one note at the end is enough if it captures
+      everything worth keeping. The first can surface as early as step 4.
+
+07. **Test before committing:**
+
+    - **7a. Find this project's test commands.** Which runner a project
+      uses, how it selects a single test, and how it runs the whole suite
+      all vary too much to ship a plugin default. Look for `CLAUDE.md`,
+      `AGENTS.md`, a "Tests" section in `README.md`, or similar in the
+      repo root.
+
+      - **Found, and covers both forms** (run a single test, run the full
+        suite) → use those commands throughout the rest of this step.
+      - **Not documented anywhere** → ask the user whether to install a
+        test runner and the testing dependencies now. This is its own task;
+        don't decide on their behalf.
+        - If they say yes → once everything's in, fold the discovered
+          "run one test" / "run full suite" commands into `CLAUDE.md` /
+          `AGENTS.md` so the next session doesn't have to re-derive them.
+        - If they say no, or this stack genuinely has no test layer →
+          skip the rest of this step. Note in the final report that
+          testing was skipped and why, then continue to step 8 (commit).
+      - **Tests exist but the commands are missing or only half-documented**
+        — the most common case in a real repo (CI runs them but no
+        `CLAUDE.md` line says how; or the docs give the full-suite command
+        and nothing for selecting a single test) → discover the missing
+        form(s) by inspecting `package.json` scripts, `Makefile` targets,
+        README sections, and CI config, and sanity-check each candidate
+        (`--listTests`, a dry run, or one trivial pass) before relying on
+        it. **Suggest** (don't silently edit) that the user add the
+        resulting "run one test" and "run full suite" commands to
+        `CLAUDE.md` / `AGENTS.md`.
+
+    - **7b. Run tests for this change.** If test coverage exists already,
+      identify the affected tests; if it doesn't, add the new test(s) to
+      the relevant suite file first. Run each new/affected test
+      individually, one at a time — don't move on until the current one
+      passes. Use the project's documented single-test command; if its
+      exact form doesn't fit your runner, adapt it (filter by name or
+      pattern) — the policy matters more than the exact invocation. Once
+      every individual test passes,
+      run the whole affected suite to catch regressions.
+
+    - **7c. Handle suite-level failures.** If the full suite run reports
+      failures, don't treat that as final — timing/flakiness can fail a
+      test that's actually fine on its own. Re-run just the failed tests
+      individually (not the whole suite again):
+
+      - If they pass individually → treat the suite as passing overall.
+        Don't re-run the whole suite a second time.
+      - If an individually re-run test fails again → stop. Report the
+        failure and wait for instructions — don't commit, push, or open a
+        PR, and don't keep retrying on your own.
+
+08. **Commit** — stage the files this change touched explicitly
+    (`git add <file>…`, not `-A`, which can sweep in strays), then
+    `git commit -m "<KEY> <short message>"`. Split into multiple commits
+    if the change has logically separate pieces; one is fine for a small
+    change.
+
+09. **Push** — `git push -u origin <branch-name>`.
 
 10. **Open the PR — or update the one that's already open:**
+
     - **Check for an existing PR first.** After a reject (step 11) this skill
       re-runs on a branch that already has one, step 9's push has already
       updated it, and `gh pr create` would fail with "a pull request already
@@ -383,8 +393,9 @@ forward as context.
         versioned. A sub-task is exempt: its base is its parent's branch.
     - Link the issue from the PR body as
       `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from Discovery's
-      `jira_account_url` row — there's no browse-URL subcommand, and the Jira
-      site domain is never hardcoded.
+      `jira_account_url` row and from nothing else — not the REST `self` URL,
+      not the git remote you just read for the PR
+      (`../_shared/project-config.md` § *Issue browse links*).
     - Write the PR body to a temp file and use `--body-file` (backticks
       inside an inline `--body` string trigger shell command substitution —
       the same hazard the comment convention avoids):
@@ -408,6 +419,7 @@ forward as context.
     `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_REVIEW>"`.
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
     a parent (check `fields.parent` from step 1):
+
     - **Has a parent (multistep sub-task)** → Once the reviewer
       approves the PR, the human merges it into the parent branch.
       GitHub-for-Jira automation (if connected) transitions the
@@ -433,10 +445,12 @@ forward as context.
     step 4 recovers it by position. Step 10's fix-summary on a re-run isn't a
     second run report: it's a *GitHub* PR comment, for the reviewer. Post the
     report with the §11 temp-file + `--body-file` convention:
+
     ```bash
     S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
     bash "$S/jira.sh" --role executor issue comment add <KEY> --body-file /tmp/<KEY>-report.md
     ```
+
     (Write it to `/tmp/<KEY>-report.md` first with a `cat > … <<'EOF'` heredoc.)
 
 Reference: `../_shared/jira-api-reference.md` is the operational + REST

@@ -18,6 +18,7 @@ given, is free-form notes about this run, not a key:
 > worktree.
 
 **Conventions used below:**
+
 - `<PARENT-KEY>` = the Jira issue key derived from the current branch (via
   the Discovery healthcheck's `issue_key` row below) — or, when the branch
   belongs to a sub-task, that sub-task's `fields.parent.key` (step 1 climbs
@@ -43,8 +44,7 @@ given, is free-form notes about this run, not a key:
   `<STATUS_IN_PROGRESS>`) are silently ignored — the executor will
   transition them when ready.
 - **Jira access is the `jira.sh` / `jira.ps1` client**
-  (`../_shared/jira-api-reference.md` §9), invoked as `bash "$S/jira.sh"
-  <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows) where
+  (`../_shared/jira-api-reference.md` §9), invoked as `bash "$S/jira.sh" <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows) where
   `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`; the steps write
   `jira.sh <cmd>` for brevity. Every Bash call is a fresh shell, so re-set
   `S` at the top of each block that needs it — an unset `S` silently becomes
@@ -58,8 +58,7 @@ given, is free-form notes about this run, not a key:
   and the Jira transition is the actual workflow gate — 3d says why.
 - **Body mechanics** (`../_shared/jira-api-reference.md` §11, which owns
   them): every body this skill posts is multi-line and goes to a temp file
-  passed as `--body-file` — Jira comments via `jira.sh --role reviewer issue
-  comment add <KEY> --body-file <file>`, GitHub ones via `gh pr review` /
+  passed as `--body-file` — Jira comments via `jira.sh --role reviewer issue comment add <KEY> --body-file <file>`, GitHub ones via `gh pr review` /
   `gh pr create`. Never inline `--body "…"`: `gh` accepts it, and backticks
   in it would hit shell substitution. The verdict header those bodies open
   with is a detection contract — see *The canonical review report*.
@@ -77,8 +76,7 @@ exit codes). Pick the branch from your own runtime *before the first call* —
 you know your OS without running anything — and use it for every script
 here, credential block included; the blocks below are the POSIX form.
 Statuscheck's `platform` row only *confirms* that choice afterwards, so it
-can't decide how statuscheck itself is run. It takes a required `--role
-reviewer` (no default credential) and no issue-key argument.
+can't decide how statuscheck itself is run. It takes a required `--role reviewer` (no default credential) and no issue-key argument.
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
 `ensure_local_env` no-ops when the file already exists, so run it
@@ -126,7 +124,9 @@ verdict comment, `gh pr list` call, and Jira transition depends on them —
 and `jira_auth` now confirms the **reviewer's** own credential, the one
 those writes will use), and `jira_account_url` (INFO) is the site domain for
 `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links, read here so no step opens
-the credential-bearing `.jst/jira-sdlc-tools.local.env`.
+the credential-bearing `.jst/jira-sdlc-tools.local.env` — that row is the
+only source those links may be built from
+(`../_shared/project-config.md` § *Issue browse links*).
 
 Only the rows this skill reads in a role-specific way, or relies on later,
 are spelled out here; the rest are role-independent preconditions defined in
@@ -135,7 +135,7 @@ printed output — that live output, not this table, is what the skill
 actually acts on).
 
 | row | what it verifies / gathers |
-|---|---|
+| -- | -- |
 | `worktree` | INFO, never FAIL — *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Stop unless it reads linked**: normally the parent's own (`worktree-<PARENT-KEY>`, per `jira-task-assigner`), or a sub-task's |
 | `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
@@ -154,14 +154,15 @@ don't exist yet.
 - `git fetch origin --prune` first. Branches created or merged by parallel
   sub-task executors (possibly from different worktrees) may not be visible
   locally yet.
+
 - Fetch the issue derived from the branch (the healthcheck's `issue_key` row
-  — call it `<RUN-KEY>`): `jira.sh --role reviewer issue view <RUN-KEY>
-  --fields 'summary,description,issuetype,status,parent,subtasks'` (reads
+  — call it `<RUN-KEY>`): `jira.sh --role reviewer issue view <RUN-KEY> --fields 'summary,description,issuetype,status,parent,subtasks'` (reads
   print raw JSON on stdout; source of truth for this review-fetch field
   list: `../_shared/jira-api-reference.md` §10 — resolve there rather than
   here if the two ever disagree). It omits `comment`, which this skill never
   reads (fetching it would bloat the parent + every sub-task fetch on
   comment-heavy issues). Check `fields.issuetype.name`:
+
   - **Top-level** (`Task`, `Story`, `Bug`) → `<PARENT-KEY>` = `<RUN-KEY>`.
   - **`Subtask`** (this worktree is a sub-task's own, not the parent's) →
     per the rule at the top, review **this sub-task's own PR only**. Do
@@ -179,14 +180,18 @@ don't exist yet.
     only `<RUN-KEY>` was reviewed. It lands on `<PARENT-KEY>` like every
     run-level report, which is why 3e is skipped: that tally would post the
     same body to the same issue.
+
 - **Resolve `<PARENT-BRANCH>`**: list branch names deduped to unique shorts
   — strip the local `*`/indent and the `remotes/origin/` prefix so a branch
   that exists both locally and on origin counts once — then match the key:
+
   ```bash
   git branch -a | sed -E 's#^[* ]+##; s#^remotes/origin/##' | sort -u | grep <PARENT-KEY>
   ```
+
   Exactly one match → that's `<PARENT-BRANCH>`. Zero or multiple → ask the
   user rather than guessing.
+
 - **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Run
   §13's resolver with `--branch <PARENT-BRANCH>`, which is what makes it
   work from here: without it the script keys on `git branch --show-current`,
@@ -195,12 +200,14 @@ don't exist yet.
   `<PARENT-BRANCH>` and 5a would open a parent PR into itself. Branch config
   lives in the shared `.git/config`, so naming the branch works from any
   worktree:
+
   ```bash
   S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/pr_base.ps1 on Windows
   OUT=$(bash "$S/pr_base.sh" --role reviewer --branch "<PARENT-BRANCH>" <PARENT-KEY>); RC=$?
   BASE_BRANCH=$(printf '%s\n' "$OUT" | sed -n 's/^base=//p')
   printf '%s (rc=%s)\n' "$OUT" "$RC"
   ```
+
   **Pass no `--parent-key` here** — `<PARENT-KEY>` is already the top-level
   issue (step 1 climbed), so enabling §13's parent-branch search would match
   `<PARENT-BRANCH>` itself and set `<BASE_BRANCH>` = `<PARENT-BRANCH>`, the
@@ -216,10 +223,12 @@ don't exist yet.
   env default fired on a production fix, so the phase check below would hunt
   for the PR on the wrong base and 5a would open a duplicate into staging.
   Stop and ask which base is right.
+
 - **Determine the track** from `fields.subtasks` (absent, `null`, or empty
   `[]` → **single-step**; anything else → **multistep**). This sets the
   run's **PR set** and the steps you will walk. Name the track explicitly so
   the rest of the skill reads as one track at a time:
+
   - **Single-step track** — the PR set is *just the one parent PR*
     (`<PARENT-BRANCH>` → `<BASE_BRANCH>`). Walk: *Single-step phase check* →
     review loop (step 3, with the parent PR as the sole PR) → 4c → 6. (If
@@ -230,8 +239,7 @@ don't exist yet.
     list above names `subtasks` explicitly, per §10 so the narrowed payload
     keeps it; the shape is an array of objects, i.e.
     `fields.subtasks[].key`, not bare strings). For each sub-task key run
-    `jira.sh --role reviewer issue view <SUBTASK-KEY> --fields
-    'summary,description,issuetype,status,parent,subtasks'` (same §10
+    `jira.sh --role reviewer issue view <SUBTASK-KEY> --fields 'summary,description,issuetype,status,parent,subtasks'` (same §10
     review-fetch list). The **PR set** is those whose `fields.status.name`
     matches `<STATUS_IN_REVIEW>` (e.g. "In Review") — others are not
     reviewed yet, skip them quietly. Keep **every** sub-task's status
@@ -288,9 +296,7 @@ For each `<SUBTASK-KEY>` that passed the status filter:
 - Find its branch with step 1's deduped listing, matched on
   `<SUBTASK-KEY>`. If no branch exists yet, that sub-task hasn't been
   implemented — flag it in the report and skip it.
-- Find the open PR: `gh pr list --head <subtask-branch> --base
-  <PARENT-BRANCH> --state open --json number,title,state,url`. `--state
-  open` is deliberate here (unlike 5a's `--state all`): an already-merged
+- Find the open PR: `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open --json number,title,state,url`. `--state open` is deliberate here (unlike 5a's `--state all`): an already-merged
   sub-task PR is finished work, and it's the phase check that reads those.
   If no PR exists, flag and skip. If more than one open PR, ask the user which one to review.
 - Record: `{ key, branch, prNumber, prUrl }`.
@@ -316,13 +322,11 @@ it rather than composing a shape of your own.
 
 Three things from it are load-bearing enough to state here as well:
 
-- The body's literal first line is `APPROVED — <summary>` or `CHANGES
-  REQUESTED — <summary>`. On GitHub comments that prefix is a byte-for-byte
+- The body's literal first line is `APPROVED — <summary>` or `CHANGES REQUESTED — <summary>`. On GitHub comments that prefix is a byte-for-byte
   contract — 3a's idempotency check matches on it, so rewording the two-word
-  prefix or the ` — ` separator silently breaks re-run detection.
+  prefix or the `—` separator silently breaks re-run detection.
 - Exactly one outcome block is filled per emission, chosen by track × phase
-  (and, per-PR, by *which* PR). It supplies only the title and the `### Next
-  step` wording; every other section is identical across outcomes.
+  (and, per-PR, by *which* PR). It supplies only the title and the `### Next step` wording; every other section is identical across outcomes.
 - The already-merged outcomes (S-MERGED, M-FULLY-COMPLETE) end their run at
   the step-6 report: no wrap-up comment, and no further action expected on
   the issue — GitHub-for-Jira already moved it to `<STATUS_DONE>`.
@@ -401,8 +405,7 @@ except where a dimension itself carves out an exception (dimension 3 does):
 
 ### 3d. Execute verdict immediately
 
-Record the verdict as a **review comment** — both verdicts go through `gh pr
-review <prNumber> --comment --body-file`: in this plugin's default
+Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> --comment --body-file`: in this plugin's default
 deployment the executor and reviewer share one `gh` account, and GitHub
 blocks an author from approving *or* requesting changes on their own PR —
 the self-review restriction covers both verdicts, not just approval. So
@@ -416,7 +419,7 @@ scoped to this one PR — not a terse one-liner. Write **one** report body to
 a temp file and post that same file to both destinations, so GitHub and Jira
 read identically:
 
-* **If APPROVE (all dimensions pass):** fill the canonical template with the
+- **If APPROVE (all dimensions pass):** fill the canonical template with the
   per-PR approve outcome **for this kind of PR** — **S-APPROVED** when this
   is the single-step parent PR, **M-SUBTASK-APPROVED** when this is a
   sub-task PR (the multistep loop, or the sub-task-worktree path of step 1;
@@ -426,6 +429,7 @@ read identically:
   single-step "final update" wording). Set `### Verdict recorded` → GitHub:
   APPROVED comment on PR #<n>, Jira: note posted, status not moved;
   verdict-header line `APPROVED — <one-line summary>`:
+
   ```bash
   S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
@@ -436,21 +440,22 @@ read identically:
   gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   ```
+
   (`<SUBTASK-KEY>` for a sub-task PR, `<PARENT-KEY>` for the single-step
   parent PR.) Don't move the Jira status *here* — mid-loop
   the PR is only approved, not merged. Step 7 offers the user the
   `<STATUS_DONE>` move once at the end of the run; declining it leaves the
   issue to the GitHub-for-Jira merge automation.
 
-* **If REQUEST_CHANGES (one or more dimensions fail):** fill the same
+- **If REQUEST_CHANGES (one or more dimensions fail):** fill the same
   canonical template with the per-PR reject outcome **for this kind of PR** —
   **S-CHANGES-REQUESTED** when this is the single-step parent PR,
   **M-SUBTASK-CHANGES-REQUESTED** when this is a sub-task PR — and
   verdict-header line `CHANGES REQUESTED — <one-line summary>`; the
-  `file:line` findings for each failed dimension go in the report's `###
-  What I reviewed` section (never dropped). Post the one body to both
+  `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body to both
   destinations, then transition the issue back to `<STATUS_IN_PROGRESS>` —
   that is the actual gate:
+
   ```bash
   S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
@@ -462,6 +467,7 @@ read identically:
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY-or-PARENT-KEY> --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue transition <SUBTASK-KEY-or-PARENT-KEY> --to "<STATUS_IN_PROGRESS>"
   ```
+
   Remember this PR as blocked. Continue the loop — review the next PR.
 
 ### 3e. Post a summary on the parent after each sub-task
@@ -506,8 +512,7 @@ report keyed to the same label.
 
 ### 4a. *(Multistep)* All approved — merge and re-run
 
-1. Check if **all** of those PRs are already merged (`gh pr view <prNumber>
-   --json state` for each).
+1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> --json state` for each).
 2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user
    "All sub-task PRs approved. Merge them manually into `<PARENT-BRANCH>`,
    then re-run `/jira-sdlc:jira-task-reviewer` (bare, from the parent's
@@ -560,8 +565,7 @@ pair.
 - **No PR exists** → create one (write the body to a temp file — see the
   body mechanics in the preamble). The sub-task PR URLs come from
   step 2's records; when the phase check jumped straight here, step 2 never
-  ran — list the sub-task keys and resolve each URL with `gh pr list --head
-  <subtask-branch> --state merged --json url`, or omit the URLs rather than
+  ran — list the sub-task keys and resolve each URL with `gh pr list --head <subtask-branch> --state merged --json url`, or omit the URLs rather than
   inventing them:
   ```bash
   cat > /tmp/<PARENT-KEY>-pr-body.md <<'EOF'
@@ -586,15 +590,13 @@ pair.
 
 Ensure `SELF` is resolved first — on the all-sub-tasks-merged re-run path
 the step-1 phase check jumps straight here and skips step 3, where `SELF` is
-normally set; if it's unset, resolve it now (`SELF=$(gh api user --jq
-.login)`; if `gh api user` errors, see *Edge cases*). Then apply the **3a
+normally set; if it's unset, resolve it now (`SELF=$(gh api user --jq .login)`; if `gh api user` errors, see *Edge cases*). Then apply the **3a
 body-prefix idempotency check** before reviewing: a prior self-review whose
 body starts `APPROVED —` → report "Parent PR already reviewed — waiting for
 manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the
 fresh aggregate code. Otherwise:
 
-1. Check the PR is mergeable — `gh pr view <prNumber> --json
-   mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
+1. Check the PR is mergeable — `gh pr view <prNumber> --json mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
    fallen behind `<BASE_BRANCH>`: stop and report, since a diff that can't
    merge gives the user nothing to act on. This is the only detection path
    the *parent branch is behind its base* edge case has.
@@ -604,17 +606,12 @@ fresh aggregate code. Otherwise:
    combine.
 3. **If approved** → outcome **M-PARENT-READY**: post the **full canonical
    review report** (see *The canonical review report* above), scoped to the
-   parent PR, with verdict-header line `APPROVED — <lighter aggregate
-   summary>` as the literal first line — `gh pr review <prNumber> --comment
-   --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
+   parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
    just the aggregate PR). Do NOT merge. Tell the user the parent PR is
    approved and awaiting their manual merge; step 6 posts the run-level
    report.
 4. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post
-   the same canonical report with verdict-header line `CHANGES REQUESTED —
-   <one-line summary>`, the integration `file:line` findings in its `###
-   What I reviewed` section, via `gh pr review <prNumber> --comment
-   --body-file`. Report the findings and stop.
+   the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Report the findings and stop.
 
 *Do not merge here.* Report that the parent PR is reviewed/approved and
 waiting for the user to merge it manually.
@@ -622,8 +619,7 @@ waiting for the user to merge it manually.
 ## 6. Report back
 
 Post the review summary to the user in chat **and** as a single Jira comment
-on `<PARENT-KEY>` via the §11 `--body-file` convention (`jira.sh --role
-reviewer issue comment add <PARENT-KEY> --body-file <file>`). This is the
+on `<PARENT-KEY>` via the §11 `--body-file` convention (`jira.sh --role reviewer issue comment add <PARENT-KEY> --body-file <file>`). This is the
 **run-level** render of *The canonical review report* (defined above) — same
 verdict-header line and same sections as every per-PR emission, but with the
 *whole run's* PR set in its `### Pull Request Summary` and its
@@ -696,8 +692,7 @@ instead.
   self-review whose body starts `APPROVED —` skips re-review (waiting for
   manual merge); one starting `CHANGES REQUESTED —` triggers a re-review of
   the fresh code. For a forced re-review, flag it manually.
-- **`gh` not installed or not authenticated**: step 3's `SELF=$(gh api
-  user --jq .login)` resolution fails, so 3a's idempotency check has no
+- **`gh` not installed or not authenticated**: step 3's `SELF=$(gh api user --jq .login)` resolution fails, so 3a's idempotency check has no
   identity to key on — report the error and give the user the PR URLs so
   they can review/merge manually.
 - **Parent branch is behind its base**: if `<BASE_BRANCH>` has advanced, the

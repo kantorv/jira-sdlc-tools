@@ -1,0 +1,92 @@
+# Builds the Docusaurus site in website/ and publishes it to GitHub Pages at
+# https://kantorv.github.io/jira-sdlc-tools/docs — the URL scheme baked into
+# scripts/docs-url-map.json and, through it, into plugin files that ship to
+# users' plugin caches (AGENTS.md -> "The published docs URL scheme").
+#
+# BEFORE THIS CAN EVER DEPLOY, a human has to set Settings -> Pages -> Build and
+# deployment -> Source -> "GitHub Actions". Until then actions/deploy-pages fails
+# with "Get Pages site failed" and no YAML change helps; the error never says
+# "enable Pages". Confirm with: gh api repos/<owner>/<repo>/pages (404 = not
+# enabled). Enabling it also creates the `github-pages` environment with a
+# deployment branch policy allowing exactly one ref — the default branch. That
+# policy is why release.yml *dispatches* this workflow instead of calling it as
+# a reusable workflow; see the long comment on release.yml's publish-docs job.
+name: Docs site
+
+on:
+  # Path-filtered on purpose: without it every source-only commit on main spends
+  # a minute of CI republishing byte-identical output.
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'website/**'
+      - '.github/workflows/docs.yml'
+  # Load-bearing, not a convenience. A push made with the default GITHUB_TOKEN
+  # creates NO workflow runs (GitHub suppresses them to prevent loops), so the
+  # docs:version snapshot release.yml commits would never reach the push trigger
+  # above — the release would ship and the site would silently stay on the old
+  # version. workflow_dispatch and repository_dispatch are the documented
+  # carve-out that always create a run, so release.yml asks for one explicitly.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A half-deployed site is worse than a stale one, so runs queue rather than
+# cancel each other. The group is shared with any other Pages deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v6
+        with:
+          # docusaurus.config.js sets showLastUpdateTime, which reads git
+          # history. A shallow clone does not fail — it degrades to "cannot
+          # infer the update date" warnings and no timestamps on any page.
+          fetch-depth: 0
+          # No explicit `ref`: every trigger (push to main, or a dispatch made
+          # with --ref main) already aims the run at the right commit.
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Build
+        working-directory: website
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

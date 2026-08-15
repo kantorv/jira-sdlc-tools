@@ -3,11 +3,15 @@
 # release sequence the policy mandates, in order:
 #   1. resolve the version (release/* -> from the branch name; hotfix/* ->
 #      latest v* tag + patch; a malformed release name fails the job — §5)
-#   2. tag the merge commit vX.Y.Z (pure SemVer, no sprint suffix — §5 note)
-#   3. publish the GitHub Release (= "deploy main to Production" for a
+#   2. cut the versioned-docs snapshot for that version onto main (JST-289)
+#   3. tag vX.Y.Z (pure SemVer, no sprint suffix — §5 note)
+#   4. publish the GitHub Release (= "deploy main to Production" for a
 #      plugin marketplace — there's nothing else to ship)
-#   4. back-merge main -> development  (§3 Phase 4 step 6 / §4 Step 4)
-#   5. delete the release/hotfix branch (§3 Phase 4 step 7)
+#   5. back-merge main -> development  (§3 Phase 4 step 6 / §4 Step 4)
+#   6. delete the release/hotfix branch (§3 Phase 4 step 7)
+# then a second job dispatches the docs workflow so the site picks the
+# snapshot up (see publish-docs at the bottom — the reason it is a dispatch
+# and not a reusable-workflow call is the whole point of that job).
 #
 # Only fires for release/* and hotfix/* head branches — a feature PR merged
 # straight into main does NOT trigger a release (the `if:` guard below).
@@ -140,17 +144,71 @@ jobs:
           echo "previous   : ${PREV:-<none — first release>}"
           echo "next       : ${NEXT}"
 
-      - name: Tag the merge commit
+      - name: Set up Node (for the docs version cut)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Cut the versioned docs snapshot
+        id: docs_version
         env:
           NEXT: ${{ steps.version.outputs.next }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          # WHY THIS STEP SITS HERE — before the tag, after the version resolve.
+          # It looks arbitrary six months later, so: `docusaurus docs:version`
+          # writes a snapshot into the working tree that has to be committed
+          # somewhere, and cutting it *before* the tag is what makes the tagged
+          # commit carry its own docs — `git checkout vX.Y.Z` then shows the
+          # docs exactly as that release published them. Two supporting
+          # reasons: this is the last point where a failure costs nothing (no
+          # tag, no Release, no branch deleted yet — just re-run), and the
+          # constraint from the field notes this was modelled on (cut *after*
+          # the package build, because the build needed the tree at the release
+          # version) does not apply — this repo has no package build. The
+          # manifest bump deliberately stays *after* the tag; that off-by-one
+          # is documented in docs/CI.md and is not what this step changes.
+          #
+          # VERSION comes from the "Resolve version" step above — SDLC §5's one
+          # implementation (release/* -> branch name, hotfix/* -> patch on the
+          # latest tag). Nothing is recomputed here; a second implementation is
+          # how the tag and the docs snapshot would drift apart.
+          VERSION="${NEXT#v}"
+          # Build on the merge commit rather than origin/main so a plain
+          # (non-force) push fails loudly if main moved under us, instead of
+          # quietly tagging a commit carrying somebody else's work.
+          git checkout -B main "${MERGE_SHA}"
+          if [ -d "website/versioned_docs/version-${VERSION}" ]; then
+            echo "::notice::website/versioned_docs/version-${VERSION} already exists — nothing to cut."
+          else
+            (cd website && npm ci && npm run docusaurus -- docs:version "${VERSION}")
+            # All three artefacts are committed, never gitignored: an ignored
+            # snapshot is a released version that silently is not on the site.
+            git add website/versioned_docs website/versioned_sidebars website/versions.json
+            git commit -m "docs: version snapshot ${NEXT}"
+            # This push is made with GITHUB_TOKEN, so it creates NO workflow
+            # runs — docs.yml's push trigger will not see it. That is exactly
+            # what the publish-docs job below exists to work around.
+            git push origin main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Tag the release commit
+        env:
+          NEXT: ${{ steps.version.outputs.next }}
+          # The merge commit, or the docs-snapshot commit sitting directly on
+          # top of it — see the placement comment on the step above.
+          RELEASE_SHA: ${{ steps.docs_version.outputs.sha }}
         run: |
           set -euo pipefail
           if git rev-parse -q --verify "refs/tags/${NEXT}" >/dev/null; then
             echo "::error::Tag ${NEXT} already exists; not overwriting. Resolve before re-running."
             exit 1
           fi
-          git tag -a "${NEXT}" -m "Release ${NEXT}" "${MERGE_SHA}"
+          git tag -a "${NEXT}" -m "Release ${NEXT}" "${RELEASE_SHA}"
           git push origin "${NEXT}"
 
       - name: Publish GitHub Release
@@ -161,7 +219,7 @@ jobs:
         run: |
           set -euo pipefail
           # The tag was created + pushed in the previous step on the exact
-          # merge commit, so gh release create just attaches the release to
+          # release commit, so gh release create just attaches the release to
           # that existing tag — no --target needed (and avoiding one sidesteps
           # a gh-version-specific error when --target meets a pre-existing tag).
           # --generate-notes derives the body from PR titles/commits since the
@@ -184,7 +242,8 @@ jobs:
           set -euo pipefail
           # Strip leading 'v' from NEXT (e.g. v0.3.0 -> 0.3.0)
           NEXT_NO_V="${NEXT#v}"
-          # The previous steps ran on a detached merge_commit_sha; check out main.
+          # The docs-version step already left us on main; re-point at
+          # origin/main anyway so this step stands on its own.
           git checkout -B main origin/main
           # Update the two manifest files using jq (select plugin by name, not index)
           jq --arg ver "$NEXT_NO_V" '.version = $ver' plugins/jira-sdlc/.claude-plugin/plugin.json > plugin.json.tmp && mv plugin.json.tmp plugins/jira-sdlc/.claude-plugin/plugin.json
@@ -262,3 +321,51 @@ jobs:
             esac
             echo "- cleanup: deleted \`${HEAD_REF}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-docs:
+    name: Publish the docs site
+    needs: release
+    runs-on: ubuntu-latest
+    # WHAT THIS CONDITION DOES, stated so the comment and the YAML agree:
+    #   !cancelled()                       -> run even if `release` FAILED.
+    #   needs.release.result != 'skipped'  -> but not when it was skipped.
+    # `needs: release` on its own would mean "only if the whole release job
+    # succeeded, including its last step" — and release ends with a back-merge
+    # and a branch delete, so a failure in either would silently take the docs
+    # publish down with it after the tag and the Release had already shipped.
+    # The second clause is what stops every ordinary (non-release) PR merged
+    # into main from republishing the site for nothing: on those, release's own
+    # `if:` guard skips it, and skipped is the one result we do not act on.
+    if: ${{ !cancelled() && needs.release.result != 'skipped' }}
+    permissions:
+      actions: write        # dispatching a workflow run needs it; nothing else does
+    steps:
+      # WHY A DISPATCH AND NOT `uses: ./.github/workflows/docs.yml`.
+      # The reusable-workflow call looks strictly better — declarative, no CLI,
+      # no token — and it does build the site correctly. Then it dies at the
+      # deploy with:
+      #
+      #   Branch "refs/pull/<N>/merge" is not allowed to deploy to github-pages
+      #   due to environment protection rules.
+      #
+      # Two invisible things combine. A called workflow runs in the CALLER's
+      # context, so github.ref is this workflow's ref — and this workflow
+      # triggers on a PR merge, so that ref is a pull request merge ref, not a
+      # branch at all. Meanwhile the github-pages environment allows exactly one
+      # ref: the default branch. `with: ref: main` does NOT rescue it; that
+      # input only tells actions/checkout what to fetch, while the environment
+      # gate reads the RUN's own ref, which no input can change. You can build
+      # exactly the right bytes and still be refused.
+      #
+      # Widening the deployment branch policy is the tempting fix. Don't: the
+      # ref you would be whitelisting is a pull request merge ref, which would
+      # let any PR deploy the site.
+      #
+      # A dispatch has none of this — it creates its own run at refs/heads/main,
+      # which is the ref the policy allows. It is also the documented carve-out
+      # from "a GITHUB_TOKEN push creates no workflow runs", so no PAT and no
+      # long-lived secret is needed here.
+      - name: Dispatch the docs workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run "Docs site" --ref main --repo "${{ github.repository }}"

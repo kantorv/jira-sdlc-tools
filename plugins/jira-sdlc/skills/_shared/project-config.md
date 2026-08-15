@@ -18,7 +18,7 @@ to get them. The tables below describe what each variable means; read
 ## What lives in `.jst/`
 
 | File | Purpose | Committed? |
-|------|---------|------------|
+| -- | -- | -- |
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
 | `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — ignored by `.jst/.gitignore`, which lists it as `jira-sdlc-tools.local.env` |
 | `.jst/.gitignore` | One line, `jira-sdlc-tools.local.env` — keeps the credential file out of git. It lives here rather than in the root `.gitignore` so it travels with any copy of `.jst/`, into a worktree for instance. | **Yes** — checked into the repo |
@@ -34,7 +34,7 @@ The two files are **not equally sensitive**, and the split is uneven — which
 is why "just read the config" is the wrong instinct:
 
 | File | Contents | Reading it |
-|---|---|---|
+| -- | -- | -- |
 | `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names | Committed and secret-free — read it whole, freely |
 | `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `CONVERSATIONS_*` — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
 
@@ -70,8 +70,8 @@ dependencies. The plugin creates N worktrees; it can't know what your stack
 needs to become N running instances, so this script is where your project
 writes that down once instead of it living in one developer's head. To draft
 one, start from the shipped example pair,
-`plugins/jira-sdlc/docs/examples/bootstrap.example.sh` /
-`bootstrap.example.ps1`.
+[`bootstrap.example.sh`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/examples/bootstrap.example.sh) /
+[`bootstrap.example.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/examples/bootstrap.example.ps1).
 
 It's **tracked**, unlike the gitignored `jira-sdlc-tools.local.env`, and that's
 the point: a linked worktree is born with it, with no copy step to arrange (the
@@ -104,7 +104,7 @@ existing container/volume rather than erroring on it.
 ports use identical names:
 
 | variable | value |
-|---|---|
+| -- | -- |
 | `JST_ISSUE_KEY` | the issue key derived from the branch, e.g. `PROJ-402` |
 | `JST_WORKTREE_DIR` | absolute path of *this* worktree's root (the script's working directory), not `WORKTREES_DIR` |
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
@@ -118,7 +118,7 @@ should derive them deterministically from `JST_ISSUE_KEY`** (hash or parse the
 numeric part into an index), so the same worktree gets the same ports on every
 run and two worktrees can't collide.
 
-The companion doc is [`docs/RUNNING-MULTIPLE-COPIES.md`](../../docs/RUNNING-MULTIPLE-COPIES.md):
+The companion doc is [`docs/RUNNING-MULTIPLE-COPIES.md`](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies):
 that one is how to *decide* what each worktree's instance shares versus
 isolates (database, cache, storage, queue, ports); this script is where your
 project records the answer it landed on, in runnable form.
@@ -136,11 +136,11 @@ without it halts rather than running half-configured.
 ## Required (in `.jst/jira-sdlc-tools.env`)
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
-| `<STATUS_TODO>` | Status used for newly created issues. No skill reads or transitions to this value — it exists so it can be documented/offered as the default landing status, and so the optional `jira_issue_transition_on_branch.yml` GitHub Action (see `docs/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md`) has a value to mirror into its hardcoded `SOURCE=` literal, since that workflow can't read this file. | `To Do` |
+| `<STATUS_TODO>` | Status used for newly created issues. No skill reads or transitions to this value — it exists so it can be documented/offered as the default landing status, and so the optional `jira_issue_transition_on_branch.yml` GitHub Action (see https://kantorv.github.io/jira-sdlc-tools/docs/state-transitions-with-github-actions) has a value to mirror into its hardcoded `SOURCE=` literal, since that workflow can't read this file. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state on its own: `jira-task-reviewer` step 7 offers it for approved issues at the end of a run and moves only what you approve; otherwise it is handled by automation or a manual `jira.sh issue transition <KEY> --to "<STATUS_DONE>"`. Must match your workflow's real status name exactly. | `Done` |
@@ -148,9 +148,37 @@ without it halts rather than running half-configured.
 ## Required (in `.jst/jira-sdlc-tools.local.env`)
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. | `/home/you/src/myapp-worktrees` |
-| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it constructs issue browse links (`https://<JIRA_ACCOUNT_URL>/browse/<KEY>`). | `your-site.atlassian.net` |
+| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it is the only source for issue browse links — see below. | `your-site.atlassian.net` |
+
+### Issue browse links — one form, one source
+
+Every human-facing link to an issue, in a report, a Jira comment or a PR body,
+is built as:
+
+```
+https://<JIRA_ACCOUNT_URL>/browse/<ISSUE-KEY>
+```
+
+- **Domain**: always `JIRA_ACCOUNT_URL`, read off statuscheck's
+  `jira_account_url` row — never by opening the credential-bearing
+  `jira-sdlc-tools.local.env` (*Reading config safely* above).
+- **Scheme**: the value is stored **without** one
+  (`your-site.atlassian.net`), so prepend exactly one `https://` — never
+  zero, never doubled.
+- **Never assemble it from anything else**, however URL-shaped that thing
+  looks. Each of these has drifted in precisely because it's plausible: the
+  REST `self` field, which every read response hands you but is a gateway API
+  endpoint (`https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<id>`),
+  not a browsable page; the git remote or repository name from
+  `git remote get-url origin`, which the same run reads for PR work but names
+  GitHub, not your Jira site; and a hardcoded or half-remembered domain, which
+  is right on the machine it was copied from and wrong on every other install.
+
+There is no browse-URL subcommand and no browse URL in any response to lift —
+`issue create` prints the bare key — so the link is always *assembled* from
+the template above, never found.
 
 The three **role credential pairs** are required too — they're the whole of the
 auth model, so they get their own section below.
@@ -167,8 +195,7 @@ Every token is the raw token value; a file path is not accepted. Create the
 tokens at `id.atlassian.com` → Security → API tokens (classic or scoped both
 work through the gateway — see `jira-api-reference.md` §5).
 
-Each skill picks its role identity per-request with `jira.sh --role
-assigner|executor|reviewer`, which selects that role's pair below. `--role` is
+Each skill picks its role identity per-request with `jira.sh --role assigner|executor|reviewer`, which selects that role's pair below. `--role` is
 **required** — there is no default account to fall back on. Because auth is
 per-request, different roles can run **concurrently** as different identities
 with no shared, machine-global "active account" to race over — the reason the
@@ -184,7 +211,7 @@ three accounts may of course be the same Atlassian account if you'd rather not
 split them; state it explicitly in all three pairs.
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `<JIRA_ASSIGNER_EMAIL>` / `<JIRA_ASSIGNER_TOKEN>` | The account `jira-task-assigner` runs as — it creates the issues and their comments. | `assigner@example.com` / `ATATT3xFfGF0…` |
 | `<JIRA_EXECUTOR_EMAIL>` / `<JIRA_EXECUTOR_TOKEN>` | The account `jira-task-executor` runs as. Doubles as the **assignee**: the assigner puts this email on every issue it creates, and the executor refuses to work an issue that isn't assigned to it. | `executor@example.com` / `ATATT3xFfGF0…` |
 | `<JIRA_REVIEWER_EMAIL>` / `<JIRA_REVIEWER_TOKEN>` | The account `jira-task-reviewer` runs as — it posts the verdict comments. | `reviewer@example.com` / `ATATT3xFfGF0…` |
@@ -215,8 +242,7 @@ ASSIGNEE_EMAIL=$(bash skills/_shared/scripts/posix/get_assignee_email.sh) || exi
 bash skills/_shared/scripts/posix/check_assignee.sh --role executor   # 0 = continue, non-zero = stop
 ```
 
-`check_assignee.sh` resolves its own identity by calling `jira.sh --role
-<role> whoami` (the account that role's credential authenticates as) and
+`check_assignee.sh` resolves its own identity by calling `jira.sh --role <role> whoami` (the account that role's credential authenticates as) and
 compares that account's `accountId` to the issue's assignee. `--role` is what
 decides which identity is demanded — no ambient logged-in state to consult.
 Unassigned, assigned to someone else, unreadable, or a hidden assignee email
@@ -235,6 +261,7 @@ can't race.
 The README's usage walkthrough assumes these filled-in files:
 
 **`.jst/jira-sdlc-tools.env` (committed):**
+
 ```
 PROJECT-KEY           = PROJ
 DEFAULT_BASE_BRANCH   = development
@@ -246,6 +273,7 @@ STATUS_DONE           = Done
 ```
 
 **`.jst/jira-sdlc-tools.local.env` (gitignored):**
+
 ```
 WORKTREES_DIR         = /home/you/src/myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net

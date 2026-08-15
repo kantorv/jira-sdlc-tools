@@ -5,18 +5,19 @@
 ## Summary table
 
 | Platform | Specification | How it loads | Integration status | Documentation |
-|---|---|---|---|---|
-| [Claude Code](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | [`CLAUDECODE.md`](plugins/jira-sdlc/docs/integrations/CLAUDECODE.md) |
-| [Cursor](plugins/jira-sdlc/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | [`CURSOR.md`](plugins/jira-sdlc/docs/integrations/CURSOR.md) |
-| [Kilo Code](plugins/jira-sdlc/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | [`KILO.md`](plugins/jira-sdlc/docs/integrations/KILO.md) |
-| [Codex (CLI)](plugins/jira-sdlc/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified — sandbox caveats | [`CODEX.md`](plugins/jira-sdlc/docs/integrations/CODEX.md) |
-| [Antigravity](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | [`ANTIGRAVITY.md`](plugins/jira-sdlc/docs/integrations/ANTIGRAVITY.md) |
-| [OpenCode](plugins/jira-sdlc/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | [`OPENCODE.md`](plugins/jira-sdlc/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](plugins/jira-sdlc/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](plugins/jira-sdlc/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](plugins/jira-sdlc/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | [`PI.md`](plugins/jira-sdlc/docs/integrations/PI.md) |
-| [Kimi Code](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](plugins/jira-sdlc/docs/integrations/KIMI-CODE.md) |
+| -- | -- | -- | -- | -- |
+| [Claude Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | [`CLAUDECODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) |
+| [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | [`CURSOR.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) |
+| [Kilo Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | [`KILO.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) |
+| [Codex (CLI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Verified | [`CODEX.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) |
+| [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | [`ANTIGRAVITY.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) |
+| [OpenCode](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | [`OPENCODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) |
+| [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) |
+| [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) |
+| [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) |
 
 **Status legend:**
+
 - **First-class** — the reference platform the skills are written for.
 - **Verified** — exercised in a live session against this repo's environment (per the doc's own verification notes).
 - **Working** — compatible per the platform's docs or spec behaviour; not blocked, but not run end-to-end here.
@@ -33,7 +34,7 @@ Before opening a platform's doc, use the table above to tell which family your p
 
 **`.agent/` (and `.codex/`) are not shipped and not generated by a script.** These manual-copy trees are a per-machine install artefact you create by following the platform's doc — this repo does not carry them, and nothing here generates them. They are gitignored, so the copy never appears in version control, and each per-platform doc says exactly which folders to copy. Each also documents the drift caveat: a manual copy silently goes stale when the plugin updates, and the recovery step is to re-run the copy recipe from that platform's doc.
 
-> **One platform spans a third axis.** NVIDIA NIM is *native-spec* for skills wiring (Mechanism A), but introduces a separate, orthogonal concern — the model endpoint itself. NIM serves an OpenAI-compatible API, so an Anthropic-compatible **model proxy** (fcc, Router9, or a self-run gateway) must sit between Claude Code and NIM. That proxy is transport, not a skills mechanism — the skills reader is still Claude Code — see [`NVIDIA-NIM.md`](plugins/jira-sdlc/docs/integrations/NVIDIA-NIM.md) for why a proxy is required and exactly what it does and does not touch.
+> **One platform spans a third axis.** NVIDIA NIM is *native-spec* for skills wiring (Mechanism A), but introduces a separate, orthogonal concern — the model endpoint itself. NIM serves an OpenAI-compatible API, so an Anthropic-compatible **model proxy** (fcc, Router9, or a self-run gateway) must sit between Claude Code and NIM. That proxy is transport, not a skills mechanism — the skills reader is still Claude Code — see [`NVIDIA-NIM.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/NVIDIA-NIM.md) for why a proxy is required and exactly what it does and does not touch.
 
 ## Locating the shared scripts — `CLAUDE_PLUGIN_ROOT`
 
@@ -62,4 +63,4 @@ a client that never loads this hub doc still has the fallback inline.
 
 ## Adding a new platform
 
-The per-platform docs all follow a shared five-section shape: (1) which spec the platform uses — one line, (2) prerequisites, (3) install / wire-up steps, (4) how to invoke the three skills, (5) platform-specific caveats and known gaps. A copy-paste skeleton with guidance for each section lives at [`plugins/jira-sdlc/docs/integrations/_TEMPLATE.md`](plugins/jira-sdlc/docs/integrations/_TEMPLATE.md) — start from it, fill in the five sections, then add a row to the summary table above with the new doc's path and status.
+The per-platform docs all follow a shared five-section shape: (1) which spec the platform uses — one line, (2) prerequisites, (3) install / wire-up steps, (4) how to invoke the three skills, (5) platform-specific caveats and known gaps. A copy-paste skeleton with guidance for each section lives at [`docs/integrations/_TEMPLATE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/_TEMPLATE.md) — start from it, fill in the five sections, then add a row to the summary table above with the new doc's path and status.

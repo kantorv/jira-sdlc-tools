@@ -1,1 +1,3 @@
-.jst/jira-sdlc-tools.local.env
+venv/
+helpers/
+__pycache__/

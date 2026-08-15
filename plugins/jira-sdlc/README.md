@@ -1,6 +1,6 @@
 # jira-sdlc-tools
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/LICENSE)
 
 A Claude Code plugin with three skills — **`jira-task-assigner`**,
 **`jira-task-executor`**, and **`jira-task-reviewer`** — that turn a
@@ -19,7 +19,7 @@ passes and flags what doesn't for the human to fix, and never merges anything
 - [Quick start](#quick-start)
 - [How the three skills relate](#how-the-three-skills-relate)
 - [Core concepts](#core-concepts)
-  - [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  - [Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Repository layout](#repository-layout)
@@ -48,7 +48,7 @@ way.
 Three skills, three jobs:
 
 | Skill | Runs | Does |
-|---|---|---|
+| -- | -- | -- |
 | `jira-task-assigner` | Once, on a task description | Plans: creates the Jira issue(s), decides single-step vs. multistep, creates branches and `git worktree`s, decides how each piece should land in git. Never writes code. |
 | `jira-task-executor` | Once per leaf issue, inside its worktree | Implements: branch/worktree setup, Jira status transition, investigation, implementation, tests, commit, push, PR. |
 | `jira-task-reviewer` | Once, on the parent issue | Reviews: iterates over each In Review sub-task PR, approves or requests changes per-PR (continuing past rejections), posts findings to Jira, and reviews the aggregate parent PR. Never merges anything — all merges are manual. |
@@ -56,8 +56,8 @@ Three skills, three jobs:
 A fourth skill sits outside that lifecycle and runs before it:
 
 | Skill | Runs | Does |
-|---|---|---|
-| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](docs/STEP-BY-STEP.md)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
+| -- | -- | -- |
+| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
 
 ## Quick start
 
@@ -107,7 +107,6 @@ flowchart TB
     BASE -->|human merges manually| DONE([Released])
 ```
 
-
 The diagram shows the multistep path — one worktree and dedicated branch
 per sub-task, all merging into the parent branch. A single-step task is
 just the top-level issue and its worktree (PR targets the base branch
@@ -135,11 +134,11 @@ subagents — can implement different pieces at the same time without
 switching branches out from under each other in a single checkout.
 Worktrees isolate the *source tree*, but not anything the running app
 touches outside it (a database, cache, storage, or port) — see
-[Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+[Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
 for how to decide, per external asset, whether each worktree's instance
 shares it or gets its own. A project records the answer it landed on in
-an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
-hook ([example](docs/examples/bootstrap.example.sh)); when it exists,
+an optional, tracked [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook)
+hook ([example](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/examples/bootstrap.example.sh)); when it exists,
 `jira-task-executor` runs it in the worktree it's about to work in — once
 per worktree, automatically, fail-soft.
 
@@ -161,7 +160,7 @@ sub-tasks to an existing parent). It always provisions one top-level issue
 default. When you *explicitly* ask for an emergency production fix, the
 assigner instead cuts a single-step `hotfix/` branch from
 `origin/<PRODUCTION_BRANCH>` and points its PR at production
-([SDLC.md](docs/SDLC.md) §4) — urgency wording alone won't trigger it, and it
+([SDLC.md](https://kantorv.github.io/jira-sdlc-tools/docs/sdlc) §4) — urgency wording alone won't trigger it, and it
 confirms with you before creating anything. The cut comes from the fetched
 remote ref, so you can invoke it from either the base branch or the production
 branch; production is never required to be checked out.
@@ -191,6 +190,7 @@ value; a `Task` for smaller, localized, or strictly technical chores. A
 Kanban status explicitly with the four status names from
 `.jst/jira-sdlc-tools.env`, so board progress reflects the work without
 relying on opaque GitHub-for-Jira transition rules:
+
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
 - `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
@@ -206,6 +206,7 @@ relying on opaque GitHub-for-Jira transition rules:
 ## Prerequisites
 
 - **Claude Code**, a version with plugin support.
+
 - **A bundled REST client (`jira.sh` / `jira.ps1`)** — the primary script these skills
   drive Jira through. It wraps `curl` (POSIX) or `Invoke-RestMethod` (Windows)
   and authenticates per-request. The shared reference (`skills/_shared/jira-api-reference.md`)
@@ -217,16 +218,20 @@ relying on opaque GitHub-for-Jira transition rules:
   there is no interactive login step to run first.
 
 - **GitHub CLI (`gh`)**, authenticated.
+
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
   connected between your Jira project and GitHub repo — automatic
   branch-to-issue linking depends on it.
+
 - **Git with worktree support** (any reasonably current git).
+
 - **A documented way to run tests** — the executor's test step reads
   the project's `CLAUDE.md` / `AGENTS.md` (or similar) for "one
   test" and "full suite" commands; they no longer live in
   `.jst/jira-sdlc-tools.env`. If the project doesn't document them,
   the executor will ask whether to install a runner — and skip the
   test step if you decline.
+
 - **A worktrees directory that already exists**, as a sibling of your
   repo — the assigner refuses to create it for you. `WORKTREES_DIR` must
   name it with an **absolute** path.
@@ -237,13 +242,16 @@ relying on opaque GitHub-for-Jira transition rules:
 
 1. Add the marketplace at `kantorv/jira-sdlc-tools` and install the
    plugin:
+
    ```
    /plugin marketplace add kantorv/jira-sdlc-tools
    /plugin install jira-sdlc@jira-sdlc-tools
    ```
+
 2. Fill in `.jst/jira-sdlc-tools.env` in the project root — see
    [Configuration](#configuration), or run `/jira-sdlc:jst-install` and let it
    walk you through the whole setup, checking each stage as it goes.
+
 3. The three lifecycle skills are now available as
    `/jira-sdlc:jira-task-assigner`, `/jira-sdlc:jira-task-executor`, and
    `/jira-sdlc:jira-task-reviewer` — plus `/jira-sdlc:jst-install` for setup.
@@ -277,6 +285,7 @@ cp -r plugins/jira-sdlc/skills/* ~/.claude/skills/   # personal, all projects
 # or
 cp -r plugins/jira-sdlc/skills/* .claude/skills/     # project-level, commit it to your repo
 ```
+
 Run from the root of your `kantorv/jira-sdlc-tools` clone.
 
 Invocation is then the bare form: `/jira-task-assigner`,
@@ -343,13 +352,14 @@ root itself is ignored, and every skill's healthcheck FAILs on a missing
 `.jst/` (the `jst_dir` row) before it does anything else.
 
 | File | Purpose | Committed? |
-|------|---------|------------|
+| -- | -- | -- |
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, default base branch, Jira workflow status names) | ✅ Yes |
 | `.jst/jira-sdlc-tools.local.env` | Machine-specific settings (worktrees directory, Jira account URL/email, token path) | ❌ No — gitignored |
 
 See `skills/_shared/project-config.md` for a description of each variable.
 
 Copy the templates from the marketplace root:
+
 ```bash
 mkdir -p .jst
 cp /path/to/jira-sdlc-tools/.jst/jira-sdlc-tools.env .jst/
@@ -400,12 +410,15 @@ Say you're on `development` and want: *"Add CSV export to the reports
 page: backend endpoint, frontend button, feature-flag config."*
 
 **1. Plan it:**
+
 ```
 /jira-sdlc:jira-task-assigner "Add CSV export to the reports page: backend endpoint, frontend button, feature-flag config"
 ```
+
 The assigner investigates the codebase, asks anything genuinely
 ambiguous, decides this splits into independent pieces (multistep), and
 creates:
+
 - `PROJ-401` (parent Story) on `feature/PROJ-401-csv-export`, with its
   own worktree `worktree-PROJ-401`
 - `PROJ-402` (backend endpoint) → worktree + branch
@@ -418,10 +431,12 @@ same as a Jira comment on `PROJ-401`.
 **2. Implement each piece — in parallel:**
 
 In three terminals (or three subagents, one per worktree):
+
 ```
 cd /home/you/src/myapp-worktrees/worktree-PROJ-402 && claude
 > /jira-sdlc:jira-task-executor
 ```
+
 No key argument — it's derived from that worktree's own branch
 (`feature/PROJ-402-...`). ...and the same for `PROJ-403` and `PROJ-404`.
 Each executor implements, tests, commits, pushes, and opens a PR into
@@ -430,9 +445,11 @@ Each executor implements, tests, commits, pushes, and opens a PR into
 **3. Review and merge the set:**
 
 cd into the parent worktree (`worktree-PROJ-401`), then:
+
 ```
 /jira-sdlc:jira-task-reviewer
 ```
+
 The reviewer only processes sub-tasks whose Jira status is `<STATUS_IN_REVIEW>`
 (e.g. "In Review") — if a sub-task is still in progress, it is skipped for
 now. For each In Review sub-task, it checks if it has already reviewed that
@@ -523,11 +540,11 @@ Deliberately never automated, regardless of how routine a run looks:
   **running app instance**. Anything the app touches outside its source
   (a database, cache, storage, queue, or port) is shared across worktrees
   by default and can collide when several run at once — see
-  [Running multiple copies across worktrees](docs/RUNNING-MULTIPLE-COPIES.md)
+  [Running multiple copies across worktrees](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies)
   for the per-asset share-vs-isolate decision (and the Django database
   worked example). Projects that need per-worktree provisioning put it in
   an optional
-  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
+  [`.jst/bootstrap.sh` / `.jst/bootstrap.ps1`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md#jstbootstrapsh--jstbootstrapps1--the-optional-worktree-hook),
   which the executor runs per worktree — but the plugin still ships
   nothing that provisions an instance for you; it only runs what your
   project wrote, and reports (never blocks on) a non-zero exit.
@@ -539,18 +556,18 @@ output" rather than assume — worth running deliberately before your first
 real task, not discovering mid-failure:
 
 - [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue view <any-existing-key> --fields 'summary,description,issuetype,status,parent,subtasks'`
-      (the review-fetch field list; source of truth: `skills/_shared/jira-api-reference.md` §10) —
-      confirm `fields.subtasks` is shaped the way the skills expect (an array of objects with
-      a `.key`, not bare strings).
+  (the review-fetch field list; source of truth: `skills/_shared/jira-api-reference.md` §10) —
+  confirm `fields.subtasks` is shaped the way the skills expect (an array of objects with
+  a `.key`, not bare strings).
   - Prints your project's real workflow status names — fill the confirmed
-      values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
-      `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `.jst/jira-sdlc-tools.env`.
+    values into `<STATUS_TODO>` / `<STATUS_IN_PROGRESS>` /
+    `<STATUS_IN_REVIEW>` / `<STATUS_DONE>` in `.jst/jira-sdlc-tools.env`.
 - [ ] `bash plugins/jira-sdlc/skills/_shared/scripts/posix/jira.sh issue comment add --help` — the skills write
-      multi-line comments to a temp file and post with `--body-file <real file>`.
-      Confirm that form works.
+  multi-line comments to a temp file and post with `--body-file <real file>`.
+  Confirm that form works.
 - [ ] Browse URL — The skills build the
-      issue link as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` from the
-      `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
+  issue link as `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` from the
+  `JIRA_ACCOUNT_URL` token; confirm that resolves to your instance.
 
 ## Troubleshooting / FAQ
 
@@ -598,7 +615,7 @@ inside `jira-task-assigner` and `jira-task-reviewer` hardcode the
 
 ## The branching model this assumes
 
-[`docs/SDLC.md`](docs/SDLC.md) is the full branching and release policy
+[`docs/SDLC.md`](https://kantorv.github.io/jira-sdlc-tools/docs/sdlc) is the full branching and release policy
 these skills were written against: `main` / `development` /
 `feature/*` / `hotfix/*` / `release/*` branches, a two-week sprint
 cadence with a feature-freeze cut, an emergency hotfix flow that bypasses
@@ -626,7 +643,7 @@ concrete before/after scenario in the PR description goes a long way.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/LICENSE).
 
 ## Acknowledgments
 
@@ -635,4 +652,3 @@ concrete before/after scenario in the PR description goes a long way.
   branch-to-issue linking.
 - Built for [Claude Code](https://claude.com/claude-code).
 - [A successful Git branching model](https://nvie.com/posts/a-successful-git-branching-model).
-
