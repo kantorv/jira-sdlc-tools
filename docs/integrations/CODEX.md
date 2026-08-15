@@ -1,6 +1,7 @@
 ---
 slug: /integrations/codex
 sidebar_position: 2
+sidebar_label: Codex
 ---
 
 # Codex CLI Integration (Agent Skills spec)

@@ -1,6 +1,7 @@
 ---
 slug: /examples/story-report
 sidebar_position: 1
+sidebar_label: Story report
 ---
 
 # Feature report — JST-122 (multistep)

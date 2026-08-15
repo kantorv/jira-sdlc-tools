@@ -1,6 +1,7 @@
 ---
 slug: /applications/ci-issue-to-task-demo
 sidebar_position: 2
+sidebar_label: Issue to task
 ---
 
 # CI application: the issue-to-task / issue-to-bug demo (jira-task-assigner alone)
@@ -13,8 +14,8 @@ sidebar_position: 2
 > branch. It is an **application demo**: a worked example meant to be read
 > next to the workflow file (whose comments carry the line-level rationale)
 > and copied into other repos, **not** this repo's development procedure
-> ([SDLC.md](../SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../CI.md).
+> ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../process/CI.md).
 >
 > [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
 > is a **byte-identical twin** — the `/make-bug` counterpart — that differs

@@ -1,6 +1,7 @@
 ---
 slug: /integrations/kimi-code
 sidebar_position: 7
+sidebar_label: Kimi Code
 ---
 
 # Kimi Code Integration (Native Claude Skills Spec)

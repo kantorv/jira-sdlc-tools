@@ -1,6 +1,7 @@
 ---
 slug: /applications/ci-feature-flow-demo
 sidebar_position: 3
+sidebar_label: Feature flow
 ---
 
 # CI application: the feature-flow demo (assigner → executor → reviewer)
@@ -14,8 +15,8 @@ sidebar_position: 3
 > meant to be read next to the workflow file (whose comments carry the
 > line-level rationale) and copied into other repos. It is **not** this repo's
 > development procedure — planned work here is human-driven
-> ([SDLC.md](../SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../CI.md).
+> ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../process/CI.md).
 >
 > Its sibling is [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) — the same
 > three-job chain on the *emergency* flow. Everything the two share is
@@ -42,7 +43,7 @@ so the whole run is visible where the work was requested.
 
 Nothing is merged. The run ends with an open, reviewed PR into
 `<DEFAULT_BASE_BRANCH>`. Merging it is a human act — and from there the
-ordinary release path applies ([SDLC.md](../SDLC.md)), with no tag bump of its
+ordinary release path applies ([SDLC.md](../process/SDLC.md)), with no tag bump of its
 own.
 
 ```mermaid

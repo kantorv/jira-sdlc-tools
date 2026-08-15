@@ -1,0 +1,9 @@
+{
+  "label": "Process & policy",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "slug": "/process",
+    "description": "Branching, releases, CI and the rules the skills enforce."
+  }
+}

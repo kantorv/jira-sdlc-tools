@@ -1,6 +1,7 @@
 ---
 slug: /integrations/claude-code
 sidebar_position: 1
+sidebar_label: Claude Code
 ---
 
 # Claude Code Integration (Native Claude skills)

@@ -1,6 +1,7 @@
 ---
 slug: /applications/ci-smoke-test-demo
 sidebar_position: 6
+sidebar_label: Smoke test
 ---
 
 # CI application: the smoke-test demo (a plain prompt, no skill)

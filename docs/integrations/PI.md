@@ -1,6 +1,7 @@
 ---
 slug: /integrations/pi
 sidebar_position: 10
+sidebar_label: Pi
 ---
 
 # Pi Integration (Native Claude Skills Spec)
