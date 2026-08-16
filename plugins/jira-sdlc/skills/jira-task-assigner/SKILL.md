@@ -65,8 +65,9 @@ can't decide how statuscheck itself is run. It takes a required `--role assigner
 There is no login step: `jira.sh` authenticates **per-request as
 `--role assigner`** (`../_shared/jira-api-reference.md` §9), so every issue
 create below carries `--role assigner` and picks up that credential on the
-one call. Statuscheck repairs a missing `.jst/jira-sdlc-tools.local.env`
-itself and reports it in `env_local`.
+one call. A missing `.jst/jira-sdlc-tools.local.env` is a hard FAIL on
+statuscheck's `env_local` row here — the main checkout is where that file has
+to exist, so there is nothing for the healthcheck to copy it from.
 
 Run the shared pre-flight healthcheck. It gathers every environment fact this
 skill depends on — git repo, the two env files + their gitignore state, Jira
