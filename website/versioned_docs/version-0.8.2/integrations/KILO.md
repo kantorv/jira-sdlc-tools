@@ -1,6 +1,7 @@
 ---
 slug: /integrations/kilo
 sidebar_position: 6
+sidebar_label: Kilo Code
 ---
 
 # Kilo Code Integration (Native Claude Skills Spec)

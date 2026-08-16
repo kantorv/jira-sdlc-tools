@@ -2,6 +2,8 @@
 skill: jira-task-reviewer
 conversation: df864d2f-3115-4f06-b3c2-24456615eed0
 plugin_version: 0.5.0-lab.2
+slug: /examples/reviewer-run-report
+sidebar_position: 5
 ---
 
 # Run report: jira-task-reviewer — df864d2f-3115-4f06-b3c2-24456615eed0

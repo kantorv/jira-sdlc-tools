@@ -6,7 +6,7 @@ on:
 jobs:
   transition-jira:
     if: false
-    #if: github.ref_type == 'branch' && (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'bugfix/') || startsWith(github.ref_name, 'chore/') || startsWith(github.ref_name, 'hotfix/'))
+    #if: github.ref_type == 'branch' && (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'hotfix/'))
     runs-on: ubuntu-latest
 
     steps:
@@ -16,7 +16,7 @@ jobs:
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          if [[ "$BRANCH" =~ ^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9]*-[0-9]+)- ]]; then
+          if [[ "$BRANCH" =~ ^(feature|hotfix)/([A-Z]+-[0-9]+)- ]]; then
             echo "key=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
           else
             echo "No Jira issue found in branch '$BRANCH'. Skipping."

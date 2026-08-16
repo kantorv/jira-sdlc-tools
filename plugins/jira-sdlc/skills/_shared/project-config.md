@@ -265,7 +265,7 @@ a session's cwd, with every path separator replaced by `-`). The core three skil
 never read them, so a project that doesn't use the lab channel can omit both.
 
 | Token | What it is | Example |
-|---|---|---|
+| -- | -- | -- |
 | `CONVERSATIONS_MAINREPO_PATH` | The main checkout's transcript folder, used as-is — where the assigner's issue-creating session lives. | `~/.claude/projects/-home-you-src-myapp` |
 | `CONVERSATIONS_WORKTREES_PREFIX` | The **prefix** shared by every worktree's transcript folder; the script appends `worktree-<KEY>` to it to locate one issue's folder. Pinning a prefix (not per-issue paths) is what scopes the builtin to your worktrees tree and nothing else under `~/.claude/projects`. | `~/.claude/projects/-home-you-src-myapp-worktrees-` |
 
@@ -304,7 +304,4 @@ JIRA_EXECUTOR_EMAIL   = executor@example.com
 JIRA_EXECUTOR_TOKEN   = ATATT3xFfGF0…
 JIRA_REVIEWER_EMAIL   = reviewer@example.com
 JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
-# Optional — lab-only conversation sync (see "Optional — conversation sync" above):
-#CONVERSATIONS_MAINREPO_PATH      = ~/.claude/projects/-home-you-src-myapp
-#CONVERSATIONS_WORKTREES_PREFIX  = ~/.claude/projects/-home-you-src-myapp-worktrees-
 ```

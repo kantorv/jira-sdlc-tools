@@ -81,15 +81,12 @@ if (-not $Me) { $Me = "role '$Role'" }
 
 # --- which issue? ------------------------------------------------------------
 if (-not $Key) {
-    # Prefix-agnostic by construction: everything up to the first `/` is dropped,
-    # so all four issue-branch prefixes (feature/bugfix/chore/hotfix) derive a key
-    # with no per-prefix list to keep current.
     $br = (& git branch --show-current 2>$null); if ($br) { $br = ([string]$br).Trim() }
     $brTail = $br -replace '^[^/]*/', ''
     if ($brTail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Key = $Matches[1] }
     if (-not $Key) {
         $shown = if ($br) { $br } else { 'none' }
-        Die "check_assignee: no issue key derivable from branch '$shown' — expected feature/, bugfix/, chore/ or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
+        Die "check_assignee: no issue key derivable from branch '$shown' — expected feature/<KEY>-<slug> or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
     }
 }
 

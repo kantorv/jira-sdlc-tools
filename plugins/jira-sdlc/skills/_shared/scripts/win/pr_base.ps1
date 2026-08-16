@@ -68,13 +68,10 @@ if ($Branch) {
 }
 
 if (-not $Key) {
-    # Prefix-agnostic by construction: everything up to the first `/` is dropped,
-    # so all four issue-branch prefixes (feature/bugfix/chore/hotfix) derive a key
-    # with no per-prefix list to keep current.
     $brTail = $Cur -replace '^[^/]*/', ''
     if ($brTail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Key = $Matches[1] }
     if (-not $Key) {
-        Die "pr_base: no issue key derivable from branch '$Cur' — expected feature/, bugfix/, chore/ or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
+        Die "pr_base: no issue key derivable from branch '$Cur' — expected feature/<KEY>-<slug> or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
     }
 }
 
@@ -113,16 +110,10 @@ if ($PrBase) { Emit $PrBase 'jira-comment'; exit 0 }
 # strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
 # (checked out in another linked worktree, the normal state of a parent branch
 # while a sub-task's worktree runs this search) — and fold the remotes/origin/
-# copy of a pushed branch into its local name (§12). All four issue-branch
-# prefixes are searched: the parent's prefix is whichever one the assigner chose
-# for that run, and a sub-task inherits it rather than picking its own.
+# copy of a pushed branch into its local name (§12).
 if ($ParentKey) {
     $raw = @()
-    try {
-        $raw = @(& git branch -a --list `
-            "*feature/$ParentKey-*" "*bugfix/$ParentKey-*" `
-            "*chore/$ParentKey-*" "*hotfix/$ParentKey-*" 2>$null)
-    } catch { $raw = @() }
+    try { $raw = @(& git branch -a --list "*feature/$ParentKey-*" "*hotfix/$ParentKey-*" 2>$null) } catch { $raw = @() }
     $candidates = @($raw |
         ForEach-Object { ([string]$_) -replace '^[+* ]+', '' -replace '^remotes/origin/', '' } |
         Where-Object { $_.Trim() } |

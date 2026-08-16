@@ -210,20 +210,15 @@ The skills assume Gitflow (https://kantorv.github.io/jira-sdlc-tools/docs/sdlc):
 names, they follow the policy. Two **distinct** long-lived branches are yours to
 create — `PRODUCTION_BRANCH` (releases land here, default `main`) and
 `DEFAULT_BASE_BRANCH` (feature work branches from and merges back into it,
-default `development`). The skills create the per-issue work branches
-themselves, one per issue, prefixed `feature/`, `bugfix/`, `chore/` or
-`hotfix/` according to what the work is
-(https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §2).
+default `development`). The skills create `feature/<KEY>-<slug>` and
+`hotfix/<KEY>-<slug>` themselves, one per issue.
 
 **A single-branch repo is not a configuration this plugin supports**, so never
 offer one: collapse the pair and the assigner's planned path and its hotfix path
 (step 5C) resolve to the same branch — every feature PR targets production, and
 the emergency route stops being distinguishable from ordinary work — while the
 release workflows, which key the version off `release/sprint-<X.Y.Z>` and
-`hotfix/*` branch names and deliberately off nothing else, so that a `feature/`,
-`bugfix/` or `chore/` merge never tags a release
-(https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §5), have nothing left to
-key on.
+`hotfix/*` branch names (https://kantorv.github.io/jira-sdlc-tools/docs/sdlc §5), have nothing left to key on.
 When a repo has only `main`, the open question is what the *second* branch is
 called, never whether to have one. Ask-don't-assume still holds for the names —
 `development` is the documented default, `develop`/`staging`/anything else is

@@ -17,9 +17,9 @@
 #                       Absent/empty means a top-level issue, which is the only
 #                       thing that makes the env default reachable.
 #         ISSUE-KEY     defaults to the key derived from --branch (or, absent
-#                       that, the current branch):
-#                       feature|bugfix|chore|hotfix/<KEY>-<slug>, as
-#                       statuscheck.sh and check_assignee.sh do.
+#                       that, the current branch): feature/<KEY>-<slug> /
+#                       hotfix/<KEY>-<slug>, as statuscheck.sh and
+#                       check_assignee.sh do.
 #
 # The implementation of jira-api-reference.md §13 — that section documents this
 # script rather than restating it, so a fix lands in one place instead of in
@@ -79,12 +79,9 @@ else
 fi
 
 if [ -z "$KEY" ]; then
-  # Prefix-agnostic by construction: everything up to the first `/` is dropped,
-  # so all four issue-branch prefixes (feature/bugfix/chore/hotfix) derive a key
-  # with no per-prefix list to keep current.
   BR_TAIL=${CUR#*/}
   KEY=$(printf '%s' "$BR_TAIL" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
-  [ -n "$KEY" ] || die "pr_base: no issue key derivable from branch '$CUR' — expected feature/, bugfix/, chore/ or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
+  [ -n "$KEY" ] || die "pr_base: no issue key derivable from branch '$CUR' — expected feature/<KEY>-<slug> or hotfix/<KEY>-<slug>. Run from the issue's worktree, or pass the key."
 fi
 
 emit() { printf 'base=%s\nsource=%s\n' "$1" "$2"; }
@@ -106,13 +103,9 @@ if [ -n "$PR_BASE" ]; then emit "$PR_BASE" jira-comment; exit 0; fi
 # strip BOTH markers `git branch -a` emits — `*` (checked out here) and `+`
 # (checked out in another linked worktree, the normal state of a parent branch
 # while a sub-task's worktree runs this search) — and fold the remotes/origin/
-# copy of a pushed branch into its local name (§12). All four issue-branch
-# prefixes are searched: the parent's prefix is whichever one the assigner chose
-# for that run, and a sub-task inherits it rather than picking its own.
+# copy of a pushed branch into its local name (§12).
 if [ -n "$PARENT_KEY" ]; then
-  CANDIDATES=$(git branch -a --list \
-      "*feature/$PARENT_KEY-*" "*bugfix/$PARENT_KEY-*" \
-      "*chore/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
+  CANDIDATES=$(git branch -a --list "*feature/$PARENT_KEY-*" "*hotfix/$PARENT_KEY-*" 2>/dev/null \
     | sed -E 's#^[+* ]+##; s#^remotes/origin/##' | sort -u)
   MATCHES=$(printf '%s' "$CANDIDATES" | grep -c . || true)
   if [ "$MATCHES" -eq 1 ]; then emit "$CANDIDATES" branch-search; exit 0; fi

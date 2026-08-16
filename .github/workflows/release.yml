@@ -13,10 +13,8 @@
 # snapshot up (see publish-docs at the bottom — the reason it is a dispatch
 # and not a reusable-workflow call is the whole point of that job).
 #
-# Only fires for release/* and hotfix/* head branches — the `if:` guard below
-# is an allowlist of those two, so no work-branch prefix (feature/, bugfix/,
-# chore/) merged straight into main triggers a release, and widening the
-# branch convention cannot reach the version resolver.
+# Only fires for release/* and hotfix/* head branches — a feature PR merged
+# straight into main does NOT trigger a release (the `if:` guard below).
 #
 # Auth: the default GITHUB_TOKEN works while main/development are unprotected
 # (verified at implementation time). If branch protection is later enabled, or
@@ -39,9 +37,7 @@ jobs:
     name: Tag, release, sync main -> development, cleanup
     runs-on: ubuntu-latest
     # Only real merges from a release/* or hotfix/* branch, never a closed
-    # PR, and never a work branch (feature/, bugfix/, chore/) sneaking into
-    # main. Allowlist, not a denylist — new branch prefixes stay excluded
-    # by construction.
+    # PR or a feature PR sneaking into main.
     if: >-
       github.event.pull_request.merged == true
       && (

@@ -1,6 +1,6 @@
 ---
 name: jira-task-executor
-description: Picks up the issue implied by the current worktree's branch end-to-end — branch, status transition, investigation, implementation, tests, commit, push, and PR. No issue-key argument; run it from inside the issue's own worktree, optionally with free-form notes for the run. Reports back the PR link and updated Jira status.
+description: Implements the Jira issue whose worktree you are standing in — branch, status transition, investigation, implementation, tests, commit, push, PR — and reports the PR link and new status. Run it bare from inside the issue's own worktree (created by jira-task-assigner); the issue key comes from the branch name, never from an argument. Re-run it the same way after a review rejects the PR — it reads the reviewer's findings from the issue and updates the existing PR instead of opening a second one. Any argument you pass is treated as free-form notes for this run.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion
 ---
@@ -11,41 +11,33 @@ the issue key is derived from the current branch (see Discovery below).
 
 **Conventions used below:**
 
-- `<KEY>` = the Jira issue key derived from the current branch
-  (`<PREFIX><KEY>-<slug>`, where `<PREFIX>` is one of `feature/`, `bugfix/`,
-  `chore/`, `hotfix/` — `../_shared/jira-api-reference.md` §12), read from the
-  Discovery healthcheck's `issue_key` row below — the branch is the sole
-  source of truth, there is no user-supplied key to compare it against.
+- `<KEY>` = the issue key from Discovery's `issue_key` row, parsed off the
+  branch (`feature/<KEY>-<slug>` / `hotfix/<KEY>-<slug>`).
 - `$ARGUMENTS`, when non-empty, is free-form notes about this run
   (constraints, focus areas, context) — never parsed as an issue key.
-  Fold it into investigation (step 4), clarification (step 5), and
-  implementation (step 6) alongside the Jira issue description; it
-  supplements, never replaces, that description.
+  Fold it into steps 4–6 alongside the issue description, which it
+  supplements rather than replaces.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root, and every script path below
-  hangs off it. If it isn't set (a non-Claude client), resolve the root
-  yourself, in order: (1) this skill's own directory — given at the top of the
-  loaded SKILL.md, or the folder containing it — so the scripts are at
-  `../_shared/scripts/posix/` relative to it (correct on every platform); (2) if
-  you can't derive that, probe the platform's default skills locations —
-  project-root `.agent/skills/`, `.agents/skills/`, `.codex/skills/`,
-  `.opencode/skills/`, `.claude/skills/`, `.grok/skills/`, the home global
-  `~/.claude/skills/`, or the path named in the platform's config
-  (`kilo.jsonc`, `settings.json`, `config.toml`). `jira.sh` and every other
-  script the steps call live there; see INTEGRATIONS.md → "Locating the shared
-  scripts".
+  hangs off it. Unset (a non-Claude client) → resolve it from this skill's own
+  directory instead, which puts the scripts at `../_shared/scripts/posix/`
+  relative to it on every platform. If even that isn't derivable, the
+  platform-by-platform skills locations are in
+  [INTEGRATIONS.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md)
+  → "Locating the shared scripts".
 - **Jira access is the `jira.sh` / `jira.ps1` client, not a global CLI.** It
   lives at `$S/jira.sh` (POSIX) / the `win/jira.ps1` port (Windows), where `S`
   is the scripts dir set in the credential block below. The steps write Jira
   calls as `jira.sh <cmd>` for brevity — actually invoke it as
   `bash "$S/jira.sh" <cmd>` (POSIX) / `pwsh …/win/jira.ps1 <cmd>` (Windows),
-  re-setting `S` at the top of each shell block that needs it. It authenticates
-  **per-request as `--role executor`** (`../_shared/jira-api-reference.md` §9) —
-  no login step and no stored credential, so nothing to log into first.
+  re-setting `S` at the top of each shell block that needs it — an unset `S`
+  silently becomes `bash "/jira.sh"`. It authenticates **per-request as
+  `--role executor`** (`../_shared/jira-api-reference.md` §9).
 - **Jira comment mechanics**: comments are written to a temp file and posted
   with `jira.sh --role executor issue comment add <KEY> --body-file <file>`.
   There is no inline-body form — the body always comes from a file, so backticks
   in it are never at risk of shell substitution; `jira.sh` stores plain text as
-  ADF (one paragraph per non-blank line). See §11.
+  ADF (one paragraph per non-blank line). See
+  `../_shared/jira-api-reference.md` §11.
 - **Task memory (Jira comments as durable per-task memory)**: the issue's
   Jira comments are this task's long-term memory across sessions — step 4
   reads what earlier runs left, step 6 records what this one learns, so a
@@ -53,17 +45,13 @@ the issue key is derived from the current branch (see Discovery below).
   instead of starting cold. Every memory comment begins with the marker line
   `Task memory (jira-task-executor)`, which keeps it greppable and distinct
   from the assigner's `Assignment report`, the `PR target branch:` comment
-  and the final run report (step 12); post it with the same temp-file +
-  `--body-file` mechanics as any other comment (§11). **Routing**: durable
-  or architectural decisions belong in the code docs (README / CLAUDE.md /
-  AGENTS.md / inline) — a memory comment is a pointer for the next session,
-  not a permanent home for design the codebase itself should own.
-- Every leaf gets its own dedicated branch and opens its own PR; step 10
-  resolves that PR's base (`../_shared/jira-api-reference.md` §13).
+  and the final run report (step 12).
+  **Routing**: durable or architectural decisions belong in the code docs
+  (README / CLAUDE.md / AGENTS.md / inline) — a memory comment is a pointer
+  for the next session, not a permanent home for design the codebase owns.
 - `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
   committed, secret-free file, and the only one those names live in; it
-  carries this project's confirmed status names, of which the default
-  examples are `In Progress`, `In Review` and `Done`. Every
+  carries this project's confirmed status names. Every
   other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
   `.jst/jira-sdlc-tools.local.env`**: it holds all three role Jira API
   tokens and the GitHub PAT (`../_shared/project-config.md` § *Reading
@@ -76,7 +64,7 @@ exit codes). Pick the branch from your own runtime *before the first call* —
 you know your OS without running anything — and use it for every script
 here, credential block included; the blocks below are the POSIX form.
 Statuscheck's `platform` row only *confirms* that choice afterwards, so it
-can't decide how statuscheck itself is run. It takes a required `--role executor` (no default credential) and no issue-key argument.
+can't decide how statuscheck itself is run.
 
 **Get local credentials and confirm you own the issue — run these FIRST,
 before the healthcheck.** Both are idempotent and take no decisions of their
@@ -92,8 +80,9 @@ bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets loca
 bash "$S/check_assignee.sh" --role executor  || exit 1   # 2. <KEY> must be assigned to the executor
 ```
 
-(`check_assignee.sh` resolves the executor identity via `jira.sh --role executor whoami` and takes the key from the branch, as the healthcheck does;
-pass a key explicitly only when running outside the issue's worktree.)
+(`check_assignee.sh` resolves the executor identity via
+`jira.sh --role executor whoami` and takes the key from the branch, as the
+healthcheck does.)
 
 **Discovery and healthcheck — run before step 1.** The rest of this skill
 transitions Jira status, commits, pushes and opens a PR, all of which assume
@@ -108,6 +97,9 @@ existed:
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role executor
 ```
+
+`--role executor` is required (there is no default credential) and no issue-key
+argument is passed: the branch is the only source of the key.
 
 It resolves `<PROJECT-KEY>` and `<DEFAULT_BASE_BRANCH>` from the env files
 itself, so you don't pre-resolve tokens for this section, and prints one
@@ -127,25 +119,16 @@ note below**:
 | row | what it verifies / gathers |
 | -- | -- |
 | `worktree` | INFO: *linked worktree* (`.git` is a file) vs. *main checkout* (`.git` is a directory). **Anything but a linked worktree → stop**: this skill runs only from an issue's own worktree. `cd` into the one `jira-task-assigner` created (`worktree-<KEY>`) and rerun |
-| `branch` | INFO: base branch vs. *issue branch* — any of §12's four prefixes, `feature/`, `bugfix/`, `chore/`, `hotfix/` (`../_shared/jira-api-reference.md`) — vs. neither. **Anything but an issue branch → stop** (same remedy) — sitting on `<DEFAULT_BASE_BRANCH>` means you're not in an issue's worktree |
+| `branch` | INFO: base branch vs. `feature/*`/`hotfix/*` issue branch (`../_shared/jira-api-reference.md` §12) vs. neither. **Anything but an issue branch → stop** (same remedy) — sitting on `<DEFAULT_BASE_BRANCH>` means you're not in an issue's worktree |
 | `issue_key` | the key derived from the branch name — becomes `<KEY>` for the rest of the run |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2's stale-branch merge (step 10's resolver reads it for itself) |
 | `production_branch` | INFO: `<PRODUCTION_BRANCH>` — this skill's only source for it, consumed by step 10's prefix/base sanity check |
 | `bootstrap` | INFO either way: whether this project ships an optional `.jst/bootstrap.sh` (POSIX) / `.jst/bootstrap.ps1` (Windows). Present → step 1 runs it; absent → nothing to do, and most projects won't have one |
 | `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
 
-The remaining rows FAIL if broken but need no per-role interpretation here:
-`jst_dir` (a missing `.jst/` aborts the script early), `git_repo`,
-`env_config`, `env_local` (auto-copied into a worktree from the main checkout
-when missing by `ensure_local_env.sh` — the credential block above ran it),
-`env_local_ignored`, `branch_project` (wrong-project guard), `gh_auth` plus
-`gh_repo_access` (step 10's `gh pr create` needs both a login *and* a PAT that
-can see this repo), `jira_auth` (the **executor's** credential authenticates
-— `jira.sh --role executor whoami`), `jira_project`, `branch_pair` (the two
-long-lived branches must differ), plus context
-`base_branch`, `working_tree` (WARN when dirty) and `worktrees_dir` (WARN when
-missing, FAIL when not an absolute path — otherwise only the assigner acts on
-it).
+Two of those other rows matter later: `gh_auth` and `gh_repo_access` together
+are what step 10's `gh pr create` depends on (a login *and* a PAT that can see
+this repo), so a FAIL there is not a problem to discover at step 10.
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't try to re-create worktrees, switch
@@ -153,11 +136,10 @@ branches, or re-auth CLIs yourself; the executor doesn't self-repair its
 own preconditions.
 
 Otherwise the `issue_key` row's derived key is `<KEY>` for the rest of this
-run. Before your first call after the healthcheck, state what the
-role-specific rows read — `worktree`, `branch`, `issue_key`,
-`parent_branch`, `bootstrap` (a message batched with the healthcheck can't:
-the values don't exist yet). Then continue to step 1, carrying the INFO rows
-forward as context.
+run. Before your first call after the healthcheck, state what each of the rows
+above read (a message batched with the healthcheck can't: the values don't
+exist yet). Then continue to step 1, carrying the INFO rows forward as
+context.
 
 01. **Run the project's bootstrap hook, then fetch the issue.**
 
@@ -195,8 +177,9 @@ forward as context.
     `../_shared/jira-api-reference.md` §10 — resolve there rather than here if
     the two ever disagree — and it's sized to everything this skill reads,
     including `comment` (scanned in step 4). Pull out: summary, description,
-    issue type, current status, and `fields.parent.key` (if any) — store that as
-    `PARENT_KEY` for step 10's resolver.
+    current status (steps 3 and 11 branch on it) and `fields.parent.key` if
+    present — store it as `PARENT_KEY`, which step 10's base resolver and step
+    11's routing both read.
 
     - Also check `fields.subtasks` (§10's canonical list names it explicitly,
       so the narrowed payload keeps it):
@@ -212,8 +195,7 @@ forward as context.
     on `<KEY>`'s own issue branch inside its own linked worktree, so there is
     nothing to locate or create here. (An issue with no branch/worktree yet is
     provisioned *before* this skill runs, by `../_shared/jira-api-reference.md`
-    §12's no-assigner recipe — which also settles the two unrelated senses of
-    "bootstrap" that git-level setup and step 1a's runtime hook trade on.)
+    §12's no-assigner recipe.)
     What the branch *can* be is **stale**: the branch it was created from may
     have moved since — most commonly a sibling sub-task's PR merging into the
     shared parent. Read the parent from Discovery's `parent_branch` row rather
@@ -242,9 +224,17 @@ forward as context.
       resolver handles an unset parentbranch (Jira comment, then env
       default).
 
-03. **Transition the issue** to in-progress:
+03. **Transition the issue to `<STATUS_IN_PROGRESS>`** — unless step 1b's
+    `status` already reads it, which is the normal state on a re-run after a
+    reject (the reviewer put it back there). Workflows generally offer no
+    transition into the status an issue already occupies, so asking anyway
+    exits 8, and `jira-api-reference.md` §9's "non-zero is a stop condition"
+    would abort the re-run
+    before step 4 ever reads the reviewer's findings. Already there → note it
+    and continue.
+
     `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_PROGRESS>"`
-    (transition by target status *name*; `jira.sh` resolves it to the id).
+    (by target status *name*; `jira.sh` resolves it to the id).
 
 04. **Investigate** — read the affected code (Grep/Read/Glob) before
     writing anything. Understand existing patterns, not just the issue text.
@@ -291,27 +281,24 @@ forward as context.
       `AGENTS.md`, a "Tests" section in `README.md`, or similar in the
       repo root.
 
-      - **Found, and covers both forms** (run a single test, run the full
-        suite) → use those commands throughout the rest of this step.
-      - **Not documented anywhere** → ask the user whether to install a
-        test runner and the testing dependencies now. This is its own task;
-        don't decide on their behalf.
-        - If they say yes → once everything's in, fold the discovered
-          "run one test" / "run full suite" commands into `CLAUDE.md` /
-          `AGENTS.md` so the next session doesn't have to re-derive them.
-        - If they say no, or this stack genuinely has no test layer →
-          skip the rest of this step. Note in the final report that
-          testing was skipped and why, then continue to step 8 (commit).
-      - **Tests exist but the commands are missing or only half-documented**
-        — the most common case in a real repo (CI runs them but no
-        `CLAUDE.md` line says how; or the docs give the full-suite command
-        and nothing for selecting a single test) → discover the missing
-        form(s) by inspecting `package.json` scripts, `Makefile` targets,
-        README sections, and CI config, and sanity-check each candidate
-        (`--listTests`, a dry run, or one trivial pass) before relying on
-        it. **Suggest** (don't silently edit) that the user add the
-        resulting "run one test" and "run full suite" commands to
-        `CLAUDE.md` / `AGENTS.md`.
+      - **Both forms documented** (run a single test, run the full suite) →
+        use those commands throughout the rest of this step.
+      - **The repo has tests, but the commands are missing or half-documented**
+        — the common case: CI runs them and no `CLAUDE.md` line says how, or
+        the docs give the full-suite command and nothing for selecting one
+        test → recover the missing form(s) from `package.json` scripts,
+        `Makefile` targets, README sections and CI config, and sanity-check
+        each candidate (`--listTests`, a dry run, one trivial pass) before
+        relying on it. **Suggest** — don't silently edit — that the user add
+        the two resulting commands to `CLAUDE.md` / `AGENTS.md`.
+      - **The repo has no test layer at all** → ask whether to install a runner
+        and the testing dependencies now. That is its own task; don't decide it
+        on their behalf.
+        - Yes → once it's in, fold the "run one test" / "run full suite"
+          commands into `CLAUDE.md` / `AGENTS.md` so the next session doesn't
+          re-derive them.
+        - No → skip the rest of this step, note in the final report that
+          testing was skipped and why, and continue to step 8 (commit).
 
     - **7b. Run tests for this change.** If test coverage exists already,
       identify the affected tests; if it doesn't, add the new test(s) to
@@ -354,11 +341,11 @@ forward as context.
       ```
       - **Non-empty** → that PR now carries this run's commits. Don't create a
         second one, and don't resolve a base — an open PR's base isn't this
-        run's decision. Post what changed as a PR comment so the reviewer's
-        next pass sees the fix instead of re-reading the whole diff —
-        `gh pr comment <number> --body-file /tmp/<KEY>-fix-summary.md` (temp
-        file, same backtick hazard as everywhere else) — then carry that PR's
-        link into steps 11 and 12 and skip to step 11.
+        run's decision. Write what changed to `/tmp/<KEY>-fix-summary.md`
+        (`cat > … <<'EOF'`) and post it with
+        `gh pr comment <number> --body-file …`, so the reviewer's next pass
+        sees the fix instead of re-reading the whole diff. Carry that PR's
+        link into steps 11 and 12.
       - **Empty** → resolve the base and create the PR, below.
     - Resolve the PR base with `pr_base.sh`, which *is*
       `../_shared/jira-api-reference.md` §13 (git config → the Jira
@@ -384,15 +371,12 @@ forward as context.
         explicitly in the final report.
       - **`source=env-default`** — top-level issues only. Proceed, and say so
         explicitly in the final report.
-      - **Prefix and base disagree** (top-level issues only — §13's sanity
-        table is the authority; this is what it comes to here, with
-        `<PRODUCTION_BRANCH>` from Discovery's `production_branch` row):
-        `hotfix/` ⇔ `PR_BASE` is `<PRODUCTION_BRANCH>`, either without the
-        other being wrong; `feature/` and `chore/` expect
-        `<DEFAULT_BASE_BRANCH>`; `bugfix/` legitimately takes either
-        `<DEFAULT_BASE_BRANCH>` or a `release/*` branch. On any other pairing
-        one of the two is wrong — **stop and ask.** A hotfix that fell through
-        to `source=env-default` is the realistic case, and
+      - **Prefix and base disagree** (top-level issues only — the §13 sanity
+        check): you're on `hotfix/…` but `PR_BASE` isn't `<PRODUCTION_BRANCH>`
+        (Discovery's `production_branch` row), or on `feature/…` but it is.
+        §12 ties the prefix to the base, so one of
+        the two is wrong — **stop and ask.** A hotfix that fell through to
+        `source=env-default` is the realistic case, and
         retargeting a production fix at staging neither ships it nor gets it
         versioned. A sub-task is exempt: its base is its parent's branch.
     - Link the issue from the PR body as
@@ -400,9 +384,8 @@ forward as context.
       `jira_account_url` row and from nothing else — not the REST `self` URL,
       not the git remote you just read for the PR
       (`../_shared/project-config.md` § *Issue browse links*).
-    - Write the PR body to a temp file and use `--body-file` (backticks
-      inside an inline `--body` string trigger shell command substitution —
-      the same hazard the comment convention avoids):
+    - Write the PR body to a temp file and use `--body-file` — same reason as
+      Jira comments:
       ```bash
       cat > /tmp/<KEY>-pr-body.md <<'EOF'
       <what changed + link to the issue>
@@ -419,7 +402,10 @@ forward as context.
 
 11. **Update Jira — status transition, no comment yet:**
     The PR from step 10 is open (whether this run created it or updated an
-    existing one), so the work is under review — transition it:
+    existing one), so the work is under review — transition it unless it
+    already reads `<STATUS_IN_REVIEW>` (step 3's exit-8 reason, and by now the
+    work is committed and pushed, so a hard stop here would be the worst place
+    to take one):
     `jira.sh --role executor issue transition <KEY> --to "<STATUS_IN_REVIEW>"`.
     How it later reaches `<STATUS_DONE>` depends on whether `<KEY>` has
     a parent (check `fields.parent` from step 1):
@@ -443,12 +429,9 @@ forward as context.
     commit(s), the PR link, and the issue's new status. Post this same report
     to the user in chat **and** as a single Jira comment: it is the one
     comprehensive **run report**, so don't fragment it (no separate trivial
-    "PR opened" comment earlier). Its only sanctioned companions on the issue
-    are step 6's `Task memory (jira-task-executor)` notes — those carry the
-    marker line and this report deliberately doesn't, which is exactly why
-    step 4 recovers it by position. Step 10's fix-summary on a re-run isn't a
+    "PR opened" comment earlier). Step 10's fix-summary on a re-run isn't a
     second run report: it's a *GitHub* PR comment, for the reviewer. Post the
-    report with the §11 temp-file + `--body-file` convention:
+    report with the temp-file + `--body-file` convention:
 
     ```bash
     S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
@@ -457,8 +440,6 @@ forward as context.
 
     (Write it to `/tmp/<KEY>-report.md` first with a `cat > … <<'EOF'` heredoc.)
 
-Reference: `../_shared/jira-api-reference.md` is the operational + REST
-reference — the `jira.sh` command surface, field lists, comment mechanics and
-git/branch conventions this skill depends on. `.jst/jira-sdlc-tools.env`
-(team-shared) and `.jst/jira-sdlc-tools.local.env` (machine-specific), under
-the project root, hold this repo's values for every `<TOKEN>` used above.
+Reference: `../_shared/jira-api-reference.md` — the `jira.sh` command surface,
+field lists, comment mechanics and git/branch conventions this skill depends
+on.

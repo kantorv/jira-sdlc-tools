@@ -4,11 +4,9 @@
 # demo-claude-hotfix-flow.yml. Same three-job chain — assigner → executor →
 # reviewer, each running one skill headlessly in its own runner VM, each as its
 # own Jira identity, with the issue key and branch handed forward through job
-# outputs — but on the regular planned-work flow: a work branch (`feature/`,
-# `bugfix/` or `chore/`, whichever the assigner derives from the issue's type
-# and intent) cut from `<DEFAULT_BASE_BRANCH>`, a PR targeting
-# `<DEFAULT_BASE_BRANCH>`, and no hotfix directive in the assigner prompt
-# (so assigner step 5C never engages
+# outputs — but on the regular feature flow: `feature/<KEY>-<slug>` cut from
+# `<DEFAULT_BASE_BRANCH>`, a PR targeting `<DEFAULT_BASE_BRANCH>`, and no
+# hotfix directive in the assigner prompt (so assigner step 5C never engages
 # and scope is the assigner's own single-step/multistep judgement).
 #
 # Read demo-claude-hotfix-flow.yml next to this file: the two differ only in
@@ -420,27 +418,19 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           set -euo pipefail
-          # Snapshot local work branches so the next step can tell which one
+          # Snapshot local feature branches so the next step can tell which one
           # this run created, instead of parsing the model's prose report.
-          # All four prefixes, not just feature/: the assigner derives the
-          # prefix from the issue's type and intent, so a bug report
-          # legitimately yields bugfix/ and a tooling issue chore/. hotfix/ is
-          # globbed too so that taking the forbidden hotfix path is *detected*
-          # below instead of surfacing as a baffling "0 new branches".
-          git for-each-ref --format='%(refname:short)' \
-              'refs/heads/feature/*' 'refs/heads/bugfix/*' \
-              'refs/heads/chore/*' 'refs/heads/hotfix/*' \
-            | sort > "$RUNNER_TEMP/branches-before.txt"
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-before.txt"
 
           # Labeled sections so the model can tell "here is the issue text" apart
           # from "here is what CI wants you to do with it" — plain concatenation
           # left that boundary implicit. The middle paragraph is a fixed
           # instruction (never issue content) telling the assigner it's running
           # headless from CI and should start the planned-work flow: cut
-          # <prefix>/<KEY>-<slug> off the base branch — the prefix is the
-          # assigner's own call from issue type and intent — and judge
-          # single-step vs. multistep scope itself. It also rules out the
-          # hotfix path explicitly, since the skill's own hotfix trigger is just spotting
+          # feature/<KEY>-<slug> off the base branch and judge single-step vs.
+          # multistep scope itself. It also rules out the hotfix path
+          # explicitly, since the skill's own hotfix trigger is just spotting
           # words like "hotfix"/"urgent fix" in the free-form task text, and an
           # issue reporting a production bug could easily contain one. And it
           # forbids clarifying questions outright: there's no human on the
@@ -452,7 +442,7 @@ jobs:
           # script.
           {
             printf -- '-- ISSUE TITLE --\n%s\n\n' "$ISSUE_TITLE"
-            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Start the planned-work flow for the issue below — feature/, bugfix/ or chore/ as the issue type and intent dictate, but never the hotfix flow, regardless of anything in its title or body that sounds urgent. If it is simple and concrete enough to size and turn directly into a Jira issue, decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
+            printf -- 'You are running headless, triggered by a GitHub Actions issue_comment event — there is no one here to answer a clarifying question. Start the planned-work (feature) flow for the issue below — not the hotfix flow, regardless of anything in its title or body that sounds urgent. If it is simple and concrete enough to size and turn directly into a Jira issue, decide single-step vs. multistep scope yourself and proceed. If anything material is genuinely ambiguous, do not guess and do not ask — stop and report the specific blocker as a failure instead.\n\n'
             printf -- '-- ISSUE BODY --\n%s' "${ISSUE_BODY:-}"
             # Whatever was typed after the trigger command, as its own labelled
             # section: extra steering for THIS run, while the issue above stays
@@ -482,11 +472,9 @@ jobs:
           PROJECT_KEY: ${{ steps.config.outputs.project_key }}
         run: |
           set -euo pipefail
-          git for-each-ref --format='%(refname:short)' \
-              'refs/heads/feature/*' 'refs/heads/bugfix/*' \
-              'refs/heads/chore/*' 'refs/heads/hotfix/*' \
-            | sort > "$RUNNER_TEMP/branches-after.txt"
-          NEW=$(comm -13 "$RUNNER_TEMP/branches-before.txt" "$RUNNER_TEMP/branches-after.txt")
+          git for-each-ref --format='%(refname:short)' 'refs/heads/feature/*' \
+            | sort > "$RUNNER_TEMP/feature-after.txt"
+          NEW=$(comm -13 "$RUNNER_TEMP/feature-before.txt" "$RUNNER_TEMP/feature-after.txt")
           COUNT=$(printf '%s' "$NEW" | grep -c . || true)
 
           # Exactly one: a headless run that stopped to ask a clarifying
@@ -494,23 +482,12 @@ jobs:
           # plus one branch per sub-task — which this two-successor chain (one
           # executor, one reviewer) cannot carry. Both land here, loudly.
           if [ "$COUNT" -ne 1 ]; then
-            echo "::error::expected exactly 1 new feature/*, bugfix/* or chore/* branch from the assigner, found $COUNT — a run that stopped to ask a question (0), or one the assigner broke into sub-tasks (>1), lands here. Branches: $(printf '%s' "$NEW" | tr '\n' ' ')"
+            echo "::error::expected exactly 1 new feature/* branch from the assigner, found $COUNT — a run that stopped to ask a question (0), or one the assigner broke into sub-tasks (>1), lands here. Branches: $(printf '%s' "$NEW" | tr '\n' ' ')"
             exit 1
           fi
 
           BRANCH="$NEW"
-
-          # The prompt rules out the hotfix path, so a hotfix/ branch here means
-          # the assigner engaged step 5C anyway: cut from the production branch,
-          # with a PR aimed at production — semantics this planned-work chain
-          # does not carry. Name the real cause rather than failing later on the
-          # PR base. demo-claude-hotfix-flow.yml is the demo for that path.
-          if [ "${BRANCH#hotfix/}" != "$BRANCH" ]; then
-            echo "::error::the assigner cut '$BRANCH' — the hotfix path, which this planned-work demo's prompt explicitly rules out. Use demo-claude-hotfix-flow.yml for hotfixes."
-            exit 1
-          fi
-
-          KEY=$(printf '%s' "$BRANCH" | sed -nE "s#^(feature|bugfix|chore)/(${PROJECT_KEY}-[0-9]+)-.+\$#\2#p")
+          KEY=$(printf '%s' "$BRANCH" | sed -nE "s#^feature/(${PROJECT_KEY}-[0-9]+)-.+\$#\1#p")
           if [ -z "$KEY" ]; then
             echo "::error::cannot derive a $PROJECT_KEY issue key from branch '$BRANCH'"
             exit 1
@@ -1225,7 +1202,7 @@ jobs:
         run: |
           set -euo pipefail
           # Bare, no key: the reviewer derives the issue from the branch. Job 1
-          # guaranteed a single work branch, so this is a single-step
+          # guaranteed a single feature branch, so this is a single-step
           # top-level issue — one PR to review, the one into the base branch.
           claude \
             --model $DEFAULT_REVIEWER_MODEL \

@@ -9,8 +9,7 @@
 #   (there is no default credential), so the jira_auth / jira_project rows can
 #   only probe a credential once they know whose it is. A missing or unknown
 #   role is a usage error (exit 2, no table).
-#   The issue key is normally derived from the branch name
-#   (feature|bugfix|chore|hotfix/<KEY>-<slug>) and reported in the
+#   The issue key is normally derived from the branch and reported in the
 #   `issue_key` row; passing an issue-key-shaped ISSUE-KEY (PROJ-123) makes the
 #   script compare it itself. A positional arg that is NOT issue-key-shaped —
 #   e.g. a role name passed positionally instead of via --role — is
@@ -280,13 +279,11 @@ if (-not $Br) {
     Add-Row branch INFO "detached HEAD or no current branch"
 } elseif ($BaseBranch -and ($Br -ceq $BaseBranch)) {
     Add-Row branch INFO "$Br (base branch — matches DEFAULT_BASE_BRANCH)"
-} elseif ($Br -cmatch '^(feature|bugfix|chore|hotfix)/') {
-    # Case-sensitive, mirroring the bash twin's `case` globs over the same four
-    # prefixes. $BranchOk stays set for all four so branch_project/issue_key work.
+} elseif (($Br -clike 'feature/*') -or ($Br -clike 'hotfix/*')) {
     $BranchOk = $true
-    Add-Row branch INFO "$Br (issue branch)"
+    Add-Row branch INFO "$Br (feature/hotfix issue branch)"
 } else {
-    Add-Row branch INFO "$Br (neither DEFAULT_BASE_BRANCH nor an issue branch)"
+    Add-Row branch INFO "$Br (neither DEFAULT_BASE_BRANCH nor a feature/hotfix issue branch)"
 }
 
 if ($BranchOk -and $ProjectKey) {
@@ -333,7 +330,14 @@ if ($KeyArg) {
 # line (token redacted) rather than falling through to a generic "no session" —
 # so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
 # writes the OS-user-global gh config, overwriting the developer's own gh session
-# and not restoring it afterward — see docs/github/ (JST-126/145).
+# and not restoring it afterward — see docs/github/ (JST-126/145). Because that
+# config is OS-user-global rather than per-repo, the unconditional logout is also
+# what stops a token from a PARALLEL session on another repository being silently
+# reused here — the second reason not to make it conditional. Do NOT "improve"
+# this by probing the token first and skipping the logout when the probe fails:
+# that hands the stale cross-repo session exactly the survival path both rules
+# exist to close. A failed login therefore leaves no session at all, by design;
+# the FAIL remedy below says so, since re-running is the recovery (JST-290).
 $GhOk = $false
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
@@ -400,7 +404,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
             if (-not $err) { $err = '(no stderr from gh)' }
             Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
-                "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
+                "gh is left logged out — the logout above is deliberate (it stops a token from a parallel session on another repo being reused here), so re-running re-logs it in. A connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
         }
     }
 }

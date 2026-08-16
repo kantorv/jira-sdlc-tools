@@ -2,6 +2,8 @@
 skill: jira-task-executor
 conversation: bb91775f-028f-48b1-acdb-9eaec28d6d9b
 plugin_version: 0.5.0-lab.2
+slug: /examples/executor-run-report
+sidebar_position: 4
 ---
 
 # Run report: jira-task-executor — bb91775f-028f-48b1-acdb-9eaec28d6d9b

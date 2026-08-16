@@ -15,10 +15,7 @@ jobs:
     # events and equals github.event.pull_request.head.ref used below.
     if: >-
       github.event.pull_request.merged == true &&
-      (startsWith(github.head_ref, 'feature/')
-       || startsWith(github.head_ref, 'bugfix/')
-       || startsWith(github.head_ref, 'chore/')
-       || startsWith(github.head_ref, 'hotfix/'))
+      (startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/'))
     runs-on: ubuntu-latest
 
     steps:
@@ -28,7 +25,7 @@ jobs:
         run: |
           BRANCH="${{ github.event.pull_request.head.ref }}"
 
-          if [[ "$BRANCH" =~ ^(feature|bugfix|chore|hotfix)/([A-Z][A-Z0-9]*-[0-9]+)- ]]; then
+          if [[ "$BRANCH" =~ ^(feature|hotfix)/([A-Z]+-[0-9]+)- ]]; then
             echo "key=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
           else
             echo "No Jira issue found in branch '$BRANCH'. Skipping."

@@ -1,6 +1,7 @@
 ---
 slug: /gh-pat-session-login
 sidebar_position: 1
+sidebar_label: PAT session login
 ---
 
 # gh CLI auth — persistent PAT session login

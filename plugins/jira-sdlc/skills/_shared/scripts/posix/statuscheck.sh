@@ -16,7 +16,7 @@
 #   else's identity.
 #
 #   The current issue key is normally derived from the branch name
-#   (feature|bugfix|chore|hotfix/<KEY>-<slug>) and reported in the
+#   (feature/<KEY>-<slug> / hotfix/<KEY>-<slug>) and reported in the
 #   `issue_key` row — the calling agent compares it to the issue it was
 #   asked to run. Passing an issue-key-shaped ISSUE-KEY (PROJ-123) explicitly
 #   makes the script do that comparison itself instead (`issue_key` FAILs on
@@ -43,7 +43,7 @@
 # Role-agnostic JUDGEMENT, role-scoped AUTH: --role decides which credential
 # the jira rows probe, and nothing else. The `worktree` and `branch` rows stay
 # context INFO — the script reports what it sees (linked worktree vs. main
-# checkout; base branch vs. issue branch vs. other) but does
+# checkout; base branch vs. feature/hotfix issue branch vs. other) but does
 # NOT decide whether that context is right for whoever ran it. Each skill
 # judges that in prose after reading the table, so one script serves the
 # assigner (main checkout on the base branch), the executor, and the
@@ -331,11 +331,11 @@ fi
 
 # --- current branch (BR/BR_TAIL/BR_KEY parsed at the top) ------------------
 # Context only — report which kind of branch this is; the caller decides
-# whether it's the right one for its role (executor/reviewer want an issue
-# branch; the assigner wants the base branch). Never a FAIL. BRANCH_OK stays
-# set for any of the four issue-branch prefixes so branch_project below can
-# still validate the project prefix (a wrong-project worktree is a
-# role-independent error and does FAIL).
+# whether it's the right one for its role (executor/reviewer want a
+# feature/hotfix issue branch; the assigner wants the base branch). Never a
+# FAIL. BRANCH_OK stays set for a feature/hotfix branch so branch_project
+# below can still validate the project prefix (a wrong-project worktree is
+# a role-independent error and does FAIL).
 BRANCH_OK=""
 if [ -z "$BR" ]; then
   row branch INFO "detached HEAD or no current branch"
@@ -343,11 +343,11 @@ elif [ -n "$BASE_BRANCH" ] && [ "$BR" = "$BASE_BRANCH" ]; then
   row branch INFO "$BR (base branch — matches DEFAULT_BASE_BRANCH)"
 else
   case "$BR" in
-    feature/*|bugfix/*|chore/*|hotfix/*)
+    feature/*|hotfix/*)
       BRANCH_OK=1
-      row branch INFO "$BR (issue branch)" ;;
+      row branch INFO "$BR (feature/hotfix issue branch)" ;;
     *)
-      row branch INFO "$BR (neither DEFAULT_BASE_BRANCH nor an issue branch)" ;;
+      row branch INFO "$BR (neither DEFAULT_BASE_BRANCH nor a feature/hotfix issue branch)" ;;
   esac
 fi
 
@@ -397,7 +397,14 @@ fi
 # a generic "no session" — so the actual auth error is named (JST-145 AC#3).
 # Accepted tradeoff: this writes ~/.config/gh/hosts.yml, global to the OS user,
 # so it overwrites the developer's own gh session and is not restored afterward —
-# see docs/github/ (JST-126/145).
+# see docs/github/ (JST-126/145). Because that file is OS-user-global rather than
+# per-repo, the unconditional logout is also what stops a token from a PARALLEL
+# session on another repository being silently reused here — which is the second
+# reason not to make it conditional. Do NOT "improve" this by probing the token
+# first and skipping the logout when the probe fails: that hands the stale
+# cross-repo session exactly the survival path both rules exist to close. A
+# failed login therefore leaves no session at all, by design; the FAIL remedy
+# below says so, since re-running is the recovery (JST-290).
 GH_OK=""
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
@@ -434,7 +441,7 @@ else
         | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
       [ "${ERR:-}" ] || ERR='(no stderr from gh)'
       row gh_auth FAIL "gh auth login --with-token failed: $ERR" \
-        "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $RERUN."
+        "gh is left logged out — the logout above is deliberate (it stops a token from a parallel session on another repo being reused here), so re-running re-logs it in. A connection or network error is usually transient: $RERUN. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
     fi
   fi
 fi
