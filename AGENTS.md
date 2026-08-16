@@ -182,13 +182,15 @@ assuming you're done:
   rather than working from the list below** — they move between files as the
   skills are refactored, and a hand-maintained list is exactly what goes
   stale (this one did: the reviewer's re-run wording left its SKILL.md steps
-  for the shared template in JST-293). That grep reaches roughly 120
-  occurrences across the plugin, `docs/`, the root prose and the
+  for the shared template in JST-293). That grep reaches ~124 occurrences
+  across the plugin, `docs/`, the root prose and the
   `.github/workflows/demo-*.yml` runners — all of which break on a rename.
-  Two sets are deliberately excluded because they are frozen records, not
-  live instructions: `website/versioned_docs/` (published snapshots of older
-  versions) and `docs/examples/reports/` (transcripts of runs that really
-  happened under the old name). Inside the plugin itself, at the time of
+  It excludes `website/`, whose `versioned_docs/` are published snapshots of
+  older releases: those name the plugin as it *was* and must keep doing so.
+  It does **not** exclude `docs/examples/reports/`, so four of those hits are
+  transcripts of runs that really happened under the old name — leave them
+  alone for the same reason, and don't read them as work the rename missed.
+  Inside the plugin itself, at the time of
   writing, they are: `jira-task-assigner` (its
   step 1 Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
   `jira-task-executor` (step 11), `jira-task-reviewer` (its Discovery &
