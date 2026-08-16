@@ -321,10 +321,11 @@ For each `<SUBTASK-KEY>` that passed the status filter:
   If no PR exists, flag and skip. If more than one open PR, ask the user which one to review.
 - Record: `{ key, branch, prNumber, prUrl }`.
 
-If **zero** sub-tasks have open PRs, apply the phase check's split before
-exiting: every sub-task `<STATUS_DONE>` means the PRs are merged and only the
-parent PR is missing → go to step 5. Otherwise report and exit. (Repeated
-here so the two exits can't disagree if either is reordered.)
+If **zero** sub-tasks have open PRs, report and exit — **except on the
+multistep track**, where the phase check's split applies first: every
+sub-task `<STATUS_DONE>` means the PRs are merged and only the parent PR is
+missing → go to step 5. The sub-task-worktree path has no track and no step
+5 on its walk.
 
 Read *The canonical review report* below before the first verdict lands in
 3d.
