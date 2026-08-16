@@ -174,9 +174,15 @@ The trade-off it settles: JST-287 baked `site_docs_base`-derived URLs into files
 that ship to users' plugin caches, where they can never be corrected. Serving
 current at the bare route means a documentation fix reaches those already-installed
 readers on merge, rather than waiting for the next release cut — which was judged
-worth more than a bare link always describing shipped behaviour. Note the
-side effect: with current as the last version, *every* snapshot — including the
-newest release's — renders Docusaurus's "no longer actively maintained" banner.
+worth more than a bare link always describing shipped behaviour.
+
+One consequence needs a config line to keep it honest. Docusaurus banners every
+version sorting *after* the last one as "no longer actively maintained", so with
+current as the last version that would include the newest snapshot — the shipped
+release, and precisely where the dropdown sends readers. `docusaurus.config.js`
+therefore reads `versions.json` (which `docs:version` writes newest-first) and
+sets `banner: 'none'` on entry `[0]`. It needs no edit when a version is cut, and
+older snapshots keep the banner, which is accurate of them.
 
 This decides only *which version* the route serves. `url`, `baseUrl` and
 `docs.routeBasePath` still compose to `site_docs_base`, so every baked-in URL

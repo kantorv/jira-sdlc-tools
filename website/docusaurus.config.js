@@ -11,7 +11,21 @@
 //     rather than cloned.
 //   * markdown.format and both broken-link hooks — see the comments on each.
 
+import fs from 'node:fs';
+
 import {themes as prismThemes} from 'prism-react-renderer';
+
+// `docusaurus docs:version` writes versions.json newest-first and commits it, so
+// releasedVersions[0] is always the current release — that's what lets the banner
+// override below need no edit when a version is cut. Read rather than imported:
+// import attributes (`with {type: 'json'}`) need Node >= 20.10 and package.json
+// declares >= 20.0. The file does not exist before the first cut, so a missing
+// one means "nothing released yet", not a build failure.
+const versionsFile = new URL('./versions.json', import.meta.url);
+const releasedVersions = fs.existsSync(versionsFile)
+  ? JSON.parse(fs.readFileSync(versionsFile, 'utf8'))
+  : [];
+const latestRelease = releasedVersions[0];
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -86,6 +100,12 @@ const config = {
             // release name; at the bare /docs/… route a visitor has no other
             // signal that these docs are ahead of every published version.
             current: {label: 'Next (unreleased)'},
+            // Docusaurus banners every version that sorts after the last one as
+            // "no longer actively maintained" — with current as the last, that
+            // includes the newest snapshot, which is the *shipped* release and
+            // is exactly where the dropdown sends readers. Suppress it there
+            // only: 0.8.3 and older keep the banner, which is true of them.
+            ...(latestRelease ? {[latestRelease]: {banner: 'none'}} : {}),
           },
         },
         blog: false,
