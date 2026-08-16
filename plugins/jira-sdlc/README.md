@@ -493,10 +493,17 @@ mid-flight is safe by design:
   existing parent, so checkout the base branch first.
 - **Executor**, run again on an issue with an existing branch → resumes
   it rather than creating a second branch for the same issue.
-- **Reviewer** — no parent PR yet → full review pass. Parent PR open →
-  only refreshes the aggregate review, doesn't re-touch sub-tasks. Parent
+- **Reviewer** — on the multistep track, *both* "no parent PR yet" and
+  "parent PR open" split on the **sub-task statuses**, because neither state
+  means what it looks like on its own. Every sub-task Done → the sub-task
+  PRs are already merged and only the aggregate parent PR is outstanding, so
+  the run goes straight to it (creating it first if it doesn't exist). Any
+  sub-task not yet Done → the work is still in flight, so the run does a
+  full sub-task review pass and leaves the parent PR to a later run. Parent
   PR merged → reports the merged state and exits; there's nothing left to
-  do (GitHub-for-Jira already transitioned the issues to Done).
+  do (GitHub-for-Jira already transitioned the issues to Done). Re-reviewing
+  a PR it already approved is skipped unless you ask for it in the run's
+  free-form notes.
 
 ## Safety model
 

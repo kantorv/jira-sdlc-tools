@@ -330,7 +330,14 @@ if ($KeyArg) {
 # line (token redacted) rather than falling through to a generic "no session" —
 # so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
 # writes the OS-user-global gh config, overwriting the developer's own gh session
-# and not restoring it afterward — see docs/github/ (JST-126/145).
+# and not restoring it afterward — see docs/github/ (JST-126/145). Because that
+# config is OS-user-global rather than per-repo, the unconditional logout is also
+# what stops a token from a PARALLEL session on another repository being silently
+# reused here — the second reason not to make it conditional. Do NOT "improve"
+# this by probing the token first and skipping the logout when the probe fails:
+# that hands the stale cross-repo session exactly the survival path both rules
+# exist to close. A failed login therefore leaves no session at all, by design;
+# the FAIL remedy below says so, since re-running is the recovery (JST-290).
 $GhOk = $false
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
@@ -397,7 +404,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
             if (-not $err) { $err = '(no stderr from gh)' }
             Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
-                "check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT (gh error above); then $Rerun."
+                "gh is left logged out — the logout above is deliberate (it stops a token from a parallel session on another repo being reused here), so re-running re-logs it in. A connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
         }
     }
 }
