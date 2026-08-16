@@ -1,0 +1,9 @@
+{
+  "label": "GitHub",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "slug": "/github",
+    "description": "Authentication, the gh CLI, and issue transitions driven by Actions."
+  }
+}
