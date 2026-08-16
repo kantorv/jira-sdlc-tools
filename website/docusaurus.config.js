@@ -70,6 +70,23 @@ const config = {
           // Reads git history: needs fetch-depth: 0 in CI (JST-289). On a shallow
           // clone it degrades to "cannot infer the update date" warnings.
           showLastUpdateTime: true,
+          // JST-294: `current` — i.e. ../docs, the unreleased working docs — is
+          // the version served at the bare /docs/… route; released snapshots
+          // move to /docs/<X.Y.Z>/…. This deliberately reverses Docusaurus's
+          // default (newest *snapshot* at /docs/…, current at /docs/next/…),
+          // because the URLs JST-287 baked into shipped plugin caches can never
+          // be corrected retroactively: pointing them at current means a doc fix
+          // reaches installed users on merge instead of at the next release cut.
+          // Note this removes /docs/next/… entirely — it is the same route as
+          // /docs/… now. routeBasePath, url and baseUrl are untouched, so
+          // `site_docs_base` still resolves.
+          lastVersion: 'current',
+          versions: {
+            // Without this the label is just "Next", which reads like a
+            // release name; at the bare /docs/… route a visitor has no other
+            // signal that these docs are ahead of every published version.
+            current: {label: 'Next (unreleased)'},
+          },
         },
         blog: false,
         theme: {customCss: './src/css/custom.css'},
@@ -92,6 +109,14 @@ const config = {
             sidebarId: 'docsSidebar',
             position: 'left',
             label: 'Docs',
+          },
+          // Every released snapshot is published, but until JST-294 nothing on
+          // the site linked to one — a reader could only reach /docs/0.8.3/…
+          // by typing it. This is that missing affordance; it needs no
+          // maintenance as versions are cut, since it reads versions.json.
+          {
+            type: 'docsVersionDropdown',
+            position: 'right',
           },
           {
             href: 'https://github.com/kantorv/jira-sdlc-tools',
