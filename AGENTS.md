@@ -176,17 +176,33 @@ assuming you're done:
   `plugins/jira-sdlc/.claude-plugin/plugin.json`, which is also the
   skill namespace in `/jira-sdlc:...`) → rename the directory under
   `plugins/`, update that entry's `name` and `source` in
-  `.claude-plugin/marketplace.json`, *and* update the self-referential
-  slash-command mentions hardcoded inside
-  `jira-task-assigner` (its step 1 Discovery & healthcheck
-  `STATUSCHECK_RERUN` override, and step 8), `jira-task-executor`
-  (step 11 and its Discovery & healthcheck section), `jira-task-reviewer`
-  (its own Discovery & healthcheck section's `STATUSCHECK_RERUN`
-  override, plus steps 4a/4b/4c and 6), `jst-install` (its
-  `STATUSCHECK_RERUN` overrides in the *Verification* section and step 4a,
-  plus the hand-off commands in 4c), and the healthcheck script's
-  rerun remedies (`skills/_shared/scripts/posix/statuscheck.sh`), which
-  currently read `/jira-sdlc:...`.
+  `.claude-plugin/marketplace.json`, *and* update every hardcoded
+  self-referential slash-command mention. **Enumerate those with
+  `grep -rn '/jira-sdlc:' . --exclude-dir=.git --exclude-dir=website --exclude-dir=node_modules`
+  rather than working from the list below** — they move between files as the
+  skills are refactored, and a hand-maintained list is exactly what goes
+  stale (this one did: the reviewer's re-run wording left its SKILL.md steps
+  for the shared template in JST-293). That grep reaches ~124 occurrences
+  across the plugin, `docs/`, the root prose and the
+  `.github/workflows/demo-*.yml` runners — all of which break on a rename.
+  It excludes `website/`, whose `versioned_docs/` are published snapshots of
+  older releases: those name the plugin as it *was* and must keep doing so.
+  It does **not** exclude `docs/examples/reports/`, so four of those hits are
+  transcripts of runs that really happened under the old name — leave them
+  alone for the same reason, and don't read them as work the rename missed.
+  Inside the plugin itself, at the time of
+  writing, they are: `jira-task-assigner` (its
+  step 1 Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
+  `jira-task-executor` (step 11), `jira-task-reviewer` (its Discovery &
+  healthcheck `STATUSCHECK_RERUN` override — and *only* that),
+  `skills/_shared/templates/review-report.md` (six, in the outcome
+  catalogue's `Next step` blocks, which is where the reviewer's re-run
+  instructions actually live), `jst-install` (its `STATUSCHECK_RERUN`
+  overrides in the *Verification* section and step 4a, the remedy-default
+  note, the three hand-off commands in 4c, and the retroactive-assignment
+  example), and the healthcheck script's rerun remedies in **both** ports —
+  `skills/_shared/scripts/posix/statuscheck.sh` *and*
+  `skills/_shared/scripts/win/statuscheck.ps1`.
 - Renaming a **skill** → `jira-task-assigner` step 8 currently refers to
   `jira-task-executor` by name; check the other two skills and the
   README for any new cross-references before assuming a rename is

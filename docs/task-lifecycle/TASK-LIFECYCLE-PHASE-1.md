@@ -9,8 +9,9 @@ sidebar_label: Phase 1 · Plan
 Phase 1 of the task lifecycle, run by the **`jira-task-assigner`** skill.
 Triggered once per task, **invoked from the default base branch** (or from
 the production branch, which is accepted only for an emergency hotfix) — the
-assigner refuses to run on an existing `feature/`/`hotfix/` issue branch,
-and asks the user how to proceed on any other branch.
+assigner refuses to run on an existing `feature/`/`hotfix/` issue branch or
+from a detached HEAD (which gives the new branches nothing nameable to be
+cut from), and asks the user how to proceed on any other branch.
 
 This phase ends when the assigner reports back: issues exist, branches
 and worktrees are ready, a `"PR target branch: ... Worktree: ..."`
@@ -41,11 +42,11 @@ sequenceDiagram
 
     activate Assigner
     Assigner->>JIRA: get_assignee_email.sh (resolve executor email)
-    Note right of Assigner: login fails → stop.<br/>Everything below is now filed BY the assigner<br/>(Jira sets creator + reporter from it)
+    Note right of Assigner: there is no login step — every call below authenticates<br/>per-request as --role assigner, so everything is filed BY the assigner<br/>(Jira sets creator + reporter from it)
     Note right of Assigner: Step 1 — Discovery & healthcheck<br/>(env/auth/worktrees-dir checks, any FAIL → stop)
-    Assigner->>GIT: read current branch (base? production? feature/hotfix? other?)
+    Assigner->>GIT: read current branch (base? production? feature/hotfix? detached? other?)
     GIT-->>Assigner: current branch
-    Note right of Assigner: base → continue · production → continue, hotfix only (step 5C decides)<br/>feature/hotfix → stop · other → ask user
+    Note right of Assigner: base → continue · production → continue, hotfix only (step 5C decides)<br/>feature/hotfix → stop · detached HEAD → stop (nothing nameable to cut from)<br/>other → ask user
     Assigner->>Assigner: investigate codebase
 
     loop clarify until scope/types settled

@@ -46,7 +46,7 @@ sequenceDiagram
         Executor->>GIT: bring worktree branch current (merge parent branch — branch already exists)
         GIT-->>Executor: working branch ready
         Note right of Executor: merge conflict → stop & ask · unset parentbranch → skip merge, flag possibly-stale
-        Executor->>JIRA: transition → In Progress
+        Executor->>JIRA: transition → In Progress<br/>(skipped when the issue already reads it — the normal state<br/>on a re-run after a reject, and asking anyway exits 8)
         Executor->>Executor: investigate (reads prior task memory) • clarify
         opt memory-worthy finding or decision
             Executor->>JIRA: post Task memory comment
@@ -55,7 +55,7 @@ sequenceDiagram
         Note right of Executor: repeated individual test failure → stop & ask, no commit/push/PR
         Executor->>GIT: commit + push + open PR
         GIT-->>Executor: PR URL
-        Executor->>JIRA: transition → In Review
+        Executor->>JIRA: transition → In Review<br/>(likewise skipped when already there — by now the work is<br/>committed and pushed, so a hard stop here would be the worst place to take one)
         Executor->>JIRA: post run-report comment (PR URL, branch, status)
         Executor-->>User: report (PR URL, branch, status)
         deactivate Executor
@@ -87,7 +87,13 @@ sequenceDiagram
   transitions to *In Review* (JIRA), and posts its run-report
   comment (JIRA). The PR is the thing phase 3 reviews.
 - **Status transitions the executor owns** — to *In Progress* on start,
-  to *In Review* on PR open (both JIRA).
+  to *In Review* on PR open (both JIRA). Each is **skipped when the issue
+  already reads that status**: workflows generally offer no transition into
+  the status an issue already occupies, so asking anyway exits 8, and a
+  non-zero `jira.sh` result is a stop condition. That matters most on a
+  re-run after a reject — the reviewer has already put the issue back to
+  *In Progress*, and aborting there would end the run before it ever read
+  the reviewer's findings.
 - **Task memory is a first-class JIRA interaction, not a single comment
   invariant** — the executor reads prior `Task memory (jira-task-executor)` comments as part of the step-1 fetch, and may
   post its own as investigation/implementation turns up findings worth
