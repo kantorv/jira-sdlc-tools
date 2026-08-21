@@ -6,13 +6,26 @@ sidebar_label: Installation
 
 # Installation
 
-> **Stub — TBD.** [STEP-BY-STEP.md](STEP-BY-STEP.md) links here as the long
-> form of its short, ordered walkthrough. Until this page is written, the
-> installation content lives in the plugin
-> [README.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/README.md#installation) and the root
-> [README.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/README.md#full-setup).
+## How it works
+
+This is the short, ordered version — four sections, each a page of its own,
+run in order.
+
+Would rather be walked through it? `/jira-sdlc:jst-install`
+([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)) follows these same four
+sections, in this order, and verifies each one with the Section 4 healthcheck
+before moving to the next.
+
+1. [Section 1. Preparing environment](PREPARING-ENVIRONMENT.md)
+2. [Section 2. GitHub repository preparation](GITHUB-REPOSITORY-PREPARATION.md)
+3. [Section 3. Jira board preparation](JIRA-BOARD-PREPARATION.md)
+4. [Section 4. Run the healthcheck](RUN-THE-HEALTHCHECK.md)
 
 ## What belongs here
+
+Carried over from the `INSTALLATION.md` stub this page replaces. The four
+sections above are the ordered walkthrough; the long form still to be written
+is:
 
 - The three loading routes in full — see
   [integrations/CLAUDECODE.md](../integrations/CLAUDECODE.md) for the Claude Code

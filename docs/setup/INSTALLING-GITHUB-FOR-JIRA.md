@@ -6,7 +6,7 @@ sidebar_label: GitHub for Jira
 
 # Installing GitHub for Jira
 
-> **Stub — TBD.** [STEP-BY-STEP.md](STEP-BY-STEP.md) links here when it
+> **Stub — TBD.** [Installation](../installation/PREPARING-ENVIRONMENT.md) links here when it
 > recommends the integration. Until this page is written, the upstream
 > install guide is
 > [github/github-for-jira](https://github.com/github/github-for-jira).

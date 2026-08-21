@@ -139,6 +139,20 @@ things about it are load-bearing:
 - **`site_docs_base` in that file is a contract with `website/docusaurus.config.js`**
   (`url` + `baseUrl` + the docs plugin's `routeBasePath`). Change one of the
   three and every baked-in URL 404s, silently.
+- **A page that moves, splits or merges leaves its slug behind in `redirects`.**
+  Docusaurus takes one slug per page, so when a shipped URL's page stops
+  existing under that name, the slug moves from `pages` to the `redirects` list
+  with the `to` slug that now serves it —
+  `@docusaurus/plugin-client-redirects` emits the redirect, and
+  `docusaurus.config.js` builds its list by *reading* this file so the two
+  cannot drift. That is what makes "never change a shipped slug" survivable
+  when the page behind it genuinely has to move (JST-296 did this to
+  `/step-by-step`). Two consequences worth knowing before you rely on it: the
+  build's broken-link checker does **not** count a redirect as a route, so an
+  in-site link to a redirected slug still fails the build — point site-internal
+  links at the live slug and leave the redirect for the URLs already in the
+  wild; and only `current` is redirected, since each versioned snapshot still
+  carries the page under its own `/docs/<X.Y.Z>/…` route.
 
 Which form a reference takes depends on who reads it, not on where it lives:
 

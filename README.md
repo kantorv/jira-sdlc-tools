@@ -69,7 +69,7 @@ Plus one that runs before all three, once per project:
 
 - **[`jst-install`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)** — guided
   first-time setup. Walks the four sections of
-  [Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md) — local tooling,
+  [Installation](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/installation/INSTALLATION.md) — local tooling,
   GitHub repo prep, Jira board prep, healthcheck — verifying each with the
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
@@ -213,7 +213,7 @@ is a tickable list in
 **[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md)**,
 ending in one command that verifies most of it for you.
 
-Prefer it as prose? **[Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)**
+Prefer it as prose? **[Installation](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/installation/INSTALLATION.md)**
 walks the same ground in the order you actually do it.
 
 Prefer to be walked through it? `/jira-sdlc:jst-install` covers the same four

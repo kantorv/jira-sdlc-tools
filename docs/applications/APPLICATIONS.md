@@ -26,7 +26,7 @@ ______________________________________________________________________
 
 Both modes read the same configuration: `.jst/jira-sdlc-tools.env` (team-shared)
 and `.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored) in the
-target project's root. See [INSTALLATION.md](../setup/INSTALLATION.md) and
+target project's root. See [Installation](../installation/INSTALLATION.md) and
 [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md) for what each
 `<TOKEN>` resolves to.
 
@@ -486,5 +486,5 @@ ______________________________________________________________________
 | [ci-smoke-test-demo.md](ci-smoke-test-demo.md) | The no-skill backend check — `demo-kimi-openrouter-reviewer.yml` |
 | [SDLC.md](../process/SDLC.md) | This repo's actual release/hotfix procedure |
 | [CI.md](../process/CI.md) | Workflow-by-workflow CI reference |
-| [INSTALLATION.md](../setup/INSTALLATION.md) | Installing the plugin / loose skills |
+| [Installation](../installation/INSTALLATION.md) | Installing the plugin / loose skills |
 | [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md) | Every `<TOKEN>` resolved from `.jst/jira-sdlc-tools.env` |

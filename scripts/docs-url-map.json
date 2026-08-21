@@ -18,6 +18,12 @@
     "them from a published doc must be absolute github.com URLs like any other",
     "category-2 link. Docusaurus excludes '_'-prefixed files by default.",
     "",
+    "'redirects' lists shipped slugs that no page carries any more because the page",
+    "they named was moved, split or merged. Each is served as a redirect to the slug",
+    "in its 'to'. They are read by website/docusaurus.config.js, so the redirect and",
+    "this file cannot drift; scripts/check-doc-links.sh (category 4) counts them as",
+    "live slugs, which is what keeps a URL already baked into a plugin cache valid.",
+    "",
     "'categories' lists the slugs served by a _category_.json generated-index, i.e.",
     "routes with no backing .md file. They are slugs like any other and must never",
     "change once shipped; they live here so scripts/check-doc-links.sh (category 4)",
@@ -53,14 +59,42 @@
       "slug": "/history"
     }
   },
+  "redirects": [
+    {
+      "slug": "/step-by-step",
+      "to": "/installation",
+      "_why": [
+        "JST-296 lifted docs/setup/STEP-BY-STEP.md out of Setup and split it into the",
+        "Installation category, whose landing page inherited /installation. Docusaurus",
+        "takes one slug per page, so /step-by-step — baked into jst-install's SKILL.md",
+        "and plugins/jira-sdlc/README.md, and therefore into plugin caches that cannot",
+        "be corrected retroactively — is served as a redirect instead of a page.",
+        "website/docusaurus.config.js reads this list and hands it to",
+        "@docusaurus/plugin-client-redirects, so the two cannot drift. Entries here are",
+        "shipped URLs like any other slug: add, never remove."
+      ]
+    }
+  ],
   "pages": {
-    "docs/setup/INSTALLATION.md": {
+    "docs/installation/INSTALLATION.md": {
       "slug": "/installation",
       "sidebar_position": 1
     },
-    "docs/setup/STEP-BY-STEP.md": {
-      "slug": "/step-by-step",
+    "docs/installation/PREPARING-ENVIRONMENT.md": {
+      "slug": "/preparing-environment",
       "sidebar_position": 2
+    },
+    "docs/installation/GITHUB-REPOSITORY-PREPARATION.md": {
+      "slug": "/github-repository-preparation",
+      "sidebar_position": 3
+    },
+    "docs/installation/JIRA-BOARD-PREPARATION.md": {
+      "slug": "/jira-board-preparation",
+      "sidebar_position": 4
+    },
+    "docs/installation/RUN-THE-HEALTHCHECK.md": {
+      "slug": "/run-the-healthcheck",
+      "sidebar_position": 5
     },
     "docs/setup/FULL-SETUP-CHECKLIST.md": {
       "slug": "/full-setup-checklist",

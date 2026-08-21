@@ -6,7 +6,7 @@ sidebar_label: Security
 
 # Security
 
-> **Stub — TBD.** [STEP-BY-STEP.md](../setup/STEP-BY-STEP.md) links here for the note
+> **Stub — TBD.** [Installation](../installation/PREPARING-ENVIRONMENT.md) links here for the note
 > on Jira token types. Until this page is written, token guidance lives in
 > [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
 > §5 and
@@ -21,7 +21,7 @@ sidebar_label: Security
   fail with `401 "scope does not match"`, because a single `GET /issue`
   requires a whole bundle of them at once. Full detail in
   [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
-  §5. Resolve the wording against [STEP-BY-STEP.md](../setup/STEP-BY-STEP.md) and the
+  §5. Resolve the wording against [Installation](../installation/PREPARING-ENVIRONMENT.md) and the
   root README's Tokens table, which currently describe this differently.
 - **GitHub PAT scope** — fine-grained, Contents + Pull requests read/write.
 - **Where secrets live:** `.jst/jira-sdlc-tools.local.env` is the untracked,

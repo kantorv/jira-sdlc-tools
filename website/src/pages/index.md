@@ -17,9 +17,8 @@ explicit-invocation only by design — never auto-triggered.
 ## Start here
 
 - **[Installation](/docs/installation)** — install the plugin from its
-  marketplace and point it at your project.
-- **[Step by step](/docs/step-by-step)** — one feature all the way through, from
-  request to merged pull request.
+  marketplace and point it at your project — four ordered sections, from local
+  tooling to a green healthcheck.
 - **[Full setup checklist](/docs/full-setup-checklist)** — every credential,
   settings file and Jira/GitHub prerequisite in one list.
 - **[Task lifecycle](/docs/task-lifecycle)** — what the three skills do to an

@@ -27,6 +27,21 @@ const releasedVersions = fs.existsSync(versionsFile)
   : [];
 const latestRelease = releasedVersions[0];
 
+// A slug that has shipped can never 404 — some of them are baked into plugin
+// caches nobody can correct retroactively (AGENTS.md -> "The published docs URL
+// scheme"). When a page moves or is split, its old slug moves to `redirects` in
+// docs-url-map.json and is served from here instead. Read rather than
+// hand-listed: a second copy of the list is how the redirect and the map drift.
+// Only `current` is redirected — a versioned snapshot still carries the page at
+// its own /docs/<X.Y.Z>/… route and must keep doing so.
+const urlMap = JSON.parse(
+  fs.readFileSync(new URL('../scripts/docs-url-map.json', import.meta.url), 'utf8'),
+);
+const docsRedirects = (urlMap.redirects ?? []).map(({slug, to}) => ({
+  from: `/docs${slug}`,
+  to: `/docs${to}`,
+}));
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'jira-sdlc-tools',
@@ -65,6 +80,10 @@ const config = {
   },
 
   themes: ['@docusaurus/theme-mermaid'],
+
+  plugins: [
+    ['@docusaurus/plugin-client-redirects', {redirects: docsRedirects}],
+  ],
 
   i18n: {defaultLocale: 'en', locales: ['en']},
 
@@ -152,7 +171,10 @@ const config = {
             title: 'Docs',
             items: [
               {label: 'Installation', to: '/docs/installation'},
-              {label: 'Step by step', to: '/docs/step-by-step'},
+              // Was 'Step by step' -> /docs/step-by-step until JST-296 folded
+              // that page into Installation; the two labels would now point at
+              // one page. /docs/step-by-step still resolves, as a redirect.
+              {label: 'Full setup checklist', to: '/docs/full-setup-checklist'},
               {label: 'Task lifecycle', to: '/docs/task-lifecycle'},
             ],
           },

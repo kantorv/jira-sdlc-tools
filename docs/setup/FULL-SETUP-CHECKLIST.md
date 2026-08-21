@@ -10,7 +10,7 @@ Tick these off before the first `/jira-sdlc:jira-task-assigner` run. Each item
 says how to check it, not just what to have. The last section is a single
 command that verifies most of the list for you.
 
-Prose walkthrough of the same ground: [STEP-BY-STEP.md](STEP-BY-STEP.md).
+Prose walkthrough of the same ground: [Installation](../installation/INSTALLATION.md).
 Guided version of it: `/jira-sdlc:jst-install`
 ([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)), which ticks these items off
 with you and runs the healthcheck between stages.
