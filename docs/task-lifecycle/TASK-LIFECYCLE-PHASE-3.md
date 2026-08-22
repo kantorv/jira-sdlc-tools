@@ -108,12 +108,12 @@ sequenceDiagram
             alt APPROVE
                 Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"APPROVED — <summary>"
                 Note right of Reviewer: no Jira post in 3d on this track — 3d's destination and step 6's are<br/>both <PARENT-KEY>, so step 6 is the single Jira record. Step 3e is skipped too
-                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-APPROVED, from step 4c)
+                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-APPROVED, outcome named in step 4c)
                 Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
             else REQUEST_CHANGES
                 Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
                 Reviewer->>JIRA: Step 3d — transition <PARENT-KEY> → <STATUS_IN_PROGRESS><br/>(the actual workflow gate — the GitHub comment only records the verdict)
-                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-CHANGES-REQUESTED, from step 4c)
+                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-CHANGES-REQUESTED, outcome named in step 4c)
                 Reviewer-->>User: "changes requested — fix, push & re-run"
             end
         end
@@ -160,13 +160,13 @@ sequenceDiagram
             end
 
             Note over Reviewer: Step 4 — all sub-task PRs visited
-            alt Some rejected (changes requested) — step 4b
+            alt Step 4b — some rejected (changes requested)
                 Reviewer->>JIRA: Step 6 — full report on <PARENT-KEY><br/>(M-SOME-BLOCKED: approved + rejected + findings)
                 Reviewer-->>User: "some PRs blocked — fix & re-run"
-            else All approved, some not yet merged — step 4a
+            else Step 4a — all approved, some not yet merged
                 Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-ALL-APPROVED — waiting for merge)
                 Reviewer-->>User: "all approved — merge manually, then re-run for the parent PR"
-            else All approved and all merged — 4a's guard, then step 5
+            else Step 4a — all approved and all merged, guard passed → step 5
                 Note over Reviewer: guard: "every PR in the set is merged" is NOT "the feature is complete".<br/>The set only ever held sub-tasks that were <STATUS_IN_REVIEW> at step 1, so any<br/>sub-task not yet <STATUS_DONE> — still in progress, or skipped by step 2 for having<br/>no branch or no PR — stays on M-ALL-APPROVED and goes to step 6 instead.<br/>Otherwise step 5 would open an aggregate PR missing the outstanding work
                 Reviewer->>GIT: Step 5a — find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>, gh pr list --state all)
                 GIT-->>Reviewer: parent PR (open | created | closed)

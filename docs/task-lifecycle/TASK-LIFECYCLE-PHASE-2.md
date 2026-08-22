@@ -58,13 +58,24 @@ sequenceDiagram
         GIT-->>Executor: working branch ready
         Note right of Executor: merge conflict → stop & ask · unset parentbranch → skip merge, flag possibly-stale
         Executor->>JIRA: Step 3 — transition → In Progress<br/>(skipped when the issue already reads it — the normal state<br/>on a re-run after a reject, and asking anyway exits 8)
-        Executor->>Executor: Step 4 — investigate • Step 5 — clarify<br/>reads the prior comments in authority order — a reviewer<br/>"CHANGES REQUESTED —" verdict first, then the Assignment report,<br/>then prior Task memory, then the last run report
+        Executor->>Executor: Step 4 — investigate<br/>reads the prior comments in authority order — a reviewer<br/>"CHANGES REQUESTED —" verdict first, then the Assignment report,<br/>then prior Task memory, then the last run report
+        opt Step 5 — something material is still ambiguous
+            Executor->>User: ask before writing code<br/>(an implementation choice that would change the result — never guessed at)
+            User-->>Executor: answer
+            Note right of Executor: step 3's transition stands while waiting — someone HAS picked<br/>the issue up, so it is not rolled back to To Do even if no answer comes
+        end
         Executor->>Executor: Step 6 — implement
         opt memory-worthy finding or decision
             Executor->>JIRA: post Task memory comment
         end
-        Executor->>Executor: Step 7 — test (single tests first, then the affected suite)
-        Note right of Executor: repeated individual test failure → stop & ask, no commit/push/PR
+        Executor->>Executor: Step 7a — find this project's test commands<br/>(CLAUDE.md · AGENTS.md · README — recovered from package.json,<br/>Makefile or CI when only half of them are written down)
+        opt the repo has no test layer at all
+            Executor->>User: install a runner and the test deps now?<br/>(its own task — not the executor's call to make for them)
+            User-->>Executor: yes → fold both commands into CLAUDE.md · no → skip testing
+            Note right of Executor: declined → skip the rest of step 7, say so in the report,<br/>and go straight to step 8. This is the one path that commits untested
+        end
+        Executor->>Executor: Step 7b — run each affected test alone, then the whole suite<br/>Step 7c — a suite failure is re-run individually before it counts
+        Note right of Executor: still failing on the individual re-run → stop & ask, no commit/push/PR
         Executor->>GIT: Step 8 — commit (staged explicitly) • Step 9 — push -u origin
         GIT-->>Executor: branch pushed
         Executor->>GIT: Step 10 — gh pr list --head <branch> --state open
@@ -132,6 +143,24 @@ sequenceDiagram
 - **Parallel lanes** — the `par / and / end` block encodes the
   worktree-level parallelism the assigner's phase 1 setup makes
   possible. **Every leaf has its own worktree** and can run concurrently.
+- **The executor asks the user twice, and both are gates** — step 5, when
+  the description or acceptance criteria leaves an implementation choice
+  that would change the result (it asks rather than guesses, and step 3's
+  transition deliberately *stands* while it waits — someone has picked the
+  issue up, so the issue is not rolled back to *To Do* even if no answer
+  comes); and step 7a, when the repo has no test layer at all. Both are
+  drawn as `opt` blocks with a real `User` round-trip, the same way phase 1
+  draws its clarify loop and hotfix gate.
+- **Finding the test commands is its own step (7a)** — which runner a
+  project uses, how it selects one test, and how it runs the suite vary too
+  much to ship a plugin default, so the executor reads `CLAUDE.md`,
+  `AGENTS.md` or the README first, and recovers whatever is missing from
+  `package.json` scripts, `Makefile` targets or CI config when only half of
+  it is written down. If the repo has **no test layer at all**, installing
+  one is its own task and not the executor's call: it asks. Declining is a
+  real path with a real consequence — the rest of step 7 is skipped, the
+  report has to say testing was skipped and why, and the run commits
+  untested. That is the only path here that reaches step 8 without 7b/7c.
 - **Uniform path** — the healthcheck confirms the worktree, then the
   executor brings its branch current, commits, pushes, opens (or updates) a
   PR (GIT), transitions to *In Review* (JIRA), and posts its run-report

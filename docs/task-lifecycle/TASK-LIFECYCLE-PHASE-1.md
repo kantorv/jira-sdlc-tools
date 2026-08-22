@@ -61,6 +61,12 @@ sequenceDiagram
 
     Assigner->>Assigner: Step 5 — decide scope (single-step vs multistep)<br/>+ top-level type (Task / Story / Bug)<br/>+ base — planned work (default) or explicit hotfix
 
+    opt Step 5C — the base decision needs the user
+        Assigner->>User: emergency production fix? name the path and get a yes<br/>(only deliberate wording counts — "urgent" or "asap" is not the signal)
+        User-->>Assigner: confirm | decline
+        Note right of Assigner: no yes → create nothing · hotfix with production_branch unset → stop and ask ·<br/>standing on production but the decision is planned work → stop and say to<br/>checkout the base branch, or tomorrow's feature is cut from production
+    end
+
     Assigner->>GIT: Step 6 — git fetch origin<br/>+ git pull --ff-only origin BRANCH_FROM (planned work only)
     GIT-->>Assigner: refs up to date
     Assigner->>Assigner: Step 6A — get_assignee_email.sh → ASSIGNEE_EMAIL<br/>(reads .jst config, no Jira call — no email configured → stop)
@@ -135,10 +141,22 @@ sequenceDiagram
   own required credential pair — there is no default account either can fall
   back to. See
   [`plugins/jira-sdlc/skills/_shared/project-config.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md).
-- **Investigate + clarify loop** — the only place the user is asked
+- **Investigate + clarify loop** — the main place the user is asked
   anything by `jira-task-assigner`; questions persist until scope,
   acceptance criteria, and priority are settled. (The branch-context
-  "ask otherwise" path, if triggered, is also a user question.)
+  "ask otherwise" path, if triggered, is also a user question, as is the
+  hotfix confirmation below.)
+- **The hotfix path has an explicit user gate (step 5C)** — the `opt` after
+  step 5. The assigner takes it *only* when the user deliberately asked for
+  an emergency production fix; urgency wording ("urgent", "asap",
+  "blocking") is not that signal, and even on deliberate wording it names
+  the path and waits for a yes before creating anything. A false positive
+  points a PR at production, shipping code that never sat in staging — which
+  is why this is a gate rather than an inference. The same `opt` carries 5C's
+  two stop conditions: a hotfix whose `production_branch` row read `unset`
+  (don't invent the name of the branch you're about to target), and standing
+  on the production branch when the decision turns out to be planned work
+  (continuing would cut tomorrow's feature from production).
 - **Scope decision first** — the assigner settles scope and the
   top-level type (`alt Multistep / else Single-step`); inside the
   multistep loop it provisions each sub-task's issue (JIRA) then branch
