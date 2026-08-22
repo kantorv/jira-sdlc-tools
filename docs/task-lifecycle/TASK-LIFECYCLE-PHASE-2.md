@@ -11,22 +11,27 @@ Triggered **once per leaf issue**, from inside its own worktree. Multiple
 executors run in parallel against the worktrees the assigner set up.
 
 The diagram surfaces the two systems the executor drives as their own
-swimlanes — **GIT** (anything that mutates repo state: merging the parent
-branch current, committing, pushing, and the `gh` calls that find, comment
-on, or open the PR) and
-**JIRA** (anything that mutates issue state: the ownership check, fetching
+swimlanes — **GIT** (repo and PR state: merging the parent branch current,
+committing, pushing, and the `gh` calls that list, comment on, or open the
+PR) and
+**JIRA** (issue state: the ownership check, fetching
 the issue and its prior comments, the *In Progress* / *In Review*
 transitions, any `Task memory` comments posted along the way, and the final
 run-report comment) — so the full interaction reads
-`User ↔ Executor ↔ GIT ↔ JIRA` left to right. The pre-flight scripts
-(`ensure_local_env`, `statuscheck`) and `pr_base.sh` are drawn as
-self-calls because they **gather facts rather than mutate** either system —
-not because they stay local. Only `ensure_local_env` does: the healthcheck
-*probes* both credentials over the network (`GET /myself` for Jira,
-`GET /repos/…` for GitHub), and `pr_base.sh`'s second source is the issue's
-own `PR target branch:` **Jira comment** — the one that survives a fresh
-clone, where the git config it tries first isn't there. All reads, no
-writes.
+`User ↔ Executor ↔ GIT ↔ JIRA` left to right. The split is by **what a call
+is about**, not by whether it writes: read-only calls sit on both lanes
+(`gh pr list`, the issue fetch, the ownership probe). What is drawn as a
+**self-call** instead is the executor's own tooling — `ensure_local_env`,
+`statuscheck` and `pr_base.sh`, whose subject is the executor's *own*
+context (is my config here, is my environment sound, which base do I
+target) — and **not** because they stay local. Two of them reach the
+network to answer it: the healthcheck *probes* both credentials
+(`GET /myself` for Jira, `GET /repos/…` for GitHub), and `pr_base.sh`'s
+second source is the issue's own `PR target branch:` **Jira comment** — the
+durable one, which survives a fresh clone where the git config it tries
+first isn't there. `ensure_local_env` is the only genuinely local one, and
+it does write: it copies `.jst/jira-sdlc-tools.local.env` in from the main
+checkout when the worktree lacks it.
 
 ## Sequence diagram
 
@@ -45,13 +50,13 @@ sequenceDiagram
         Executor->>Executor: Pre-step — ensure_local_env.sh<br/>(worktree gets .jst local.env if it is missing — no login step)
         Executor->>JIRA: Pre-step — check_assignee.sh --role executor<br/>(is <KEY-A> assigned to me? compares accountId, not email)
         JIRA-->>Executor: assignee
-        Note right of Executor: NOT mine (unassigned · someone else · unreadable)<br/>→ STOP: print the assign command, exit.<br/>No transition, no branch, no commit, no comment.
+        Note right of Executor: NOT mine → STOP, exit. No transition, no branch, no commit, no comment.<br/>unassigned · assigned to someone else → the stop prints the assign command.<br/>unreadable (no access · API timeout) → stops earlier, without it
         Executor->>Executor: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role executor<br/>(worktree · branch · issue_key · parent_branch · production_branch ·<br/>bootstrap · jira_account_url · gh_auth · gh_repo_access — any FAIL → stop)
         Note right of Executor: not a linked worktree, or not a feature/ or hotfix/ issue branch → stop.<br/>issue_key comes off the branch name — it is the only source of <KEY-A>.<br/>gh rows are checked HERE so step 10 never discovers a logged-out gh
         opt Step 1a — bootstrap row read "present"
             Executor->>Executor: .jst/bootstrap.sh with the JST_* contract<br/>(fail-soft — report a non-zero exit and carry on)
         end
-        Executor->>JIRA: Step 1b — fetch issue <KEY-A><br/>(summary, description, status, parent, subtasks, comment)
+        Executor->>JIRA: Step 1b — fetch issue <KEY-A><br/>(summary, description, issuetype, status, parent, subtasks, comment)
         JIRA-->>Executor: issue (summary, AC, parent family, prior comments)
         Note right of Executor: subtasks non-empty → <KEY-A> is a multistep PARENT, not an<br/>implementation surface → confirm with the user before continuing
         Executor->>GIT: Step 2 — bring worktree branch current<br/>(merge origin/<parent-branch>, or the local ref when it was never pushed)
@@ -71,7 +76,7 @@ sequenceDiagram
         Executor->>Executor: Step 7a — find this project's test commands<br/>(CLAUDE.md · AGENTS.md · README — recovered from package.json,<br/>Makefile or CI when only half of them are written down)
         opt the repo has no test layer at all
             Executor->>User: install a runner and the test deps now?<br/>(its own task — not the executor's call to make for them)
-            User-->>Executor: yes → fold both commands into CLAUDE.md · no → skip testing
+            User-->>Executor: yes → fold both commands into CLAUDE.md · AGENTS.md<br/>no → skip testing
             Note right of Executor: declined → skip the rest of step 7, say so in the report,<br/>and go straight to step 8. This is the one path that commits untested
         end
         Executor->>Executor: Step 7b — run each affected test alone, then the whole suite<br/>Step 7c — a suite failure is re-run individually before it counts
@@ -84,9 +89,10 @@ sequenceDiagram
             Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, the base is not re-resolved,<br/>and the URL is the one the list just returned)
         else no PR yet
             Executor->>Executor: pr_base.sh --role executor --parent-key <PARENT_KEY><br/>git config → Jira "PR target branch:" comment →<br/>parent-branch search → env default (top-level issues only)
-            Note right of Executor: source=unresolved → stop & ask · source=env-default → proceed, say so ·<br/>a hotfix/ prefix disagreeing with the resolved base → stop & ask
+            Note right of Executor: source=unresolved → stop & ask · source=branch-search → proceed,<br/>naming the branch in the report · source=env-default → proceed, say so ·<br/>a hotfix/ prefix disagreeing with the resolved base → stop & ask
             Executor->>GIT: gh pr create --base PR_BASE<br/>(body links https://<JIRA_ACCOUNT_URL>/browse/<KEY-A>)
             GIT-->>Executor: PR URL
+            Note right of Executor: gh fails here (repo permissions · network) → report the error and still<br/>hand back the compare URL so the user can open the PR by hand
         end
         Executor->>JIRA: Step 11 — transition → In Review<br/>(likewise skipped when already there — by now the work is<br/>committed and pushed, so a hard stop here would be the worst place to take one)
         Executor->>JIRA: Step 12 — post the one run-report comment (PR URL, branch, status)
@@ -122,8 +128,9 @@ sequenceDiagram
   never discovers a logged-out `gh` after the implementation is already
   written and pushed.
 - **Participant routing** — the executor orchestrates between three
-  parties. **GIT** owns repo state (merging the parent branch current, the
-  commit, the push, and the `gh` calls that list, comment on, or open the
+  parties. **GIT** owns repo and PR state (merging the parent branch
+  current, the commit, the push, and the `gh` calls that list, comment on,
+  or open the
   PR). **JIRA** owns issue state (the `check_assignee` ownership probe, the
   issue fetch that carries the parent family *and prior comments*, the *In
   Progress* and *In Review* transitions, any `Task memory` comments posted
@@ -143,14 +150,19 @@ sequenceDiagram
 - **Parallel lanes** — the `par / and / end` block encodes the
   worktree-level parallelism the assigner's phase 1 setup makes
   possible. **Every leaf has its own worktree** and can run concurrently.
-- **The executor asks the user twice, and both are gates** — step 5, when
-  the description or acceptance criteria leaves an implementation choice
-  that would change the result (it asks rather than guesses, and step 3's
-  transition deliberately *stands* while it waits — someone has picked the
-  issue up, so the issue is not rolled back to *To Do* even if no answer
-  comes); and step 7a, when the repo has no test layer at all. Both are
-  drawn as `opt` blocks with a real `User` round-trip, the same way phase 1
-  draws its clarify loop and hotfix gate.
+- **Two of the executor's questions are drawn as round-trips, because the
+  run continues down either arm** — step 5, when the description or
+  acceptance criteria leaves an implementation choice that would change the
+  result (it asks rather than guesses, and step 3's transition deliberately
+  *stands* while it waits — someone has picked the issue up, so the issue is
+  not rolled back to *To Do* even if no answer comes); and step 7a, when the
+  repo has no test layer at all. Both are `opt` blocks with a real `User`
+  round-trip, the same way phase 1 draws its clarify loop and hotfix gate.
+  The skill's other user-facing questions are drawn as **notes** rather than
+  round-trips, because they gate the run instead of branching it: step 1b's
+  confirmation when `<KEY>` turns out to have sub-tasks, and the stop-and-ask
+  guards at step 2 (merge conflict) and step 10 (`source=unresolved`, or a
+  prefix disagreeing with the resolved base).
 - **Finding the test commands is its own step (7a)** — which runner a
   project uses, how it selects one test, and how it runs the suite vary too
   much to ship a plugin default, so the executor reads `CLAUDE.md`,
@@ -177,7 +189,9 @@ sequenceDiagram
   default (top-level issues only, never a sub-task). `source=unresolved`
   stops the run and asks, as does a `hotfix/` branch whose resolved base
   isn't the production branch — retargeting a production fix at staging
-  neither ships it nor gets it versioned.
+  neither ships it nor gets it versioned. The two sources that *do* proceed
+  still owe the report a sentence: `branch-search` names the branch it
+  recovered, `env-default` says that it fell through to the default.
 - **Status transitions the executor owns** — to *In Progress* on start,
   to *In Review* on PR open (both JIRA). Each is **skipped when the issue
   already reads that status**: workflows generally offer no transition into
@@ -206,8 +220,10 @@ sequenceDiagram
   happened to be logged in. Ownership is then **confirmed, not assumed**
   (`check_assignee.sh`): `<KEY>` must be assigned to that account. Anything
   else — unassigned, assigned to someone else, unreadable — stops the run
-  *before* it has touched anything, printing the ready-to-paste
-  `jira.sh issue assign …` command. This is the counterpart to phase 1
+  *before* it has touched anything. The first two stop with the
+  `jira issue assign …` command ready to paste; the unreadable case (no
+  access to the project, or a Jira timeout) stops earlier than that message
+  is built, so it reports the read failure instead. This is the counterpart to phase 1
   assigning every issue to the executor on create: the assigner says who owns
   the work, and the executor refuses to work anything it doesn't own.
   (Ownership is compared by `accountId`, not by email — Jira only exposes an
@@ -223,9 +239,12 @@ sequenceDiagram
   **sub-tasks**, `<KEY>` is a multistep parent — a merge target, not an
   implementation surface — and the executor asks the user to confirm rather
   than silently implementing on it. Two more guards can stop the run
-  mid-flow: a merge conflict while bringing the branch current (GIT), and
-  a test that still fails when re-run individually after the suite run
-  (both leave the run stopped, with no commit/push/PR).
+  *before it commits anything*: a merge conflict while bringing the branch
+  current (GIT), and a test that still fails when re-run individually after
+  the suite run (both leave the run stopped, with no commit/push/PR). Step
+  10 can stop it too — `source=unresolved`, or a prefix disagreeing with the
+  resolved base — but by then the commit and the push have already landed,
+  so what is missing there is the PR, not the work.
 - **Phase 2 never sets Done** — step 11 transitions to *In Review* and
   stops there. A sub-task reaches `<STATUS_DONE>` when its PR is merged into
   the parent branch, a single-step issue when its PR is merged into the base
