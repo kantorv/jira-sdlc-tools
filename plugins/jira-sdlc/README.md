@@ -194,8 +194,9 @@ relying on opaque GitHub-for-Jira transition rules:
 - New issues created by `jira-task-assigner` start in `<STATUS_TODO>`
   (Jira's default initial status for new issues — no explicit move needed).
 - `jira-task-executor` transitions a leaf issue to `<STATUS_IN_PROGRESS>`
-  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once it opens
-  the sub-task's PR (step 11, dedicated-branch path only).
+  when it starts work (step 3), then to `<STATUS_IN_REVIEW>` once its PR is
+  open (step 11). Each transition is skipped when the issue already reads
+  that status — the normal case on a re-run after a rejection.
 - `jira-task-reviewer` transitions a rejected sub-task back to
   `<STATUS_IN_PROGRESS>` (step 3d, `REQUEST_CHANGES` path) so the executor
   can pick it up again. It never transitions anything to `<STATUS_DONE>` on
