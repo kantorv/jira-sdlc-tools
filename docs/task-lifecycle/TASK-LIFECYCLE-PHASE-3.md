@@ -90,7 +90,7 @@ sequenceDiagram
     GIT-->>Reviewer: PR state (none | open | merged | closed-unmerged)
     Note over Reviewer: both phase checks share two rules — several PRs back → act on the OPEN one<br/>(several open → ask which) · a CLOSED, unmerged PR matches no enumerated state,<br/>so stop and ask: someone abandoned this branch's PR deliberately, and both<br/>opening a replacement and reviewing a dead one would guess at intent
 
-    Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE · nothing to review)<br/>never reach step 3 and never resolve it. Two branches DO review without entering<br/>step 3 — both every-sub-task-DONE splits below (no parent PR → 5a+5b · open parent<br/>PR → 5b) — so 5b resolves <SELF> itself on each
+    Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE as detected by this phase check ·<br/>nothing to review) never reach step 3 and never resolve it — 5a's second M-FULLY-COMPLETE<br/>detector is the exception, reached through the step-3 loop with <SELF> already resolved.<br/>Two branches DO review without entering step 3 — both every-sub-task-DONE splits below<br/>(no parent PR → 5a+5b · open parent PR → 5b) — so 5b resolves <SELF> itself on each
 
     alt Single-step — no PR yet
         Note over Reviewer: executor hasn't opened a PR
@@ -292,10 +292,13 @@ sequenceDiagram
   resolves it as a self-call. On *this* call three of its four sources are
   live, in order: the `parentbranch` git config the assigner wrote in phase 1
   — the phase-1 → phase-3 thread — then the issue's `PR target branch:` Jira
-  comment, then the env default. The fourth, the parent-branch search, is
-  gated on `--parent-key`, which this call deliberately never passes; that is
-  what keeps the env default reachable and stops `<BASE_BRANCH>` resolving to
-  `<PARENT-BRANCH>`. Phase 2 draws the same script the same way.
+  comment, then the env default (sources 1, 2 and 4). The one it skips is
+  **source 3**, the parent-branch search, which is gated on `--parent-key` —
+  and this call deliberately never passes it. That gate gets skipped in both
+  directions at once: a `--parent-key` match resolves *before* the env default
+  is ever consulted, so omitting the flag is both what keeps that default
+  reachable and what stops `<BASE_BRANCH>` resolving to `<PARENT-BRANCH>`.
+  Phase 2 draws the same script the same way.
 - **A sub-task branch does not climb into a full pass** — the reviewer
   derives the key from the current branch (feature/<KEY>-slug or
   hotfix/<KEY>-slug) and `jira.sh` fetches that issue. A top-level issue with
@@ -346,8 +349,12 @@ sequenceDiagram
   loop, and its value is substituted literally into every 3a check. That is
   why the diagram draws it *inside* the branches that review something
   rather than once up front: the exits that review nothing — no PR yet,
-  S-MERGED, M-FULLY-COMPLETE, and the multistep nothing-to-review case —
-  never reach step 3 and never resolve it. **Two** branches review without
+  S-MERGED, M-FULLY-COMPLETE *as the step-1 phase check detects it*, and the
+  multistep nothing-to-review case — never reach step 3 and never resolve it.
+  M-FULLY-COMPLETE's **second** detector is the exception: a 5a that finds the
+  parent PR already merged is reached *through* the review loop (step 2 → 3 →
+  4a → 5a), so `<SELF>` is already resolved by the time that exit is taken.
+  **Two** branches review without
   entering step 3, and both are the multistep phase check's
   every-sub-task-`<STATUS_DONE>` split: the *open parent PR* path, which jumps
   from step 1 straight to 5b, and the *no parent PR* path, which jumps from
