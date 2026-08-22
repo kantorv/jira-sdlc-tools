@@ -20,8 +20,13 @@ transitions, any `Task memory` comments posted along the way, and the final
 run-report comment) — so the full interaction reads
 `User ↔ Executor ↔ GIT ↔ JIRA` left to right. The pre-flight scripts
 (`ensure_local_env`, `statuscheck`) and `pr_base.sh` are drawn as
-self-calls: they read local config and git state rather than mutating
-either system.
+self-calls because they **gather facts rather than mutate** either system —
+not because they stay local. Only `ensure_local_env` does: the healthcheck
+*probes* both credentials over the network (`GET /myself` for Jira,
+`GET /repos/…` for GitHub), and `pr_base.sh`'s second source is the issue's
+own `PR target branch:` **Jira comment** — the one that survives a fresh
+clone, where the git config it tries first isn't there. All reads, no
+writes.
 
 ## Sequence diagram
 
@@ -63,15 +68,15 @@ sequenceDiagram
         Executor->>GIT: Step 8 — commit (staged explicitly) • Step 9 — push -u origin
         GIT-->>Executor: branch pushed
         Executor->>GIT: Step 10 — gh pr list --head <branch> --state open
-        GIT-->>Executor: existing PR, or none
+        GIT-->>Executor: the open PR and its URL, or none
         alt an open PR already exists (the re-run after a reject)
-            Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, and the base is not re-resolved)
+            Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, the base is not re-resolved,<br/>and the URL is the one the list just returned)
         else no PR yet
             Executor->>Executor: pr_base.sh --role executor --parent-key <PARENT_KEY><br/>git config → Jira "PR target branch:" comment →<br/>parent-branch search → env default (top-level issues only)
             Note right of Executor: source=unresolved → stop & ask · source=env-default → proceed, say so ·<br/>a hotfix/ prefix disagreeing with the resolved base → stop & ask
             Executor->>GIT: gh pr create --base PR_BASE<br/>(body links https://<JIRA_ACCOUNT_URL>/browse/<KEY-A>)
+            GIT-->>Executor: PR URL
         end
-        GIT-->>Executor: PR URL
         Executor->>JIRA: Step 11 — transition → In Review<br/>(likewise skipped when already there — by now the work is<br/>committed and pushed, so a hard stop here would be the worst place to take one)
         Executor->>JIRA: Step 12 — post the one run-report comment (PR URL, branch, status)
         Executor-->>User: Step 12 — report (PR URL, branch, status)

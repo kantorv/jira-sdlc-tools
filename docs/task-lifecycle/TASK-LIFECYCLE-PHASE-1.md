@@ -27,8 +27,12 @@ the pre-branch fetch/pull, creating branches, setting
 (anything that mutates issue state: creating the top-level or sub-task
 issue, posting comments) — so the full interaction reads
 `User ↔ Assigner ↔ GIT ↔ JIRA` left to right. The healthcheck and
-`get_assignee_email.sh` are drawn as self-calls: both read local config
-and git state rather than mutating either system.
+`get_assignee_email.sh` are drawn as self-calls because they **gather facts
+rather than mutate** either system — not because they stay local.
+`get_assignee_email.sh` genuinely only reads `.jst/` config, but the
+healthcheck also *probes* both credentials over the network
+(`GET /myself` for Jira, `GET /repos/…` for GitHub). Both reads, neither a
+write.
 
 ## Sequence diagram
 

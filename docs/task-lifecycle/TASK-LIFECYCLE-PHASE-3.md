@@ -27,9 +27,8 @@ approved anything, its last step (7) asks whether to move those issues to
 
 The diagram surfaces the two systems the reviewer drives as their own
 swimlanes — **GIT** (anything that mutates or reads repo/PR state:
-`git fetch --prune`, resolving the parent/base branches from the
-`branch.<PARENT-BRANCH>.parentbranch` git config that the assigner
-wrote in phase 1, resolving this skill's own GitHub identity with
+`git fetch --prune`, the anchored `git branch -a --list` that finds
+`<PARENT-BRANCH>`, resolving this skill's own GitHub identity with
 `gh api user`, the phase-check `gh pr list`, the per-PR `3a`
 idempotency lookup, fetching PR diffs, `gh pr review --comment --body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
 verdicts, and finding, mergeability-checking, or creating the aggregate
@@ -42,9 +41,12 @@ issue after every verdict, the per-sub-task summary comment on the
 parent, every report comment posted on the parent, and the step-7
 user-approved → Done transitions) — so the full
 interaction reads `User ↔ Reviewer ↔ GIT ↔ JIRA` left to right. The two
-pre-flight scripts (`ensure_local_env`, `statuscheck`) are drawn as
-self-calls: they read local config and probe credentials rather than
-mutating either system.
+pre-flight scripts (`ensure_local_env`, `statuscheck`) and `pr_base.sh` are
+drawn as self-calls because they **gather facts rather than mutate** either
+system — not because they stay local. Only `ensure_local_env` does: the
+healthcheck *probes* both credentials over the network (`GET /myself` for
+Jira, `GET /repos/…` for GitHub), and `pr_base.sh`'s second source is the
+issue's own `PR target branch:` **Jira comment**. All reads, no writes.
 
 ## Sequence diagram
 
@@ -69,7 +71,10 @@ sequenceDiagram
         Note over Reviewer,JIRA: Different run shape — scope is that ONE sub-task PR.<br/>fields.parent.key is read only to resolve <PARENT-BRANCH> (the PR's base)<br/>via pr_base.sh --parent-key · the parent is never re-fetched as an acting issue ·<br/>fields.subtasks is never read · no track is determined · the parent PR is never touched
         Note over Reviewer: walk: step 2 (this sub-task alone) → 3 → 6 → 7, then the run ends.<br/>A full pass is a separate run from the parent's worktree — the rest of this diagram
     end
-    Reviewer->>GIT: Step 1 — resolve <PARENT-BRANCH> (branch -a --list globs)<br/>+ <BASE_BRANCH> (pr_base.sh --branch, parentbranch config)
+    Reviewer->>GIT: Step 1 — resolve <PARENT-BRANCH><br/>(git branch -a --list globs, anchored on the key)
+    GIT-->>Reviewer: exactly one branch (zero or several → ask the user)
+    Reviewer->>Reviewer: Step 1 — resolve <BASE_BRANCH><br/>pr_base.sh --role reviewer --branch <PARENT-BRANCH><br/>(never --parent-key here — it would match <PARENT-BRANCH><br/>itself and open the parent PR into itself)
+    Note right of Reviewer: source=env-default → proceed but flag it · unresolved → ask ·<br/>a hotfix/ <PARENT-BRANCH> resolving to the staging base means the env<br/>default fired on a production fix → stop and ask which base is right
     Note over Reviewer: Step 1 — determine track from fields.subtasks<br/>(empty → single-step · non-empty → multistep)
     opt multistep — fetch every sub-task's status
         Reviewer->>JIRA: Step 1 — issue view per sub-task key
@@ -79,9 +84,7 @@ sequenceDiagram
     GIT-->>Reviewer: PR state (none | open | merged | closed-unmerged)
     Note over Reviewer: both phase checks share two rules — several PRs back → act on the OPEN one<br/>(several open → ask which) · a CLOSED, unmerged PR matches no enumerated state,<br/>so stop and ask: someone abandoned this branch's PR deliberately, and both<br/>opening a replacement and reviewing a dead one would guess at intent
 
-    Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(this skill's GitHub identity, resolved ONCE per run)
-    GIT-->>Reviewer: login
-    Note right of Reviewer: every 3a check below matches on <SELF> + body prefix.<br/>Resolved at the top of step 3 · 5b resolves it itself on the<br/>re-run path that jumps straight from step 1 to step 5.<br/>gh missing or logged out → report the error, hand back the PR URLs
+    Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE · nothing to review)<br/>never reach step 3 and never resolve it
 
     alt Single-step — no PR yet
         Note over Reviewer: executor hasn't opened a PR
@@ -90,6 +93,9 @@ sequenceDiagram
 
     else Single-step — PR open (first run)
         Note over Reviewer: single-step: the one PR is the whole set → review loop (step 3).<br/>Step 2 is skipped — its PR set is the parent PR itself
+        Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(resolved here, at the top of the review loop)
+        GIT-->>Reviewer: login
+        Note right of Reviewer: gh missing or logged out → report the error and hand back the PR URLs
         Reviewer->>GIT: Step 3a — idempotency: my prior verdict comment on this PR?
         GIT-->>Reviewer: none | "APPROVED —" | "CHANGES REQUESTED —"<br/>(the MOST RECENT verdict wins — a later one supersedes an earlier)
         alt most recent is "APPROVED —" and no re-review requested
@@ -128,6 +134,8 @@ sequenceDiagram
             Reviewer->>JIRA: Step 6 — post report on <PARENT-KEY> (nothing to review)
             Reviewer-->>User: "no sub-task PRs to review — re-run later"
         else at least one sub-task PR to review
+            Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(resolved once here, before the loop — not per PR)
+            GIT-->>Reviewer: login
             loop Step 3 — per sub-task PR (In Review, sequential, one pass)
                 Reviewer->>GIT: Step 3a — idempotency: my prior verdict comment on this PR?
                 GIT-->>Reviewer: none | "APPROVED —" | "CHANGES REQUESTED —"<br/>(most recent wins)
@@ -187,6 +195,8 @@ sequenceDiagram
 
     else Multistep — parent PR open
         Note over Reviewer: an open parent PR splits on sub-task status too —<br/>EVERY sub-task <STATUS_DONE> → the merges have happened, go straight to 5b below ·<br/>any sub-task not yet <STATUS_DONE> → the parent PR was opened early and the sub-tasks<br/>are still the work, so run the full step-2 pass and leave the parent PR to a later run
+        Reviewer->>GIT: Step 5b — gh api user --jq .login → <SELF><br/>(this path skipped step 3, so 5b resolves it itself)
+        GIT-->>Reviewer: login
         Reviewer->>GIT: Step 5b — 3a idempotency + mergeable check<br/>+ refresh the aggregate diff
         GIT-->>Reviewer: prior verdict + mergeable state + aggregate diff
         Reviewer->>Reviewer: Step 5b — refresh aggregate review (lighter pass)<br/>skip if already "APPROVED —" · CONFLICTING → stop and report
@@ -236,16 +246,19 @@ sequenceDiagram
   idempotency check) is identical — only the PR set and the post-loop
   outcomes differ.
 - **Participant routing** — the reviewer orchestrates three parties.
-  **GIT** owns repo/PR state: the opening fetch, resolving
-  `<PARENT-BRANCH>` + `<BASE_BRANCH>` (the latter read from the
-  `parentbranch` git config the assigner wrote in phase 1 — the
-  phase-1 → phase-3 thread), the phase-check `gh pr list`, the per-PR 3a
+  **GIT** owns repo/PR state: the opening fetch, the anchored
+  `git branch -a --list` that resolves `<PARENT-BRANCH>`, the phase-check
+  `gh pr list`, the per-PR 3a
   idempotency lookup, fetching PR diffs, the verdict comment (`gh pr review --comment --body-file`), and finding or creating the aggregate
   parent PR. **JIRA** owns issue state: fetching the parent + sub-tasks
   (filtering to `<STATUS_IN_REVIEW>`), climbing from a sub-task branch to
   its parent, each rejected sub-task → In Progress transition with its
   findings comment, and the summary/report comments posted on the parent
-  after every review.
+  after every review. `<BASE_BRANCH>` sits in neither lane: `pr_base.sh`
+  resolves it as a self-call, reading the `parentbranch` git config the
+  assigner wrote in phase 1 — the phase-1 → phase-3 thread — and falling
+  back to the issue's `PR target branch:` Jira comment when that config
+  isn't there. Phase 2 draws the same script the same way.
 - **A sub-task branch does not climb into a full pass** — the reviewer
   derives the key from the current branch (feature/<KEY>-slug or
   hotfix/<KEY>-slug) and `jira.sh` fetches that issue. A top-level issue with
@@ -291,13 +304,17 @@ sequenceDiagram
   and
   [`plugins/jira-sdlc/skills/_shared/jira-api-reference.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
   §9.
-- **`<SELF>` is resolved once, and everything downstream keys on it** —
+- **`<SELF>` is resolved once per run — but only where a review happens** —
   `gh api user --jq .login` runs at the top of step 3, before the review
-  loop, and its value is substituted literally into every 3a check. The 5b
-  parent-PR review resolves it itself on the re-run path that jumps straight
-  from step 1 to step 5 and never enters step 3. If that call errors, `gh`
-  is missing or logged out: the run reports the error and hands the user the
-  PR URLs rather than proceeding.
+  loop, and its value is substituted literally into every 3a check. That is
+  why the diagram draws it *inside* the branches that review something
+  rather than once up front: the exits that review nothing — no PR yet,
+  S-MERGED, M-FULLY-COMPLETE, and the multistep nothing-to-review case —
+  never reach step 3 and never resolve it. The one branch that reviews
+  without entering step 3 is the open-parent-PR path, which jumps from step
+  1 to 5b, so **5b resolves `<SELF>` itself** there. If that call errors,
+  `gh` is missing or logged out: the run reports the error and hands the
+  user the PR URLs rather than proceeding.
 - **Idempotent review (step 3a)** — before every PR review — the
   single-step PR, each multistep sub-task PR, and the aggregate parent PR
   (5b) — the reviewer checks whether *its own* GitHub identity already left
