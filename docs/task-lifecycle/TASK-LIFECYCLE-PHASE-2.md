@@ -89,7 +89,7 @@ sequenceDiagram
             Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, the base is not re-resolved,<br/>and the URL is the one the list just returned)
         else no PR yet
             Executor->>Executor: pr_base.sh --role executor --parent-key <PARENT_KEY><br/>git config → Jira "PR target branch:" comment →<br/>parent-branch search → env default (top-level issues only)
-            Note right of Executor: source=unresolved → stop & ask · source=branch-search → proceed,<br/>naming the branch in the report · source=env-default → proceed, say so ·<br/>a hotfix/ prefix disagreeing with the resolved base → stop & ask
+            Note right of Executor: source=unresolved → stop & ask · source=branch-search → proceed,<br/>naming the branch in the report · source=env-default → proceed, say so ·<br/>prefix and base disagreeing — a hotfix/ off production, or a feature/ on it<br/>(top-level only — a sub-task is exempt) → stop & ask
             Executor->>GIT: gh pr create --base PR_BASE<br/>(body links https://<JIRA_ACCOUNT_URL>/browse/<KEY-A>)
             GIT-->>Executor: PR URL
             Note right of Executor: gh fails here (repo permissions · network) → report the error and still<br/>hand back the compare URL so the user can open the PR by hand
@@ -134,10 +134,11 @@ sequenceDiagram
   PR). **JIRA** owns issue state (the `check_assignee` ownership probe, the
   issue fetch that carries the parent family *and prior comments*, the *In
   Progress* and *In Review* transitions, any `Task memory` comments posted
-  along the way, and the final run-report comment). Everything
-  else (the pre-flight scripts, the bootstrap hook, `pr_base.sh`,
-  investigating, clarifying, implementing, testing) stays inside
-  the executor.
+  along the way, and the final run-report comment). Everything else stays
+  off both lanes: the pre-flight scripts, the bootstrap hook, `pr_base.sh`,
+  investigating, implementing and testing are the executor's own
+  **self-calls**, while the two questions it asks — step 5's clarify and
+  step 7a's install-a-runner — go to **User**.
 - **The bootstrap hook (step 1a)** — a worktree is a source tree, not a
   running instance. When the healthcheck's `bootstrap` row reads *present*,
   the executor runs the project's optional `.jst/bootstrap.sh` (or
@@ -161,8 +162,9 @@ sequenceDiagram
   The skill's other user-facing questions are drawn as **notes** rather than
   round-trips, because they gate the run instead of branching it: step 1b's
   confirmation when `<KEY>` turns out to have sub-tasks, and the stop-and-ask
-  guards at step 2 (merge conflict) and step 10 (`source=unresolved`, or a
-  prefix disagreeing with the resolved base).
+  guards at step 2 (merge conflict), step 7c (a test that still fails when
+  re-run individually) and step 10 (`source=unresolved`, or a prefix
+  disagreeing with the resolved base).
 - **Finding the test commands is its own step (7a)** — which runner a
   project uses, how it selects one test, and how it runs the suite vary too
   much to ship a plugin default, so the executor reads `CLAUDE.md`,
@@ -187,9 +189,13 @@ sequenceDiagram
   resolves a base, and it does so with `pr_base.sh`, which tries git config
   → the Jira `PR target branch:` comment → a parent-branch search → the env
   default (top-level issues only, never a sub-task). `source=unresolved`
-  stops the run and asks, as does a `hotfix/` branch whose resolved base
-  isn't the production branch — retargeting a production fix at staging
-  neither ships it nor gets it versioned. The two sources that *do* proceed
+  stops the run and asks, as does a prefix that disagrees with the resolved
+  base — a `hotfix/` branch not targeting the production branch, or a
+  `feature/` branch that is. That check is **top-level-only** (a sub-task is
+  exempt — its base is its parent's branch), and the first case is the one
+  that actually happens: a hotfix that fell through to `env-default`, where
+  retargeting a production fix at staging neither ships it nor gets it
+  versioned. The two sources that *do* proceed
   still owe the report a sentence: `branch-search` names the branch it
   recovered, `env-default` says that it fell through to the default.
 - **Status transitions the executor owns** — to *In Progress* on start,
