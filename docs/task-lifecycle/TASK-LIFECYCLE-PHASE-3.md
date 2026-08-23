@@ -93,8 +93,7 @@ sequenceDiagram
     Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE as detected by this phase check ·<br/>nothing to review) never reach step 3 and never resolve it — 5a's second M-FULLY-COMPLETE<br/>detector is the exception, reached through the step-3 loop with <SELF> already resolved.<br/>Two branches DO review without entering step 3 — both every-sub-task-DONE splits below<br/>(no parent PR → 5a+5b · open parent PR → 5b) — so 5b resolves <SELF> itself on each
 
     alt Single-step — no PR yet
-        Note over Reviewer: executor hasn't opened a PR
-        Reviewer->>JIRA: Step 6 — post report on <PARENT-KEY><br/>(no PR yet — nothing to review)
+        Note over Reviewer: executor hasn't opened a PR — the phase check reports and exits<br/>HERE, before step 6, and no catalogue outcome describes this state
         Reviewer-->>User: "no open PR yet — reviewer runs once it exists"
 
     else Single-step — PR open (first run)
@@ -137,7 +136,7 @@ sequenceDiagram
             Note over Reviewer: no branch / no open PR → flag & skip this sub-task ·<br/>more than one open PR → ask the user which to review
         end
         alt zero sub-tasks have an open PR
-            Reviewer->>JIRA: Step 6 — post report on <PARENT-KEY> (nothing to review)
+            Note over Reviewer: step 2 reports and exits before step 6 too —<br/>no catalogue outcome describes this state either
             Reviewer-->>User: "no sub-task PRs to review — re-run later"
         else at least one sub-task PR to review
             Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(resolved once here, before the loop — not per PR)
@@ -467,21 +466,31 @@ sequenceDiagram
   M-FULLY-COMPLETE) skip the question — those issues are Done already. No
   extra Jira comment is posted either way: the step-6 report is still the
   run's single final comment.
-- **Every terminal branch posts a JIRA report comment on the parent**
-  — per step 6, the report goes to chat *and* as a single Jira comment
-  on `<PARENT-KEY>`: the single-step *no-PR-yet* exit, the single-step
-  approve/reject (S-APPROVED / S-CHANGES-REQUESTED) and merged (S-MERGED)
-  reports, the multistep *nothing-to-review* exit, the M-ALL-APPROVED and
-  M-SOME-BLOCKED reports, the parent approve (M-PARENT-READY) and parent
-  reject (M-PARENT-CHANGES-REQUESTED) reports, the 5b already-approved skip
-  (which posts no GitHub comment but still reports), and the merged-state report
-  (M-FULLY-COMPLETE). **Three** branches stop without a step-6 report, all of
-  them surfacing state to the user in chat and waiting: the
+- **A branch posts a JIRA report comment on the parent exactly when it
+  renders a catalogue outcome** — that is the rule, and it decides every
+  branch rather than a list you have to keep in sync. Step 6 sends the
+  report to chat *and* to `<PARENT-KEY>` as a single Jira comment, and step
+  6 must "pick exactly one outcome from the catalogue", which
+  `_shared/templates/review-report.md` caps at **ten** blocks. So those ten
+  are the whole of it: the single-step approve/reject (S-APPROVED /
+  S-CHANGES-REQUESTED) and merged (S-MERGED) reports, M-ALL-APPROVED and
+  M-SOME-BLOCKED, the parent approve (M-PARENT-READY) — which the 5b
+  already-approved skip also renders, posting no GitHub comment but still
+  reporting — the parent reject (M-PARENT-CHANGES-REQUESTED), the
+  merged-state report (M-FULLY-COMPLETE), and the two `M-SUBTASK-*` blocks,
+  which step 6 renders at run level only on the sub-task-worktree path.
+  Every **other** branch surfaces its state to the user in chat and waits,
+  posting nothing to Jira, for one reason: no block exists for it to fill.
+  That covers the single-step *no-PR-yet* exit and the multistep
+  *nothing-to-review* exit — `SKILL.md` ends the first with a chat line and
+  a bare "Exit." at the phase check, the second with "report and exit" at
+  step 2, neither reaching step 6 — the phase checks' **CLOSED, unmerged**
+  stop, step 1's own
+  stop-and-asks (zero or several branch matches, `source=unresolved`, a
+  `hotfix/` `<PARENT-BRANCH>` resolving to the staging base), the
   parent-PR-CLOSED case (5a), 5b's `CONFLICTING` stop, and the failure to
-  resolve `<SELF>` (`gh` missing or logged out), which hands back the PR URLs
-  instead. None of the three has a report to post — the outcome catalogue in
-  `_shared/templates/review-report.md` holds exactly ten blocks and no block
-  describes any of them.
+  resolve `<SELF>` (`gh` missing or logged out), which hands back the PR
+  URLs instead.
 
 ## Related
 
