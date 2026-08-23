@@ -236,8 +236,18 @@ $ProjectKey       = Get-Cfg 'PROJECT[-_]KEY'
 $BaseBranch       = Get-Cfg 'DEFAULT_BASE_BRANCH'
 $ProductionBranch = Get-Cfg 'PRODUCTION_BRANCH'
 if (-not (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.env'))) {
-    Add-Row env_config FAIL "jira-sdlc-tools.env not found in $CfgDir" `
-        "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $Rerun."
+    # In a worktree the obvious remedy is the wrong one: hand-authoring a copy
+    # here clears the row while leaving a second file that drifts from the main
+    # checkout's (JST-301). ensure_local_env already syncs this file across, so
+    # reaching this row in a worktree means the main checkout hasn't got it
+    # either — which is where the fix belongs.
+    if ($IsWt) {
+        Add-Row env_config FAIL "jira-sdlc-tools.env not found in $CfgDir" `
+            "this is a linked worktree — don't author a copy here, it would silently drift from the main checkout's. Fix it there instead: create .jst/jira-sdlc-tools.env in the main checkout (variables described in skills/_shared/project-config.md) and commit it, so every worktree gets it as a tracked file; while it stays uncommitted, ensure_local_env.sh copies it across. Then $Rerun."
+    } else {
+        Add-Row env_config FAIL "jira-sdlc-tools.env not found in $CfgDir" `
+            "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $Rerun."
+    }
 } elseif (-not $ProjectKey) {
     Add-Row env_config FAIL "jira-sdlc-tools.env found but PROJECT-KEY is unset" `
         "add PROJECT-KEY to .jst/jira-sdlc-tools.env (see skills/_shared/project-config.md), then $Rerun."
@@ -260,12 +270,12 @@ if (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.local.env')) {
     $ignored = ($LASTEXITCODE -eq 0)
     if ($tracked) {
         Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" `
-            "git rm --cached .jst/jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
+            "git rm --cached .jst/jira-sdlc-tools.local.env, add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
     } elseif ($ignored) {
         Add-Row env_local_ignored OK "gitignored (never committed)"
     } else {
         Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" `
-            "add .jst/jira-sdlc-tools.local.env to .gitignore first, then $Rerun."
+            "add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $Rerun."
     }
 } else {
     Add-Row env_local FAIL "jira-sdlc-tools.local.env not found in $CfgDir" `
