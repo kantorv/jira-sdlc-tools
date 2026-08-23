@@ -27,19 +27,32 @@ approved anything, its last step (7) asks whether to move those issues to
 
 The diagram surfaces the two systems the reviewer drives as their own
 swimlanes — **GIT** (anything that mutates or reads repo/PR state:
-`git fetch --prune`, resolving the parent/base branches from the
-`branch.<PARENT-BRANCH>.parentbranch` git config that the assigner
-wrote in phase 1, the phase-check `gh pr list`, the per-PR `3a`
-idempotency lookup, fetching PR diffs, `gh pr review --comment --body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
-verdicts, and finding or creating the aggregate parent PR) and **JIRA**
-(anything that mutates issue state: fetching the parent + In-Review
-sub-tasks, reading `fields.parent.key` off a sub-task's own fetch to reach
-its parent, each rejected
-sub-task → In Progress transition, multi-line comments on the reviewed
+`git fetch origin --prune`, the anchored `git branch -a --list` that finds
+`<PARENT-BRANCH>`, resolving this skill's own GitHub identity with
+`gh api user`, the phase-check `gh pr list`, the per-PR `3a`
+idempotency lookup, fetching PR diffs, the step-4a per-PR merge-state
+lookup, `gh pr review --comment --body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
+verdicts, and finding, mergeability-checking, or creating the aggregate
+parent PR) and **JIRA**
+(anything that mutates issue state: fetching the parent and then *every*
+sub-task — the `<STATUS_IN_REVIEW>` ones become the PR set, but all statuses
+are kept — reading `fields.parent.key` off a sub-task's own fetch to reach
+its parent, each rejected issue → In Progress transition (a sub-task on the
+multistep track, `<PARENT-KEY>` itself on single-step), multi-line comments on the reviewed
 issue after every verdict, the per-sub-task summary comment on the
 parent, every report comment posted on the parent, and the step-7
 user-approved → Done transitions) — so the full
-interaction reads `User ↔ Reviewer ↔ GIT ↔ JIRA` left to right.
+interaction reads `User ↔ Reviewer ↔ GIT ↔ JIRA` left to right. The two
+pre-flight scripts (`ensure_local_env`, `statuscheck`) and `pr_base.sh` are
+drawn as self-calls because they **neither mutate GIT nor JIRA state** — not
+because they stay local. Only `ensure_local_env` does: the
+healthcheck *probes* both credentials over the network (`GET /myself` for
+Jira, `GET /repos/…` for GitHub), and `pr_base.sh`'s second source is the
+issue's own `PR target branch:` **Jira comment**. Read-only of *those two
+systems*, not of the machine: `statuscheck.sh` also re-logs `gh` in from the
+stored PAT (`gh auth logout`, then `gh auth login --with-token`), a
+deliberate local mutation that exists so a stale read-only token can't 403 at
+`gh pr create` later.
 
 ## Sequence diagram
 
@@ -54,115 +67,145 @@ sequenceDiagram
     User->>Reviewer: cd worktree-<PARENT-KEY>, invoke /jira-task-reviewer (no key arg)
 
     activate Reviewer
-    Reviewer->>Reviewer: ensure_local_env.sh<br/>(credentials file exists — there is no login step)
-    Reviewer->>JIRA: statuscheck.sh --role reviewer<br/>(healthcheck — jira_auth probes the reviewer credential)
-    JIRA-->>Reviewer: rows OK, continue
-    Note right of Reviewer: any FAIL row → stop.<br/>Every verdict comment + reject transition below<br/>authenticates per-request as the reviewer
-    Reviewer->>GIT: git fetch origin --prune
-    Reviewer->>JIRA: fetch issue from branch key<br/>(type, status, parent, subtasks)
+    Reviewer->>Reviewer: Pre-step — ensure_local_env.sh<br/>(credentials file exists — there is no login step)
+    Reviewer->>Reviewer: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role reviewer<br/>(worktree · branch · issue_key · parent_branch · gh_auth ·<br/>jira_auth probes the reviewer credential — any FAIL → stop)
+    Note right of Reviewer: not a linked worktree, or not a feature/ or hotfix/ issue branch → stop.<br/>Every verdict comment + reject transition below<br/>authenticates per-request as the reviewer
+    Reviewer->>GIT: Step 1 — git fetch origin --prune
+    Reviewer->>JIRA: Step 1 — fetch issue from branch key<br/>(summary, description, type, status, parent, subtasks — never comment)
     JIRA-->>Reviewer: issue fields
     opt branch key is a Subtask — run from a sub-task's own worktree
         Note over Reviewer,JIRA: Different run shape — scope is that ONE sub-task PR.<br/>fields.parent.key is read only to resolve <PARENT-BRANCH> (the PR's base)<br/>via pr_base.sh --parent-key · the parent is never re-fetched as an acting issue ·<br/>fields.subtasks is never read · no track is determined · the parent PR is never touched
         Note over Reviewer: walk: step 2 (this sub-task alone) → 3 → 6 → 7, then the run ends.<br/>A full pass is a separate run from the parent's worktree — the rest of this diagram
     end
-    Note over Reviewer: determine track from fields.subtasks<br/>(empty → single-step · non-empty → multistep)
-    Reviewer->>GIT: resolve <PARENT-BRANCH> (branch -a --list globs)<br/>+ <BASE_BRANCH> (pr_base.sh --branch, parentbranch config)
-    Reviewer->>GIT: phase check — list PR (state all)
+    Reviewer->>GIT: Step 1 — resolve <PARENT-BRANCH><br/>(git branch -a --list globs, anchored on the key)
+    GIT-->>Reviewer: exactly one branch (zero or several → ask the user)
+    Reviewer->>Reviewer: Step 1 — resolve <BASE_BRANCH><br/>pr_base.sh --role reviewer --branch <PARENT-BRANCH><br/>(never --parent-key here — it would match <PARENT-BRANCH><br/>itself and open the parent PR into itself)
+    Note right of Reviewer: source=env-default → proceed but flag it · unresolved → ask ·<br/>a hotfix/ <PARENT-BRANCH> resolving to the staging base means the env<br/>default fired on a production fix → stop and ask which base is right
+    Note over Reviewer: Step 1 — determine track from fields.subtasks<br/>(empty → single-step · non-empty → multistep)
+    opt multistep — fetch every sub-task's status
+        Reviewer->>JIRA: Step 1 — issue view per sub-task key
+        JIRA-->>Reviewer: statuses — the PR set is the <STATUS_IN_REVIEW> ones,<br/>but every status is kept: the phase check reads the whole set<br/>to tell "still in flight" from "all merged"
+    end
+    Reviewer->>GIT: Step 1 — phase check — gh pr list (state all)
     GIT-->>Reviewer: PR state (none | open | merged | closed-unmerged)
     Note over Reviewer: both phase checks share two rules — several PRs back → act on the OPEN one<br/>(several open → ask which) · a CLOSED, unmerged PR matches no enumerated state,<br/>so stop and ask: someone abandoned this branch's PR deliberately, and both<br/>opening a replacement and reviewing a dead one would guess at intent
 
+    Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE as detected by this phase check ·<br/>nothing to review) never reach step 3 and never resolve it — 5a's second M-FULLY-COMPLETE<br/>detector is the exception, reached through the step-3 loop with <SELF> already resolved.<br/>Two branches DO review without entering step 3 — both every-sub-task-DONE splits below<br/>(no parent PR → 5a+5b · open parent PR → 5b) — so 5b resolves <SELF> itself on each
+
     alt Single-step — no PR yet
-        Note over Reviewer: executor hasn't opened a PR
-        Reviewer->>JIRA: post report on <PARENT-KEY><br/>(no PR yet — nothing to review)
+        Note over Reviewer: executor hasn't opened a PR — the phase check reports and exits<br/>HERE, before step 6, and no catalogue outcome describes this state
         Reviewer-->>User: "no open PR yet — reviewer runs once it exists"
 
     else Single-step — PR open (first run)
-        Note over Reviewer: single-step: the one PR is the whole set → review loop (step 3)
-        Reviewer->>GIT: 3a idempotency — my prior verdict comment on this PR?
+        Note over Reviewer: single-step: the one PR is the whole set → review loop (step 3).<br/>Step 2 is skipped — its PR set is the parent PR itself
+        Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(resolved here, at the top of the review loop)
+        GIT-->>Reviewer: login
+        Note right of Reviewer: gh missing or logged out → report the error and hand back the PR URLs
+        Reviewer->>GIT: Step 3a — idempotency: my prior verdict comment on this PR?
         GIT-->>Reviewer: none | "APPROVED —" | "CHANGES REQUESTED —"<br/>(the MOST RECENT verdict wins — a later one supersedes an earlier)
         alt most recent is "APPROVED —" and no re-review requested
-            Reviewer->>JIRA: post report on <PARENT-KEY><br/>(already approved — waiting for merge)
+            Reviewer->>JIRA: Step 6 — post report on <PARENT-KEY><br/>(already approved — waiting for merge)
             Reviewer-->>User: "already approved — merge manually"
         else none · most recent "CHANGES REQUESTED —" · or $ARGUMENTS forces a re-review
-            Reviewer->>GIT: fetch PR diff
+            Reviewer->>GIT: Step 3b — fetch PR diff
             GIT-->>Reviewer: diff
-            Reviewer->>Reviewer: review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
+            Reviewer->>Reviewer: Step 3c — review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
             alt APPROVE
-                Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
-                Reviewer->>JIRA: canonical report on <PARENT-KEY><br/>(S-APPROVED, step 6)
+                Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"APPROVED — <summary>"
+                Note right of Reviewer: no Jira post in 3d on this track — 3d's destination and step 6's are<br/>both <PARENT-KEY>, so step 6 is the single Jira record. Step 3e is skipped too
+                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-APPROVED, outcome named in step 4c)
                 Reviewer-->>User: "approved — merge manually<br/>GitHub-for-Jira handles Done, no re-run needed"
             else REQUEST_CHANGES
-                Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                Reviewer->>JIRA: transition <PARENT-KEY> → <STATUS_IN_PROGRESS>
-                Reviewer->>JIRA: canonical report on <PARENT-KEY><br/>(S-CHANGES-REQUESTED, step 6)
+                Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+                Reviewer->>JIRA: Step 3d — transition <PARENT-KEY> → <STATUS_IN_PROGRESS><br/>(the actual workflow gate — the GitHub comment only records the verdict)
+                Reviewer->>JIRA: Step 6 — canonical report on <PARENT-KEY><br/>(S-CHANGES-REQUESTED, outcome named in step 4c)
                 Reviewer-->>User: "changes requested — fix, push & re-run"
             end
         end
 
     else Single-step — PR merged (re-run)
         Note over Reviewer: detect merged PR — GitHub-for-Jira<br/>already handled Done, no wrap-up
-        Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(S-MERGED, step 6)
+        Reviewer->>JIRA: Step 6 — post final report on <PARENT-KEY><br/>(S-MERGED)
         Reviewer-->>User: "merged — complete (S-MERGED)"
 
     else Multistep — no parent PR yet
-        Note over Reviewer: "no parent PR" splits on sub-task status —<br/>EVERY sub-task <STATUS_DONE> → the PRs are already merged and only the<br/>parent PR is missing, so skip to step 5 (the only place it is created) ·<br/>any sub-task not yet <STATUS_DONE> → still in flight, full pass below
-        loop step 2 — per In Review sub-task: discover branch + PR
-            Reviewer->>GIT: git branch -a --list "*feature/<SUBTASK-KEY>-*"<br/>"*hotfix/<SUBTASK-KEY>-*" (anchored, strips the + worktree marker), gh pr list
+        Note over Reviewer: "no parent PR" splits on sub-task status —<br/>EVERY sub-task <STATUS_DONE> → the PRs are already merged and only the<br/>parent PR is missing, so skip to step 5 (the only place it is created) ·<br/>any sub-task not yet <STATUS_DONE> → still in flight, full pass below.<br/>The skip-to-5 route never enters step 3, so 5b resolves <SELF> itself there<br/>— the same as the open-parent-PR path further down
+        loop Step 2 — per In Review sub-task: discover branch + PR
+            Reviewer->>GIT: git branch -a --list "*feature/<SUBTASK-KEY>-*"<br/>"*hotfix/<SUBTASK-KEY>-*" (anchored, strips the + worktree marker), then<br/>gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open
             GIT-->>Reviewer: sub-task branch + open PR (or none)
-            Note over Reviewer: no branch / no open PR → flag & skip this sub-task
+            Note over Reviewer: no branch / no open PR → flag & skip this sub-task ·<br/>more than one open PR → ask the user which to review
         end
         alt zero sub-tasks have an open PR
-            Reviewer->>JIRA: post report on <PARENT-KEY> (nothing to review)
+            Note over Reviewer: step 2 reports and exits before step 6 too —<br/>no catalogue outcome describes this state either
             Reviewer-->>User: "no sub-task PRs to review — re-run later"
         else at least one sub-task PR to review
-            loop step 3 — per sub-task PR (In Review, sequential, one pass)
-                Reviewer->>GIT: 3a idempotency — my prior verdict comment on this PR?
+            Reviewer->>GIT: Step 3 — gh api user --jq .login → <SELF><br/>(resolved once here, before the loop — not per PR)
+            GIT-->>Reviewer: login
+            loop Step 3 — per sub-task PR (In Review, sequential, one pass)
+                Reviewer->>GIT: Step 3a — idempotency: my prior verdict comment on this PR?
                 GIT-->>Reviewer: none | "APPROVED —" | "CHANGES REQUESTED —"<br/>(most recent wins)
                 alt most recent is "APPROVED —" and no re-review requested
                     Note over Reviewer: record approved, skip re-review → next sub-task PR
                 else none · most recent "CHANGES REQUESTED —" · or $ARGUMENTS forces a re-review
-                    Reviewer->>GIT: fetch PR diff
+                    Reviewer->>GIT: Step 3b — fetch PR diff
                     GIT-->>Reviewer: diff
-                    Reviewer->>Reviewer: review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
+                    Reviewer->>Reviewer: Step 3c — review 6 dimensions<br/>(correctness • patterns • scope<br/>regressions • tests • hygiene)
                     alt APPROVE
-                        Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
-                        Reviewer->>JIRA: canonical report on <SUBTASK-KEY><br/>(M-SUBTASK-APPROVED)
-                        Reviewer->>JIRA: parent tally on <PARENT-KEY><br/>"Sub-task <KEY>: ✅ approved"
+                        Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"APPROVED — <summary>"
+                        Reviewer->>JIRA: Step 3d — canonical report on <SUBTASK-KEY><br/>(M-SUBTASK-APPROVED)
+                        Reviewer->>JIRA: Step 3e — the SAME report body again, on <PARENT-KEY><br/>(one fresh comment per sub-task — the intentional audit trail)
                     else REQUEST_CHANGES
-                        Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                        Reviewer->>JIRA: transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
-                        Reviewer->>JIRA: canonical report on <SUBTASK-KEY><br/>(M-SUBTASK-CHANGES-REQUESTED)
-                        Reviewer->>JIRA: parent tally on <PARENT-KEY><br/>"Sub-task <KEY>: ❌ changes requested"
+                        Reviewer->>GIT: Step 3d — gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+                        Reviewer->>JIRA: Step 3d — canonical report on <SUBTASK-KEY><br/>(M-SUBTASK-CHANGES-REQUESTED, with the file:line findings)
+                        Reviewer->>JIRA: Step 3d — transition <SUBTASK-KEY> → <STATUS_IN_PROGRESS>
+                        Reviewer->>JIRA: Step 3e — the SAME report body again, on <PARENT-KEY>
                         Note over Reviewer: continue to next sub-task PR
                     end
                 end
             end
 
-            Note over Reviewer: all sub-task PRs visited (step 4)
-            alt Some rejected (changes requested) — step 4b
-                Reviewer->>JIRA: full report on <PARENT-KEY><br/>(M-SOME-BLOCKED: approved + rejected + findings)
+            Note over Reviewer: Step 4 — all sub-task PRs visited
+            alt Step 4b — some rejected (changes requested)
+                Reviewer->>JIRA: Step 6 — full report on <PARENT-KEY><br/>(M-SOME-BLOCKED: approved + rejected + findings)
                 Reviewer-->>User: "some PRs blocked — fix & re-run"
-            else All approved, some not yet merged — step 4a
-                Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-ALL-APPROVED — waiting for merge)
-                Reviewer-->>User: "all approved — merge manually, then re-run for the parent PR"
-            else All approved and all merged — 4a's guard, then step 5
-                Note over Reviewer: guard: "every PR in the set is merged" is NOT "the feature is complete".<br/>The set only ever held sub-tasks that were <STATUS_IN_REVIEW> at step 1, so any<br/>sub-task not yet <STATUS_DONE> — still in progress, or skipped by step 2 for having<br/>no branch or no PR — stays on M-ALL-APPROVED and goes to step 6 instead.<br/>Otherwise step 5 would open an aggregate PR missing the outstanding work
-                Reviewer->>GIT: 5a — find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>)
-                GIT-->>Reviewer: parent PR (open | created | closed)
-                alt parent PR CLOSED
-                    Reviewer-->>User: "parent PR is closed — stop, user decides"
-                else parent PR open or newly created
-                    Reviewer->>GIT: 3a idempotency + fetch aggregate diff
-                    GIT-->>Reviewer: prior verdict + aggregate diff
-                    Reviewer->>Reviewer: 5b — review aggregate diff (lighter pass)
-                    alt APPROVE (or already approved)
-                        Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>" (no auto-merge)
-                        Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-READY, step 6)
-                        Reviewer-->>User: "parent PR approved — merge manually"
-                    else REQUEST_CHANGES
-                        Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-                        Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
-                        Reviewer-->>User: "parent PR changes requested — fix on <PARENT-BRANCH> & re-run"
+            else Step 4a — all approved
+                Reviewer->>GIT: Step 4a — gh pr view --json state, once per PR in the set
+                GIT-->>Reviewer: merged | open, per PR
+                alt some not yet merged
+                    Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-ALL-APPROVED — waiting for merge)
+                    Reviewer-->>User: "all approved — merge manually, then re-run for the parent PR"
+                else all merged, guard passed → step 5
+                    Note over Reviewer: guard: "every PR in the set is merged" is NOT "the feature is complete".<br/>The set only ever held sub-tasks that were <STATUS_IN_REVIEW> at step 1, so any<br/>sub-task not yet <STATUS_DONE> — still in progress, or skipped by step 2 for having<br/>no branch or no PR — stays on M-ALL-APPROVED and goes to step 6 instead.<br/>Otherwise step 5 would open an aggregate PR missing the outstanding work
+                    Reviewer->>GIT: Step 5a — find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>, gh pr list --state all)
+                    GIT-->>Reviewer: parent PR (open | created | merged | closed)<br/>several back → act on the OPEN one, several open → ask (same rule as step 2)
+                    alt parent PR CLOSED
+                        Reviewer-->>User: "parent PR is closed — stop, user decides"
+                    else parent PR MERGED
+                        Reviewer->>JIRA: Step 6 — final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE — 5a is its second detector, after the step-1 phase check)
+                        Reviewer-->>User: "fully complete — all PRs merged"
+                    else parent PR open or newly created
+                        Reviewer->>GIT: Step 5b — 3a idempotency check first,<br/>then gh pr view --json mergeable,mergeStateStatus
+                        GIT-->>Reviewer: prior verdict + mergeable state
+                        Note right of Reviewer: CONFLICTING → <PARENT-BRANCH> has fallen behind <BASE_BRANCH>.<br/>Stop and report — a diff that cannot merge gives the user nothing to act on.<br/>This is the only detector the "parent branch is behind its base" case has,<br/>and it exits without a step-6 report
+                        alt prior verdict is "APPROVED —"
+                            Note over Reviewer: skip the re-review — nothing is posted to GitHub
+                            Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(parent PR already reviewed — waiting for manual merge)
+                            Reviewer-->>User: "parent PR already approved — merge manually"
+                        else none, or "CHANGES REQUESTED —"
+                            Reviewer->>GIT: Step 5b — fetch aggregate diff
+                            GIT-->>Reviewer: aggregate diff
+                            Reviewer->>Reviewer: Step 5b — review aggregate diff (lighter pass — integration focus)
+                            alt APPROVE
+                                Reviewer->>GIT: Step 5b — gh pr review --comment --body-file<br/>"APPROVED — <summary>" (no auto-merge)
+                                Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-PARENT-READY)
+                                Reviewer-->>User: "parent PR approved — merge manually"
+                            else REQUEST_CHANGES
+                                Reviewer->>GIT: Step 5b — gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+                                Note right of Reviewer: a parent-PR reject transitions NO Jira issue —<br/>unlike a sub-task reject, <PARENT-KEY> stays as it is
+                                Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED)
+                                Reviewer-->>User: "parent PR changes requested — fix on <PARENT-BRANCH> & re-run"
+                            end
+                        end
                     end
                 end
             end
@@ -170,26 +213,37 @@ sequenceDiagram
 
     else Multistep — parent PR open
         Note over Reviewer: an open parent PR splits on sub-task status too —<br/>EVERY sub-task <STATUS_DONE> → the merges have happened, go straight to 5b below ·<br/>any sub-task not yet <STATUS_DONE> → the parent PR was opened early and the sub-tasks<br/>are still the work, so run the full step-2 pass and leave the parent PR to a later run
-        Reviewer->>GIT: 3a idempotency + refresh aggregate diff
-        GIT-->>Reviewer: prior verdict + aggregate diff
-        Reviewer->>Reviewer: 5b — refresh aggregate review (lighter pass)<br/>skip if already "APPROVED —"
-        alt APPROVE (or already approved)
-            Reviewer->>GIT: gh pr review --comment --body-file<br/>"APPROVED — <summary>"
-            Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-READY, step 6)
-            Reviewer-->>User: "parent PR reviewed and approved — merge manually"
-        else REQUEST_CHANGES
-            Reviewer->>GIT: gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
-            Reviewer->>JIRA: report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED, step 6)
-            Reviewer-->>User: "parent PR changes requested — fix & re-run"
+        Reviewer->>GIT: Step 5b — gh api user --jq .login → <SELF><br/>(this path skipped step 3, so 5b resolves it itself)
+        GIT-->>Reviewer: login
+        Reviewer->>GIT: Step 5b — 3a idempotency + mergeable check
+        GIT-->>Reviewer: prior verdict + mergeable state
+        Note right of Reviewer: CONFLICTING → stop and report, with no step-6 report
+        alt prior verdict is "APPROVED —"
+            Note over Reviewer: skip the re-review — nothing is posted to GitHub
+            Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(parent PR already reviewed — waiting for manual merge)
+            Reviewer-->>User: "parent PR already approved — merge manually"
+        else none, or "CHANGES REQUESTED —"
+            Reviewer->>GIT: Step 5b — fetch the aggregate diff
+            GIT-->>Reviewer: aggregate diff
+            Reviewer->>Reviewer: Step 5b — review aggregate diff (lighter pass — integration focus)
+            alt APPROVE
+                Reviewer->>GIT: Step 5b — gh pr review --comment --body-file<br/>"APPROVED — <summary>"
+                Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-PARENT-READY)
+                Reviewer-->>User: "parent PR reviewed and approved — merge manually"
+            else REQUEST_CHANGES
+                Reviewer->>GIT: Step 5b — gh pr review --comment --body-file<br/>"CHANGES REQUESTED — <findings>"
+                Reviewer->>JIRA: Step 6 — report on <PARENT-KEY><br/>(M-PARENT-CHANGES-REQUESTED)
+                Reviewer-->>User: "parent PR changes requested — fix & re-run"
+            end
         end
 
     else Multistep — parent PR merged (re-run)
         Note over Reviewer: detect merged parent PR — GitHub-for-Jira<br/>handled Done, no wrap-up
-        Reviewer->>JIRA: post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE, step 6)
+        Reviewer->>JIRA: Step 6 — post final report on <PARENT-KEY><br/>(M-FULLY-COMPLETE)
         Reviewer-->>User: "fully complete — all PRs merged"
     end
 
-    opt step 7 — this run approved something (not the already-merged exits)
+    opt Step 7 — this run approved something (not the already-merged exits)
         Reviewer->>User: move the approved issues to <STATUS_DONE>?<br/>(names every approved key — asked once)
         User-->>Reviewer: yes (all or some) | no
         Reviewer->>JIRA: transition each approved key → <STATUS_DONE><br/>(only the ones the user said yes to)
@@ -200,6 +254,17 @@ sequenceDiagram
 
 ## What the diagram shows
 
+- **Step labelling** — every node carries the step number
+  `jira-task-reviewer`'s own `SKILL.md` gives it, sub-steps included
+  (`Step 3a`, `Step 5b`). `ensure_local_env.sh` and **Discovery &
+  healthcheck run before step 1 and are unnumbered in the skill**, so they
+  are labelled `Pre-step` here, exactly as in phase 2. Phase 1 runs the same
+  healthcheck but numbers it *its* step 1, so its diagram reads `Step 1 — Discovery & healthcheck`. The step and its name are identical across all
+  three phases, and so is the `statuscheck.sh` call apart from its required
+  `--role` — `assigner`, `executor` and `reviewer` respectively, since auth is
+  role-scoped and the script has no default credential. Only each skill's own
+  numbering differs, and the diagrams follow the skill rather than
+  renumbering it.
 - **Two tracks, three entry shapes, one skill** — from the parent's
   worktree, step 1 determines the track from `fields.subtasks`: empty →
   **single-step** (the PR set is the one parent PR), non-empty →
@@ -211,16 +276,28 @@ sequenceDiagram
   idempotency check) is identical — only the PR set and the post-loop
   outcomes differ.
 - **Participant routing** — the reviewer orchestrates three parties.
-  **GIT** owns repo/PR state: the opening fetch, resolving
-  `<PARENT-BRANCH>` + `<BASE_BRANCH>` (the latter read from the
-  `parentbranch` git config the assigner wrote in phase 1 — the
-  phase-1 → phase-3 thread), the phase-check `gh pr list`, the per-PR 3a
-  idempotency lookup, fetching PR diffs, the verdict comment (`gh pr review --comment --body-file`), and finding or creating the aggregate
+  **GIT** owns repo/PR state: the opening fetch, the anchored
+  `git branch -a --list` that resolves `<PARENT-BRANCH>`, the phase-check
+  `gh pr list`, the per-PR 3a
+  idempotency lookup, fetching PR diffs, step 4a's per-PR
+  `gh pr view --json state` merge check, the verdict comment (`gh pr review --comment --body-file`), and finding or creating the aggregate
   parent PR. **JIRA** owns issue state: fetching the parent + sub-tasks
-  (filtering to `<STATUS_IN_REVIEW>`), climbing from a sub-task branch to
-  its parent, each rejected sub-task → In Progress transition with its
-  findings comment, and the summary/report comments posted on the parent
-  after every review.
+  (every sub-task is fetched and every status kept; `<STATUS_IN_REVIEW>` only
+  selects the PR set), climbing from a sub-task branch to
+  its parent, each rejected issue → In Progress transition with its
+  findings comment — a sub-task on the multistep track, `<PARENT-KEY>` itself
+  on the single-step track — and the summary/report comments posted on the parent
+  after every review. `<BASE_BRANCH>` sits in neither lane: `pr_base.sh`
+  resolves it as a self-call. On *this* call three of its four sources are
+  live, in order: the `parentbranch` git config the assigner wrote in phase 1
+  — the phase-1 → phase-3 thread — then the issue's `PR target branch:` Jira
+  comment, then the env default (sources 1, 2 and 4). The one it skips is
+  **source 3**, the parent-branch search, which is gated on `--parent-key` —
+  and this call deliberately never passes it. That gate gets skipped in both
+  directions at once: a `--parent-key` match resolves *before* the env default
+  is ever consulted, so omitting the flag is both what keeps that default
+  reachable and what stops `<BASE_BRANCH>` resolving to `<PARENT-BRANCH>`.
+  Phase 2 draws the same script the same way.
 - **A sub-task branch does not climb into a full pass** — the reviewer
   derives the key from the current branch (feature/<KEY>-slug or
   hotfix/<KEY>-slug) and `jira.sh` fetches that issue. A top-level issue with
@@ -266,6 +343,26 @@ sequenceDiagram
   and
   [`plugins/jira-sdlc/skills/_shared/jira-api-reference.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
   §9.
+- **`<SELF>` is resolved once per run — but only where a review happens** —
+  `gh api user --jq .login` runs at the top of step 3, before the review
+  loop, and its value is substituted literally into every 3a check. That is
+  why the diagram draws it *inside* the branches that review something
+  rather than once up front: the exits that review nothing — no PR yet,
+  S-MERGED, M-FULLY-COMPLETE *as the step-1 phase check detects it*, and the
+  multistep nothing-to-review case — never reach step 3 and never resolve it.
+  M-FULLY-COMPLETE's **second** detector is the exception: a 5a that finds the
+  parent PR already merged is reached *through* the review loop (step 2 → 3 →
+  4a → 5a), so `<SELF>` is already resolved by the time that exit is taken.
+  **Two** branches review without
+  entering step 3, and both are the multistep phase check's
+  every-sub-task-`<STATUS_DONE>` split: the *open parent PR* path, which jumps
+  from step 1 straight to 5b, and the *no parent PR* path, which jumps from
+  step 1 to 5a — where the parent PR is created — and on into 5b. Neither
+  passes through step 3, so **5b resolves `<SELF>` itself** on both. That is
+  what the skill's 5b means by "the all-sub-tasks-merged re-run path": one
+  class, two routes. If that call errors,
+  `gh` is missing or logged out: the run reports the error and hands the
+  user the PR URLs rather than proceeding.
 - **Idempotent review (step 3a)** — before every PR review — the
   single-step PR, each multistep sub-task PR, and the aggregate parent PR
   (5b) — the reviewer checks whether *its own* GitHub identity already left
@@ -281,8 +378,9 @@ sequenceDiagram
 - **Empty exits and flag-and-skip (step 2)** — the reviewer first discovers
   each In Review sub-task's branch (anchored `git branch -a --list` globs
   that also strip git's `+` marker for a branch checked out in another
-  worktree) and its open PR. A sub-task with **no branch or no open PR** is
-  flagged and skipped, not reviewed. If **zero** sub-tasks have an open PR,
+  worktree) and its open PR — `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open`. A sub-task with **no branch or no open PR** is
+  flagged and skipped, not reviewed; **more than one** open PR is a question
+  for the user, the same rule the phase checks carry. If **zero** sub-tasks have an open PR,
   the run reports that there is nothing to review and exits before the
   review loop — except on the multistep track, where the phase check's split
   applies first: every sub-task `<STATUS_DONE>` means the PRs are merged and
@@ -313,16 +411,36 @@ sequenceDiagram
 - **Continue on rejection, don't stop** — when a PR fails the review,
   the reviewer posts the `CHANGES REQUESTED —` verdict comment, transitions
   that issue back to `<STATUS_IN_PROGRESS>`, **records it as blocked**, and
-  continues to the next sub-task. After every single PR (approved or
-  rejected), a short summary comment is posted on the parent so the human
-  can see progress in real time (intentional audit trail). The final
+  continues to the next sub-task. The final
   report at the end (step 6) lists both approved and rejected items so the
   fix-and-re-run cycle is clear.
+- **One report body, posted to every destination that needs it** — 3d, 3e,
+  5b and 6 all emit *the same* canonical review report, filled from
+  `_shared/templates/review-report.md`. On the multistep track 3d writes one
+  body to a temp file, posts it to GitHub and to `<SUBTASK-KEY>`, and **3e
+  posts that identical file again to `<PARENT-KEY>`** — a fresh comment per
+  sub-task, which is the intentional audit trail, not a one-line tally. On
+  the single-step track 3d's Jira destination and step 6's are both
+  `<PARENT-KEY>`, so 3d posts only the GitHub half and 3e is skipped
+  entirely: step 6 is that run's single Jira record. The same reasoning
+  skips 3e on the sub-task-worktree path.
 - **Parent PR: review, approve *or reject*, still never merge (multistep
   only)** — once every sub-task PR is merged, the reviewer finds or creates
-  the aggregate parent PR (GIT). If that PR is already **CLOSED** it stops
-  and lets the user decide (5a) — it never reopens or recreates it.
-  Otherwise it reviews the lighter aggregate diff (integration focus) and
+  the aggregate parent PR (GIT). `gh pr list --state all` there returns four
+  states, not three: if that PR is already **CLOSED** it stops
+  and lets the user decide (5a) — it never reopens or recreates it; if it is
+  already **MERGED**, 5a is the second detector of M-FULLY-COMPLETE, after
+  the step-1 phase check.
+  Otherwise 5b runs the 3a idempotency check first — a prior `APPROVED —`
+  self-review means the parent PR is already reviewed, so the run reports it
+  as awaiting manual merge and posts **nothing** to GitHub. Past that it asks
+  GitHub whether the
+  PR is **mergeable** (`gh pr view --json mergeable,mergeStateStatus`):
+  `CONFLICTING` means `<PARENT-BRANCH>` has fallen behind `<BASE_BRANCH>`,
+  so it stops and reports rather than reviewing a diff that cannot merge —
+  this is the *only* detector the "parent branch is behind its base" edge
+  case has. Past that it reviews the lighter aggregate diff (integration
+  focus) and
   records a verdict on the parent PR via `gh pr review --comment --body-file`: **approve** → M-PARENT-READY (awaiting the human's manual
   merge), or **request changes** → M-PARENT-CHANGES-REQUESTED (integration
   `file:line` findings; fix on `<PARENT-BRANCH>` and re-run). Unlike a
@@ -348,16 +466,31 @@ sequenceDiagram
   M-FULLY-COMPLETE) skip the question — those issues are Done already. No
   extra Jira comment is posted either way: the step-6 report is still the
   run's single final comment.
-- **Every terminal branch posts a JIRA report comment on the parent**
-  — per step 6, the report goes to chat *and* as a single Jira comment
-  on `<PARENT-KEY>`: the single-step *no-PR-yet* exit, the single-step
-  approve/reject (S-APPROVED / S-CHANGES-REQUESTED) and merged (S-MERGED)
-  reports, the multistep *nothing-to-review* exit, the M-ALL-APPROVED and
-  M-SOME-BLOCKED reports, the parent approve (M-PARENT-READY) and parent
-  reject (M-PARENT-CHANGES-REQUESTED) reports, and the merged-state report
-  (M-FULLY-COMPLETE). The one branch that stops without a step-6 report is
-  the parent-PR-CLOSED case (5a) — it surfaces the state to the user in
-  chat and waits for their decision.
+- **A branch posts a JIRA report comment on the parent exactly when it
+  renders a catalogue outcome** — that is the rule, and it decides every
+  branch rather than a list you have to keep in sync. Step 6 sends the
+  report to chat *and* to `<PARENT-KEY>` as a single Jira comment, and step
+  6 must "pick exactly one outcome from the catalogue", which
+  `_shared/templates/review-report.md` caps at **ten** blocks. So those ten
+  are the whole of it: the single-step approve/reject (S-APPROVED /
+  S-CHANGES-REQUESTED) and merged (S-MERGED) reports, M-ALL-APPROVED and
+  M-SOME-BLOCKED, the parent approve (M-PARENT-READY) — which the 5b
+  already-approved skip also renders, posting no GitHub comment but still
+  reporting — the parent reject (M-PARENT-CHANGES-REQUESTED), the
+  merged-state report (M-FULLY-COMPLETE), and the two `M-SUBTASK-*` blocks,
+  which step 6 renders at run level only on the sub-task-worktree path.
+  Every **other** branch surfaces its state to the user in chat and waits,
+  posting nothing to Jira, for one reason: no block exists for it to fill.
+  That covers the single-step *no-PR-yet* exit and the multistep
+  *nothing-to-review* exit — `SKILL.md` ends the first with a chat line and
+  a bare "Exit." at the phase check, the second with "report and exit" at
+  step 2, neither reaching step 6 — the phase checks' **CLOSED, unmerged**
+  stop, step 1's own
+  stop-and-asks (zero or several branch matches, `source=unresolved`, a
+  `hotfix/` `<PARENT-BRANCH>` resolving to the staging base), the
+  parent-PR-CLOSED case (5a), 5b's `CONFLICTING` stop, and the failure to
+  resolve `<SELF>` (`gh` missing or logged out), which hands back the PR
+  URLs instead.
 
 ## Related
 
