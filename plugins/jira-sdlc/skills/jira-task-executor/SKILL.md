@@ -76,7 +76,7 @@ a global account.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"
-bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets local.env if it's missing
+bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets its .jst/, local.env ignored
 bash "$S/check_assignee.sh" --role executor  || exit 1   # 2. <KEY> must be assigned to the executor
 ```
 

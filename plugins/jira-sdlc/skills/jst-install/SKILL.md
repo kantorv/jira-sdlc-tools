@@ -471,11 +471,13 @@ whole `.jst/` folder is untracked: `jira-sdlc-tools.env` (2d and 3c wrote it —
 team-shared, meant to be committed) and the `.gitignore` 1b put beside it. This
 skill leaves them on purpose; they're the payload of the first task below. Say
 so, because the consequence isn't one the user will predict — **a worktree cut
-from `<DEFAULT_BASE_BRANCH>` is born without `.jst/` at all**, so the first
-executor run FAILs statuscheck's `env_config` row there. `ensure_local_env.sh`
-doesn't rescue it: it carries only the gitignored
-`.jst/jira-sdlc-tools.local.env` over from the main checkout, and the tracked
-files are git's job — git simply has nothing to carry yet.
+from `<DEFAULT_BASE_BRANCH>` is born without `.jst/` at all**, since a linked
+worktree shares only *tracked* files and git has nothing to carry yet.
+`ensure_local_env.sh` covers for that — every skill runs it first, and it syncs
+`.gitignore`, `jira-sdlc-tools.env` and `jira-sdlc-tools.local.env` across from
+the main checkout — so the run isn't blocked. But each worktree then keeps its
+own untracked copy, drifting the moment either side is edited, which is exactly
+what committing the folder fixes.
 
 Recommend committing them *as* this project's first real task, so the fix and
 an end-to-end test of all three skills are the same run; committing the two
