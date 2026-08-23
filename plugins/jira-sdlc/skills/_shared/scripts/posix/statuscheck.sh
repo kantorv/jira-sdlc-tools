@@ -179,9 +179,15 @@ if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
   [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  if ! bash "$SCRIPT_DIR/ensure_local_env.sh" >/dev/null 2>&1; then
-    row env_local FAIL "mandatory .jst/jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
-      "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
+  # Relay its stderr as the remedy rather than asserting a cause. It now fails
+  # for three different reasons — nothing to copy, the path isn't ignored here,
+  # the credential is tracked — and each needs a different fix, so a hardcoded
+  # "missing / not copyable" line would be wrong two times in three (JST-301).
+  ELE_ERR=$(bash "$SCRIPT_DIR/ensure_local_env.sh" 2>&1 >/dev/null); ELE_RC=$?
+  if [ "$ELE_RC" -ne 0 ]; then
+    ELE_ERR=$(printf '%s' "$ELE_ERR" | tr '\n' ' ')
+    row env_local FAIL "ensure_local_env could not provision .jst/jira-sdlc-tools.local.env here" \
+      "${ELE_ERR:-create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN.}"
     print_report
     exit 1
   fi

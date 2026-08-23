@@ -17,6 +17,14 @@
 # credentials is the wrong place to be liberal about what it moves; anything
 # else in .jst/ arrives the moment the folder is committed.
 #
+# .gitignore and jira-sdlc-tools.env are provisioning copies of files that are
+# *meant to become tracked*, so they land untracked at paths git will later
+# claim, and git refuses to overwrite an untracked file — the first merge after
+# the project commits .jst/ aborts on them, even byte-identical. This script
+# cannot clear that itself: it runs before statuscheck, which still has to read
+# those files, so the moment they are safe to drop is the merge, not here.
+# jira-task-executor step 2 owns that recovery; keep the two in step.
+#
 # Call this FIRST in each skill's step 1, before statuscheck.sh — this is the
 # ONLY place the copy logic lives; statuscheck.sh delegates here too for its
 # env_config / env_local / env_local_ignored rows rather than duplicating it.
@@ -90,7 +98,18 @@ fi
 #    here — statuscheck's env_config row reports that, with its own remedy.
 sync_in jira-sdlc-tools.env
 
-# 3. The credential file — but only once git actually ignores the path. Ask
+# 3. A *tracked* credential file is a different and worse problem, and it has
+#    to be tested before check-ignore rather than after: check-ignore consults
+#    the index, so it reports "not ignored" for a tracked path no matter what
+#    .gitignore says. Falling through to the gate below would hand the user a
+#    remedy that cannot clear the condition — add the rule, rerun, same error,
+#    forever. Name the remedy that works, in statuscheck's words.
+if git -C "$WT_ROOT" ls-files --error-unmatch ".jst/$LOCAL_ENV_NAME" >/dev/null 2>&1; then
+  printf '%s\n' "ensure_local_env: .jst/$LOCAL_ENV_NAME is TRACKED by git — the account email and credential path are in shared history. Run 'git rm --cached .jst/$LOCAL_ENV_NAME', add a line '$LOCAL_ENV_NAME' to .jst/.gitignore, and rotate the leaked Jira token before anything else." >&2
+  exit 1
+fi
+
+# 4. The credential file — but only once git actually ignores the path. Ask
 #    git rather than trusting the write above: a negation rule elsewhere
 #    ("!.jst/**") can still un-ignore it, and being wrong here is what leaks
 #    the tokens.

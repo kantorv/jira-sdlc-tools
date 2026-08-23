@@ -99,11 +99,23 @@ if (-not $HasRule) {
 #    here — statuscheck's env_config row reports that, with its own remedy.
 Sync-In 'jira-sdlc-tools.env'
 
-# 3. The credential file — but only once git actually ignores the path. Ask
+# 3. A *tracked* credential file is a different and worse problem, and it has
+#    to be tested before check-ignore rather than after: check-ignore consults
+#    the index, so it reports "not ignored" for a tracked path no matter what
+#    .gitignore says. Falling through to the gate below would hand the user a
+#    remedy that cannot clear the condition — add the rule, rerun, same error,
+#    forever. Name the remedy that works, in statuscheck's words.
+$LocalEnv = Join-Path $JstDir $LocalEnvName
+& git -C $WtRoot ls-files --error-unmatch ".jst/$LocalEnvName" *> $null
+if ($LASTEXITCODE -eq 0) {
+    [Console]::Error.WriteLine("ensure_local_env: .jst/$LocalEnvName is TRACKED by git — the account email and credential path are in shared history. Run 'git rm --cached .jst/$LocalEnvName', add a line '$LocalEnvName' to .jst/.gitignore, and rotate the leaked Jira token before anything else.")
+    exit 1
+}
+
+# 4. The credential file — but only once git actually ignores the path. Ask
 #    git rather than trusting the write above: a negation rule elsewhere
 #    ("!.jst/**") can still un-ignore it, and being wrong here is what leaks
 #    the tokens.
-$LocalEnv = Join-Path $JstDir $LocalEnvName
 & git -C $WtRoot check-ignore -q ".jst/$LocalEnvName" 2>$null
 if ($LASTEXITCODE -ne 0) {
     if (Test-Path -LiteralPath $LocalEnv) {

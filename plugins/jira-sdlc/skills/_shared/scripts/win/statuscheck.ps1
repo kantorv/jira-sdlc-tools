@@ -142,10 +142,23 @@ $EnvLocalCopiedFrom = ''
 if ($WtRoot) {
     $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env')
     $selfExe = if (Test-Path "$PSHOME\pwsh.exe" -PathType Leaf) { "$PSHOME\pwsh.exe" } else { "$PSHOME\powershell.exe" }
-    & $selfExe -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Add-Row env_local FAIL "mandatory .jst/jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" `
-            "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
+    # Relay its stderr as the remedy rather than asserting a cause. It now fails
+    # for three different reasons — nothing to copy, the path isn't ignored here,
+    # the credential is tracked — and each needs a different fix, so a hardcoded
+    # "missing / not copyable" line would be wrong two times in three (JST-301).
+    $eleErrFile = [System.IO.Path]::GetTempFileName()
+    & $selfExe -NoProfile -File (Join-Path $PSScriptRoot 'ensure_local_env.ps1') `
+        2> $eleErrFile > $null
+    $eleRc = $LASTEXITCODE
+    $eleErr = ''
+    try { $eleErr = ((Get-Content -LiteralPath $eleErrFile -Raw -ErrorAction Stop) -replace '\s+', ' ').Trim() } catch { }
+    Remove-Item -LiteralPath $eleErrFile -Force -ErrorAction SilentlyContinue
+    if ($eleRc -ne 0) {
+        if (-not $eleErr) {
+            $eleErr = "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
+        }
+        Add-Row env_local FAIL "ensure_local_env could not provision .jst/jira-sdlc-tools.local.env here" `
+            $eleErr
         Write-Report
         exit 1
     }
