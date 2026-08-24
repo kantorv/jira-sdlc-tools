@@ -179,9 +179,15 @@ if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
   [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  if ! bash "$SCRIPT_DIR/ensure_local_env.sh" >/dev/null 2>&1; then
-    row env_local FAIL "mandatory .jst/jira-sdlc-tools.local.env missing — not in this worktree and not copyable from the main repo" \
-      "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN."
+  # Relay its stderr as the remedy rather than asserting a cause. It now fails
+  # for three different reasons — nothing to copy, the path isn't ignored here,
+  # the credential is tracked — and each needs a different fix, so a hardcoded
+  # "missing / not copyable" line would be wrong two times in three (JST-301).
+  ELE_ERR=$(bash "$SCRIPT_DIR/ensure_local_env.sh" 2>&1 >/dev/null); ELE_RC=$?
+  if [ "$ELE_RC" -ne 0 ]; then
+    ELE_ERR=$(printf '%s' "$ELE_ERR" | tr '\n' ' ')
+    row env_local FAIL "ensure_local_env could not provision .jst/jira-sdlc-tools.local.env here" \
+      "${ELE_ERR:-create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN.}"
     print_report
     exit 1
   fi
@@ -289,8 +295,18 @@ PROJECT_KEY=$(cfg 'PROJECT[-_]KEY' || true)
 BASE_BRANCH=$(cfg DEFAULT_BASE_BRANCH || true)
 PRODUCTION_BRANCH=$(cfg PRODUCTION_BRANCH || true)
 if [ ! -f "$CFG_DIR/jira-sdlc-tools.env" ]; then
-  row env_config FAIL "jira-sdlc-tools.env not found in $CFG_DIR" \
-    "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $RERUN."
+  # In a worktree the obvious remedy is the wrong one: hand-authoring a copy
+  # here clears the row while leaving a second file that drifts from the main
+  # checkout's (JST-301). ensure_local_env.sh already syncs this file across,
+  # so reaching this row in a worktree means the main checkout hasn't got it
+  # either — which is where the fix belongs.
+  if [ -n "$IS_WORKTREE" ]; then
+    row env_config FAIL "jira-sdlc-tools.env not found in $CFG_DIR" \
+      "this is a linked worktree — don't author a copy here, it would silently drift from the main checkout's. Fix it there instead: create .jst/jira-sdlc-tools.env in the main checkout (variables described in skills/_shared/project-config.md) and commit it, so every worktree gets it as a tracked file; while it stays uncommitted, ensure_local_env.sh copies it across. Then $RERUN."
+  else
+    row env_config FAIL "jira-sdlc-tools.env not found in $CFG_DIR" \
+      "create jira-sdlc-tools.env in the project's .jst/ folder (variables described in skills/_shared/project-config.md), then $RERUN."
+  fi
 elif [ -z "$PROJECT_KEY" ]; then
   row env_config FAIL "jira-sdlc-tools.env found but PROJECT-KEY is unset" \
     "add PROJECT-KEY to .jst/jira-sdlc-tools.env (see skills/_shared/project-config.md), then $RERUN."
@@ -316,12 +332,12 @@ if [ -f "$CFG_DIR/jira-sdlc-tools.local.env" ]; then
   # relative pathspec against its working directory, so the two must agree.
   if git -C "$CFG_ROOT" ls-files --error-unmatch .jst/jira-sdlc-tools.local.env >/dev/null 2>&1; then
     row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" \
-      "git rm --cached .jst/jira-sdlc-tools.local.env, add it to .gitignore, and rotate the leaked Jira token before anything else."
+      "git rm --cached .jst/jira-sdlc-tools.local.env, add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
   elif git -C "$CFG_ROOT" check-ignore -q .jst/jira-sdlc-tools.local.env 2>/dev/null; then
     row env_local_ignored OK "gitignored (never committed)"
   else
     row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" \
-      "add .jst/jira-sdlc-tools.local.env to .gitignore first, then $RERUN."
+      "add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $RERUN."
   fi
 else
   row env_local FAIL "jira-sdlc-tools.local.env not found in $CFG_DIR" \

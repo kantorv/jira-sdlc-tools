@@ -223,6 +223,13 @@ claude plugin validate .
 # exits non-zero only over the hard ceiling
 bash scripts/check-skill-size.sh
 
+# ensure_local_env's safety contract — the one script here with a security
+# property to protect (a worktree must never hold an unignored
+# jira-sdlc-tools.local.env). Run it after touching either ensure_local_env
+# port, statuscheck's env_* rows, or jira-task-executor step 2's merge
+# recovery. --ports adds a posix/win diff and needs pwsh.
+bash scripts/check-ensure-local-env.sh [--ports]
+
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
