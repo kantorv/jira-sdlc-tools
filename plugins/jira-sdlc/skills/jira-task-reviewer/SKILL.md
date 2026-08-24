@@ -88,10 +88,10 @@ can't decide how statuscheck itself is run. It takes a required `--role reviewer
   safely*).
 
 **Make sure local credentials exist — run FIRST, before the healthcheck.**
-`ensure_local_env` no-ops when the file already exists, so run it
+`ensure_local_env` fills in only what `.jst/` lacks, so run it
 unconditionally; on non-zero, relay its stderr and **stop**. There's no login
-step to follow it (see the Jira-access bullet) — this only ensures the
-credentials file exists.
+step to follow it (see the Jira-access bullet) — this only provisions config,
+never an unignored credential.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1

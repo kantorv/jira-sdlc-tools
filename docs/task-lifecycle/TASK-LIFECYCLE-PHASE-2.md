@@ -119,7 +119,8 @@ sequenceDiagram
   identical across all three phases — only each skill's own numbering
   differs, and the diagrams follow the skill rather than renumbering it.
 - **Three pre-flight steps, in a fixed order** — `ensure_local_env.sh`
-  (make sure the worktree has its credentials file), then
+  (sync the worktree's `.jst/` from the main checkout, and refuse to place
+  the credentials file unless git ignores it there), then
   `check_assignee.sh --role executor` (the ownership gate), then the
   `statuscheck.sh` healthcheck. The healthcheck is what turns the branch
   name into `<KEY>`, confirms this is a *linked worktree* on a
