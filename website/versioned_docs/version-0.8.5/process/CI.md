@@ -29,9 +29,9 @@ built is the documentation site in `website/`.
 | :- | :- | :- |
 | `validator.yml` | push / PR to `development`, `main` | Runs `claude plugin validate .` and checks both manifests are well-formed JSON. The only gate on structural correctness. |
 | `cut-release.yml` | manual `workflow_dispatch` (bump: patch/minor/major, default minor) | Computes the next SemVer from the latest **stable** tag + bump, cuts `release/sprint-<X.Y.Z>` off `development`, opens a **draft** PR into `main`. SDLC Phase 2. |
-| `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Cuts the versioned-docs snapshot onto `main`, tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch, then dispatches `docs.yml` and — only when the back-merge pushed rather than conflicted — `update_lab.yml`. SDLC Phase 4 / §4. |
+| `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Cuts the versioned-docs snapshot onto `main`, tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch, then dispatches `docs.yml`. SDLC Phase 4 / §4. |
 | `docs.yml` | push to `main` touching `docs/**`, `website/**` or itself; `workflow_dispatch` | Builds the Docusaurus site in `website/` and deploys it to GitHub Pages. See [The docs site](#the-docs-site). |
-| `update_lab.yml` | push to `development` or `lab`; `workflow_dispatch` (from `release.yml` after a back-merge) | Merges `development`→`lab` to keep the lab channel current, stamps the plugin manifests with a `X.Y.Z-lab.N` version **on the branch**, and tags the build `vX.Y.Z-lab.N`. See [Tagging Mechanics](#tagging-mechanics). |
+| `update_lab.yml` | push to `development` or `lab` | Merges `development`→`lab` to keep the lab channel current, stamps the plugin manifests with a `X.Y.Z-lab.N` version **on the branch**, and tags the build `vX.Y.Z-lab.N`. See [Tagging Mechanics](#tagging-mechanics). |
 | `jira_issue_transition_on_branch.yml` | `create` (a `feature/*` or `hotfix/*` branch) | Advances the issue **To Do → In Progress**. |
 | `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from `feature/*` / `hotfix/*` | Advances the issue **→ In Review**. |
 | `jira_issue_transition_on_merge.yml` | PR closed (merged) on an issue branch | Advances the issue **→ Done**. |
@@ -49,13 +49,9 @@ built is the documentation site in `website/`.
   snapshot and has to ask for the run explicitly, because the push that carries
   the snapshot is made by CI and therefore triggers nothing. Both halves are in
   [The docs site](#the-docs-site).
-- **Lab path (continuous):** every **non-CI** push to `development` cascades
-  into `lab` and produces a `vX.Y.Z-lab.N` build, giving an always-current
-  pre-release channel that runs **independently** of the stable release path.
-  The one `development` push that does *not* cascade — the release back-merge,
-  made with `GITHUB_TOKEN`, which creates no workflow runs — is covered by
-  `release.yml` dispatching `update_lab.yml` explicitly instead. See
-  [Why release.yml dispatches the lab sync](#why-releaseyml-dispatches-the-lab-sync).
+- **Lab path (continuous):** every push to `development` cascades into `lab`
+  and produces a `vX.Y.Z-lab.N` build, giving an always-current pre-release
+  channel that runs **independently** of the stable release path.
 - **Jira transitions** derive the issue key from the branch name and drive
   status changes to mirror `STATUS_TODO` / `STATUS_IN_PROGRESS` /
   `STATUS_IN_REVIEW` / `STATUS_DONE` from `jira-sdlc-tools.env`. They call the
@@ -71,7 +67,7 @@ built is the documentation site in `website/`.
 
 | Secret | Used by |
 | :- | :- |
-| `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs, and dispatch `docs.yml` and `update_lab.yml`. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
+| `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs, and dispatch `docs.yml`. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
 | *(none)* | `docs.yml` — `actions/deploy-pages` authenticates to Pages via OIDC (`id-token: write`), so no secret is configured for it. |
 | `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | the three Jira transition workflows |
 
@@ -291,43 +287,6 @@ What one `update_lab.yml` run does, in order:
 > double-tag, no loop. A `concurrency` group serialises runs so two pushes
 > can't collide on the counter. Lab builds are git tags only — **no GitHub
 > Release** is published.
-
-#### Why release.yml dispatches the lab sync
-
-`update_lab.yml` runs on `push` to `development` (and `lab`). The one
-`development` push that never reaches it is the release back-merge:
-`release.yml` performs it with the default `GITHUB_TOKEN`, and GitHub suppresses
-workflow runs from `GITHUB_TOKEN` pushes to prevent loops — the same limitation
-documented for `docs.yml` under
-[Why the release dispatches this workflow](#why-the-release-dispatches-this-workflow).
-Left alone, a release would leave `lab` stale and the lab version base un-reset
-(JST-302).
-
-So `release.yml` runs a `sync-lab` job after `release` that executes
-`gh workflow run "Sync Lab with Development" --ref main` with the default
-`GITHUB_TOKEN` and `permissions: actions: write`. `workflow_dispatch` — now
-un-commented in `update_lab.yml` — is the documented carve-out that always
-creates a run, so the back-merge commit is picked up and lab re-stamps to
-`vX.Y.Z-lab.1`.
-
-The job is gated by exposing `release`'s sync-step output as a job output and
-reading it in the `if:`:
-
-```
-if: ${{ !cancelled() && needs.release.result != 'skipped' && needs.release.outputs.synced == 'pushed' }}
-```
-
-It dispatches **only** when the back-merge actually pushed `development`:
-
-- a **conflicting** back-merge opens a sync PR instead of pushing — `development`
-  has not moved, so there is nothing for lab to sync, and the dispatch is skipped;
-- an **ordinary feature PR** merged into `main` skips the `release` job, whose
-  output is therefore empty — no dispatch;
-- a **successful** release pushes `development`, and the dispatch fires.
-
-`update_lab.yml` is byte-identical on `development`, `lab` and `main`, so a
-`--ref main` dispatch only runs the fixed copy once the release lands on `main`;
-the first post-fix release is the first one whose dispatch works end to end.
 
 ### Namespace isolation — why lab tags can't corrupt the stable version math
 
