@@ -9,9 +9,11 @@
 #      plugin marketplace — there's nothing else to ship)
 #   5. back-merge main -> development  (§3 Phase 4 step 6 / §4 Step 4)
 #   6. delete the release/hotfix branch (§3 Phase 4 step 7)
-# then a second job dispatches the docs workflow so the site picks the
-# snapshot up (see publish-docs at the bottom — the reason it is a dispatch
-# and not a reusable-workflow call is the whole point of that job).
+# then two more jobs — publish-docs and sync-lab — dispatch the docs and lab
+# workflows respectively. Both are dispatches rather than reusable-workflow
+# calls for the same reason: a push made with GITHUB_TOKEN creates no workflow
+# runs, so the snapshot/back-merge commits would never reach the target's push
+# trigger (see the comment on publish-docs, and CI.md -> The docs site).
 #
 # Only fires for release/* and hotfix/* head branches — a feature PR merged
 # straight into main does NOT trigger a release (the `if:` guard below).
@@ -44,6 +46,12 @@ jobs:
         startsWith(github.event.pull_request.head.ref, 'release/')
         || startsWith(github.event.pull_request.head.ref, 'hotfix/')
       )
+    # Expose the sync step's outcome for the sync-lab job below to read. Only
+    # a real back-merge push moves development — "pushed" means lab has work to
+    # pick up, a conflict sync-PR URL means development did not move, and an
+    # empty value (skipped, or failed before the sync step) means it did not.
+    outputs:
+      synced: ${{ steps.sync.outputs.synced }}
     steps:
       - name: Checkout merge commit (full history + tags)
         uses: actions/checkout@v6
@@ -369,3 +377,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run "Docs site" --ref main --repo "${{ github.repository }}"
+
+  sync-lab:
+    name: Dispatch the lab sync
+    needs: release
+    runs-on: ubuntu-latest
+    # Runs only when the back-merge actually pushed development. Why the three
+    # clauses, stated so this comment and the YAML agree:
+    #   !cancelled()                         -> never dispatch from a cancelled run.
+    #   needs.release.result != 'skipped'    -> an ordinary feature PR merged
+    #       into main skips the release job (its own `if:` guard), and must not
+    #       dispatch a lab sync for a development push that never happened.
+    #   needs.release.outputs.synced == 'pushed'
+    #       -> the back-merge step sets "pushed" on a real push, and a sync-PR
+    #       URL on conflict (where development has NOT moved, so there is
+    #       nothing for lab to sync). "pushed" is the only value that means
+    #       update_lab.yml has a development change to pick up.
+    # It is a dispatch and not a `uses:` call for exactly the reason publish-docs
+    # documents: a GITHUB_TOKEN push creates no workflow runs, so the back-merge
+    # commit never reaches update_lab.yml's push trigger; workflow_dispatch is
+    # the documented carve-out. See CI.md -> The docs site.
+    if: ${{ !cancelled() && needs.release.result != 'skipped' && needs.release.outputs.synced == 'pushed' }}
+    permissions:
+      actions: write        # dispatching a workflow run needs it; nothing else does
+    steps:
+      - name: Dispatch the lab sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run "Sync Lab with Development" --ref main --repo "${{ github.repository }}"
