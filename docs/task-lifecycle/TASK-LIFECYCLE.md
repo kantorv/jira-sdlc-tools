@@ -27,6 +27,7 @@ flowchart LR
 1. **Phase 1 · Plan**\
    skill: `jira-task-assigner`\
    Jira state: **To Do**
+   - runs the shared discovery healthcheck first (`statuscheck.sh --role assigner`) — any FAIL stops the run
    - investigates the codebase
    - asks clarifying questions
    - settles the scope (one issue, or a parent split into sub-tasks)
@@ -37,16 +38,18 @@ flowchart LR
    skill: `jira-task-executor`\
    Jira state: **In Progress**
    - runs once per worktree, in parallel
-   - confirms it owns the worktree and brings the branch up to date
-   - implements the issue, runs the tests, commits, pushes, and opens a PR
+   - confirms the issue is assigned to it, then runs the same discovery healthcheck (`statuscheck.sh --role executor`)
+   - runs the project's optional `.jst/bootstrap.sh` hook, and brings the branch up to date
+   - implements the issue, runs the tests, commits, pushes, and opens a PR — or updates the existing one on a re-run after a rejection
    - issue moves to *In Review*
 3. **Phase 3 · Review & aggregate approval**\
    skill: `jira-task-reviewer`\
    Jira state: **In Review**
+   - runs the same discovery healthcheck (`statuscheck.sh --role reviewer`) before anything else
    - reviews each PR across six dimensions (correctness, patterns, scope, regressions, tests, hygiene)
    - posts its verdict to GitHub and Jira
    - sends rejected issues back to *In Progress*
-   - never merges — that stays a human call
+   - never merges — that stays a human call, and it ends by asking whether to close what it approved
 4. **Phase 4 · Merge (done by Human)**\
    skill: skip\
    Jira state: **Done**

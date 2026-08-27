@@ -157,10 +157,37 @@ apart. `versioned_docs/`, `versioned_sidebars/` and `versions.json` are all
 **committed**; `website/.gitignore` covers build products only, because an
 ignored snapshot is a released version that silently is not on the site.
 
-Once the first version exists, `docs/` becomes the *unreleased* docs served at
-`/docs/next/…` and the newest snapshot serves the plain `/docs/…` route — so a
-bare `/docs/sdlc` link keeps pointing at released docs, which is what the URLs
-baked into the plugin's shipped files need.
+Which version the **bare `/docs/…` route serves is a decision, not a default**,
+and this site takes the opposite one from Docusaurus (JST-294):
+`lastVersion: 'current'` in `website/docusaurus.config.js` keeps `../docs` — the
+unreleased working docs — at `/docs/<slug>`, and puts each released snapshot at
+`/docs/<X.Y.Z>/<slug>`. The navbar's `docsVersionDropdown` is how a reader
+reaches those snapshots; it reads `versions.json`, so a new cut needs no config
+change.
+
+> **There is no `/docs/next/…` any more.** Docusaurus routes the current version
+> at `next` only while it is *not* the last version; here it is, so `next` and
+> the bare route are the same thing and only the bare one exists. A `/docs/next/`
+> URL written before JST-294 now 404s.
+
+The trade-off it settles: JST-287 baked `site_docs_base`-derived URLs into files
+that ship to users' plugin caches, where they can never be corrected. Serving
+current at the bare route means a documentation fix reaches those already-installed
+readers on merge, rather than waiting for the next release cut — which was judged
+worth more than a bare link always describing shipped behaviour.
+
+One consequence needs a config line to keep it honest. Docusaurus banners every
+version sorting *after* the last one as "no longer actively maintained", so with
+current as the last version that would include the newest snapshot — the shipped
+release, and precisely where the dropdown sends readers. `docusaurus.config.js`
+therefore reads `versions.json` (which `docs:version` writes newest-first) and
+sets `banner: 'none'` on entry `[0]`. It needs no edit when a version is cut, and
+older snapshots keep the banner, which is accurate of them.
+
+This decides only *which version* the route serves. `url`, `baseUrl` and
+`docs.routeBasePath` still compose to `site_docs_base`, so every baked-in URL
+resolves; those three remain the contract described at the top of
+`docusaurus.config.js`.
 
 > **The snapshot trap.** `docs:version` copies the docs root and nothing else,
 > so anything a published doc references by a relative path from *outside* that

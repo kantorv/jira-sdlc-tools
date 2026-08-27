@@ -76,7 +76,7 @@ a global account.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"
-bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets local.env if it's missing
+bash "$S/ensure_local_env.sh"                || exit 1   # 1. worktree gets its .jst/, local.env ignored
 bash "$S/check_assignee.sh" --role executor  || exit 1   # 2. <KEY> must be assigned to the executor
 ```
 
@@ -207,6 +207,7 @@ context.
       `git merge origin/…` then fails with an unknown-revision error that
       reads like a broken repo, so decide which ref to merge rather than
       guessing:
+
       ```bash
       git fetch origin
       if git rev-parse --verify --quiet origin/<parent-branch> >/dev/null; then
@@ -215,8 +216,24 @@ context.
         git merge <parent-branch> --no-edit   # never pushed — no remote ref to merge
       fi
       ```
+
       If the merge conflicts, stop and ask the user to resolve — don't
       attempt to resolve merge conflicts automatically.
+
+      One abort is **not** a conflict and is safe to clear yourself: git
+      refuses to overwrite *untracked* files, so the first merge after this
+      project commits its `.jst/` folder (jst-install 4d's recommended first
+      task) dies with `error: The following untracked working tree files would be overwritten by merge`
+      naming paths under `.jst/`. Those are `ensure_local_env`'s provisioning
+      copies — it materialises `.jst/.gitignore` and `.jst/jira-sdlc-tools.env`
+      untracked in a worktree cut before that commit, and git now wants the
+      same paths for the committed originals. It can't drop them itself: it
+      runs at step 1, where statuscheck still has to read them. So delete
+      exactly the paths git named and merge again — git then places the
+      tracked copies, and step 1's script restores anything still missing on
+      the next run. **Only when every named path is under `.jst/`**; a named
+      path anywhere else is real work, so stop and ask.
+
     - **Unset** (the branch predates the parentbranch convention, or
       wasn't created by the assigner) → skip the merge, but flag in the
       final report that you proceeded on a possibly-stale worktree branch.
