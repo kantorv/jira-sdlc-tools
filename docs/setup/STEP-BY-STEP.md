@@ -120,7 +120,10 @@ git switch -c development
 git push -u origin development
 ```
 
-Make `development` the repository default so PRs target it automatically:
+Making `development` the repository default is optional. It only saves people
+opening PRs by hand from picking the base in the GitHub UI — nothing in this
+plugin reads the repo default, because every `gh pr create` passes `--base`
+explicitly. If you want it:
 
 ```bash
 gh repo edit <OWNER>/<REPO> --default-branch development

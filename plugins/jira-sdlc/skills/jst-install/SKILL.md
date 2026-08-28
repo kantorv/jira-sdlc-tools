@@ -230,20 +230,27 @@ repo with only `main` gives the assigner nowhere to branch from.
 
 **2b. Create the base branch if it's absent** — not optional, per the rule
 above; only its name is the user's call. Ask first anyway, because this pushes a
-new branch and changes the repo default, which is outward-facing and other
-people see it:
+new branch, which is outward-facing and other people see it:
 
 ```bash
 git switch main && git switch -c development && git push -u origin development
-gh repo edit <OWNER>/<REPO> --default-branch development
 ```
 
-Substitute the two names the user confirmed — `main`/`development` are this
+Substitute the names the user confirmed — `main`/`development` are this
 plugin's documented defaults, not a naming rule, and a repo using `master` or
-`develop` keeps its own names in the env file. A `404` from `gh repo edit` is
-almost never a wrong repo name: it's the PAT that can't see this repository,
-the same cause `gh_repo_access` names in 2e — fix the token's repository
-access rather than retyping `<OWNER>/<REPO>`.
+`develop` keeps its own names in the env file.
+
+**Making `development` the GitHub default branch is optional.** Recommend it,
+but don't block on it: it only saves people opening PRs by hand from picking
+the base in the GitHub UI, because nothing in this plugin reads the repo
+default — every `gh pr create` passes `--base` explicitly. Offer
+`gh repo edit <OWNER>/<REPO> --default-branch development`; if the user
+declines or the command errors, carry on — record the names in 2d and continue
+to 2c, nothing downstream is blocked. A `404` from `gh repo edit` is almost
+never a wrong repo name: the command needs repository *administration*
+permission, strictly more than the read/PR access `gh_repo_access` proves in
+2e, so that row can read OK while this command still 404s — grant the token
+admin on the repo rather than retyping `<OWNER>/<REPO>`.
 
 Mention that protecting both branches is recommended — everything reaches them
 through a reviewed PR, which is the flow the skills already produce — but don't
