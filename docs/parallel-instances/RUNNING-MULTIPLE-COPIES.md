@@ -129,7 +129,14 @@ They're environment variables rather than positional arguments so the set
 can grow later without breaking scripts already written against it — a
 script that ignores a variable it doesn't know about keeps working. Give
 each one a fallback default so the script stays runnable by hand, which
-is how you'll debug it.
+is how you'll debug it — and make each fallback *equivalent* to the
+variable it stands in for. `JST_ISSUE_KEY` is the one to watch:
+`${JST_ISSUE_KEY:-$(git branch --show-current)}` looks reasonable and
+isn't, because it substitutes `feature/PROJ-402-some-slug` for
+`PROJ-402`, which either crashes the index arithmetic or silently hashes
+to a different instance than the executor run of the same worktree. Pull
+the key back out of the branch instead — both worked examples that need
+an index do this.
 
 **2. Fail-soft, always.** A non-zero exit is reported in the executor's
 output and the run continues; you cannot block the executor from here, so

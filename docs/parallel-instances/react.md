@@ -41,7 +41,9 @@ instead, derive `N` from the issue key in `.jst/bootstrap.sh`, per
 set -euo pipefail
 cd "${JST_WORKTREE_DIR:-$(git rev-parse --show-toplevel)}"
 
-ISSUE_KEY="${JST_ISSUE_KEY:-$(git branch --show-current)}"
+# the fallback has to yield the *key*, not the branch — see below
+ISSUE_KEY="${JST_ISSUE_KEY:-$(git branch --show-current | grep -oE '[A-Z]+-[0-9]+' || true)}"
+: "${ISSUE_KEY:?no issue key in JST_ISSUE_KEY or the branch name; pass JST_ISSUE_KEY=PROJ-402}"
 N=$(( ${ISSUE_KEY##*-} % 100 + 1 ))       # never 0 — that's the main checkout
 
 [ -d node_modules ] || yarn install --silent
@@ -52,6 +54,16 @@ echo "bootstrap: instance $N — 'yarn dev --port $(( 5173 + N ))'"
 That is the whole hook. Resist padding it out: it earns its place by
 doing what someone would otherwise work out by hand, not by covering
 every step in a bigger example.
+
+The one line worth reading twice is the fallback. `JST_ISSUE_KEY` is set
+when the executor invokes the hook, and the `:-` branch is what keeps the
+script runnable by hand — so it has to produce the *key*, not the branch.
+Handing `${..##*-}` a raw `feature/PROJ-402-some-slug` yields `slug`,
+which under this script's own `set -u` aborts with `slug: unbound variable`; the `grep -oE` pulls `PROJ-402` back out, and the `:?`
+line turns a branch with no key in it into a message instead of a shell
+error. The same rule applies to whichever derivation you pick — the
+fallback must be *equivalent* to the variable it stands in for, or the
+same worktree lands on a different index depending on who started it.
 
 ## What's shared, what isn't
 

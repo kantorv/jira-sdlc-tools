@@ -221,8 +221,11 @@ MAIN=$(git -C "$WORKTREE" worktree list --porcelain | awk '/^worktree /{print $2
 # 0b. already provisioned? exit quietly rather than re-dumping over a live instance
 [ -d "$WORKTREE/backend/venv" ] && exit 0
 
-# derive a stable index from the issue key — see the hook contract
-KEY="${JST_ISSUE_KEY:-$(git -C "$WORKTREE" branch --show-current)}"
+# derive a stable index from the issue key — see the hook contract. The fallback
+# extracts the key rather than hashing the whole branch name, so a hand-run and
+# an executor run of the same worktree land on the same instance.
+KEY="${JST_ISSUE_KEY:-$(git -C "$WORKTREE" branch --show-current | grep -oE '[A-Z]+-[0-9]+' || true)}"
+: "${KEY:?no issue key in JST_ISSUE_KEY or the branch name; pass JST_ISSUE_KEY=PROJ-402}"
 N=$(( $(printf '%s' "$KEY" | cksum | cut -d' ' -f1) % 250 + 1 ))
 
 git -C "$WORKTREE" submodule update --init --recursive   # worktree add leaves them empty
