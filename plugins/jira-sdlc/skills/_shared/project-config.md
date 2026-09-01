@@ -118,10 +118,14 @@ should derive them deterministically from `JST_ISSUE_KEY`** (hash or parse the
 numeric part into an index), so the same worktree gets the same ports on every
 run and two worktrees can't collide.
 
-The companion doc is [`docs/RUNNING-MULTIPLE-COPIES.md`](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies):
-that one is how to *decide* what each worktree's instance shares versus
-isolates (database, cache, storage, queue, ports); this script is where your
-project records the answer it landed on, in runnable form.
+The companion section is [Parallel instances](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies):
+its overview is how to *decide* what each worktree's instance shares versus
+isolates (database, cache, storage, queue, ports), and it carries three worked
+examples — a [Python toolchain](https://kantorv.github.io/jira-sdlc-tools/docs/parallel-instances/python),
+a [React / Vite SPA](https://kantorv.github.io/jira-sdlc-tools/docs/parallel-instances/react)
+and a [multi-service docker-compose stack](https://kantorv.github.io/jira-sdlc-tools/docs/parallel-instances/docker-compose).
+This script is where your project records the answer it landed on, in runnable
+form.
 
 ⚠️ Not to be confused with the **no-assigner provisioning** procedure in
 [`jira-api-reference.md` §12](jira-api-reference.md) — that one creates a

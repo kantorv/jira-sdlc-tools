@@ -511,6 +511,28 @@ rule inside `.jst/` in the first place: `git add .jst` then stages
 Copy across only the env file and that worktree ends up holding three Jira role
 tokens and a GitHub PAT with nothing ignoring them.
 
+**4e. Offer the optional worktree hook — `.jst/bootstrap.sh` and
+`.jst/teardown.sh`.** **Optional, and most projects don't need one**: raise it,
+don't push it, and never write one here — you'd have to guess the project's
+stack. The gap it closes is one nobody predicts, so name the gap rather than the
+file: the assigner gives each issue its own worktree, but a worktree is a
+*source tree*, not a *running instance*. Anything the app reaches outside its
+own directory — a database, a cache, an uploads tree, a fixed port — is shared
+between all of them by default, and two instances on one migration-driven
+database corrupt each other silently.
+
+Ask whether they'll want to run more than one worktree's app at a time. Yes, or
+unsure → point them at https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies:
+the share-vs-isolate decision framework, the `JST_*` contract the executor
+exports, and three worked examples to copy the shape from (a Python toolchain,
+a React/Vite SPA, a multi-service docker-compose stack). `jira-task-executor`
+runs `.jst/bootstrap.sh` (`bootstrap.ps1` on Windows) in its step 1, once per
+worktree, fail-soft; `.jst/teardown.sh` is its by-hand counterpart, run before
+`git worktree remove` — no skill invokes it. Statuscheck's `bootstrap` row
+reports either way and never blocks, so leaving this until they actually hit the
+collision costs nothing. No → say the row will read "no `.jst/bootstrap.sh`" and
+that this is fine, so nobody reads it as an unfinished step.
+
 Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step (the prose walkthrough this skill
 follows), https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist (the same ground as a tickable
 list, with each item's "how to check it"), `../_shared/project-config.md`
