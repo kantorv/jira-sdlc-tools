@@ -601,7 +601,8 @@ esac
 # .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
 # tracked hook a project writes to turn a fresh worktree into a *runnable*
 # instance: clone the database, pick per-instance ports, install deps. See
-# project-config.md and docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so
+# project-config.md and https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies
+# (which carries three worked examples). Optional by design, so
 # it is INFO either way — never WARN or FAIL, because most projects won't have
 # one. This script only REPORTS it: jira-task-executor step 1 is what runs it,
 # which keeps a broken hook visible in that run's transcript instead of

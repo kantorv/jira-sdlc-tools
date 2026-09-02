@@ -144,6 +144,22 @@ git --version; gh --version; $PSVersionTable.PSVersion
   `/home/you/src/myapp-worktrees`. A relative value means a different
   directory depending on which checkout a skill runs from, so the
   healthcheck FAILs on one. Every issue gets its own worktree there.
+- [ ] **Optional — `.jst/bootstrap.sh` and `.jst/teardown.sh` exist**, *if*
+  you'll run more than one worktree's app at the same time. Skip this and
+  nothing breaks: the `bootstrap` row is INFO either way and most projects
+  have no hook. A worktree isolates the source tree only, so a database,
+  cache, uploads tree or fixed port is shared across all of them until
+  something scopes it per worktree — and two instances on one
+  migration-driven database corrupt each other silently.
+  `jira-task-executor` runs `bootstrap.sh` (`bootstrap.ps1` on Windows) in
+  its step 1, once per worktree, fail-soft; `teardown.sh` is the by-hand
+  counterpart, run before `git worktree remove`. The decision framework, the
+  `JST_*` contract and three worked examples — Python, React/Vite,
+  multi-service docker-compose — are in
+  [Parallel instances](../parallel-instances/RUNNING-MULTIPLE-COPIES.md); a
+  full example pair to copy is at
+  [`bootstrap.example.sh`](../examples/bootstrap.example.sh) /
+  [`bootstrap.example.ps1`](../examples/bootstrap.example.ps1).
 
 ## Settings files
 

@@ -282,3 +282,26 @@ fix doubles as an end-to-end smoke test of all three skills.
 ready-to-paste prompt for that: the assigner creates a retroactive
 **JIRA-SDLC-TOOLS setup** issue and copies `.jst/` into its worktree, the
 executor commits and pushes it, and the reviewer confirms the settings work.
+
+### Optional — create `.jst/bootstrap.sh` and `.jst/teardown.sh`
+
+**Only if you'll run more than one worktree's app at a time.** Most projects
+never need this, and nothing above is unfinished without it — but the gap it
+closes is one people don't see coming. The assigner gives each issue its own
+worktree, which isolates the *source tree* and nothing else: a database, a
+cache, an uploads tree or a fixed port is shared between every worktree by
+default. Two instances against one migration-driven database will reshape the
+schema under each other, silently.
+
+The answer, once you've made it, goes in `.jst/bootstrap.sh` (`bootstrap.ps1`
+on Windows) — the optional hook `jira-task-executor` runs in its step 1, once
+per worktree, fail-soft. `.jst/teardown.sh` is the by-hand counterpart you run
+before `git worktree remove`; no skill invokes it. Statuscheck's `bootstrap`
+row reports whether you have one and never blocks either way.
+
+[Parallel instances](../parallel-instances/RUNNING-MULTIPLE-COPIES.md) is the
+whole story: the share-vs-isolate decision framework, the `JST_*` environment
+contract, and three worked examples to take the shape from — a
+[Python toolchain](../parallel-instances/python.md), a
+[React / Vite SPA](../parallel-instances/react.md), and a
+[multi-service docker-compose stack](../parallel-instances/docker-compose.md).
