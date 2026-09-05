@@ -16,7 +16,6 @@ Would rather be walked through it? `/jira-sdlc:jst-install`
 sections, in this order, and verifies each one with the Section 4 healthcheck
 before moving to the next.
 
-
 ## Prerequisites
 
 ### Tools
@@ -41,12 +40,13 @@ with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
 API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
 `JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
 (see [Full Setup](#full-setup) below).
+
 ### Tokens and auth
 
 Before configuring the table below, create the following tokens:
 
-* **One GitHub PAT** — see [Creating a GitHub PAT](SECURITY.md#github)
-* **One (or three) Jira classic tokens** — see [Creating Jira tokens](SECURITY.md#jira) and [JIRA-ACCOUNTS-TBD](JIRA-ACCOUNTS-TBD.md)
+- **One GitHub PAT** — see [Creating a GitHub PAT](SECURITY.md#github)
+- **One (or three) Jira classic tokens** — see [Creating Jira tokens](SECURITY.md#jira) and [JIRA-ACCOUNTS-TBD](JIRA-ACCOUNTS-TBD.md)
 
 | Tool | Auth type | Scopes | Shared across roles | Description | Link |
 | -- | -- | -- | -- | -- | -- |
@@ -62,8 +62,6 @@ Before configuring the table below, create the following tokens:
 > setup doesn't need that — the agent is the only thing ever touching
 > `git` here — it can authenticate with its own PAT instead, the same way
 > `gh` already does. That setup isn't documented yet.
-
-
 
 ## Section 1. Preparing environment
 

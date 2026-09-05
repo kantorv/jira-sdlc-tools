@@ -33,17 +33,14 @@ branch, deleting Jira issues, resolving conflicts — is listed in
 [Safety model](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/README.md#safety-model).
 
 ## Environment setup
+
 You will need
+
 - **Git account + Repository + PAT token** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
 - **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
 - **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
 
-
 Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md).
-
-
-
-
 
 ## What's here
 
@@ -135,7 +132,6 @@ flowchart LR
 See **[Task lifecycle](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE.md)** for the
 full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
 
-
 ## Quick install
 
 ### Claude Code
@@ -159,7 +155,6 @@ See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/ma
 ### Non Claude Code assistants
 
 This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
-
 
 ## Examples
 
@@ -219,8 +214,6 @@ and a link to its detailed doc.
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
 yet exercised in this environment. See [Platform Compatibility Matrix](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
 full status legend.
-
-
 
 ## Full Setup
 
@@ -300,7 +293,6 @@ onto your board's real status names in `.jst/jira-sdlc-tools.env`. Who moves a
 card to which state — the three skills, GitHub Actions, a Jira automation
 app, or direct REST calls — is consolidated in
 **[Jira state movements](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/jira/JIRA-STATE-MOVEMENTS.md)**.
-
 
 ## Repository layout
 
