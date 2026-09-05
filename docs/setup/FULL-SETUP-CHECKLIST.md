@@ -15,6 +15,12 @@ Guided version of it: `/jira-sdlc:jst-install`
 ([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)), which ticks these items off
 with you and runs the healthcheck between stages.
 
+## Semi-automated setup
+
+Run this skill: `/jira-sdlc:jst-install`
+([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md))
+for a guided installation of this file. You will still need to create or confirm the existence of some folders, edit files, and install some tools yourself.
+
 ## Your PC
 
 Three CLIs must be installed and authenticated on your machine, plus a couple
