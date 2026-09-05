@@ -16,13 +16,58 @@ Would rather be walked through it? `/jira-sdlc:jst-install`
 sections, in this order, and verifies each one with the Section 4 healthcheck
 before moving to the next.
 
+
+## Prerequisites
+
+### Tools
+
+| Tool | Title | Uses | Install URL | Local docs |
+| -- | -- | -- | -- | -- |
+| `git` | Version control | commit/push | [git-scm.com/downloads](https://git-scm.com/downloads) | — |
+| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github/GH-PAT-SESSION-LOGIN.md) |
+| `jq` | JSON processor | parse Jira REST responses (`jira.sh`) | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | — |
+| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | — |
+
+**Platform specific**
+
+| Platform | Needs | Tested on | Why |
+| -- | -- | -- | -- |
+| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
+| **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
+| **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
+API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
+`JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
+(see [Full Setup](#full-setup) below).
+### Tokens and auth
+
+Before configuring the table below, create the following tokens:
+
+* **One GitHub PAT** — see [Creating a GitHub PAT](SECURITY.md#github)
+* **One (or three) Jira classic tokens** — see [Creating Jira tokens](SECURITY.md#jira) and [JIRA-ACCOUNTS-TBD](JIRA-ACCOUNTS-TBD.md)
+
+| Tool | Auth type | Scopes | Shared across roles | Description | Link |
+| -- | -- | -- | -- | -- | -- |
+| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#jira) |
+| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#github) |
+| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#git) |
+
+> ⚠️ **This plugin is designed to run in a shared environment** — the same
+> checkout where a coding assistant operates *and* where you yourself still
+> run `git` commands by hand. That's why `git` auth is left shared between
+> you and the agent rather than split out: a separate agent identity would
+> otherwise fight your own commits/pushes for the same repo state. If your
+> setup doesn't need that — the agent is the only thing ever touching
+> `git` here — it can authenticate with its own PAT instead, the same way
+> `gh` already does. That setup isn't documented yet.
+
+
+
 ## Section 1. Preparing environment
 
-1. **Install the required tools** — `git` and `gh`. There is nothing to
-   install for Jira: the skills drive it over the REST API through their own
-   client, `jira.sh` / `jira.ps1`, which ships with the plugin. On Linux and
-   macOS that client needs `curl` and `jq` on your `PATH`; the Windows
-   PowerShell port uses built-in cmdlets and needs neither.
+1. **Install the required tools** — `git` and `gh`. On Linux and macOS, the Jira client requires `curl` and `jq` on your `PATH`. On Windows, use PowerShell 5.1 or PowerShell 7; both have been tested. Python 3 is recommended on all platforms because the workflows handle substantial JSON data from the Jira and GitHub APIs, although it is not mandatory.
 2. **Have a git repository and a Jira account with a board created.**
    [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md) is a great, recommended
    integration — but it is **not** required.
