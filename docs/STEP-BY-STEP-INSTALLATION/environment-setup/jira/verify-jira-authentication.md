@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/verify-jira-authentication
-sidebar_position: 5
+sidebar_position: 6
 sidebar_label: Verify Jira authentication
 ---
 

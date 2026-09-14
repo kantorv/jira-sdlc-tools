@@ -31,7 +31,8 @@ STEP-BY-STEP-INSTALLATION
 │   │   ├── Account, project, and board
 │   │   ├── Project key and four statuses
 │   │   ├── Read the project key and statuses from Jira
-│   │   ├── Jira users and tokens
+│   │   ├── Jira users
+│   │   ├── Jira tokens
 │   │   ├── Verify Jira authentication
 │   │   ├── Record the Jira settings
 │   │   ├── Prove the Jira workflow

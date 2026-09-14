@@ -151,25 +151,29 @@
       "slug": "/step-by-step-installation/read-the-project-key-and-statuses",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-users-and-tokens.md": {
-      "slug": "/step-by-step-installation/jira-users-and-tokens",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-users.md": {
+      "slug": "/step-by-step-installation/jira-users",
       "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-tokens.md": {
+      "slug": "/step-by-step-installation/jira-tokens",
+      "sidebar_position": 5
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/verify-jira-authentication.md": {
       "slug": "/step-by-step-installation/verify-jira-authentication",
-      "sidebar_position": 5
+      "sidebar_position": 6
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/record-the-jira-settings.md": {
       "slug": "/step-by-step-installation/record-the-jira-settings",
-      "sidebar_position": 6
+      "sidebar_position": 7
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/prove-the-jira-workflow.md": {
       "slug": "/step-by-step-installation/prove-the-jira-workflow",
-      "sidebar_position": 7
+      "sidebar_position": 8
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-setup-gate.md": {
       "slug": "/step-by-step-installation/jira-setup-gate",
-      "sidebar_position": 8
+      "sidebar_position": 9
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/platform-compatibility-matrix.md": {
       "slug": "/step-by-step-installation/platform-compatibility-matrix",

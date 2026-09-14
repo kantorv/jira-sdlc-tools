@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/prove-the-jira-workflow
-sidebar_position: 7
+sidebar_position: 8
 sidebar_label: Prove the Jira workflow
 ---
 
