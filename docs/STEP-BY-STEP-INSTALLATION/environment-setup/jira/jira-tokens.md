@@ -21,7 +21,7 @@ See [Creating Jira tokens](../../../process/SECURITY.md#jira).
 **Using a single account?** Skip *Account setup* and follow *Token setup* once,
 signed in as yourself.
 
-After [adding the users](jira-users.md), go to your mailbox. You should have
+**Multiple (3) additional accounts** After [adding the users](jira-users.md), go to your mailbox. You should have
 three invitation emails:
 
 ![Three Jira invitation emails in the inbox, one per role](../../../assets/jira-new-user-invitation-email.png)
@@ -62,9 +62,10 @@ Repeat the steps below for **each** of them.
 
     ![The verification email for API token access](../../../assets/jira-token-verification-code-email.png)
 
-    ![The API tokens screen](../../../assets/jira-token-api-tokens-screen.png)
 
 08. Click **Create API token with scopes**.
+
+    ![The API tokens screen](../../../assets/jira-token-api-tokens-screen.png)
 
     ![Naming the new API token](../../../assets/jira-token-name-token.png)
 
