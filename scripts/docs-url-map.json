@@ -31,7 +31,9 @@
   "tree_base": "https://github.com/kantorv/jira-sdlc-tools/tree/main",
   "raw_base": "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main",
   "unpublished": [
-    "docs/integrations/_TEMPLATE.md"
+    "docs/integrations/_TEMPLATE.md",
+    "docs/STEP-BY-STEP-INSTALLATION/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/_intro.md"
   ],
   "categories": {
     "docs/process": {
@@ -51,6 +53,18 @@
     },
     "docs/history": {
       "slug": "/history"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software": {
+      "slug": "/step-by-step-installation/software"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github": {
+      "slug": "/step-by-step-installation/github"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira": {
+      "slug": "/step-by-step-installation/jira"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant": {
+      "slug": "/step-by-step-installation/coding-assistant"
     }
   },
   "pages": {
@@ -69,6 +83,118 @@
     "docs/setup/INSTALLING-GITHUB-FOR-JIRA.md": {
       "slug": "/installing-github-for-jira",
       "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/prerequisites.md": {
+      "slug": "/step-by-step-installation/prerequisites",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-authentication.md": {
+      "slug": "/step-by-step-installation/software-authentication",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/verify-the-project-repository.md": {
+      "slug": "/step-by-step-installation/verify-the-project-repository",
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/create-the-jst-scaffold.md": {
+      "slug": "/step-by-step-installation/create-the-jst-scaffold",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/fill-the-local-env.md": {
+      "slug": "/step-by-step-installation/fill-the-local-env",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-setup-gate.md": {
+      "slug": "/step-by-step-installation/software-setup-gate",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-account-repository-and-authentication.md": {
+      "slug": "/step-by-step-installation/github-account-repository-and-authentication",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-authentication.md": {
+      "slug": "/step-by-step-installation/verify-github-authentication",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/repository-branching-model.md": {
+      "slug": "/step-by-step-installation/repository-branching-model",
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/split-production-from-base.md": {
+      "slug": "/step-by-step-installation/split-production-from-base",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-access.md": {
+      "slug": "/step-by-step-installation/verify-github-access",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/clone-the-base-branch.md": {
+      "slug": "/step-by-step-installation/clone-the-base-branch",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-setup-gate.md": {
+      "slug": "/step-by-step-installation/github-setup-gate",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-account-project-and-board.md": {
+      "slug": "/step-by-step-installation/jira-account-project-and-board",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/project-key-and-four-statuses.md": {
+      "slug": "/step-by-step-installation/project-key-and-four-statuses",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/read-the-project-key-and-statuses.md": {
+      "slug": "/step-by-step-installation/read-the-project-key-and-statuses",
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-users-and-tokens.md": {
+      "slug": "/step-by-step-installation/jira-users-and-tokens",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/verify-jira-authentication.md": {
+      "slug": "/step-by-step-installation/verify-jira-authentication",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/record-the-jira-settings.md": {
+      "slug": "/step-by-step-installation/record-the-jira-settings",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/prove-the-jira-workflow.md": {
+      "slug": "/step-by-step-installation/prove-the-jira-workflow",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-setup-gate.md": {
+      "slug": "/step-by-step-installation/jira-setup-gate",
+      "sidebar_position": 8
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/platform-compatibility-matrix.md": {
+      "slug": "/step-by-step-installation/platform-compatibility-matrix",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration.md": {
+      "slug": "/step-by-step-installation/configuration",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
+      "slug": "/step-by-step-installation/healthcheck",
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-task-commit-the-setup.md": {
+      "slug": "/step-by-step-installation/first-task-commit-the-setup",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
+      "slug": "/step-by-step-installation/optional-parallel-worktrees",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
+      "slug": "/step-by-step-installation",
+      "sidebar_position": 0
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/index.mdx": {
+      "slug": "/step-by-step-installation/environment-setup",
+      "sidebar_position": 0
     },
     "docs/parallel-instances/RUNNING-MULTIPLE-COPIES.md": {
       "slug": "/running-multiple-copies",
