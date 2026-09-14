@@ -77,6 +77,8 @@ Before configuring the table below, create the following tokens:
    absolute path, never a relative one:
    ```
    WORKTREES_DIR=/home/you/src/myapp-worktrees
+   # Windows: the drive-letter form, not Git Bash's /c/... one
+   WORKTREES_DIR=C:\Users\you\projects\myapp-worktrees
    ```
 
 ### Verify your tokens
@@ -105,6 +107,7 @@ echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 
 ```
 WORKTREES_DIR=/path/to/worktrees/PROJ-worktrees
+# Windows: WORKTREES_DIR=C:\Users\you\projects\PROJ-worktrees
 
 JIRA_ACCOUNT_URL=your-jira-site.atlassian.net
 
@@ -206,10 +209,20 @@ mkdir -p ../myapp-worktrees
 cd ../myapp-worktrees && pwd   # the absolute path to paste below
 ```
 
+On **Windows**, `pwd` in Git Bash prints the MSYS form (`/c/Users/...`), which
+neither Windows git nor the plugin's PowerShell scripts can resolve — so
+convert it, and paste the drive-letter form instead:
+
+```bash
+cd ../myapp-worktrees && cygpath -w "$PWD"   # C:\Users\you\projects\myapp-worktrees
+```
+
 Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`, **as an
-absolute path** — `/home/you/src/myapp-worktrees`, not `../myapp-worktrees`.
+absolute path** — `/home/you/src/myapp-worktrees` (or
+`C:\Users\you\projects\myapp-worktrees` on Windows), not `../myapp-worktrees`.
 A relative value resolves against a different base from inside a worktree than
-from this clone, so the healthcheck FAILs on one. From here
+from this clone, so the healthcheck FAILs on one; an MSYS `/c/...` value is
+rooted only for Git Bash, so it WARNs. From here
 on, the loop is: run the assigner in this clone, then run the executor from
 inside each issue's worktree.
 

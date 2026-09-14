@@ -175,10 +175,13 @@ both install modes.
 **1c. Hand the file over.** Tell the user to open
 `.jst/jira-sdlc-tools.local.env` in their editor and fill in, by hand:
 
-- `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`
+- `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`,
+  or on Windows the drive-letter form `C:\Users\you\projects\myapp-worktrees`
   (a sibling of this repo is the sensible place; section 2 creates it). A
   relative value means a different directory depending on which checkout a
-  skill runs from, so the gate FAILs on one
+  skill runs from, so the gate FAILs on one. On Windows, don't paste what Git
+  Bash's `pwd` prints (`/c/Users/…`) — Windows git and the `win/` PowerShell
+  ports can't resolve that form, and the gate WARNs on it
 - `JIRA_ACCOUNT_URL` — their Cloud site, `your-site.atlassian.net`, no scheme
 - `GITHUB_PAT_TOKEN` — a fine-grained PAT with **Contents: read/write** and
   **Pull requests: read/write** on this repo. Where to click:
@@ -458,8 +461,10 @@ done
 
 **4b. Read the result.** Every row should be OK or INFO. The install-irrelevant
 rows named in the row map stay INFO, and `worktrees_dir` may WARN if the user
-skipped 2c — it FAILs, though, if they wrote a relative `WORKTREES_DIR`, and
-that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
+skipped 2c, or on Windows if they wrote the MSYS form (`/c/…`) rather than the
+drive-letter one — that WARN is worth acting on, since only the drive-letter
+form works on both dispatch paths. It FAILs if they wrote a relative
+`WORKTREES_DIR`, and that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
 rather than improvising — and name the two things the script structurally
 cannot see: whether the workflow permits the transitions the skills make (3b
 proved the names exist; 3d is the only proof of the transitions), and whether

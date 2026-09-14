@@ -558,11 +558,35 @@ $JiraAccountUrl = Get-Cfg 'JIRA_ACCOUNT_URL'
 Add-Row jira_account_url INFO "JIRA_ACCOUNT_URL=$(if ($JiraAccountUrl) { $JiraAccountUrl } else { 'unset' }) (browse links: https://<JIRA_ACCOUNT_URL>/browse/<KEY>)"
 
 # WORKTREES_DIR must be ABSOLUTE — see the posix twin for why a relative
-# value FAILs here rather than being resolved against a per-checkout base.
+# value FAILs here rather than being resolved against a per-checkout base, and
+# for why "absolute" is OS-dependent (JST-308). The classification below is
+# spelled out rather than delegated to [System.IO.Path]::IsPathRooted() so the
+# two ports agree on every form under STATUSCHECK_FORCE_OS as well: .NET's
+# answer for 'C:\…' follows the runtime's platform, not $OS.
+
+# /c/Users/you → C:\Users\you. Textual on purpose: statuscheck.sh's
+# msys_to_drive does the same transform, so both ports print the same string.
+function ConvertTo-DriveLetterPath([string]$Path) {
+    if ($Path -match '^/([A-Za-z])(/.*)?$') {
+        $rest = if ($Matches[2]) { $Matches[2].Replace('/', '\') } else { '\' }
+        return ($Matches[1].ToUpper() + ':' + $rest)
+    }
+    return ''
+}
+
 $WorktreesDir = Get-Cfg 'WORKTREES_DIR'
+$wdAbsolute = $WorktreesDir -like '/*'
+$wdMsys = $false
+if ($OS -eq 'windows') {
+    if ($WorktreesDir -match '^/[A-Za-z](/|$)') { $wdMsys = $true }
+    if ($WorktreesDir -match '^[A-Za-z]:([/\\]|$)' -or $WorktreesDir -like '\\*') { $wdAbsolute = $true }
+}
+
 if (-not $WorktreesDir) {
     Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
-} elseif ([System.IO.Path]::IsPathRooted($WorktreesDir)) {
+} elseif ($wdMsys) {
+    Add-Row worktrees_dir WARN "$WorktreesDir is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(ConvertTo-DriveLetterPath $WorktreesDir)) in .jst/jira-sdlc-tools.local.env so both dispatch paths agree"
+} elseif ($wdAbsolute) {
     if (Test-Path -LiteralPath $WorktreesDir -PathType Container) {
         Add-Row worktrees_dir INFO "$WorktreesDir (present)"
     } else {
@@ -574,10 +598,22 @@ if (-not $WorktreesDir) {
     $wdAbs = $null
     $wdRp = Resolve-Path -LiteralPath $WorktreesDir -ErrorAction SilentlyContinue
     if ($wdRp -and (Test-Path -LiteralPath $wdRp.Path -PathType Container)) { $wdAbs = $wdRp.Path }
+    $wdExample = '/home/you/src/myapp-worktrees'
+    if ($OS -eq 'windows') {
+        # Never hand a Windows user an MSYS /c/… path: rooted for .NET,
+        # unresolvable for Windows git. Offer the resolved value only when it
+        # really is drive-letter/UNC, else fall back to the example — which is
+        # also what keeps this identical to the bash port on a forced-OS run.
+        $wdExample = 'C:\Users\you\projects\myapp-worktrees'
+        if ($wdAbs) {
+            if ($wdAbs -like '/*') { $wdAbs = ConvertTo-DriveLetterPath $wdAbs }
+            if (-not ($wdAbs -match '^[A-Za-z]:([/\\]|$)' -or $wdAbs -like '\\*')) { $wdAbs = $null }
+        }
+    }
     $wdFix = if ($wdAbs) {
         "set WORKTREES_DIR=$wdAbs in .jst/jira-sdlc-tools.local.env"
     } else {
-        'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. /home/you/src/myapp-worktrees)'
+        "set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. $wdExample)"
     }
     Add-Row worktrees_dir FAIL "WORKTREES_DIR=$WorktreesDir is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" `
         "$wdFix, then $Rerun."
