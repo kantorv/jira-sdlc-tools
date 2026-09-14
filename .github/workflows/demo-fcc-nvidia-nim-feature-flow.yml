@@ -187,12 +187,12 @@ env:
   # Pinned deliberately, same as validator.yml: a float would let an upstream
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
-  CLAUDE_CLI_VERSION: 2.1.220
+  CLAUDE_CLI_VERSION: 2.1.263
   # Default model for issue_comment runs (no dispatch inputs). Sync the value
   # with the workflow_dispatch input's default.
-  DEFAULT_ASSIGNER_MODEL: "nvidia_nim/z-ai/glm-5.2"
-  DEFAULT_EXECUTOR_MODEL: "nvidia_nim/deepseek-ai/deepseek-v4-pro"
-  DEFAULT_REVIEWER_MODEL: 'nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b'
+  DEFAULT_ASSIGNER_MODEL: "nvidia_nim/moonshotai/kimi-k3"
+  DEFAULT_EXECUTOR_MODEL: "nvidia_nim/deepseek-ai/deepseek-v4-pro-0813"
+  DEFAULT_REVIEWER_MODEL: 'nvidia_nim/nvidia/nemotron-3-super-120b-a12b'
 
 
 jobs:

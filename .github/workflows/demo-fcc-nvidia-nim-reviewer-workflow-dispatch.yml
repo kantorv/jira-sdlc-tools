@@ -80,19 +80,18 @@ on:
       model:
         description: 'Nvidia-NIM model to use'
         required: false
-        default: 'nvidia/nemotron-3-ultra-550b-a55b'
+        default: 'nvidia/nemotron-3-super-120b-a12b'
         type: choice
         options:
-          - "z-ai/glm-5.2"
-          - "nvidia/nemotron-3-ultra-550b-a55b"
-          - "deepseek-ai/deepseek-v4-pro"
-          - "minimaxai/minimax-m3"
+          - "moonshotai/kimi-k3"
+          - "nvidia/nemotron-3-super-120b-a12b"
+          - "deepseek-ai/deepseek-v4-pro-0813"
 
 env:
   # Pinned deliberately, same as validator.yml and the comment-triggered twin:
   # a float would let an upstream CLI change break this demo on an unrelated
   # day. Bump them together.
-  CLAUDE_CLI_VERSION: 2.1.220
+  CLAUDE_CLI_VERSION: 2.1.263
   # The dispatch input lists NIM models WITHOUT the `nvidia_nim/` provider
   # prefix that FCC (and `claude --model`) expect; the prefix is prepended here
   # so the input stays a short, readable choice list. Sync this default's value

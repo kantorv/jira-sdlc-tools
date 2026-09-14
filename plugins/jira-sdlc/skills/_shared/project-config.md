@@ -153,7 +153,7 @@ without it halts rather than running half-configured.
 
 | Token | What it is | Example |
 | -- | -- | -- |
-| `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. | `/home/you/src/myapp-worktrees` |
+| `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. On **Windows**, absolute means the drive-letter form (`C:\…` or `C:/…`) or a UNC share, since that is what Windows git and the `win/` PowerShell ports both resolve; the MSYS form Git Bash's `pwd` prints (`/c/…`) is rooted only for Git Bash, so statuscheck WARNs on it. | POSIX `/home/you/src/myapp-worktrees`; Windows `C:\Users\you\projects\myapp-worktrees` |
 | `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it is the only source for issue browse links — see below. | `your-site.atlassian.net` |
 
 ### Issue browse links — one form, one source
@@ -300,6 +300,7 @@ STATUS_DONE           = Done
 
 ```
 WORKTREES_DIR         = /home/you/src/myapp-worktrees
+# on Windows:  WORKTREES_DIR = C:\Users\you\projects\myapp-worktrees
 JIRA_ACCOUNT_URL      = your-site.atlassian.net
 # All three role pairs are required — one email + one token each, no default:
 JIRA_ASSIGNER_EMAIL   = assigner@example.com

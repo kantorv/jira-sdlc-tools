@@ -1,0 +1,9 @@
+{
+  "label": "History",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "slug": "/history",
+    "description": "Design records for migrations that are already done."
+  }
+}

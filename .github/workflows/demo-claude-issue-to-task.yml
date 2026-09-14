@@ -137,7 +137,7 @@ env:
   # Pinned deliberately, same as validator.yml: a float would let an upstream
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
-  CLAUDE_CLI_VERSION: 2.1.220
+  CLAUDE_CLI_VERSION: 2.1.263
   DEFAULT_ASSIGNER_MODEL: sonnet
 
 
@@ -275,8 +275,8 @@ jobs:
         # deliberately — a float would let an upstream CLI change break this
         # demo on an unrelated day. The other demos pin this same version (via
         # their workflow-level CLAUDE_CLI_VERSION env var) — bump them
-        # together with this file's inline pin. validator.yml lags on an
-        # older pin (2.1.199) and is not part of that bump-together set.
+        # together with this file's inline pin. validator.yml hardcodes the
+        # same pin inline and is bumped in lockstep with this set too.
         shell: bash
         run: |
           set -euo pipefail

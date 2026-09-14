@@ -36,8 +36,8 @@ env:
   # Pinned deliberately, same as validator.yml: a float would let an upstream
   # CLI change break this demo on an unrelated day. Workflow-level env can't
   # cross files, so validator.yml hardcodes the same pin — bump both together.
-  CLAUDE_CLI_VERSION: 2.1.220
-  DEFAULT_REVIEWER_MODEL: "nvidia_nim/z-ai/glm-5.2"
+  CLAUDE_CLI_VERSION: 2.1.263
+  DEFAULT_REVIEWER_MODEL: "nvidia_nim/nvidia/nemotron-3-super-120b-a12b"
 
 jobs:
   # ── Gating job — cheap, secret-free, and runs before the environment gate ──
