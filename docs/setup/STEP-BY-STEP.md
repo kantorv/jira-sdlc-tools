@@ -45,8 +45,8 @@ API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
 
 Before configuring the table below, create the following tokens:
 
-- **One GitHub PAT** — see [Creating a GitHub PAT](SECURITY.md#github)
-- **One (or three) Jira classic tokens** — see [Creating Jira tokens](SECURITY.md#jira) and [JIRA-ACCOUNTS-TBD](JIRA-ACCOUNTS-TBD.md)
+- **One GitHub PAT** — see [Creating a GitHub PAT](../process/SECURITY.md#github)
+- **One (or three) Jira classic tokens** — see [Creating Jira tokens](../process/SECURITY.md#jira)
 
 | Tool | Auth type | Scopes | Shared across roles | Description | Link |
 | -- | -- | -- | -- | -- | -- |
