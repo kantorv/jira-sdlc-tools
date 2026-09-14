@@ -1,10 +1,10 @@
 ---
-slug: /step-by-step-installation/first-task-commit-the-setup
-sidebar_position: 4
-sidebar_label: First task — commit the setup
+slug: /step-by-step-installation/commit-the-setup
+sidebar_position: 1
+sidebar_label: Commit the setup
 ---
 
-# First task — commit the setup
+# Commit the setup
 
 A green healthcheck doesn't mean the config is in git. The whole `.jst/` folder
 is still untracked — `jira-sdlc-tools.env` (team-shared and meant to be

@@ -40,7 +40,10 @@ STEP-BY-STEP-INSTALLATION
 │       └── Platform Compatibility Matrix
 ├── Configuration
 ├── Healthcheck
-├── First task — commit the setup
+├── First tasks
+│   ├── Commit the setup
+│   ├── Add bootstrap and teardown scripts
+│   └── Create a release cycle
 └── Optional: parallel worktrees
 ```
 

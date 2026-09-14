@@ -65,6 +65,9 @@
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant": {
       "slug": "/step-by-step-installation/coding-assistant"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks": {
+      "slug": "/step-by-step-installation/first-tasks"
     }
   },
   "pages": {
@@ -180,9 +183,17 @@
       "slug": "/step-by-step-installation/healthcheck",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/first-task-commit-the-setup.md": {
-      "slug": "/step-by-step-installation/first-task-commit-the-setup",
-      "sidebar_position": 4
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/commit-the-setup.md": {
+      "slug": "/step-by-step-installation/commit-the-setup",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/add-bootstrap-and-teardown-scripts.md": {
+      "slug": "/step-by-step-installation/add-bootstrap-and-teardown-scripts",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/create-a-release-cycle.md": {
+      "slug": "/step-by-step-installation/create-a-release-cycle",
+      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
       "slug": "/step-by-step-installation/optional-parallel-worktrees",
