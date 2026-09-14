@@ -62,7 +62,6 @@ Repeat the steps below for **each** of them.
 
     ![The verification email for API token access](../../../assets/jira-token-verification-code-email.png)
 
-
 08. Click **Create API token with scopes**.
 
     ![The API tokens screen](../../../assets/jira-token-api-tokens-screen.png)
@@ -93,3 +92,17 @@ Repeat the steps below for **each** of them.
     Copy it now: Atlassian only shows it once.
 
     ![The created token with its copy button](../../../assets/jira-token-copy-token-screenshot.png)
+
+12. Confirm the token was created:
+
+    1. Go to
+       [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
+
+       ![The API tokens list showing the newly created token](../../../assets/jira-token-created-confirmation.png)
+
+    2. Check that the token you just created is listed.
+
+    3. Confirm it has all three required scopes: `read:jira-user`,
+       `read:jira-work` and `write:jira-work`.
+
+       ![The token's details listing its three scopes](../../../assets/jira-token-confirmation-scopes.png)
