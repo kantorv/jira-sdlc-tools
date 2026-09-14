@@ -80,7 +80,10 @@ claude
 ## Environment setup - see [`INSTALLATION-STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)
 
 You will need:
+- **Software**
 
+  - Install `git`, `gh`, and `jq`\
+    (see [Prerequisites](https://github.com/kantorv/jira-sdlc-tools/blob/development/docs/setup/STEP-BY-STEP.md#prerequisites))
 - **GitHub**
 
   - Account (can be free)
@@ -110,10 +113,7 @@ You will need:
   - Claude or any other compatible solution\
     (see [Platform Compatibility Matrix](#platform-compatibility-matrix))
 
-- **Software**
 
-  - Install `git`, `gh`, and `jq`\
-    (see [Prerequisites](https://github.com/kantorv/jira-sdlc-tools/blob/development/docs/setup/STEP-BY-STEP.md#prerequisites))
 
 Check out the full installation docs:\
 [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)
