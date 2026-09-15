@@ -80,12 +80,13 @@ on:
       model:
         description: 'Nvidia-NIM model to use'
         required: false
-        default: 'nvidia/nemotron-3-super-120b-a12b'
+        default: 'z-ai/glm-5.3-flash'
         type: choice
         options:
           - "moonshotai/kimi-k3"
           - "nvidia/nemotron-3-super-120b-a12b"
-          - "deepseek-ai/deepseek-v4-pro-0813"
+          - "deepseek-ai/deepseek-v4-flash-0731"
+          - "z-ai/glm-5.3-flash"
 
 env:
   # Pinned deliberately, same as validator.yml and the comment-triggered twin:
