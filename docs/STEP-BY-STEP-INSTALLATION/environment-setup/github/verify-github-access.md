@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/verify-github-access
-sidebar_position: 5
+sidebar_position: 6
 sidebar_label: Verify GitHub access
 ---
 

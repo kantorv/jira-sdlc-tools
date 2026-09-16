@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/repository-branching-model
-sidebar_position: 3
+sidebar_position: 4
 sidebar_label: Repository branching model
 ---
 

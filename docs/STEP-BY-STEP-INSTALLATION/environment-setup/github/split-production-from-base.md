@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/split-production-from-base
-sidebar_position: 4
+sidebar_position: 5
 sidebar_label: Split production from base
 ---
 

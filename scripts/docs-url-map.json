@@ -115,29 +115,33 @@
       "slug": "/step-by-step-installation/github-account-repository-and-authentication",
       "sidebar_position": 1
     },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/post-install.md": {
+      "slug": "/step-by-step-installation/github-post-install",
+      "sidebar_position": 2
+    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-authentication.md": {
       "slug": "/step-by-step-installation/verify-github-authentication",
-      "sidebar_position": 2
+      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/repository-branching-model.md": {
       "slug": "/step-by-step-installation/repository-branching-model",
-      "sidebar_position": 3
+      "sidebar_position": 4
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/split-production-from-base.md": {
       "slug": "/step-by-step-installation/split-production-from-base",
-      "sidebar_position": 4
+      "sidebar_position": 5
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-access.md": {
       "slug": "/step-by-step-installation/verify-github-access",
-      "sidebar_position": 5
+      "sidebar_position": 6
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/clone-the-base-branch.md": {
       "slug": "/step-by-step-installation/clone-the-base-branch",
-      "sidebar_position": 6
+      "sidebar_position": 7
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-setup-gate.md": {
       "slug": "/step-by-step-installation/github-setup-gate",
-      "sidebar_position": 7
+      "sidebar_position": 8
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-account-project-and-board.md": {
       "slug": "/step-by-step-installation/jira-account-project-and-board",

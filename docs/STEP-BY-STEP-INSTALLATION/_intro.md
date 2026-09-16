@@ -21,6 +21,7 @@ STEP-BY-STEP-INSTALLATION
 │   │   └── Software setup gate
 │   ├── GitHub
 │   │   ├── Account, repository, and authentication
+│   │   ├── Post install
 │   │   ├── Verify GitHub authentication
 │   │   ├── Repository branching model
 │   │   ├── Split production from base
