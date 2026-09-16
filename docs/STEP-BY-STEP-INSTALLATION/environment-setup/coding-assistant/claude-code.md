@@ -1,7 +1,7 @@
 ---
 slug: /integrations/claude-code
 sidebar_position: 1
-sidebar_label: Claude Code
+sidebar_label: Claude Code (extended)
 ---
 
 # Claude Code Integration (Native Claude skills)
@@ -28,7 +28,7 @@ about getting it loaded.
 - Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md) §9)
 - `gh` (GitHub CLI) authenticated
 - `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md)
-- Claude Code itself, in any of its surfaces (CLI, desktop app, or the IDE extension — the extension is what Cursor and Antigravity re-use, see [CURSOR.md](CURSOR.md) and [ANTIGRAVITY.md](ANTIGRAVITY.md))
+- Claude Code itself, in any of its surfaces (CLI, desktop app, or the IDE extension — the extension is what Cursor and Antigravity re-use, see [CURSOR.md](non-claude-clients/CURSOR.md) and [ANTIGRAVITY.md](non-claude-clients/ANTIGRAVITY.md))
 - **Methods 2 and 3 only** — a local clone of `kantorv/jira-sdlc-tools`
 
 ## Install / Wire-up Steps
@@ -97,7 +97,7 @@ Two things to get right:
 The project-level variant is the one to use when you want the skills
 committed alongside a repo so every contributor gets them; the personal
 variant applies across all your projects and stays out of version control.
-Cursor reads this same `~/.claude/` tree — see [CURSOR.md](CURSOR.md).
+Cursor reads this same `~/.claude/` tree — see [CURSOR.md](non-claude-clients/CURSOR.md).
 
 ### Method 3: `--plugin-dir` against a local clone
 

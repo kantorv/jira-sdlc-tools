@@ -159,7 +159,7 @@ nothing. `docs/assets/` (the four phase diagrams plus one PNG, ~500 KB) does
 move with the docs and is referenced relatively.
 
 Files under `docs/` whose name starts with `_` are **not published** —
-Docusaurus treats them as partials, so `docs/integrations/_TEMPLATE.md` is a
+Docusaurus treats them as partials, so `docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/_TEMPLATE.md` is a
 contributor template and links to it are absolute like any other unpublished
 file. `scripts/docs-url-map.json` lists them under `unpublished`.
 

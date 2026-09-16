@@ -39,7 +39,9 @@ STEP-BY-STEP-INSTALLATION
 │   │   ├── Prove the Jira workflow
 │   │   └── Jira setup gate
 │   └── Coding Assistant
-│       └── Platform Compatibility Matrix
+│       ├── Claude Code (extended)
+│       └── Non Claude clients
+│           └── one page per client
 ├── Configuration
 ├── Healthcheck
 ├── First tasks

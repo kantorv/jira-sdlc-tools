@@ -2,8 +2,7 @@
   "label": "Coding Assistant",
   "position": 4,
   "link": {
-    "type": "generated-index",
-    "slug": "/step-by-step-installation/coding-assistant",
-    "description": "Claude or any other compatible assistant."
+    "type": "doc",
+    "id": "STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/index"
   }
 }

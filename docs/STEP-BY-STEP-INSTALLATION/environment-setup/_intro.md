@@ -28,7 +28,7 @@ You will need:
     - `write:jira-work`
 - **Coding Assistant** — see [Coding Assistant](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/coding-assistant)
   - Claude or any other compatible solution
-    (see [Platform Compatibility Matrix](coding-assistant/platform-compatibility-matrix.md))
+    (see [Platform Compatibility Matrix](coding-assistant/index.mdx#platform-compatibility-matrix))
 
 Check out the full installation docs:
 [`docs/setup/STEP-BY-STEP.md`](../../setup/STEP-BY-STEP.md)
