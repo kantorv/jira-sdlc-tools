@@ -34,7 +34,8 @@
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/_TEMPLATE.md",
     "docs/STEP-BY-STEP-INSTALLATION/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/_intro.md",
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_intro.md"
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_matrix.md"
   ],
   "categories": {
     "docs/process": {
@@ -47,7 +48,7 @@
       "slug": "/github"
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients": {
-      "slug": "/integrations"
+      "slug": "/step-by-step-installation/non-claude-clients"
     },
     "docs/contributing": {
       "slug": "/contributing"
@@ -399,6 +400,10 @@
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/index.mdx": {
       "slug": "/step-by-step-installation/coding-assistant",
       "sidebar_position": 0
+    },
+    "docs/integrations.mdx": {
+      "slug": "/integrations",
+      "sidebar_position": 7
     }
   }
 }
