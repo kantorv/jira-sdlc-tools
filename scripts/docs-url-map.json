@@ -35,7 +35,8 @@
     "docs/STEP-BY-STEP-INSTALLATION/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_intro.md",
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_matrix.md"
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_matrix.md",
+    "docs/research/_intro.md"
   ],
   "categories": {
     "docs/process": {
@@ -375,6 +376,18 @@
     "docs/examples/reports/jira-task-reviewer-JST-122-df864d2f-3115-4f06-b3c2-24456615eed0.md": {
       "slug": "/examples/reviewer-run-report",
       "sidebar_position": 5
+    },
+    "docs/research/index.mdx": {
+      "slug": "/research",
+      "sidebar_position": 0
+    },
+    "docs/research/cedit.md": {
+      "slug": "/research/cedit",
+      "sidebar_position": 1
+    },
+    "docs/research/cl10n.md": {
+      "slug": "/research/cl10n",
+      "sidebar_position": 2
     },
     "docs/contributing/skill-development-considerations.md": {
       "slug": "/skill-development-considerations",
