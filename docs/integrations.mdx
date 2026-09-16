@@ -5,20 +5,17 @@ sidebar_position: 7
 sidebar_label: Integrations
 ---
 
-{/* The table below is the same _matrix.md partial the Coding Assistant folder
-    page imports — one copy of the compatibility matrix, rendered on both
-    pages. Its links resolve relative to the partial's own directory. */}
+{/* Same content as the Coding Assistant folder page: both import the same two
+    partials, so the install routes and the compatibility matrix have one
+    source and cannot drift. Links inside a partial resolve relative to the
+    partial's own directory, not to this file. */}
 
+import Intro from './STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_intro.md';
 import Matrix from './STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_matrix.md';
 
-Running these skills on assistants other than Claude Code. This page is the
-status table; the setup instructions live in the installation walkthrough:
+*Part of the installation walkthrough:
+[Environment setup → Coding Assistant](STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/index.mdx).*
 
-- [Coding Assistant](STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/index.mdx)
-  — how to install the plugin, whichever assistant you use.
-- [Claude Code (extended)](STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/claude-code.md)
-  — the reference platform, in full.
-- [Non Claude clients](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/non-claude-clients)
-  — one page per assistant, each with its own wiring and caveats.
+<Intro />
 
 <Matrix />
