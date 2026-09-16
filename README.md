@@ -17,8 +17,8 @@ for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
 Jira and Atlassian are trademarks or registered trademarks of Atlassian
 Pty Ltd, in the United States and/or other countries. This is an
-independent, community-built project that integrates with Jira through
-its public CLI and APIs; it is not affiliated with, endorsed by, or
+**independent**, community-built project that integrates with Jira through
+its public CLI and APIs; it is **not affiliated** with, endorsed by, or
 sponsored by Atlassian, and its references to Jira are solely to
 describe compatibility.
 
@@ -41,21 +41,97 @@ What it deliberately never does on its own — merging into your base
 branch, deleting Jira issues, resolving conflicts — is listed in
 [Safety model](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/README.md#safety-model).
 
-## Environment setup
+## Examples
 
-You will need
+### JIRA-TASK-ASSIGNER
 
-- **Git account + Repository + PAT token** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
-- **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
-- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+```bash
+claude
+> /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action.
+The action is currently separated into two perform_create methods.
+Investigate the code to determine whether this flow could be simplified.
+Additionally, check for any redundant code.
+Reference: cropapp/catalog/views.py, lines 1265–1676"
+```
 
-Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md).
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-EXECUTOR
+
+```bash
+# cd into each worktree it creates, run this in each one (no key —
+# derived from that worktree's branch):
+claude
+> /jira-sdlc:jira-task-executor 
+```
+
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-REVIEWER
+
+```bash
+# once the sub-task's PR is up, run from the same worktree:
+claude
+> /jira-sdlc:jira-task-reviewer 
+```
+
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+## Environment setup - see [`INSTALLATION-STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)
+
+You will need:
+- **Software**
+
+  - Install `git`, `gh`, and `jq`\
+    (see [Prerequisites](https://github.com/kantorv/jira-sdlc-tools/blob/development/docs/setup/STEP-BY-STEP.md#prerequisites))
+- **GitHub**
+
+  - Account (can be free)
+  - Repository
+  - PAT token (repo-scoped) with the following permissions:
+    - `Contents` (read/write)
+    - `Pull requests` (read/write)
+    - `Meta` (read) - added automatically
+
+- **Jira**
+
+  - Account (can be free)
+  - Space with a Board (you will have a `Project Key`, e.g. `XYZ`)
+  - At least 4 states (names can differ):
+    - `TODO`
+    - `IN_PROGRESS`
+    - `IN_REVIEW`
+    - `DONE`
+  - Users: can be only the owner, or additionally a dedicated user per each of the skills - `assigner`, `executor`, `reviewer` (fits the free tier - up to 10 users in org).
+  - Classic Scoped token (either for owner, or for each otf the 3 users - `assigner`, `executor`, `reviewer`) with the following permissions:
+    - `read:jira-user`
+    - `read:jira-work`
+    - `write:jira-work`
+
+- **Coding Assistant**
+
+  - Claude or any other compatible solution\
+    (see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+
+
+
+Check out the full installation docs:\
+[`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)
 
 ## Quick install
 
 ### Claude Code
 
 #### Remote — from the marketplace (recommended)
+
+##### from console
+
+```
+claude plugin marketplace add kantorv/jira-sdlc-tools
+claude plugin install jira-sdlc@jira-sdlc-tools
+```
+
+##### from within claude code
 
 ```
 /plugin marketplace add kantorv/jira-sdlc-tools
@@ -66,14 +142,14 @@ Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/ka
 
 ```bash
 git clone https://github.com/kantorv/jira-sdlc-tools.git
-claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
+claude --plugin-dir <PATH-TO>/jira-sdlc-tools/plugins/jira-sdlc
 ```
 
 See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md)
 
 ### Non Claude Code assistants
 
-This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
+This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Codex](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
 
 ## Platform Compatibility Matrix
 
@@ -161,38 +237,6 @@ flowchart LR
 </td>
 </tr>
 </table>
-
-## Examples
-
-### JIRA-TASK-ASSIGNER
-
-```bash
-claude
-> /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action. The action is currently separated into two perform_create methods. Investigate the code to determine whether this flow could be simplified. Additionally, check for any redundant code. Reference: cropapp/catalog/views.py, lines 1265–1676"
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-### JIRA-TASK-EXECUTOR
-
-```bash
-# cd into each worktree it creates, run this in each one (no key —
-# derived from that worktree's branch):
-claude
-> /jira-sdlc:jira-task-executor 
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-### JIRA-TASK-REVIEWER
-
-```bash
-# once the sub-task's PR is up, run from the same worktree:
-claude
-> /jira-sdlc:jira-task-reviewer 
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
 
 ## What's here
 
