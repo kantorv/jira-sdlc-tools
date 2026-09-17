@@ -53,7 +53,8 @@ STEP-BY-STEP-INSTALLATION
 │   ├── Commit the setup
 │   ├── Add bootstrap and teardown scripts
 │   └── Create a release cycle
-└── Optional: parallel worktrees
+├── Optional: parallel worktrees
+└── Full setup checklist
 ```
 
 The pages below follow this tree in the same order.

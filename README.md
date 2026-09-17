@@ -34,7 +34,7 @@ configured — your own, or a dedicated one per skill.
 
 Use it with caution: point it at a project you're comfortable having
 changed, and read
-[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md#settings-files)
+[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md#settings-files)
 before the first run so you know which repo and which Jira project it's wired to.
 
 What it deliberately never does on its own — merging into your base
@@ -49,7 +49,8 @@ You will need
 - **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
 - **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
 
-Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md).
+Check out the installation docs:
+[Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation).
 
 ## Quick install
 
@@ -230,8 +231,8 @@ The three skills, one per stage of the lifecycle:
 Plus one that runs before all three, once per project:
 
 - **[`jst-install`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)** — guided
-  first-time setup. Walks the four sections of
-  [Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md) — local tooling,
+  first-time setup. Walks
+  [Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation) — local tooling,
   GitHub repo prep, Jira board prep, healthcheck — verifying each with the
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
@@ -241,10 +242,10 @@ Plus one that runs before all three, once per project:
 Everything to have in place before the first run — the three CLIs, both API
 tokens, the two settings files, and the branches and board your project needs —
 is a tickable list in
-**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md)**,
+**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md)**,
 ending in one command that verifies most of it for you.
 
-Prefer it as prose? **[Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)**
+Prefer it as prose? **[Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation)**
 walks the same ground in the order you actually do it.
 
 Prefer to be walked through it? `/jira-sdlc:jst-install` covers the same four

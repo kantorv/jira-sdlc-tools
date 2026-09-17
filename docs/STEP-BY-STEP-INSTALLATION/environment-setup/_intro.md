@@ -29,7 +29,7 @@ You will need:
   - Claude or any other compatible solution
     (see [Platform Compatibility Matrix](../coding-assistant/index.mdx#platform-compatibility-matrix))
 
-Check out the full installation docs:
-[`docs/setup/STEP-BY-STEP.md`](../../setup/STEP-BY-STEP.md)
+Prefer a single tickable list over this section-by-section walkthrough? See
+[Full setup checklist](../full-setup-checklist.md).
 
 The pages below are the detailed reference for each item in the checklist.

@@ -78,21 +78,9 @@
     }
   },
   "pages": {
-    "docs/setup/INSTALLATION.md": {
-      "slug": "/installation",
-      "sidebar_position": 1
-    },
-    "docs/setup/STEP-BY-STEP.md": {
-      "slug": "/step-by-step",
-      "sidebar_position": 2
-    },
-    "docs/setup/FULL-SETUP-CHECKLIST.md": {
-      "slug": "/full-setup-checklist",
-      "sidebar_position": 3
-    },
-    "docs/setup/INSTALLING-GITHUB-FOR-JIRA.md": {
-      "slug": "/installing-github-for-jira",
-      "sidebar_position": 4
+    "docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md": {
+      "slug": "/step-by-step-installation/full-setup-checklist",
+      "sidebar_position": 7
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software.md": {
       "slug": "/step-by-step-installation/software",

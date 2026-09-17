@@ -1,6 +1,6 @@
 ---
-slug: /full-setup-checklist
-sidebar_position: 3
+slug: /step-by-step-installation/full-setup-checklist
+sidebar_position: 7
 sidebar_label: Full setup checklist
 ---
 
@@ -10,8 +10,8 @@ Tick these off before the first `/jira-sdlc:jira-task-assigner` run. Each item
 says how to check it, not just what to have. The last section is a single
 command that verifies most of the list for you.
 
-Prose walkthrough of the same ground: [STEP-BY-STEP.md](STEP-BY-STEP.md).
-Guided version of it: `/jira-sdlc:jst-install`
+This is the tickable version of the pages above. Guided version of it:
+`/jira-sdlc:jst-install`
 ([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)), which ticks these items off
 with you and runs the healthcheck between stages.
 

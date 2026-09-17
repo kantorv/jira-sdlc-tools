@@ -27,7 +27,7 @@ status names in `.jst/jira-sdlc-tools.env`.
 | **[`jira-task-executor`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
 | **[`jira-task-reviewer`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
 | **[GitHub Actions](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
-| **[Jira Automation](../setup/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
+| **[Jira Automation](JIRA-GITHUB-API.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
 
 The **GitHub Actions** row is **this repo's own CI** (`.github/workflows/`),
 not files the plugin installs — a marketplace install copies only
@@ -68,7 +68,7 @@ automations — including the common *pull request merged → move to
 least setup of any mechanism. It's recommended, not required: the skills
 work without it; what you lose is the automatic linking. Connection and
 automation-rule setup is in
-**[Installing GitHub for Jira](../setup/INSTALLING-GITHUB-FOR-JIRA.md)**.
+**[Jira + GitHub integration](JIRA-GITHUB-API.md)**.
 
 ## API
 
