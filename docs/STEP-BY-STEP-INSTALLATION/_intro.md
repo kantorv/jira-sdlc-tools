@@ -16,6 +16,7 @@ STEP-BY-STEP-INSTALLATION
 │   ├── GitHub
 │   │   ├── Account, repository, and authentication
 │   │   ├── Post install
+│   │   │   └── Add the git branch to your command prompt
 │   │   ├── Verify GitHub authentication
 │   │   ├── Repository branching model
 │   │   ├── Split production from base

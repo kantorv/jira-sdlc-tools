@@ -1,12 +1,10 @@
 ---
-slug: /step-by-step-installation/github-post-install
-sidebar_position: 2
-sidebar_label: Post install
+slug: /step-by-step-installation/add-git-branch-to-prompt
+sidebar_position: 1
+sidebar_label: "Optional: git branch in prompt"
 ---
 
-# Post install
-
-## *[OPTIONAL]* Add the git branch to your command prompt
+# *[OPTIONAL]* Add the git branch to your command prompt
 
 These skills move you between a lot of directories and branches: the main
 checkout sits on the base branch, and every issue gets its own worktree on its
@@ -85,7 +83,7 @@ PROMPT='%F{green}%n@%m%f:%F{blue}%~%f %F{green}$(git_branch)%f$ '
 ```
 
 ⚠️ Unlike the bash and PowerShell versions above, this one is not tested — the
-same caveat the [Software](../software.md) table carries for
+same caveat the [Software](../../software.md) table carries for
 macOS generally. Using bash on macOS instead? The bash snippet works as is, in
 `~/.bash_profile`.
 

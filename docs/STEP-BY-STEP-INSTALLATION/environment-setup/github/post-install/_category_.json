@@ -1,0 +1,9 @@
+{
+  "label": "Post install",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/github-post-install",
+    "description": "Optional tweaks to run after the core GitHub setup is done."
+  }
+}
