@@ -64,6 +64,12 @@
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/post-install": {
       "slug": "/step-by-step-installation/github-post-install"
     },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git": {
+      "slug": "/step-by-step-installation/git-authentication"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh": {
+      "slug": "/step-by-step-installation/gh-authentication"
+    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira": {
       "slug": "/step-by-step-installation/jira"
     },
@@ -100,21 +106,21 @@
       "slug": "/step-by-step-installation/github-authentication",
       "sidebar_position": 0
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/credentials-manager.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git/credentials-manager.md": {
       "slug": "/step-by-step-installation/credentials-manager",
       "sidebar_position": 1
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/ssh-key.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git/ssh-key.md": {
       "slug": "/step-by-step-installation/ssh-key",
       "sidebar_position": 2
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/pat.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh/pat.md": {
       "slug": "/step-by-step-installation/pat",
-      "sidebar_position": 3
+      "sidebar_position": 1
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh-auth-login.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh/gh-auth-login.md": {
       "slug": "/step-by-step-installation/gh-auth-login",
-      "sidebar_position": 4
+      "sidebar_position": 2
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/post-install/add-git-branch-to-prompt.md": {
       "slug": "/step-by-step-installation/add-git-branch-to-prompt",

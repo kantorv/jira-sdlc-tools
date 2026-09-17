@@ -16,10 +16,12 @@ STEP-BY-STEP-INSTALLATION
 │   ├── GitHub
 │   │   ├── Account and Repository
 │   │   ├── Authentication
-│   │   │   ├── Credentials manager
-│   │   │   ├── SSH key
-│   │   │   ├── PAT
-│   │   │   └── gh auth login
+│   │   │   ├── git
+│   │   │   │   ├── Credentials manager
+│   │   │   │   └── SSH key
+│   │   │   └── gh
+│   │   │       ├── PAT
+│   │   │       └── gh auth login
 │   │   ├── Post install
 │   │   │   └── Add the git branch to your command prompt
 │   │   ├── Verify GitHub authentication
