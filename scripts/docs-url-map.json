@@ -333,29 +333,41 @@
       "slug": "/integrations/pi",
       "sidebar_position": 10
     },
-    "docs/applications/APPLICATIONS.md": {
+    "docs/github-automations/GITHUB-AUTOMATIONS.md": {
       "slug": "/applications",
       "sidebar_position": 1
     },
-    "docs/applications/ci-issue-to-task-demo.md": {
+    "docs/github-automations/jira-state-manipulation/jira-state-manipulation.md": {
+      "slug": "/github-automations/jira-state-manipulation",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/chatops.md": {
+      "slug": "/github-automations/chatops",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/review/ci-review-pr-demo.md": {
+      "slug": "/applications/ci-review-pr-demo",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md": {
       "slug": "/applications/ci-issue-to-task-demo",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/manual-dispatch/manual-dispatch.md": {
+      "slug": "/github-automations/manual-dispatch",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/autopilot/autopilot.md": {
+      "slug": "/github-automations/autopilot",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/autopilot/ci-feature-flow-demo.md": {
+      "slug": "/applications/ci-feature-flow-demo",
       "sidebar_position": 2
     },
-    "docs/applications/ci-feature-flow-demo.md": {
-      "slug": "/applications/ci-feature-flow-demo",
-      "sidebar_position": 3
-    },
-    "docs/applications/ci-review-pr-demo.md": {
-      "slug": "/applications/ci-review-pr-demo",
-      "sidebar_position": 4
-    },
-    "docs/applications/ci-hotfix-flow-demo.md": {
+    "docs/github-automations/autopilot/ci-hotfix-flow-demo.md": {
       "slug": "/applications/ci-hotfix-flow-demo",
-      "sidebar_position": 5
-    },
-    "docs/applications/ci-smoke-test-demo.md": {
-      "slug": "/applications/ci-smoke-test-demo",
-      "sidebar_position": 6
+      "sidebar_position": 3
     },
     "docs/examples/reports/JST-122-story-report.md": {
       "slug": "/examples/story-report",

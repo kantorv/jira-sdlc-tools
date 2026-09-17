@@ -1,6 +1,6 @@
 ---
 slug: /applications/ci-review-pr-demo
-sidebar_position: 4
+sidebar_position: 1
 sidebar_label: Review a PR
 ---
 
@@ -15,15 +15,15 @@ sidebar_label: Review a PR
 > [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)).
 > Despite its filename,
 > [`demo-kimi-openrouter-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-kimi-openrouter-reviewer.yml)
-> is **not** one of them — it invokes no skill and belongs to the smoke-test
-> scenario ([APPLICATIONS.md §2c](APPLICATIONS.md#2c-the-same-demos-by-scenario)).
+> is **not** one of them — it invokes no skill (see "Why
+> `demo-kimi-openrouter-reviewer.yml` isn't a third one" below).
 > It is an **application demo**: a worked example meant to be read next to the
 > workflow files and copied into other repos, **not** this repo's development
-> procedure ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../process/CI.md).
+> procedure ([SDLC.md](../../../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../../../process/CI.md).
 >
-> Its siblings are [ci-feature-flow-demo.md](ci-feature-flow-demo.md) and
-> [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) — the full three-skill
+> Its siblings are [ci-feature-flow-demo.md](../../autopilot/ci-feature-flow-demo.md) and
+> [ci-hotfix-flow-demo.md](../../autopilot/ci-hotfix-flow-demo.md) — the full three-skill
 > chains. This one is the single-skill case: no assigner, no executor, no Jira
 > issue created. Everything about runner-vs-developer-machine worktree
 > rebuilding is explained in those two in the same words.
@@ -160,9 +160,9 @@ enabled — makes GitHub pause for a human before it starts. There is only one
 skill here, so there is at most one gate: the point at which you can eyeball
 the diff before the review spends tokens on it. With Required reviewers left
 unchecked the job runs unattended, still correctly scoped to the environment's
-secrets. See [APPLICATIONS.md §3.1–3.2](APPLICATIONS.md) for the full
+secrets. See [APPLICATIONS.md §3.1–3.2](../../GITHUB-AUTOMATIONS.md) for the full
 two-gate convention. Setup is
-[APPLICATIONS.md §3](APPLICATIONS.md#3-the-two-gate-convention-for-assistant-workflows).
+[APPLICATIONS.md §3](../../GITHUB-AUTOMATIONS.md#3-the-two-gate-convention-for-assistant-workflows).
 
 The gating job runs *before* the environment gate, deliberately: resolving the
 branch and confirming a PR exists is cheap and needs no secrets, so a comment
@@ -252,10 +252,9 @@ builds no worktree, and has no environment gate.
 
 That makes it a **smoke test**, not a review implementation — it proves a
 backend installs, authenticates, sees the skills, and returns a completion,
-which is the rung below any of these flows. It has its own scenario row in
-[APPLICATIONS.md §2c](APPLICATIONS.md#2c-the-same-demos-by-scenario). Reach
-for it when a real run fails on a new client and you need to know whether the
-assistant is even answering before you go hunting in the skills.
+which is the rung below any of these flows. Reach for it when a real run
+fails on a new client and you need to know whether the assistant is even
+answering before you go hunting in the skills.
 
 > The header comment inside `demo-kimi-openrouter-reviewer.yml` claims it
 > "posts no review to Jira or GitHub". That is stale — the Jira half is right,
@@ -287,7 +286,7 @@ Nothing is ever merged. That stays a human act.
 1. Ensure the `production` environment exists with the reviewer secrets —
    `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`,
    `CLAUDE_CODE_OAUTH_TOKEN` (or `NVIDIA_NIM_API_KEY` for the FCC variant).
-   See [APPLICATIONS.md §3.4](APPLICATIONS.md#34-setting-secrets-via-github-cli).
+   See [APPLICATIONS.md §3.4](../../GITHUB-AUTOMATIONS.md#34-setting-secrets-via-github-cli).
 2. Open a PR from a `feature/<KEY>-…` or `hotfix/<KEY>-…` branch.
 3. Comment `/review` on it (`/fcc-review` for the FCC variant) as an OWNER or
    OWNER of the repo — bare, or followed by a space or newline and whatever
@@ -313,7 +312,7 @@ closed or merged PR is a no-op rather than a failure.
   merge of its own.
 - **Not a full-flow demo.** No issue is created and no code is written; it
   reviews what is already there. For the three-skill chain see
-  [ci-feature-flow-demo.md](ci-feature-flow-demo.md).
+  [ci-feature-flow-demo.md](../../autopilot/ci-feature-flow-demo.md).
 - **Not a replacement for `/code-review` or this repo's own `validator.yml`.**
   It demonstrates the *skill* running in CI, against a Jira-tracked issue
   branch.

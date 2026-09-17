@@ -260,12 +260,12 @@ driving the three skills headlessly in CI, from a standalone reviewer gate on
 an open PR up to the full assigner → executor → reviewer chain on the feature
 and hotfix paths. Full detail, including production-environment setup and
 which secrets each demo reads, is in
-**[Applications](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/APPLICATIONS.md)**.
+**[GitHub Automations](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/GITHUB-AUTOMATIONS.md)**.
 
-Five scenarios, each with its own walkthrough. "Approvals" counts the
+Four scenarios, each with its own walkthrough. "Approvals" counts the
 `environment: production` pauses a run waits on before it can continue.
 
-- **[Feature flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-feature-flow-demo.md)**
+- **[Feature flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-feature-flow-demo.md)**
   — the whole assigner → executor → reviewer chain on the planned path: a
   GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
   and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
@@ -274,20 +274,20 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
   (Claude Code · `/make-feature`) ·
   [`demo-fcc-nvidia-nim-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-make-feature`)
-- **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-hotfix-flow-demo.md)**
+- **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-hotfix-flow-demo.md)**
   — the same chain on the emergency path: `hotfix/*` cut off
   `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
   Comment-triggered, up to 3 approvals.
   [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-hotfix-flow.yml)
   (Claude Code · `/make-hotfix`)
-- **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-review-pr-demo.md)** —
+- **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/review/ci-review-pr-demo.md)** —
   the reviewer on its own against an already-open PR, posting its verdict to
   GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
   [`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-reviewer.yml)
   (Claude Code · `/review`) ·
   [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-review`)
-- **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-issue-to-task-demo.md)**
+- **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md)**
   — the assigner alone: a commented issue becomes a Jira Task (or Bug) with its
   branch and worktree, and the run stops there. Comment-triggered
   (`/make-task` / `/make-bug`), gated by the OWNER/MEMBER author check — and
@@ -298,13 +298,6 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
   (Claude Code · `/make-task`) ·
   [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
   (Claude Code · `/make-bug`)
-- **[Smoke test](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-smoke-test-demo.md)** —
-  **no skill runs.** It installs a coding assistant, points it at this plugin's
-  `skills/`, and drives one plain inference to prove the backend is wired up —
-  the plumbing check before you trust a new client or model with a real flow.
-  Manual, no approval gate.
-  [`demo-kimi-openrouter-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-kimi-openrouter-reviewer.yml)
-  (Kimi Code + OpenRouter · `workflow_dispatch`)
 
 ## Jira states - who can move a card
 

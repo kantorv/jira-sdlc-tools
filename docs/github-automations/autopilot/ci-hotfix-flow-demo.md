@@ -1,6 +1,6 @@
 ---
 slug: /applications/ci-hotfix-flow-demo
-sidebar_position: 5
+sidebar_position: 3
 sidebar_label: Hotfix flow
 ---
 
@@ -15,8 +15,8 @@ sidebar_label: Hotfix flow
 > example of running the skills in a CI environment, meant to be read next to
 > the workflow file (whose comments carry the line-level rationale) and copied
 > into other repos. It is **not** this repo's hotfix procedure — that stays
-> human-driven ([SDLC.md §4](../process/SDLC.md)). The workflow-by-workflow CI
-> reference is [CI.md](../process/CI.md); this file covers just this one workflow, in
+> human-driven ([SDLC.md §4](../../process/SDLC.md)). The workflow-by-workflow CI
+> reference is [CI.md](../../process/CI.md); this file covers just this one workflow, in
 > depth.
 >
 > Its sibling is [ci-feature-flow-demo.md](ci-feature-flow-demo.md) — the
@@ -46,7 +46,7 @@ so the whole run is visible where the fix was requested.
 Nothing is merged. The run ends with an open, reviewed PR into
 `<PRODUCTION_BRANCH>`; merging it is a human act, after which the repo's
 `release.yml` patch-bumps the tag as for any `hotfix/*` merge
-([SDLC.md §5](../process/SDLC.md)).
+([SDLC.md §5](../../process/SDLC.md)).
 
 ```mermaid
 flowchart TB
@@ -132,7 +132,7 @@ environment: production
 ```
 
 and the `production` environment in this repo has GitHub's **Required
-reviewers** rule checked. See [APPLICATIONS.md §3.1–3.2](APPLICATIONS.md)
+reviewers** rule checked. See [APPLICATIONS.md §3.1–3.2](../GITHUB-AUTOMATIONS.md)
 for the full two-gate convention. The `production` environment in this repo has GitHub's **Required
 reviewers** protection rule checked. Environment protection is evaluated
 **before each job starts**, so one `/make-hotfix` comment pauses three times:
@@ -426,7 +426,7 @@ rather than per-issue for exactly that reason.
 ## What this demo is not
 
 A production incident response. A real hotfix in this repo is a human
-decision end to end ([SDLC.md §4](../process/SDLC.md)): a human cuts or requests the
+decision end to end ([SDLC.md §4](../../process/SDLC.md)): a human cuts or requests the
 branch, reviews the fix, and merges it. What the demo borrows from that flow
 is only the *branch semantics* — assigner step 5C's
 `hotfix/<KEY>-<slug>` cut from `origin/<PRODUCTION_BRANCH>`, single-step

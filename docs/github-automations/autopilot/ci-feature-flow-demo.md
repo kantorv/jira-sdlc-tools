@@ -1,6 +1,6 @@
 ---
 slug: /applications/ci-feature-flow-demo
-sidebar_position: 3
+sidebar_position: 2
 sidebar_label: Feature flow
 ---
 
@@ -15,8 +15,8 @@ sidebar_label: Feature flow
 > meant to be read next to the workflow file (whose comments carry the
 > line-level rationale) and copied into other repos. It is **not** this repo's
 > development procedure — planned work here is human-driven
-> ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../process/CI.md).
+> ([SDLC.md](../../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../../process/CI.md).
 >
 > Its sibling is [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) — the same
 > three-job chain on the *emergency* flow. Everything the two share is
@@ -43,7 +43,7 @@ so the whole run is visible where the work was requested.
 
 Nothing is merged. The run ends with an open, reviewed PR into
 `<DEFAULT_BASE_BRANCH>`. Merging it is a human act — and from there the
-ordinary release path applies ([SDLC.md](../process/SDLC.md)), with no tag bump of its
+ordinary release path applies ([SDLC.md](../../process/SDLC.md)), with no tag bump of its
 own.
 
 ```mermaid
@@ -161,14 +161,14 @@ Three things about that placement are deliberate:
 Only the **assigner** reads the prose in this chain: jobs 2 and 3 run in
 separate VMs off job 1's outputs and invoke their skills as they always have.
 Direction meant for the reviewer goes in a `/review` comment on the PR instead
-([ci-review-pr-demo.md](ci-review-pr-demo.md)).
+([ci-review-pr-demo.md](../chatops/review/ci-review-pr-demo.md)).
 
 ## The `environment: production` gate — one approval per skill
 
 Every job declares `environment: production`, and that environment has
 GitHub's **Required reviewers** rule checked. Protection is evaluated **before
 each job starts**, so one `/make-feature` comment pauses three times. See
-[APPLICATIONS.md §3.1–3.2](APPLICATIONS.md) for the full two-gate convention:
+[APPLICATIONS.md §3.1–3.2](../GITHUB-AUTOMATIONS.md) for the full two-gate convention:
 
 | Pause | Approving it releases | What has happened so far |
 | :- | :- | :- |

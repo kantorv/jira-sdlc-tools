@@ -1,6 +1,6 @@
 ---
 slug: /applications/ci-issue-to-task-demo
-sidebar_position: 2
+sidebar_position: 1
 sidebar_label: Issue to task
 ---
 
@@ -14,8 +14,8 @@ sidebar_label: Issue to task
 > branch. It is an **application demo**: a worked example meant to be read
 > next to the workflow file (whose comments carry the line-level rationale)
 > and copied into other repos, **not** this repo's development procedure
-> ([SDLC.md](../process/SDLC.md)). The workflow-by-workflow CI reference is
-> [CI.md](../process/CI.md).
+> ([SDLC.md](../../../process/SDLC.md)). The workflow-by-workflow CI reference is
+> [CI.md](../../../process/CI.md).
 >
 > [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
 > is a **byte-identical twin** — the `/make-bug` counterpart — that differs
@@ -24,9 +24,9 @@ sidebar_label: Issue to task
 > here applies to both; "issue-to-bug" is called out only where it genuinely
 > differs (the trigger word and the Jira issue type produced).
 >
-> Its other siblings are [ci-feature-flow-demo.md](ci-feature-flow-demo.md)
-> and [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) (the full three-skill
-> chains) and [ci-review-pr-demo.md](ci-review-pr-demo.md) (the reviewer
+> Its other siblings are [ci-feature-flow-demo.md](../../autopilot/ci-feature-flow-demo.md)
+> and [ci-hotfix-flow-demo.md](../../autopilot/ci-hotfix-flow-demo.md) (the full three-skill
+> chains) and [ci-review-pr-demo.md](../review/ci-review-pr-demo.md) (the reviewer
 > alone). This is the *first* skill of the chain on its own — the assigner
 > half of `demo-claude-feature-flow.yml`'s `/make-feature`, with the same
 > trigger and prose-parsing step but no executor/reviewer jobs.
@@ -116,7 +116,7 @@ signal — until those same secrets also exist at the repo level (or are
 renamed/resourced). That secret redistribution is a **separate follow-up this
 PR deliberately flags rather than fixes**: the workflow can merge now but will
 not run a comment-triggered job successfully until that is done. See "Secrets"
-below and [APPLICATIONS.md §3.2 and §3.5](APPLICATIONS.md) for the updated
+below and [APPLICATIONS.md §3.2 and §3.5](../../GITHUB-AUTOMATIONS.md) for the updated
 two-gate convention and secret-location guidance.
 
 ### Steering one run from the comment
@@ -217,7 +217,7 @@ A later executor run expects that worktree to *already exist*. On hosted
 runners it won't. That is the whole reason this demo stops after one skill
 instead of chaining — the full flows solve it by having each job rebuild a
 linked worktree from the pushed branch
-([ci-feature-flow-demo.md](ci-feature-flow-demo.md)). A persistent or
+([ci-feature-flow-demo.md](../../autopilot/ci-feature-flow-demo.md)). A persistent or
 self-hosted runner, whose disk survives across runs the way a developer's
 machine does, wouldn't need the trick.
 
@@ -289,7 +289,7 @@ read like a task description, not a question.
    `production`; with the `environment:` line gone, each `${{ secrets.* }}`
    now resolves from repo-level secrets, so set the keys from the table above
    as repo secrets. See
-   [APPLICATIONS.md §3.4](APPLICATIONS.md#34-setting-secrets-via-github-cli)
+   [APPLICATIONS.md §3.4](../../GITHUB-AUTOMATIONS.md#34-setting-secrets-via-github-cli)
    for the `gh secret set` commands (drop the `--env production` so they land
    at the repo).
 2. Confirm `.jst/jira-sdlc-tools.env` sets `DEFAULT_BASE_BRANCH`.
