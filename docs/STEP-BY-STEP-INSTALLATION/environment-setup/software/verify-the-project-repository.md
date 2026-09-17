@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/verify-the-project-repository
-sidebar_position: 3
+sidebar_position: 2
 sidebar_label: Verify the project repository
 ---
 

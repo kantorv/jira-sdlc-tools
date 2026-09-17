@@ -91,25 +91,21 @@
       "slug": "/step-by-step-installation/prerequisites",
       "sidebar_position": 1
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-authentication.md": {
-      "slug": "/step-by-step-installation/software-authentication",
-      "sidebar_position": 2
-    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/verify-the-project-repository.md": {
       "slug": "/step-by-step-installation/verify-the-project-repository",
-      "sidebar_position": 3
+      "sidebar_position": 2
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/create-the-jst-scaffold.md": {
       "slug": "/step-by-step-installation/create-the-jst-scaffold",
-      "sidebar_position": 4
+      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/fill-the-local-env.md": {
       "slug": "/step-by-step-installation/fill-the-local-env",
-      "sidebar_position": 5
+      "sidebar_position": 4
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-setup-gate.md": {
       "slug": "/step-by-step-installation/software-setup-gate",
-      "sidebar_position": 6
+      "sidebar_position": 5
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-account-repository-and-authentication.md": {
       "slug": "/step-by-step-installation/github-account-repository-and-authentication",
