@@ -15,7 +15,7 @@ sidebar_label: Installation
 ## What belongs here
 
 - The three loading routes in full — see
-  [Claude Code (extended)](../STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/claude-code.md) for the Claude Code
+  [Claude Code (extended)](../STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md) for the Claude Code
   ones, and [Integrations](https://kantorv.github.io/jira-sdlc-tools/docs/integrations)
   for every other platform.
 - Prerequisites and tool installation (`git`, `gh`, plus `curl` + `jq` for

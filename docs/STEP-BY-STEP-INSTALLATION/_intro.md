@@ -33,13 +33,13 @@ STEP-BY-STEP-INSTALLATION
 │   │   ├── Record the Jira settings
 │   │   ├── Prove the Jira workflow
 │   │   └── Jira setup gate
-│   └── Coding Assistant
-│       ├── Claude Code (extended)
-│       └── Non Claude clients
-│           └── one page per client
 ├── Configuration
 │   ├── Create the `.jst/` scaffold
 │   └── Fill `.jst/jira-sdlc-tools.local.env`
+├── Coding Assistant
+│   ├── Claude Code (extended)
+│   └── Non Claude clients
+│       └── one page per client
 ├── Healthcheck
 ├── First tasks
 │   ├── Commit the setup

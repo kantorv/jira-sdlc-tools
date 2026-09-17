@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/optional-parallel-worktrees
-sidebar_position: 5
+sidebar_position: 6
 sidebar_label: "Optional: parallel worktrees"
 ---
 

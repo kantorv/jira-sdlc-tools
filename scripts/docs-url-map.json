@@ -31,11 +31,11 @@
   "tree_base": "https://github.com/kantorv/jira-sdlc-tools/tree/main",
   "raw_base": "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main",
   "unpublished": [
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/_TEMPLATE.md",
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/_TEMPLATE.md",
     "docs/STEP-BY-STEP-INSTALLATION/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/_intro.md",
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_intro.md",
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/_matrix.md",
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_matrix.md",
     "docs/research/_intro.md"
   ],
   "categories": {
@@ -48,7 +48,7 @@
     "docs/github": {
       "slug": "/github"
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients": {
       "slug": "/step-by-step-installation/non-claude-clients"
     },
     "docs/contributing": {
@@ -174,7 +174,7 @@
     },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
       "slug": "/step-by-step-installation/healthcheck",
-      "sidebar_position": 3
+      "sidebar_position": 4
     },
     "docs/STEP-BY-STEP-INSTALLATION/first-tasks/commit-the-setup.md": {
       "slug": "/step-by-step-installation/commit-the-setup",
@@ -190,7 +190,7 @@
     },
     "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
       "slug": "/step-by-step-installation/optional-parallel-worktrees",
-      "sidebar_position": 5
+      "sidebar_position": 6
     },
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
@@ -282,43 +282,43 @@
       "slug": "/state-transitions-with-github-actions",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/claude-code.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md": {
       "slug": "/integrations/claude-code",
       "sidebar_position": 1
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/CODEX.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CODEX.md": {
       "slug": "/integrations/codex",
       "sidebar_position": 2
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/CURSOR.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CURSOR.md": {
       "slug": "/integrations/cursor",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/ANTIGRAVITY.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/ANTIGRAVITY.md": {
       "slug": "/integrations/antigravity",
       "sidebar_position": 4
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/GROK.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md": {
       "slug": "/integrations/grok",
       "sidebar_position": 5
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/KILO.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KILO.md": {
       "slug": "/integrations/kilo",
       "sidebar_position": 6
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/KIMI-CODE.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md": {
       "slug": "/integrations/kimi-code",
       "sidebar_position": 7
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/NVIDIA-NIM.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/NVIDIA-NIM.md": {
       "slug": "/integrations/nvidia-nim",
       "sidebar_position": 8
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/OPENCODE.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/OPENCODE.md": {
       "slug": "/integrations/opencode",
       "sidebar_position": 9
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/non-claude-clients/PI.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md": {
       "slug": "/integrations/pi",
       "sidebar_position": 10
     },
@@ -411,7 +411,7 @@
       "slug": "/acli-to-rest-api-migration",
       "sidebar_position": 2
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/coding-assistant/index.mdx": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/index.mdx": {
       "slug": "/step-by-step-installation/coding-assistant",
       "sidebar_position": 0
     },
