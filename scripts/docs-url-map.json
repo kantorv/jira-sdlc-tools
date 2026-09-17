@@ -31,7 +31,13 @@
   "tree_base": "https://github.com/kantorv/jira-sdlc-tools/tree/main",
   "raw_base": "https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main",
   "unpublished": [
-    "docs/integrations/_TEMPLATE.md"
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/_TEMPLATE.md",
+    "docs/STEP-BY-STEP-INSTALLATION/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_intro.md",
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_matrix.md",
+    "docs/research/_intro.md"
   ],
   "categories": {
     "docs/process": {
@@ -43,32 +49,174 @@
     "docs/github": {
       "slug": "/github"
     },
-    "docs/integrations": {
-      "slug": "/integrations"
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients": {
+      "slug": "/step-by-step-installation/non-claude-clients"
     },
     "docs/contributing": {
       "slug": "/contributing"
     },
     "docs/history": {
       "slug": "/history"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github": {
+      "slug": "/step-by-step-installation/github"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/post-install": {
+      "slug": "/step-by-step-installation/github-post-install"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git": {
+      "slug": "/step-by-step-installation/git-authentication"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh": {
+      "slug": "/step-by-step-installation/gh-authentication"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira": {
+      "slug": "/step-by-step-installation/jira"
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks": {
+      "slug": "/step-by-step-installation/first-tasks"
     }
   },
   "pages": {
-    "docs/setup/INSTALLATION.md": {
-      "slug": "/installation",
+    "docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md": {
+      "slug": "/step-by-step-installation/full-setup-checklist",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software.md": {
+      "slug": "/step-by-step-installation/software",
       "sidebar_position": 1
     },
-    "docs/setup/STEP-BY-STEP.md": {
-      "slug": "/step-by-step",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/account-and-repository.md": {
+      "slug": "/step-by-step-installation/account-and-repository",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/index.mdx": {
+      "slug": "/step-by-step-installation/github-authentication",
+      "sidebar_position": 0
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git/credentials-manager.md": {
+      "slug": "/step-by-step-installation/credentials-manager",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/git/ssh-key.md": {
+      "slug": "/step-by-step-installation/ssh-key",
       "sidebar_position": 2
     },
-    "docs/setup/FULL-SETUP-CHECKLIST.md": {
-      "slug": "/full-setup-checklist",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh/pat.md": {
+      "slug": "/step-by-step-installation/pat",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/gh/gh-auth-login.md": {
+      "slug": "/step-by-step-installation/gh-auth-login",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/post-install/add-git-branch-to-prompt.md": {
+      "slug": "/step-by-step-installation/add-git-branch-to-prompt",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-authentication.md": {
+      "slug": "/step-by-step-installation/verify-github-authentication",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/repository-branching-model.md": {
+      "slug": "/step-by-step-installation/repository-branching-model",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/split-production-from-base.md": {
+      "slug": "/step-by-step-installation/split-production-from-base",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-github-access.md": {
+      "slug": "/step-by-step-installation/verify-github-access",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/clone-the-base-branch.md": {
+      "slug": "/step-by-step-installation/clone-the-base-branch",
+      "sidebar_position": 8
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-the-project-repository.md": {
+      "slug": "/step-by-step-installation/verify-the-project-repository",
+      "sidebar_position": 9
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-setup-gate.md": {
+      "slug": "/step-by-step-installation/github-setup-gate",
+      "sidebar_position": 10
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-account-project-and-board.md": {
+      "slug": "/step-by-step-installation/jira-account-project-and-board",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/project-key-and-four-statuses.md": {
+      "slug": "/step-by-step-installation/project-key-and-four-statuses",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/read-the-project-key-and-statuses.md": {
+      "slug": "/step-by-step-installation/read-the-project-key-and-statuses",
       "sidebar_position": 3
     },
-    "docs/setup/INSTALLING-GITHUB-FOR-JIRA.md": {
-      "slug": "/installing-github-for-jira",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-users.md": {
+      "slug": "/step-by-step-installation/jira-users",
       "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-tokens.md": {
+      "slug": "/step-by-step-installation/jira-tokens",
+      "sidebar_position": 5
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/verify-jira-authentication.md": {
+      "slug": "/step-by-step-installation/verify-jira-authentication",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/record-the-jira-settings.md": {
+      "slug": "/step-by-step-installation/record-the-jira-settings",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/prove-the-jira-workflow.md": {
+      "slug": "/step-by-step-installation/prove-the-jira-workflow",
+      "sidebar_position": 8
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-setup-gate.md": {
+      "slug": "/step-by-step-installation/jira-setup-gate",
+      "sidebar_position": 9
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/index.mdx": {
+      "slug": "/step-by-step-installation/configuration",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/create-the-jst-scaffold.md": {
+      "slug": "/step-by-step-installation/create-the-jst-scaffold",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-local-env.md": {
+      "slug": "/step-by-step-installation/fill-the-local-env",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
+      "slug": "/step-by-step-installation/healthcheck",
+      "sidebar_position": 4
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/commit-the-setup.md": {
+      "slug": "/step-by-step-installation/commit-the-setup",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/add-bootstrap-and-teardown-scripts.md": {
+      "slug": "/step-by-step-installation/add-bootstrap-and-teardown-scripts",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/first-tasks/create-a-release-cycle.md": {
+      "slug": "/step-by-step-installation/create-a-release-cycle",
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
+      "slug": "/step-by-step-installation/optional-parallel-worktrees",
+      "sidebar_position": 6
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
+      "slug": "/step-by-step-installation",
+      "sidebar_position": 0
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/index.mdx": {
+      "slug": "/step-by-step-installation/environment-setup",
+      "sidebar_position": 0
     },
     "docs/parallel-instances/RUNNING-MULTIPLE-COPIES.md": {
       "slug": "/running-multiple-copies",
@@ -152,69 +300,81 @@
       "slug": "/state-transitions-with-github-actions",
       "sidebar_position": 3
     },
-    "docs/integrations/CLAUDECODE.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md": {
       "slug": "/integrations/claude-code",
       "sidebar_position": 1
     },
-    "docs/integrations/CODEX.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CODEX.md": {
       "slug": "/integrations/codex",
       "sidebar_position": 2
     },
-    "docs/integrations/CURSOR.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CURSOR.md": {
       "slug": "/integrations/cursor",
       "sidebar_position": 3
     },
-    "docs/integrations/ANTIGRAVITY.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/ANTIGRAVITY.md": {
       "slug": "/integrations/antigravity",
       "sidebar_position": 4
     },
-    "docs/integrations/GROK.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md": {
       "slug": "/integrations/grok",
       "sidebar_position": 5
     },
-    "docs/integrations/KILO.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KILO.md": {
       "slug": "/integrations/kilo",
       "sidebar_position": 6
     },
-    "docs/integrations/KIMI-CODE.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md": {
       "slug": "/integrations/kimi-code",
       "sidebar_position": 7
     },
-    "docs/integrations/NVIDIA-NIM.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/NVIDIA-NIM.md": {
       "slug": "/integrations/nvidia-nim",
       "sidebar_position": 8
     },
-    "docs/integrations/OPENCODE.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/OPENCODE.md": {
       "slug": "/integrations/opencode",
       "sidebar_position": 9
     },
-    "docs/integrations/PI.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md": {
       "slug": "/integrations/pi",
       "sidebar_position": 10
     },
-    "docs/applications/APPLICATIONS.md": {
+    "docs/github-automations/GITHUB-AUTOMATIONS.md": {
       "slug": "/applications",
       "sidebar_position": 1
     },
-    "docs/applications/ci-issue-to-task-demo.md": {
+    "docs/github-automations/jira-state-manipulation/jira-state-manipulation.md": {
+      "slug": "/github-automations/jira-state-manipulation",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/chatops.md": {
+      "slug": "/github-automations/chatops",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/review/ci-review-pr-demo.md": {
+      "slug": "/applications/ci-review-pr-demo",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md": {
       "slug": "/applications/ci-issue-to-task-demo",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/manual-dispatch/manual-dispatch.md": {
+      "slug": "/github-automations/manual-dispatch",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/autopilot/autopilot.md": {
+      "slug": "/github-automations/autopilot",
+      "sidebar_position": 1
+    },
+    "docs/github-automations/autopilot/ci-feature-flow-demo.md": {
+      "slug": "/applications/ci-feature-flow-demo",
       "sidebar_position": 2
     },
-    "docs/applications/ci-feature-flow-demo.md": {
-      "slug": "/applications/ci-feature-flow-demo",
-      "sidebar_position": 3
-    },
-    "docs/applications/ci-review-pr-demo.md": {
-      "slug": "/applications/ci-review-pr-demo",
-      "sidebar_position": 4
-    },
-    "docs/applications/ci-hotfix-flow-demo.md": {
+    "docs/github-automations/autopilot/ci-hotfix-flow-demo.md": {
       "slug": "/applications/ci-hotfix-flow-demo",
-      "sidebar_position": 5
-    },
-    "docs/applications/ci-smoke-test-demo.md": {
-      "slug": "/applications/ci-smoke-test-demo",
-      "sidebar_position": 6
+      "sidebar_position": 3
     },
     "docs/examples/reports/JST-122-story-report.md": {
       "slug": "/examples/story-report",
@@ -236,6 +396,18 @@
       "slug": "/examples/reviewer-run-report",
       "sidebar_position": 5
     },
+    "docs/research/index.mdx": {
+      "slug": "/research",
+      "sidebar_position": 0
+    },
+    "docs/research/cedit.md": {
+      "slug": "/research/cedit",
+      "sidebar_position": 1
+    },
+    "docs/research/cl10n.md": {
+      "slug": "/research/cl10n",
+      "sidebar_position": 2
+    },
     "docs/contributing/skill-development-considerations.md": {
       "slug": "/skill-development-considerations",
       "sidebar_position": 1
@@ -256,6 +428,14 @@
     "docs/history/acli-to-rest-api-migration.md": {
       "slug": "/acli-to-rest-api-migration",
       "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/index.mdx": {
+      "slug": "/step-by-step-installation/coding-assistant",
+      "sidebar_position": 0
+    },
+    "docs/integrations.mdx": {
+      "slug": "/integrations",
+      "sidebar_position": 7
     }
   }
 }

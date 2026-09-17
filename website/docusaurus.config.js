@@ -151,8 +151,7 @@ const config = {
           {
             title: 'Docs',
             items: [
-              {label: 'Installation', to: '/docs/installation'},
-              {label: 'Step by step', to: '/docs/step-by-step'},
+              {label: 'Step-by-step installation', to: '/docs/step-by-step-installation'},
               {label: 'Task lifecycle', to: '/docs/task-lifecycle'},
             ],
           },

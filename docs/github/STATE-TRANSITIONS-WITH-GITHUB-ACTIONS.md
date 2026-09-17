@@ -22,7 +22,7 @@ They live in **this repo's own `.github/workflows/`**, not inside
 you won't get them by installing the plugin. Copy the three files out of this
 repository into your project.
 
-This is an alternative to [GitHub for Jira](../setup/INSTALLING-GITHUB-FOR-JIRA.md),
+This is an alternative to [GitHub for Jira](../jira/JIRA-GITHUB-API.md),
 not a companion to it. The app is less setup and covers more surface; these
 workflows win when you need the exact status names, sources and guards to be
 yours, or you can't install a Marketplace app in the org. Running both means
@@ -224,7 +224,7 @@ rows, is in [JIRA-STATES.md](../jira/JIRA-STATES.md).
 
 - [JIRA-STATES.md](../jira/JIRA-STATES.md) — who moves a card where, all actors
 - [CI.md](../process/CI.md) — every workflow in this repo, including the release path
-- [INSTALLING-GITHUB-FOR-JIRA.md](../setup/INSTALLING-GITHUB-FOR-JIRA.md) — the app
+- [JIRA-GITHUB-API.md](../jira/JIRA-GITHUB-API.md) — the app
   alternative to these workflows
 - [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
   §5 — token types and the scope trap, from the skills' side
