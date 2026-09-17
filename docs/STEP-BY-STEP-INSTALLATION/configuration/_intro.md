@@ -1,11 +1,3 @@
----
-slug: /step-by-step-installation/configuration
-sidebar_position: 2
-sidebar_label: Configuration
----
-
-# Configuration
-
 The installer uses **two environment files**:
 
 - `.jst/jira-sdlc-tools.env` — team-shared, secret-free configuration containing
@@ -47,3 +39,5 @@ it. Every variable above is described in
 > setup doesn't need that — the agent is the only thing ever touching
 > `git` here — it can authenticate with its own PAT instead, the same way
 > `gh` already does. That setup isn't documented yet.
+
+The pages below walk through creating and filling the scaffold.

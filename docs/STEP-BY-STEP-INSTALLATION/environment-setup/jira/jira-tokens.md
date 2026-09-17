@@ -88,7 +88,7 @@ Repeat the steps below for **each** of them.
 
 11. Copy the token and store it locally together with the user's email. Both go into
     `.jst/jira-sdlc-tools.local.env` (see
-    [Fill `.jst/jira-sdlc-tools.local.env`](../software/fill-the-local-env.md)).
+    [Fill `.jst/jira-sdlc-tools.local.env`](../../configuration/fill-the-local-env.md)).
     Copy it now: Atlassian only shows it once.
 
     ![The created token with its copy button](../../../assets/jira-token-copy-token-screenshot.png)

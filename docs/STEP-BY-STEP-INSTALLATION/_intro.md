@@ -14,10 +14,7 @@ STEP-BY-STEP-INSTALLATION
 ├── Environment setup — what you need
 │   ├── Software
 │   │   ├── Prerequisites
-│   │   ├── Software authentication
 │   │   ├── Verify the project repository
-│   │   ├── Create the `.jst/` scaffold
-│   │   ├── Fill `.jst/jira-sdlc-tools.local.env`
 │   │   └── Software setup gate
 │   ├── GitHub
 │   │   ├── Account, repository, and authentication
@@ -43,6 +40,8 @@ STEP-BY-STEP-INSTALLATION
 │       └── Non Claude clients
 │           └── one page per client
 ├── Configuration
+│   ├── Create the `.jst/` scaffold
+│   └── Fill `.jst/jira-sdlc-tools.local.env`
 ├── Healthcheck
 ├── First tasks
 │   ├── Commit the setup

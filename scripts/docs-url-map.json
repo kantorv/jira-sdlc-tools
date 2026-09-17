@@ -95,17 +95,9 @@
       "slug": "/step-by-step-installation/verify-the-project-repository",
       "sidebar_position": 2
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/create-the-jst-scaffold.md": {
-      "slug": "/step-by-step-installation/create-the-jst-scaffold",
-      "sidebar_position": 3
-    },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/fill-the-local-env.md": {
-      "slug": "/step-by-step-installation/fill-the-local-env",
-      "sidebar_position": 4
-    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-setup-gate.md": {
       "slug": "/step-by-step-installation/software-setup-gate",
-      "sidebar_position": 5
+      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-account-repository-and-authentication.md": {
       "slug": "/step-by-step-installation/github-account-repository-and-authentication",
@@ -175,8 +167,16 @@
       "slug": "/step-by-step-installation/jira-setup-gate",
       "sidebar_position": 9
     },
-    "docs/STEP-BY-STEP-INSTALLATION/configuration.md": {
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/index.mdx": {
       "slug": "/step-by-step-installation/configuration",
+      "sidebar_position": 2
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/create-the-jst-scaffold.md": {
+      "slug": "/step-by-step-installation/create-the-jst-scaffold",
+      "sidebar_position": 1
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-local-env.md": {
+      "slug": "/step-by-step-installation/fill-the-local-env",
       "sidebar_position": 2
     },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {

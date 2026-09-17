@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/software-setup-gate
-sidebar_position: 5
+sidebar_position: 3
 sidebar_label: Software setup gate
 ---
 

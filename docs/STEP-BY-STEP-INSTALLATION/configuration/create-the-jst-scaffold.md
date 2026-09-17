@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/create-the-jst-scaffold
-sidebar_position: 3
+sidebar_position: 1
 sidebar_label: Create the .jst/ scaffold
 ---
 
