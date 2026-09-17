@@ -13,9 +13,6 @@ follows the same setup flow and verifies each part with the healthcheck.
 STEP-BY-STEP-INSTALLATION
 ├── Environment setup — what you need
 │   ├── Software
-│   │   ├── Prerequisites
-│   │   ├── Verify the project repository
-│   │   └── Software setup gate
 │   ├── GitHub
 │   │   ├── Account, repository, and authentication
 │   │   ├── Post install
@@ -24,6 +21,7 @@ STEP-BY-STEP-INSTALLATION
 │   │   ├── Split production from base
 │   │   ├── Verify GitHub access
 │   │   ├── Clone the base branch
+│   │   ├── Verify the project repository
 │   │   └── GitHub setup gate
 │   ├── Jira
 │   │   ├── Account, project, and board

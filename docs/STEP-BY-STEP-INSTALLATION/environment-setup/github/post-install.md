@@ -85,7 +85,7 @@ PROMPT='%F{green}%n@%m%f:%F{blue}%~%f %F{green}$(git_branch)%f$ '
 ```
 
 ⚠️ Unlike the bash and PowerShell versions above, this one is not tested — the
-same caveat the [Prerequisites](../software/prerequisites.md) table carries for
+same caveat the [Software](../software.md) table carries for
 macOS generally. Using bash on macOS instead? The bash snippet works as is, in
 `~/.bash_profile`.
 

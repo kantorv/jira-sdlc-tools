@@ -1,8 +1,7 @@
 You will need:
 
-- **Software** — see [Software](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/software)
+- **Software** — see [Software](software.md)
   - Install `git`, `gh`, and `jq`
-    (see [Prerequisites](software/prerequisites.md))
 - **GitHub** — see [GitHub](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/github)
   - Account (can be free)
   - Repository

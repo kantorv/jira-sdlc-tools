@@ -1,17 +1,17 @@
 ---
-slug: /step-by-step-installation/prerequisites
+slug: /step-by-step-installation/software
 sidebar_position: 1
-sidebar_label: Prerequisites
+sidebar_label: Software
 ---
 
-# Prerequisites
+# Software
 
 ## Tools
 
 | Tool | Title | Uses | Install URL | Local docs |
 | -- | -- | -- | -- | -- |
 | `git` | Version control | commit/push | [git-scm.com/downloads](https://git-scm.com/downloads) | — |
-| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](../../../github/GH-PAT-SESSION-LOGIN.md) |
+| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](../../github/GH-PAT-SESSION-LOGIN.md) |
 | `jq` | JSON processor | parse Jira REST responses (`jira.sh`) | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | — |
 | `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | — |
 

@@ -57,9 +57,6 @@
     "docs/history": {
       "slug": "/history"
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software": {
-      "slug": "/step-by-step-installation/software"
-    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github": {
       "slug": "/step-by-step-installation/github"
     },
@@ -87,17 +84,9 @@
       "slug": "/installing-github-for-jira",
       "sidebar_position": 4
     },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/prerequisites.md": {
-      "slug": "/step-by-step-installation/prerequisites",
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software.md": {
+      "slug": "/step-by-step-installation/software",
       "sidebar_position": 1
-    },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/verify-the-project-repository.md": {
-      "slug": "/step-by-step-installation/verify-the-project-repository",
-      "sidebar_position": 2
-    },
-    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/software/software-setup-gate.md": {
-      "slug": "/step-by-step-installation/software-setup-gate",
-      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-account-repository-and-authentication.md": {
       "slug": "/step-by-step-installation/github-account-repository-and-authentication",
@@ -127,9 +116,13 @@
       "slug": "/step-by-step-installation/clone-the-base-branch",
       "sidebar_position": 7
     },
+    "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/verify-the-project-repository.md": {
+      "slug": "/step-by-step-installation/verify-the-project-repository",
+      "sidebar_position": 8
+    },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/github-setup-gate.md": {
       "slug": "/step-by-step-installation/github-setup-gate",
-      "sidebar_position": 8
+      "sidebar_position": 9
     },
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/jira/jira-account-project-and-board.md": {
       "slug": "/step-by-step-installation/jira-account-project-and-board",
