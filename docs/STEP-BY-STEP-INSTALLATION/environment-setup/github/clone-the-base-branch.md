@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/clone-the-base-branch
-sidebar_position: 7
+sidebar_position: 8
 sidebar_label: Clone the base branch
 ---
 

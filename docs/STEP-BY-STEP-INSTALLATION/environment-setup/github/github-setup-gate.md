@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/github-setup-gate
-sidebar_position: 9
+sidebar_position: 10
 sidebar_label: GitHub setup gate
 ---
 

@@ -14,7 +14,12 @@ STEP-BY-STEP-INSTALLATION
 ├── Environment setup — what you need
 │   ├── Software
 │   ├── GitHub
-│   │   ├── Account, repository, and authentication
+│   │   ├── Account and Repository
+│   │   ├── Authentication
+│   │   │   ├── Credentials manager
+│   │   │   ├── SSH key
+│   │   │   ├── PAT
+│   │   │   └── gh auth login
 │   │   ├── Post install
 │   │   │   └── Add the git branch to your command prompt
 │   │   ├── Verify GitHub authentication

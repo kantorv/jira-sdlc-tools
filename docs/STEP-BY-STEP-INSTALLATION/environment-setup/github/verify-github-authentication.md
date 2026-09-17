@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/verify-github-authentication
-sidebar_position: 3
+sidebar_position: 4
 sidebar_label: Verify GitHub authentication
 ---
 
