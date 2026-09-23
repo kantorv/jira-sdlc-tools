@@ -70,9 +70,21 @@
       "slug": "/installing-github-for-jira",
       "sidebar_position": 4
     },
-    "docs/setup/RUNNING-MULTIPLE-COPIES.md": {
+    "docs/parallel-instances/RUNNING-MULTIPLE-COPIES.md": {
       "slug": "/running-multiple-copies",
-      "sidebar_position": 5
+      "sidebar_position": 1
+    },
+    "docs/parallel-instances/python.md": {
+      "slug": "/parallel-instances/python",
+      "sidebar_position": 2
+    },
+    "docs/parallel-instances/react.md": {
+      "slug": "/parallel-instances/react",
+      "sidebar_position": 3
+    },
+    "docs/parallel-instances/docker-compose.md": {
+      "slug": "/parallel-instances/docker-compose",
+      "sidebar_position": 4
     },
     "docs/task-lifecycle/TASK-LIFECYCLE.md": {
       "slug": "/task-lifecycle",

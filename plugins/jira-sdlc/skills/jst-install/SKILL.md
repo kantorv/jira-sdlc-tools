@@ -176,10 +176,13 @@ both install modes.
 **1c. Hand the file over.** Tell the user to open
 `.jst/jira-sdlc-tools.local.env` in their editor and fill in, by hand:
 
-- `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`
+- `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`,
+  or on Windows the drive-letter form `C:\Users\you\projects\myapp-worktrees`
   (a sibling of this repo is the sensible place; section 2 creates it). A
   relative value means a different directory depending on which checkout a
-  skill runs from, so the gate FAILs on one
+  skill runs from, so the gate FAILs on one. On Windows, don't paste what Git
+  Bash's `pwd` prints (`/c/Users/…`) — Windows git and the `win/` PowerShell
+  ports can't resolve that form, and the gate WARNs on it
 - `JIRA_ACCOUNT_URL` — their Cloud site, `your-site.atlassian.net`, no scheme
 - `GITHUB_PAT_TOKEN` — a fine-grained PAT with **Contents: read/write** and
   **Pull requests: read/write** on this repo. Where to click:
@@ -231,20 +234,27 @@ repo with only `main` gives the assigner nowhere to branch from.
 
 **2b. Create the base branch if it's absent** — not optional, per the rule
 above; only its name is the user's call. Ask first anyway, because this pushes a
-new branch and changes the repo default, which is outward-facing and other
-people see it:
+new branch, which is outward-facing and other people see it:
 
 ```bash
 git switch main && git switch -c development && git push -u origin development
-gh repo edit <OWNER>/<REPO> --default-branch development
 ```
 
-Substitute the two names the user confirmed — `main`/`development` are this
+Substitute the names the user confirmed — `main`/`development` are this
 plugin's documented defaults, not a naming rule, and a repo using `master` or
-`develop` keeps its own names in the env file. A `404` from `gh repo edit` is
-almost never a wrong repo name: it's the PAT that can't see this repository,
-the same cause `gh_repo_access` names in 2e — fix the token's repository
-access rather than retyping `<OWNER>/<REPO>`.
+`develop` keeps its own names in the env file.
+
+**Making `development` the GitHub default branch is optional.** Recommend it,
+but don't block on it: it only saves people opening PRs by hand from picking
+the base in the GitHub UI, because nothing in this plugin reads the repo
+default — every `gh pr create` passes `--base` explicitly. Offer
+`gh repo edit <OWNER>/<REPO> --default-branch development`; if the user
+declines or the command errors, carry on — record the names in 2d and continue
+to 2c, nothing downstream is blocked. A `404` from `gh repo edit` is almost
+never a wrong repo name: the command needs repository *administration*
+permission, strictly more than the read/PR access `gh_repo_access` proves in
+2e, so that row can read OK while this command still 404s — grant the token
+admin on the repo rather than retyping `<OWNER>/<REPO>`.
 
 Mention that protecting both branches is recommended — everything reaches them
 through a reviewed PR, which is the flow the skills already produce — but don't
@@ -452,8 +462,10 @@ done
 
 **4b. Read the result.** Every row should be OK or INFO. The install-irrelevant
 rows named in the row map stay INFO (or WARN `skipped`), and `worktrees_dir` may WARN if the user
-skipped 2c — it FAILs, though, if they wrote a relative `WORKTREES_DIR`, and
-that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
+skipped 2c, or on Windows if they wrote the MSYS form (`/c/…`) rather than the
+drive-letter one — that WARN is worth acting on, since only the drive-letter
+form works on both dispatch paths. It FAILs if they wrote a relative
+`WORKTREES_DIR`, and that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
 rather than improvising — and name the two things the script structurally
 cannot see: whether the workflow permits the transitions the skills make (3b
 proved the names exist; 3d is the only proof of the transitions), and whether
@@ -504,6 +516,28 @@ rule inside `.jst/` in the first place: `git add .jst` then stages
 `jira-sdlc-tools.env` and `.gitignore` and leaves `local.env` out on its own.
 Copy across only the env file and that worktree ends up holding three Jira role
 tokens and a GitHub PAT with nothing ignoring them.
+
+**4e. Offer the optional worktree hook — `.jst/bootstrap.sh` and
+`.jst/teardown.sh`.** **Optional, and most projects don't need one**: raise it,
+don't push it, and never write one here — you'd have to guess the project's
+stack. The gap it closes is one nobody predicts, so name the gap rather than the
+file: the assigner gives each issue its own worktree, but a worktree is a
+*source tree*, not a *running instance*. Anything the app reaches outside its
+own directory — a database, a cache, an uploads tree, a fixed port — is shared
+between all of them by default, and two instances on one migration-driven
+database corrupt each other silently.
+
+Ask whether they'll want to run more than one worktree's app at a time. Yes, or
+unsure → point them at https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies:
+the share-vs-isolate decision framework, the `JST_*` contract the executor
+exports, and three worked examples to copy the shape from (a Python toolchain,
+a React/Vite SPA, a multi-service docker-compose stack). `jira-task-executor`
+runs `.jst/bootstrap.sh` (`bootstrap.ps1` on Windows) in its step 1, once per
+worktree, fail-soft; `.jst/teardown.sh` is its by-hand counterpart, run before
+`git worktree remove` — no skill invokes it. Statuscheck's `bootstrap` row
+reports either way and never blocks, so leaving this until they actually hit the
+collision costs nothing. No → say the row will read "no `.jst/bootstrap.sh`" and
+that this is fine, so nobody reads it as an unfinished step.
 
 Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step (the prose walkthrough this skill
 follows), https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist (the same ground as a tickable
