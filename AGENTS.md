@@ -66,9 +66,15 @@ reasoning, caveats, and how we plan to test them live in
   `jira-task-reviewer` 415 → 714 lines while its word count moved by
   *five*, and the long lines it replaced had hidden a real overage for
   years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
-  width. `jira-task-reviewer` is a recorded exception at ~6,100 — it is
+  width. `jira-task-reviewer` is a recorded exception at ~6,500 (the ceiling itself) — it is
   the only skill carrying two tracks plus a phase machine, and no
   realistic trim clears the target — so it reports `WARN (accepted)`.
+  JST-310 raised it from 6,100 to 6,350 for the *Reading PRs* rule (read
+  `current_pr`, confirm any other `[]` before concluding "no PR"): its
+  absence let the reviewer exit on an open PR, so correctness won over
+  words — then to 6,500 to leave ~150 words of headroom for updates. The
+  allowance now equals the ceiling, so there is nothing left to raise: the
+  next addition goes to `skills/_shared/`, not inline.
   An exception is a number, not a pass: exceed it and the plain WARN
   comes back, and if the file shrinks the script tells you to ratchet the
   allowance down. Add one only when the alternative is a warning nobody
@@ -155,7 +161,7 @@ The root README's three GIFs (8.4 MB) are the deliberate exception to that last
 row: they stay in the repo-root `assets/` and the README names them by absolute
 `raw.githubusercontent.com` URL, because README is not under the docs root and
 copying 8.4 MB into every future version snapshot is a permanent cost for
-nothing. `docs/assets/` (the four phase diagrams plus one PNG, ~500 KB) does
+nothing. `docs/assets/` (the four phase diagrams, one `.mmd` source, one PNG, ~500 KB) does
 move with the docs and is referenced relatively.
 
 Files under `docs/` whose name starts with `_` are **not published** —
@@ -294,6 +300,25 @@ unmatched parens, and participants used without being declared (mermaid
 auto-creates those). All confirmed against the parser. Don't rewrite them chasing
 an error; the semicolon is the one that bites, and the checker will point at it.
 
+**Then re-render the SVGs.** The lifecycle table and the root README show
+`docs/assets/task-lifecycle-phase-*.svg`, not the blocks, so a block edit
+without a render leaves the picture people actually see stale:
+
+```bash
+bash scripts/render-diagrams.sh           # rewrite every SVG whose source moved
+bash scripts/render-diagrams.sh --check   # exit 1 naming each stale SVG, writes nothing
+```
+
+It pins mermaid-cli (11.17.0, `-b white`) — the pipeline that reproduced every
+committed SVG byte-for-byte — so an unchanged source renders to an unchanged
+file, and the diff shows only diagrams that really moved. Its `DIAGRAMS` list
+maps each source to its SVG: a phase page contributes its one mermaid block,
+and the Phase 3 single-step preview, which no page carries as a block, has its
+own source in `docs/assets/task-lifecycle-phase-3-single-step.mmd`. Add a new
+diagram there rather than rendering by hand. It isn't a CI gate: headless
+Chromium measures text with the fonts it finds, so a runner with different
+fonts could flag SVGs whose source never changed.
+
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
 The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
@@ -343,11 +368,11 @@ knowing this up front saves chasing a port bug that isn't there:
 Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
 Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
 FAIL rows" footer under the table, so drop that block too or the diff shows
-three phantom lines. `gh_repo_access` skips itself when `gh_auth` failed, so it
-inherits the same noise and needs the same filter:
+three phantom lines. `gh_repo_access` and `current_pr` skip themselves when
+`gh_auth` failed, so they inherit the same noise and need the same filter:
 
 ```bash
-filt() { grep -vE '^\| (gh_auth|gh_repo_access)' | sed '/^Remedies for FAIL rows/,$d'; }
+filt() { grep -vE '^\| (gh_auth|gh_repo_access|current_pr)' | sed '/^Remedies for FAIL rows/,$d'; }
 ```
 
 **Or drop the filter entirely and exercise the real path** (JST-251): the only
