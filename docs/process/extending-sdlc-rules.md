@@ -348,7 +348,7 @@ ______________________________________________________________________
   suspect (angle brackets, colons, `→`, backticks) is fine.
 - **Skill word budget.** `SKILL.md` files are capped (~5,000 words, hard
   ceiling 6,500) and a flow change *adds* prose. `jira-task-reviewer` is
-  already a recorded exception at ~6,100. If your change pushes a skill over,
+  already a recorded exception at ~6,350. If your change pushes a skill over,
   the fix is progressive disclosure into `skills/_shared/*.md`, not deletion.
 - **The `.env` token rule.** Never hardcode a real project's branch names.
   `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH` and friends are tokens resolved

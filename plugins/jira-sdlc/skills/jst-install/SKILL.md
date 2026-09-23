@@ -101,7 +101,8 @@ purpose, and saying so keeps the user from chasing them:
 | 4 · healthcheck | every row, for all three roles | — |
 
 `worktree`, `branch`, `branch_project`, `issue_key`, `parent_branch`,
-`working_tree` and `bootstrap` are about *running an issue*, not installing.
+`current_pr` (it WARNs `skipped` off an issue branch), `working_tree` and
+`bootstrap` are about *running an issue*, not installing.
 Ignore them here — a main checkout on the base branch with no issue key is
 exactly right for this skill.
 
@@ -450,7 +451,7 @@ done
 ```
 
 **4b. Read the result.** Every row should be OK or INFO. The install-irrelevant
-rows named in the row map stay INFO, and `worktrees_dir` may WARN if the user
+rows named in the row map stay INFO (or WARN `skipped`), and `worktrees_dir` may WARN if the user
 skipped 2c — it FAILs, though, if they wrote a relative `WORKTREES_DIR`, and
 that one has to be fixed in the file. For anything still FAILing, relay the script's own remedy line
 rather than improvising — and name the two things the script structurally

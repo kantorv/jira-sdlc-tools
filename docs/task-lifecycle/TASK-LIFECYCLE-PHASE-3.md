@@ -29,7 +29,7 @@ The diagram surfaces the two systems the reviewer drives as their own
 swimlanes — **GIT** (anything that mutates or reads repo/PR state:
 `git fetch origin --prune`, the anchored `git branch -a --list` that finds
 `<PARENT-BRANCH>`, resolving this skill's own GitHub identity with
-`gh api user`, the phase-check `gh pr list`, the per-PR `3a`
+`gh api user`, the healthcheck's `current_pr` lookup the phase checks read, the per-PR `3a`
 idempotency lookup, fetching PR diffs, the step-4a per-PR merge-state
 lookup, `gh pr review --comment --body-file` with `APPROVED —` / `CHANGES REQUESTED —` body-prefix
 verdicts, and finding, mergeability-checking, or creating the aggregate
@@ -68,7 +68,7 @@ sequenceDiagram
 
     activate Reviewer
     Reviewer->>Reviewer: Pre-step — ensure_local_env.sh<br/>(credentials file exists — there is no login step)
-    Reviewer->>Reviewer: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role reviewer<br/>(worktree · branch · issue_key · parent_branch · gh_auth ·<br/>jira_auth probes the reviewer credential — any FAIL → stop)
+    Reviewer->>Reviewer: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role reviewer<br/>(worktree · branch · issue_key · parent_branch · current_pr · gh_auth ·<br/>jira_auth probes the reviewer credential — any FAIL → stop)
     Note right of Reviewer: not a linked worktree, or not a feature/ or hotfix/ issue branch → stop.<br/>Every verdict comment + reject transition below<br/>authenticates per-request as the reviewer
     Reviewer->>GIT: Step 1 — git fetch origin --prune
     Reviewer->>JIRA: Step 1 — fetch issue from branch key<br/>(summary, description, type, status, parent, subtasks — never comment)
@@ -86,8 +86,8 @@ sequenceDiagram
         Reviewer->>JIRA: Step 1 — issue view per sub-task key
         JIRA-->>Reviewer: statuses — the PR set is the <STATUS_IN_REVIEW> ones,<br/>but every status is kept: the phase check reads the whole set<br/>to tell "still in flight" from "all merged"
     end
-    Reviewer->>GIT: Step 1 — phase check — gh pr list (state all)
-    GIT-->>Reviewer: PR state (none | open | merged | closed-unmerged)
+    Reviewer->>Reviewer: Step 1 — phase check — read the healthcheck's current_pr row<br/>(gh pr list --head, state all, no --base — never re-queried by hand)
+    Note over Reviewer: PR state (none | open | merged | closed-unmerged) ·<br/>a current_pr WARN (several open, open off parent_branch, gh error) → stop and ask
     Note over Reviewer: both phase checks share two rules — several PRs back → act on the OPEN one<br/>(several open → ask which) · a CLOSED, unmerged PR matches no enumerated state,<br/>so stop and ask: someone abandoned this branch's PR deliberately, and both<br/>opening a replacement and reviewing a dead one would guess at intent
 
     Note over Reviewer: <SELF> — this skill's GitHub identity — is resolved ONCE per run,<br/>but only on the branches that actually review something. The four exits below that<br/>review nothing (no PR yet · S-MERGED · M-FULLY-COMPLETE as detected by this phase check ·<br/>nothing to review) never reach step 3 and never resolve it — 5a's second M-FULLY-COMPLETE<br/>detector is the exception, reached through the step-3 loop with <SELF> already resolved.<br/>Two branches DO review without entering step 3 — both every-sub-task-DONE splits below<br/>(no parent PR → 5a+5b · open parent PR → 5b) — so 5b resolves <SELF> itself on each
@@ -131,7 +131,7 @@ sequenceDiagram
     else Multistep — no parent PR yet
         Note over Reviewer: "no parent PR" splits on sub-task status —<br/>EVERY sub-task <STATUS_DONE> → the PRs are already merged and only the<br/>parent PR is missing, so skip to step 5 (the only place it is created) ·<br/>any sub-task not yet <STATUS_DONE> → still in flight, full pass below.<br/>The skip-to-5 route never enters step 3, so 5b resolves <SELF> itself there<br/>— the same as the open-parent-PR path further down
         loop Step 2 — per In Review sub-task: discover branch + PR
-            Reviewer->>GIT: git branch -a --list "*feature/<SUBTASK-KEY>-*"<br/>"*hotfix/<SUBTASK-KEY>-*" (anchored, strips the + worktree marker), then<br/>gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open
+            Reviewer->>GIT: git branch -a --list "*feature/<SUBTASK-KEY>-*"<br/>"*hotfix/<SUBTASK-KEY>-*" (anchored, strips the + worktree marker), then<br/>gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open<br/>(sub-task worktree: current_pr instead · an empty result is confirmed<br/>with --head only and state all before it counts as absent)
             GIT-->>Reviewer: sub-task branch + open PR (or none)
             Note over Reviewer: no branch / no open PR → flag & skip this sub-task ·<br/>more than one open PR → ask the user which to review
         end
@@ -176,7 +176,7 @@ sequenceDiagram
                     Reviewer-->>User: "all approved — merge manually, then re-run for the parent PR"
                 else all merged, guard passed → step 5
                     Note over Reviewer: guard: "every PR in the set is merged" is NOT "the feature is complete".<br/>The set only ever held sub-tasks that were <STATUS_IN_REVIEW> at step 1, so any<br/>sub-task not yet <STATUS_DONE> — still in progress, or skipped by step 2 for having<br/>no branch or no PR — stays on M-ALL-APPROVED and goes to step 6 instead.<br/>Otherwise step 5 would open an aggregate PR missing the outstanding work
-                    Reviewer->>GIT: Step 5a — find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>, gh pr list --state all)
+                    Reviewer->>GIT: Step 5a — find or create parent PR<br/>(<PARENT-BRANCH> → <BASE_BRANCH>, found from current_pr — never re-queried)
                     GIT-->>Reviewer: parent PR (open | created | merged | closed)<br/>several back → act on the OPEN one, several open → ask (same rule as step 2)
                     alt parent PR CLOSED
                         Reviewer-->>User: "parent PR is closed — stop, user decides"
@@ -277,8 +277,8 @@ sequenceDiagram
   outcomes differ.
 - **Participant routing** — the reviewer orchestrates three parties.
   **GIT** owns repo/PR state: the opening fetch, the anchored
-  `git branch -a --list` that resolves `<PARENT-BRANCH>`, the phase-check
-  `gh pr list`, the per-PR 3a
+  `git branch -a --list` that resolves `<PARENT-BRANCH>`, the healthcheck's
+  `current_pr` lookup the phase checks read, the per-PR 3a
   idempotency lookup, fetching PR diffs, step 4a's per-PR
   `gh pr view --json state` merge check, the verdict comment (`gh pr review --comment --body-file`), and finding or creating the aggregate
   parent PR. **JIRA** owns issue state: fetching the parent + sub-tasks
@@ -309,8 +309,10 @@ sequenceDiagram
   determined, and the parent PR is never touched — that sweep belongs to a
   separate run from the parent's own worktree. Its walk is step 2 (for this
   one sub-task) → 3 → 6 → 7.
-- **Phase check first, and track-aware** — an explicit GIT `gh pr list`
-  whose return dispatches the top-level branches. On the **single-step**
+- **Phase check first, and track-aware** — the healthcheck's `current_pr` row
+  (`gh pr list --head <PARENT-BRANCH> --state all`, no `--base`, never
+  re-queried by hand, because a filter that misses returns `[]` rather than an
+  error) dispatches the top-level branches. On the **single-step**
   track it has three outcomes: *no* PR → report that the executor hasn't
   opened one yet and exit (nothing to review); an *open* PR → the step-3
   review loop; a *merged* PR → the S-MERGED report and exit. On the
@@ -378,7 +380,7 @@ sequenceDiagram
 - **Empty exits and flag-and-skip (step 2)** — the reviewer first discovers
   each In Review sub-task's branch (anchored `git branch -a --list` globs
   that also strip git's `+` marker for a branch checked out in another
-  worktree) and its open PR — `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open`. A sub-task with **no branch or no open PR** is
+  worktree) and its open PR — `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open`, whose empty result is confirmed once with `--head` only and `--state all` before it counts. A sub-task with **no branch or no open PR** is
   flagged and skipped, not reviewed; **more than one** open PR is a question
   for the user, the same rule the phase checks carry. If **zero** sub-tasks have an open PR,
   the run reports that there is nothing to review and exits before the
@@ -426,7 +428,7 @@ sequenceDiagram
   skips 3e on the sub-task-worktree path.
 - **Parent PR: review, approve *or reject*, still never merge (multistep
   only)** — once every sub-task PR is merged, the reviewer finds or creates
-  the aggregate parent PR (GIT). `gh pr list --state all` there returns four
+  the aggregate parent PR (GIT). `current_pr` (`--state all`) there shows four
   states, not three: if that PR is already **CLOSED** it stops
   and lets the user decide (5a) — it never reopens or recreates it; if it is
   already **MERGED**, 5a is the second detector of M-FULLY-COMPLETE, after

@@ -135,12 +135,13 @@ actually acts on).
 | `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — the sub-task's parent, not the base, when this is a sub-task worktree, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
+| `current_pr` | INFO/WARN, never FAIL: every PR whose head is the *current* branch (`gh pr list --head <branch> --state all`, no `--base`) as `#<n> <STATE> → <base> (<url>)`, or `none (…)`. The phase checks, 5a, and the sub-task-worktree step 2 read it — see *Reading PRs* after the walk table |
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy line
 to the user, and wait — don't self-repair. Apply the `worktree` and `branch`
 stop conditions from the table yourself, since those rows never FAIL.
 Otherwise, state what the role-specific rows read — `worktree`, `branch`,
-`issue_key`, `parent_branch` — before your first call after the healthcheck;
+`issue_key`, `parent_branch`, `current_pr` — before your first call after the healthcheck;
 a message batched with the healthcheck can't state them, because the values
 don't exist yet.
 
@@ -256,22 +257,42 @@ don't exist yet.
 | parent's worktree, has sub-tasks (**multistep**) | each sub-task PR in `<STATUS_IN_REVIEW>` (→ `<PARENT-BRANCH>`) | multistep phase check → 2 → 3 → 4a *(all approved)* / 4b *(any rejected)* → 5 *(only when every sub-task is `<STATUS_DONE>`)* → 6 → 7 |
 | a **sub-task's** worktree | that one sub-task's PR | 2 *(for this sub-task only)* → 3 → 6 → 7 |
 
-Two rules hold for **both** phase checks below, which run the same query. If
-several PRs come back, act on the OPEN one — if several are open, ask which
-(same as step 2). And a **CLOSED, unmerged** PR matches none of the
-enumerated states → stop and ask: someone abandoned this branch's PR
-deliberately, so opening a replacement or reviewing a dead one both guess at
-intent.
+### Reading PRs — `current_pr` for this branch, one rule for any other
+
+**The current branch** (the phase checks and 5a — from the parent's worktree
+it *is* `<PARENT-BRANCH>` — and step 2 on the sub-task-worktree path): read
+the healthcheck's `current_pr` row, which queried it with the bare branch
+name, `--state all` and no `--base`. **Don't re-run `gh pr list` for the
+current branch** — `gh` answers a filter that misses with `[]`, not an error,
+so hand-typed variants (an `owner:branch` head, a narrowed `--state`, a
+`--base`) read an open PR as none (JST-310). Then:
+
+- Several PRs → act on the OPEN one.
+- `skipped (…)`, or a branch other than the current one → the rule below.
+- Any other **WARN** (several OPEN, OPEN off `parent_branch`, a `gh` error),
+  or an OPEN PR off the base the step expects (`<BASE_BRANCH>`; a sub-task's
+  is `<PARENT-BRANCH>`) → stop and ask — never exit as "no PR" or open a
+  second one.
+- A **CLOSED, unmerged** PR matches none of the enumerated states → stop and
+  ask: someone abandoned this branch's PR deliberately, so opening a
+  replacement or reviewing a dead one both guess at intent.
+
+**Any other branch** (step 2's sub-task lookup, 5a's merged-URL lookup):
+
+1. Run the command as written: `--head` takes the bare branch name, never
+   `owner:branch`; don't narrow `--state`.
+2. `[]` alone never proves absence. Before concluding "no PR" (skip, exit, or
+   create), confirm once with
+   `gh pr list --head <branch> --state all --json number,state,baseRefName,url`
+   and show the `baseRefName`s. Still nothing the step wants → absent. A PR on
+   an unexpected base → report it and stop to ask.
 
 ### Single-step phase check (only for the single-step track)
 
-Check whether a PR already exists targeting `<BASE_BRANCH>`:
+Read `current_pr` (*Reading PRs* above) — has the executor opened
+`<PARENT-BRANCH>` → `<BASE_BRANCH>`?
 
-```bash
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
-```
-
-- **No PR exists yet** → The executor hasn't opened one. Report:
+- **`none` — no PR exists yet** → The executor hasn't opened one. Report:
   "Single-step issue `<PARENT-KEY>` has no open PR yet. The reviewer will
   run once the PR is created." Exit.
 - **PR exists and is OPEN** → Proceed to step 3 to review this PR (skip step
@@ -281,11 +302,10 @@ gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number
 
 ### Multistep phase check (only for the multistep track)
 
-```bash
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,state,url
-```
+Read `current_pr` (*Reading PRs* above) for the parent PR,
+`<PARENT-BRANCH>` → `<BASE_BRANCH>`:
 
-- **No parent PR exists yet** → split on the sub-task statuses step 1 just
+- **`none` — no parent PR exists yet** → split on the sub-task statuses step 1 just
   fetched, because "no parent PR" has two very different causes:
   - **Any sub-task not yet `<STATUS_DONE>`** → they are genuinely still in
     flight. Continue to step 2 for a full review pass.
@@ -316,9 +336,10 @@ For each `<SUBTASK-KEY>` that passed the status filter:
 - Find its branch with step 1's listing, with `<SUBTASK-KEY>` in place of
   `<PARENT-KEY>` in both `--list` patterns. If no branch exists yet, that
   sub-task hasn't been implemented — flag it in the report and skip it.
-- Find the open PR: `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open --json number,title,state,url`. `--state open` is deliberate here (unlike 5a's `--state all`): an already-merged
+- Find the open PR — on the sub-task-worktree path the sub-task's branch is
+  the current one, so read `current_pr`; otherwise run `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open --json number,title,state,url` under *Reading PRs*' rule for other branches. `--state open` is deliberate here (unlike `current_pr`'s `--state all`): an already-merged
   sub-task PR is finished work, and it's the phase check that reads those.
-  If no PR exists, flag and skip. If more than one open PR, ask the user which one to review.
+  If no PR exists — after that rule's confirmation query — flag and skip. If more than one open PR, ask the user which one to review.
 - Record: `{ key, branch, prNumber, prUrl }`.
 
 If **zero** sub-tasks have open PRs, report and exit — **except on the
@@ -570,22 +591,14 @@ from the template rather than composing your own.
 
 ### 5a. Find or create the parent PR
 
-```bash
-gh pr list --head <PARENT-BRANCH> --base <BASE_BRANCH> --state all --json number,title,state,url
-```
+Read `current_pr` again (*Reading PRs* above) — still current, since this
+run has opened no PR. Re-querying is how 5a once missed an off-base parent PR
+and nearly opened a *second* one (JST-286).
 
-If several PRs come back, act on the OPEN one; if several are open, ask which
-— same as step 2.
-
-`--state all` is load-bearing: `gh pr list` defaults to open only, so
-without it a merged or closed parent PR reads as "No PR exists" — the two
-branches below become unreachable and 5a opens a *second* PR for the same
-pair.
-
-- **No PR exists** → create one (write the body to a temp file — see the
+- **`none` — no PR exists** → create one (write the body to a temp file — see the
   body mechanics in the preamble). The sub-task PR URLs come from
   step 2's records; when the phase check jumped straight here, step 2 never
-  ran — list the sub-task keys and resolve each URL with `gh pr list --head <subtask-branch> --state merged --json url`, or omit the URLs rather than
+  ran — list the sub-task keys and resolve each URL with `gh pr list --head <subtask-branch> --state merged --json url` under *Reading PRs*' rule for other branches, or omit the URLs rather than
   inventing them:
   ```bash
   cat > /tmp/<PARENT-KEY>-pr-body.md <<'EOF'

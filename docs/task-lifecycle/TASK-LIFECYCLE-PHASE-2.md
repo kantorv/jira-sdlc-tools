@@ -51,7 +51,7 @@ sequenceDiagram
         Executor->>JIRA: Pre-step — check_assignee.sh --role executor<br/>(is <KEY-A> assigned to me? compares accountId, not email)
         JIRA-->>Executor: assignee
         Note right of Executor: NOT mine → STOP, exit. No transition, no branch, no commit, no comment.<br/>unassigned · assigned to someone else → the stop prints the assign command.<br/>unreadable (no access · API timeout) → stops earlier, without it
-        Executor->>Executor: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role executor<br/>(worktree · branch · issue_key · parent_branch · production_branch ·<br/>bootstrap · jira_account_url · gh_auth · gh_repo_access — any FAIL → stop)
+        Executor->>Executor: Pre-step — Discovery & healthcheck<br/>statuscheck.sh --role executor<br/>(worktree · branch · issue_key · parent_branch · production_branch ·<br/>bootstrap · jira_account_url · gh_auth · gh_repo_access · current_pr — any FAIL → stop)
         Note right of Executor: not a linked worktree, or not a feature/ or hotfix/ issue branch → stop.<br/>issue_key comes off the branch name — it is the only source of <KEY-A>.<br/>gh rows are checked HERE so step 10 never discovers a logged-out gh
         opt Step 1a — bootstrap row read "present"
             Executor->>Executor: .jst/bootstrap.sh with the JST_* contract<br/>(fail-soft — report a non-zero exit and carry on)
@@ -83,10 +83,10 @@ sequenceDiagram
         Note right of Executor: still failing on the individual re-run → stop & ask, no commit/push/PR
         Executor->>GIT: Step 8 — commit (staged explicitly) • Step 9 — push -u origin
         GIT-->>Executor: branch pushed
-        Executor->>GIT: Step 10 — gh pr list --head <branch> --state open
-        GIT-->>Executor: the open PR and its URL, or none
+        Executor->>Executor: Step 10 — read the healthcheck's current_pr row<br/>(never a fresh gh pr list — a filter that misses returns [], not an error)
+        Note right of Executor: the open PR and its URL, or none ·<br/>a current_pr WARN (several open, open off parent_branch, gh error) → stop & ask
         alt an open PR already exists (the re-run after a reject)
-            Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, the base is not re-resolved,<br/>and the URL is the one the list just returned)
+            Executor->>GIT: gh pr comment — what this run fixed<br/>(no second PR, the base is not re-resolved,<br/>and the URL is the one current_pr listed)
         else no PR yet
             Executor->>Executor: pr_base.sh --role executor --parent-key <PARENT_KEY><br/>git config → Jira "PR target branch:" comment →<br/>parent-branch search → env default (top-level issues only)
             Note right of Executor: source=unresolved → stop & ask · source=branch-search → proceed,<br/>naming the branch in the report · source=env-default → proceed, say so ·<br/>prefix and base disagreeing — a hotfix/ off production, or a feature/ on it<br/>(top-level only — a sub-task is exempt) → stop & ask
@@ -181,7 +181,8 @@ sequenceDiagram
   PR (GIT), transitions to *In Review* (JIRA), and posts its run-report
   comment (JIRA). The PR is the thing phase 3 reviews.
 - **Step 10 has two arms, and the second one is the re-run** — the executor
-  runs `gh pr list --head <branch> --state open` *before* anything else at
+  reads the healthcheck's `current_pr` row (`gh pr list --head <branch> --state all`,
+  run once at Discovery and never re-queried by hand) *before* anything else at
   step 10. An **existing open PR** means this is the re-run after a
   rejection: step 9's push has already updated that PR, so the executor
   posts a `gh pr comment` saying what it fixed — for the reviewer's next
