@@ -1,12 +1,12 @@
 ---
 name: jst-install
-description: Guided first-time setup of the jira-sdlc plugin in your own project. Walks the four sections of https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step in order — local tooling, GitHub repo preparation, Jira board preparation, healthcheck — and verifies each one with the bundled statuscheck script before moving to the next, so a missing `development` branch or a misspelled status name surfaces at setup instead of mid-run. Writes the team-shared `.jst/jira-sdlc-tools.env` for you; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env` — it tells you which file to copy and which keys to fill in by hand. Run it once per project, from the project root, before the first `jira-task-assigner` run.
+description: Guided first-time setup of the jira-sdlc plugin in your own project. Walks the four sections of https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation in order — local tooling, GitHub repo preparation, Jira board preparation, healthcheck — and verifies each one with the bundled statuscheck script before moving to the next, so a missing `development` branch or a misspelled status name surfaces at setup instead of mid-run. Writes the team-shared `.jst/jira-sdlc-tools.env` for you; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env` — it tells you which file to copy and which keys to fill in by hand. Run it once per project, from the project root, before the first `jira-task-assigner` run.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion
 ---
 
 You are walking a new user through first-time setup of this plugin **in their
-own project**. Everything below follows https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step — same four
+own project**. Everything below follows https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation — same four
 sections, same order — with a verification gate between each, which is the
 whole point: the prose docs let someone work the whole list and only discover at
 the first real run that the board has no `In Review` column.
@@ -126,7 +126,7 @@ git --version; gh --version; $PSVersionTable.PSVersion
 
 `&&` stops at the first missing tool and names it; PowerShell's `;` runs all of
 them, so scan for the one that errored. Report what's missing with its install
-URL (https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist § *Your PC* has them) and stop until
+URL (https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/full-setup-checklist § *Your PC* has them) and stop until
 the user has it — the later sections all shell out to these.
 
 Then check the prerequisite this skill **cannot create for them** — a git repo
@@ -539,7 +539,7 @@ reports either way and never blocks, so leaving this until they actually hit the
 collision costs nothing. No → say the row will read "no `.jst/bootstrap.sh`" and
 that this is fine, so nobody reads it as an unfinished step.
 
-Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step (the prose walkthrough this skill
-follows), https://kantorv.github.io/jira-sdlc-tools/docs/full-setup-checklist (the same ground as a tickable
-list, with each item's "how to check it"), `../_shared/project-config.md`
+Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation (the walkthrough this skill
+follows), https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/full-setup-checklist (the same
+ground as a tickable list, with each item's "how to check it"), `../_shared/project-config.md`
 (every variable in both env files), https://kantorv.github.io/jira-sdlc-tools/docs/sdlc (the branching policy).

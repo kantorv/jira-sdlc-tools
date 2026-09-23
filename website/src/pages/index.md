@@ -16,11 +16,10 @@ explicit-invocation only by design — never auto-triggered.
 
 ## Start here
 
-- **[Installation](/docs/installation)** — install the plugin from its
-  marketplace and point it at your project.
-- **[Step by step](/docs/step-by-step)** — one feature all the way through, from
-  request to merged pull request.
-- **[Full setup checklist](/docs/full-setup-checklist)** — every credential,
+- **[Step-by-step installation](/docs/step-by-step-installation)** — install
+  the plugin from its marketplace, point it at your project, and take one
+  feature all the way through, from request to merged pull request.
+- **[Full setup checklist](/docs/step-by-step-installation/full-setup-checklist)** — every credential,
   settings file and Jira/GitHub prerequisite in one list.
 - **[Task lifecycle](/docs/task-lifecycle)** — what the three skills do to an
   issue, and where a human still decides.
@@ -40,7 +39,7 @@ This plugin acts as an authenticated user in both git and Jira. Given
 credentials, it will commit, push branches, open pull requests, and create,
 transition and comment on issues. Read
 [Security](/docs/security) and the
-[full setup checklist](/docs/full-setup-checklist) before the first run, and
+[full setup checklist](/docs/step-by-step-installation/full-setup-checklist) before the first run, and
 point it at a project you are comfortable having changed.
 
 Source, issues and releases live on

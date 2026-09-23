@@ -34,7 +34,7 @@ configured — your own, or a dedicated one per skill.
 
 Use it with caution: point it at a project you're comfortable having
 changed, and read
-[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md#settings-files)
+[Settings files](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md#settings-files)
 before the first run so you know which repo and which Jira project it's wired to.
 
 What it deliberately never does on its own — merging into your base
@@ -49,7 +49,8 @@ You will need
 - **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
 - **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
 
-Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md).
+Check out the installation docs:
+[Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation).
 
 ## Quick install
 
@@ -69,11 +70,11 @@ git clone https://github.com/kantorv/jira-sdlc-tools.git
 claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
 ```
 
-See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md)
+See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md)
 
 ### Non Claude Code assistants
 
-This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
+This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
 
 ## Platform Compatibility Matrix
 
@@ -87,15 +88,15 @@ and a link to its detailed doc.
 
 | Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
 | -- | -- | -- | -- | -- | -- |
-| [Claude Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) |
-| [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) |
-| [Kilo Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) |
-| [Codex (CLI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) |
-| [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) |
-| [OpenCode](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) |
-| [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) |
+| [Claude Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/claude-code.md) |
+| [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CURSOR.md) |
+| [Kilo Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KILO.md) |
+| [Codex (CLI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/CODEX.md) |
+| [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/ANTIGRAVITY.md) |
+| [OpenCode](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/OPENCODE.md) |
+| [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) |
+| [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) |
+| [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) |
 
 **Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
@@ -230,8 +231,8 @@ The three skills, one per stage of the lifecycle:
 Plus one that runs before all three, once per project:
 
 - **[`jst-install`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)** — guided
-  first-time setup. Walks the four sections of
-  [Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md) — local tooling,
+  first-time setup. Walks
+  [Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation) — local tooling,
   GitHub repo prep, Jira board prep, healthcheck — verifying each with the
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
@@ -241,10 +242,10 @@ Plus one that runs before all three, once per project:
 Everything to have in place before the first run — the three CLIs, both API
 tokens, the two settings files, and the branches and board your project needs —
 is a tickable list in
-**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/FULL-SETUP-CHECKLIST.md)**,
+**[Full setup checklist](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md)**,
 ending in one command that verifies most of it for you.
 
-Prefer it as prose? **[Step by step](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md)**
+Prefer it as prose? **[Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation)**
 walks the same ground in the order you actually do it.
 
 Prefer to be walked through it? `/jira-sdlc:jst-install` covers the same four
@@ -260,12 +261,12 @@ driving the three skills headlessly in CI, from a standalone reviewer gate on
 an open PR up to the full assigner → executor → reviewer chain on the feature
 and hotfix paths. Full detail, including production-environment setup and
 which secrets each demo reads, is in
-**[Applications](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/APPLICATIONS.md)**.
+**[GitHub Automations](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/GITHUB-AUTOMATIONS.md)**.
 
-Five scenarios, each with its own walkthrough. "Approvals" counts the
+Four scenarios, each with its own walkthrough. "Approvals" counts the
 `environment: production` pauses a run waits on before it can continue.
 
-- **[Feature flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-feature-flow-demo.md)**
+- **[Feature flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-feature-flow-demo.md)**
   — the whole assigner → executor → reviewer chain on the planned path: a
   GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
   and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
@@ -274,20 +275,20 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
   (Claude Code · `/make-feature`) ·
   [`demo-fcc-nvidia-nim-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-make-feature`)
-- **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-hotfix-flow-demo.md)**
+- **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-hotfix-flow-demo.md)**
   — the same chain on the emergency path: `hotfix/*` cut off
   `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
   Comment-triggered, up to 3 approvals.
   [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-hotfix-flow.yml)
   (Claude Code · `/make-hotfix`)
-- **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-review-pr-demo.md)** —
+- **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/review/ci-review-pr-demo.md)** —
   the reviewer on its own against an already-open PR, posting its verdict to
   GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
   [`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-reviewer.yml)
   (Claude Code · `/review`) ·
   [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-review`)
-- **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-issue-to-task-demo.md)**
+- **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md)**
   — the assigner alone: a commented issue becomes a Jira Task (or Bug) with its
   branch and worktree, and the run stops there. Comment-triggered
   (`/make-task` / `/make-bug`), gated by the OWNER/MEMBER author check — and
@@ -298,13 +299,6 @@ Five scenarios, each with its own walkthrough. "Approvals" counts the
   (Claude Code · `/make-task`) ·
   [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
   (Claude Code · `/make-bug`)
-- **[Smoke test](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/applications/ci-smoke-test-demo.md)** —
-  **no skill runs.** It installs a coding assistant, points it at this plugin's
-  `skills/`, and drives one plain inference to prove the backend is wired up —
-  the plumbing check before you trust a new client or model with a real flow.
-  Manual, no approval gate.
-  [`demo-kimi-openrouter-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-kimi-openrouter-reviewer.yml)
-  (Kimi Code + OpenRouter · `workflow_dispatch`)
 
 ## Jira states - who can move a card
 
