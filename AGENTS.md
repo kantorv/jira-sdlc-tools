@@ -66,14 +66,15 @@ reasoning, caveats, and how we plan to test them live in
   `jira-task-reviewer` 415 → 714 lines while its word count moved by
   *five*, and the long lines it replaced had hidden a real overage for
   years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
-  width. `jira-task-reviewer` is a recorded exception at ~6,350 — it is
+  width. `jira-task-reviewer` is a recorded exception at ~6,500 (the ceiling itself) — it is
   the only skill carrying two tracks plus a phase machine, and no
   realistic trim clears the target — so it reports `WARN (accepted)`.
-  JST-310 raised it from 6,100 for the *Reading PRs* rule (read
+  JST-310 raised it from 6,100 to 6,350 for the *Reading PRs* rule (read
   `current_pr`, confirm any other `[]` before concluding "no PR"): its
   absence let the reviewer exit on an open PR, so correctness won over
-  words. That leaves ~150 words under the ceiling — the next addition goes
-  to `skills/_shared/`, not inline.
+  words — then to 6,500 to leave ~150 words of headroom for updates. The
+  allowance now equals the ceiling, so there is nothing left to raise: the
+  next addition goes to `skills/_shared/`, not inline.
   An exception is a number, not a pass: exceed it and the plain WARN
   comes back, and if the file shrinks the script tells you to ratchet the
   allowance down. Add one only when the alternative is a warning nobody

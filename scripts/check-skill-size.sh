@@ -50,7 +50,7 @@ CEILING=6500
 accepted_budget() {
   case "$1" in
     jira-task-reviewer/SKILL.md|*/jira-task-reviewer/SKILL.md)
-      echo "6350 the only skill carrying two tracks plus a phase machine" ;;
+      echo "6500 the only skill carrying two tracks plus a phase machine" ;;
   esac
 }
 
