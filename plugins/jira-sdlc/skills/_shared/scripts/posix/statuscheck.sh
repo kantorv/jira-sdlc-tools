@@ -503,6 +503,64 @@ else
   esac
 fi
 
+# --- the current branch's PR(s) ----------------------------------------------
+# Answers "which PR does the branch I'm standing on have" once, the same way on
+# every run, so no skill hand-types that lookup (JST-310). gh answers a filter
+# that misses with [] rather than an error, so every argument is load-bearing:
+# --head takes the BARE branch name (owner:branch silently matches nothing),
+# --state all keeps a merged/closed PR visible, and there is deliberately no
+# --base — a PR opened against an unexpected base must show up (and WARN), not
+# read as "none". Never FAILs: whether "no PR" is a problem is the calling
+# skill's judgement. Skipped off an issue branch, so the assigner (on the base
+# branch) pays no extra API call. PARENT feeds the parent_branch row below too.
+PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
+CP_SLUG=""
+[ -n "${ORIGIN_URL:-}" ] && CP_SLUG=$(gh_slug "$ORIGIN_URL" || true)
+if [ -z "$GH_OK" ]; then
+  row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a logged-in gh; see rows above)"
+elif [ -z "${ORIGIN_URL:-}" ]; then
+  row current_pr WARN "skipped (no 'origin' remote to look PRs up on — see gh_repo_access)"
+elif [ -z "$CP_SLUG" ]; then
+  row current_pr WARN "skipped (origin is not a github.com remote — see gh_repo_access)"
+elif [ -z "$BR" ]; then
+  row current_pr WARN "skipped (detached HEAD — no branch to look PRs up for)"
+elif [ "$BR" = "$BASE_BRANCH" ] || [ "$BR" = "$PRODUCTION_BRANCH" ]; then
+  row current_pr WARN "skipped ($BR is a base branch, not an issue branch)"
+elif [ -z "$BRANCH_OK" ]; then
+  row current_pr WARN "skipped ($BR is not a feature/hotfix issue branch)"
+else
+  CP_ERRF=$(mktemp)
+  if CP_OUT=$($TMOUT_CMD gh pr list --repo "$CP_SLUG" --head "$BR" --state all \
+        --json number,state,baseRefName,url \
+        --jq '.[] | "\(.number)\t\(.state)\t\(.baseRefName)\t\(.url)"' 2>"$CP_ERRF"); then
+    if [ -z "$CP_OUT" ]; then
+      row current_pr INFO "none on $CP_SLUG (gh pr list --head $BR --state all)"
+    else
+      CP_LIST=""; CP_OPEN=0; CP_OFF=""
+      while IFS=$'\t' read -r n st base url; do
+        [ -n "$n" ] || continue
+        CP_LIST="${CP_LIST:+$CP_LIST; }#$n $st → $base ($url)"
+        if [ "$st" = OPEN ]; then
+          CP_OPEN=$((CP_OPEN + 1))
+          [ -n "$PARENT" ] && [ "$base" != "$PARENT" ] && CP_OFF="${CP_OFF:+$CP_OFF, }#$n"
+        fi
+      done <<< "$CP_OUT"
+      CP_WHY=""
+      [ "$CP_OPEN" -gt 1 ] && CP_WHY="$CP_OPEN PRs are OPEN — expected at most one"
+      [ -n "$CP_OFF" ] && CP_WHY="${CP_WHY:+$CP_WHY; }OPEN $CP_OFF targets a base other than parent_branch $PARENT"
+      if [ -n "$CP_WHY" ]; then
+        row current_pr WARN "$CP_LIST — $CP_WHY"
+      else
+        row current_pr INFO "$CP_LIST"
+      fi
+    fi
+  else
+    ERR=$(awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}' "$CP_ERRF")
+    row current_pr WARN "gh pr list --head $BR --state all failed: ${ERR:-(no error output from gh)} — PRs unknown, not absent"
+  fi
+  rm -f "$CP_ERRF"
+fi
+
 # --- Jira auth (needed by every 'jira.sh …' call) -------------------------
 # Per-request Basic auth via `jira.sh --role <caller> whoami` (GET /myself): one
 # live call, no global login state and no cache. Auth is role-scoped, so this
@@ -670,7 +728,6 @@ else
   row bootstrap INFO "no .jst/$BOOTSTRAP_FILE (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 fi
 
-PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
 row parent_branch INFO "${PARENT:-unset} (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
 DIRTY=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
