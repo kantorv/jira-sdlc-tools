@@ -160,7 +160,7 @@ The root README's three GIFs (8.4 MB) are the deliberate exception to that last
 row: they stay in the repo-root `assets/` and the README names them by absolute
 `raw.githubusercontent.com` URL, because README is not under the docs root and
 copying 8.4 MB into every future version snapshot is a permanent cost for
-nothing. `docs/assets/` (the four phase diagrams plus one PNG, ~500 KB) does
+nothing. `docs/assets/` (the four phase diagrams, one `.mmd` source, one PNG, ~500 KB) does
 move with the docs and is referenced relatively.
 
 Files under `docs/` whose name starts with `_` are **not published** —
@@ -298,6 +298,25 @@ tokens (`<KEY>`), em-dashes, `→`, colons, commas, `#`, backticks, pipes, brace
 unmatched parens, and participants used without being declared (mermaid
 auto-creates those). All confirmed against the parser. Don't rewrite them chasing
 an error; the semicolon is the one that bites, and the checker will point at it.
+
+**Then re-render the SVGs.** The lifecycle table and the root README show
+`docs/assets/task-lifecycle-phase-*.svg`, not the blocks, so a block edit
+without a render leaves the picture people actually see stale:
+
+```bash
+bash scripts/render-diagrams.sh           # rewrite every SVG whose source moved
+bash scripts/render-diagrams.sh --check   # exit 1 naming each stale SVG, writes nothing
+```
+
+It pins mermaid-cli (11.17.0, `-b white`) — the pipeline that reproduced every
+committed SVG byte-for-byte — so an unchanged source renders to an unchanged
+file, and the diff shows only diagrams that really moved. Its `DIAGRAMS` list
+maps each source to its SVG: a phase page contributes its one mermaid block,
+and the Phase 3 single-step preview, which no page carries as a block, has its
+own source in `docs/assets/task-lifecycle-phase-3-single-step.mmd`. Add a new
+diagram there rather than rendering by hand. It isn't a CI gate: headless
+Chromium measures text with the fonts it finds, so a runner with different
+fonts could flag SVGs whose source never changed.
 
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
