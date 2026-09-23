@@ -109,8 +109,8 @@ written and pushed; `jira_account_url` is where
 step 7's browse links come from, which is why no step opens the
 credential-bearing `.jst/jira-sdlc-tools.local.env`; and `working_tree` WARNs
 on a dirty tree — not blocking, but mention it before branching from that
-checkout. `branch_project`, `issue_key` and `parent_branch` read WARN/INFO
-because no issue exists yet; the rest print their own remedy on FAIL.
+checkout. `branch_project`, `issue_key`, `current_pr` and `parent_branch`
+read WARN/INFO because no issue exists yet; the rest print their own remedy on FAIL.
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy
 line to the user, and wait — don't self-repair (re-auth CLIs, fabricate
