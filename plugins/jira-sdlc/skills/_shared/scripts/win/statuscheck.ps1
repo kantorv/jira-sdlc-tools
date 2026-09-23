@@ -452,6 +452,7 @@ function Get-GhSlug {  # Get-GhSlug <remote-url> -> OWNER/REPO ; $null when not 
     if ($s -notmatch '^[^/]+/[^/]+$') { return $null }
     return $s
 }
+$originUrl = ''; $ghSlug = $null   # current_pr below reads both, even when this block can't set them
 if (-not $WtRoot) {
     Add-Row gh_repo_access WARN "skipped (not in a git repository, so there is no origin to probe — see git_repo)"
 } else {
@@ -477,6 +478,71 @@ if (-not $WtRoot) {
             $err = if ($err) { $err.Trim() } else { '(no error output from gh)' }
             Add-Row gh_repo_access FAIL "GET /repos/$ghSlug failed: $err" `
                 "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $Rerun."
+        }
+    }
+}
+
+# --- the current branch's PR(s) ------------------------------------------------
+# Answers "which PR does the branch I'm standing on have" once, the same way on
+# every run, so no skill hand-types that lookup (JST-310). gh answers a filter
+# that misses with [] rather than an error, so every argument is load-bearing:
+# --head takes the BARE branch name (owner:branch silently matches nothing),
+# --state all keeps a merged/closed PR visible, and there is deliberately no
+# --base — a PR opened against an unexpected base must show up (and WARN), not
+# read as "none". Never FAILs: whether "no PR" is a problem is the calling
+# skill's judgement. Skipped off an issue branch, so the assigner (on the base
+# branch) pays no extra API call. $Parent feeds the parent_branch row below too.
+$Parent = (& git config "branch.$Br.parentbranch" 2>$null)
+$Parent = if ($Parent) { ([string]$Parent).Trim() } else { '' }
+if (-not $GhOk) {
+    Add-Row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a logged-in gh; see rows above)"
+} elseif (-not $originUrl) {
+    Add-Row current_pr WARN "skipped (no 'origin' remote to look PRs up on — see gh_repo_access)"
+} elseif (-not $ghSlug) {
+    Add-Row current_pr WARN "skipped (origin is not a github.com remote — see gh_repo_access)"
+} elseif (-not $Br) {
+    Add-Row current_pr WARN "skipped (detached HEAD — no branch to look PRs up for)"
+} elseif (($Br -ceq $BaseBranch) -or ($Br -ceq $ProductionBranch)) {
+    Add-Row current_pr WARN "skipped ($Br is a base branch, not an issue branch)"
+} elseif (-not $BranchOk) {
+    Add-Row current_pr WARN "skipped ($Br is not a feature/hotfix issue branch)"
+} else {
+    # No --jq here, unlike the bash twin: PowerShell 5.1 strips the embedded
+    # double quotes a jq string needs when passing args to a native command, so
+    # parse gh's JSON instead. 2>&1 then split by type: ErrorRecords are stderr.
+    $cpRaw = @(& gh pr list --repo $ghSlug --head $Br --state all `
+        --json number,state,baseRefName,url 2>&1)
+    $cpCode = $LASTEXITCODE
+    $cpText = (@($cpRaw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } |
+        ForEach-Object { [string]$_ }) -join "`n")
+    $cpPrs = @()
+    if ($cpCode -eq 0 -and $cpText.Trim()) {
+        # (…) then pipe: unrolls 5.1's single array object; pwsh 7's empty [] is $null, dropped by the filter
+        $cpPrs = @(($cpText | ConvertFrom-Json) | Where-Object { $_ })
+    }
+    if ($cpCode -ne 0) {
+        $err = @($cpRaw | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } |
+            ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -ne '' } | Select-Object -First 1)
+        $err = if ($err.Count -gt 0) { $err[0] } else { '(no error output from gh)' }
+        Add-Row current_pr WARN "gh pr list --head $Br --state all failed: $err — PRs unknown, not absent"
+    } elseif ($cpPrs.Count -eq 0) {
+        Add-Row current_pr INFO "none on $ghSlug (gh pr list --head $Br --state all)"
+    } else {
+        $cpList = @(); $cpOpen = 0; $cpOff = @()
+        foreach ($p in $cpPrs) {
+            $cpList += "#$($p.number) $($p.state) → $($p.baseRefName) ($($p.url))"
+            if ([string]$p.state -ceq 'OPEN') {
+                $cpOpen++
+                if ($Parent -and ([string]$p.baseRefName -cne $Parent)) { $cpOff += "#$($p.number)" }
+            }
+        }
+        $cpWhy = @()
+        if ($cpOpen -gt 1) { $cpWhy += "$cpOpen PRs are OPEN — expected at most one" }
+        if ($cpOff.Count -gt 0) { $cpWhy += "OPEN $($cpOff -join ', ') targets a base other than parent_branch $Parent" }
+        if ($cpWhy.Count -gt 0) {
+            Add-Row current_pr WARN "$($cpList -join '; ') — $($cpWhy -join '; ')"
+        } else {
+            Add-Row current_pr INFO ($cpList -join '; ')
         }
     }
 }
@@ -601,8 +667,6 @@ if (Test-Path -LiteralPath $BootstrapPath -PathType Leaf) {
     Add-Row bootstrap INFO "no .jst/$BootstrapFile (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 }
 
-$Parent = (& git config "branch.$Br.parentbranch" 2>$null)
-$Parent = if ($Parent) { ([string]$Parent).Trim() } else { '' }
 Add-Row parent_branch INFO "$(if ($Parent) { $Parent } else { 'unset' }) (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
 $dirtyOut = (& git status --porcelain 2>$null)
