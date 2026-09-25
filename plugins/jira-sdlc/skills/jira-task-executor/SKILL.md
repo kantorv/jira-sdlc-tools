@@ -125,6 +125,7 @@ note below**:
 | `production_branch` | INFO: `<PRODUCTION_BRANCH>` — this skill's only source for it, consumed by step 10's prefix/base sanity check |
 | `bootstrap` | INFO either way: whether this project ships an optional `.jst/bootstrap.sh` (POSIX) / `.jst/bootstrap.ps1` (Windows). Present → step 1 runs it; absent → nothing to do, and most projects won't have one |
 | `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
+| `current_pr` | INFO/WARN, never FAIL: every PR whose head is this branch (`gh pr list --head <branch> --state all`, no `--base`) as `#<n> <STATE> → <base> (<url>)`, or `none (…)` — step 10's existing-PR check |
 
 Two of those other rows matter later: `gh_auth` and `gh_repo_access` together
 are what step 10's `gh pr create` depends on (a login *and* a PAT that can see
@@ -351,19 +352,23 @@ context.
     - **Check for an existing PR first.** After a reject (step 11) this skill
       re-runs on a branch that already has one, step 9's push has already
       updated it, and `gh pr create` would fail with "a pull request already
-      exists":
-      ```bash
-      gh pr list --head "$(git branch --show-current)" --state open \
-        --json number,url --jq '.[] | "\(.number) \(.url)"' | head -1
-      ```
-      - **Non-empty** → that PR now carries this run's commits. Don't create a
+      exists". Read Discovery's `current_pr` row — a push doesn't open a PR, so
+      it still holds — and **don't re-run `gh pr list` for this branch**: `gh`
+      answers a filter that misses with `[]`, so a hand-typed variant (an
+      `owner:branch` head, an added `--base`) reads an open PR as none. A
+      `current_pr` WARN (several OPEN, an OPEN PR off `parent_branch`, a `gh`
+      error) → stop and ask; it never means "create one". (On an issue branch
+      only a non-GitHub origin makes it read `skipped (…)`, and `gh pr create`
+      can't reach that either — see the failure fallback at the end of this step.)
+      - **An OPEN PR listed** → that PR now carries this run's commits. Don't create a
         second one, and don't resolve a base — an open PR's base isn't this
         run's decision. Write what changed to `/tmp/<KEY>-fix-summary.md`
         (`cat > … <<'EOF'`) and post it with
         `gh pr comment <number> --body-file …`, so the reviewer's next pass
         sees the fix instead of re-reading the whole diff. Carry that PR's
         link into steps 11 and 12.
-      - **Empty** → resolve the base and create the PR, below.
+      - **`none`, or only MERGED/CLOSED ones** → resolve the base and create
+        the PR, below.
     - Resolve the PR base with `pr_base.sh`, which *is*
       `../_shared/jira-api-reference.md` §13 (git config → the Jira
       `PR target branch:` comment → a parent-branch search for sub-tasks → the
