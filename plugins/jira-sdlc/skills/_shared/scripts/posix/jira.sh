@@ -45,6 +45,8 @@ usage: jira.sh --role assigner|executor|reviewer <command>
   issue create    --project K --type T --summary S
                   [--parent K] [--assignee email|@me]
                   [--desc-file FILE | --adf-file FILE]   -> prints the new key
+  issue edit      <KEY> [--summary S]
+                  [--desc-file FILE | --adf-file FILE]   replace summary and/or description
   issue transition <KEY> --to "In Review"        transition by target status name
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)
@@ -180,6 +182,7 @@ op_issue_view() {   # KEY [FIELDS]
 }
 
 op_issue_create() { _request POST "/issue" "$1" && jq -r '.key' "$RESP_FILE"; }  # $1 = {"fields":…}
+op_issue_edit()   { _request PUT "/issue/$1" "$2"; }   # $2 = {"fields":…}; 204, prints nothing
 
 op_transition_to() {   # KEY STATUS_NAME
   _request GET "/issue/$1/transitions" || return
@@ -336,6 +339,35 @@ case "$group" in
           fields=$(jq --slurpfile d "$adf_file" '. + {description:$d[0]}' <<<"$fields")
         fi
         op_issue_create "$(jq -n --argjson f "$fields" '{fields:$f}')" ;;
+
+      edit)
+        # Only the fields you pass are sent, so the rest of the issue is untouched.
+        [ $# -ge 1 ] || usage; key="$1"; shift; summary=""; desc_file=""; adf_file=""
+        while [ $# -gt 0 ]; do
+          [ $# -ge 2 ] || usage   # every flag here takes a value
+          case "$1" in
+            --summary)   summary="$2";   shift 2 ;;
+            --desc-file) desc_file="$2"; shift 2 ;;
+            --adf-file)  adf_file="$2";  shift 2 ;;
+            *) usage ;;
+          esac
+        done
+        { [ -n "$summary" ] || [ -n "$desc_file" ] || [ -n "$adf_file" ]; } || usage
+        [ -n "$desc_file" ] && [ -n "$adf_file" ] && die "$EX_USAGE" "give --desc-file OR --adf-file, not both."
+        for f in "$desc_file" "$adf_file"; do [ -z "$f" ] || [ -f "$f" ] || die "$EX_ERR" "file not found: $f"; done
+        # -s: an empty file is "no output", which plain `jq -e` passes as success.
+        [ -z "$adf_file" ] || jq -se 'length == 1 and (.[0] | type == "object")' "$adf_file" >/dev/null 2>&1 \
+          || die "$EX_USAGE" "--adf-file must hold one ADF doc object: $adf_file"
+        _ready
+        fields='{}'
+        [ -n "$summary" ] && fields=$(jq --arg s "$summary" '. + {summary:$s}' <<<"$fields")
+        if [ -n "$desc_file" ]; then
+          doc=$(_text_to_adf_doc "$desc_file")
+          fields=$(jq --argjson d "$doc" '. + {description:$d}' <<<"$fields")
+        elif [ -n "$adf_file" ]; then
+          fields=$(jq --slurpfile d "$adf_file" '. + {description:$d[0]}' <<<"$fields")
+        fi
+        op_issue_edit "$key" "$(jq -n --argjson f "$fields" '{fields:$f}')" ;;
 
       comment)
         sub="${1-}"; shift || true
