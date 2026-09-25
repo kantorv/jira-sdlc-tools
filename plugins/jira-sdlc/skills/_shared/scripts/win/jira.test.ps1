@@ -124,6 +124,29 @@ try {
     $d = Json (J issue view $PARENT --fields description)
     Eq 'description first paragraph stored' 'Live test parent for jira.ps1.' $d.fields.description.content[0].content[0].text
 
+    # 7b. edit: each field alone leaves the other untouched; usage + HTTP errors
+    $out = J issue edit $PARENT --summary 'jira.ps1 live test (parent, edited)'; Rc 'edit --summary -> 0' 0 $script:RC
+    Eq 'edit prints nothing' '' (@($out) -join '')
+    $v = Json (J issue view $PARENT --fields 'summary,description')
+    Eq 'summary replaced' 'jira.ps1 live test (parent, edited)' $v.fields.summary
+    Eq 'description untouched by --summary' 'Live test parent for jira.ps1.' $v.fields.description.content[0].content[0].text
+    $desc2 = Join-Path $TMP 'desc2.txt'
+    [IO.File]::WriteAllText($desc2, "Edited description.`n")
+    J issue edit $PARENT --desc-file $desc2 | Out-Null; Rc 'edit --desc-file -> 0' 0 $script:RC
+    $v = Json (J issue view $PARENT --fields 'summary,description')
+    Eq 'description replaced' 'Edited description.' $v.fields.description.content[0].content[0].text
+    Eq 'summary untouched by --desc-file' 'jira.ps1 live test (parent, edited)' $v.fields.summary
+    $descAdf = Join-Path $TMP 'desc.adf.json'
+    [IO.File]::WriteAllText($descAdf, '{"type":"doc","version":1,"content":[{"type":"heading","attrs":{"level":3},"content":[{"type":"text","text":"ADF description"}]}]}')
+    J issue edit $PARENT --adf-file $descAdf | Out-Null; Rc 'edit --adf-file -> 0' 0 $script:RC
+    $n = (Json (J issue view $PARENT --fields description)).fields.description.content[0]
+    Eq 'ADF description stored' 'heading:ADF description' ($n.type + ':' + $n.content[0].text)
+    J issue edit $PARENT | Out-Null; Rc 'edit with no fields -> 2' 2 $script:RC
+    J issue edit $PARENT --desc-file $desc2 --adf-file $descAdf | Out-Null; Rc 'edit --desc-file + --adf-file -> 2' 2 $script:RC
+    J issue edit $PARENT --summary | Out-Null; Rc 'edit --summary with no value -> 2' 2 $script:RC
+    J issue edit $PARENT --summary ('x' * 300) | Out-Null; Rc 'edit 300-char summary -> 5 (400)' 5 $script:RC
+    J issue edit "$PROJECT_KEY-0" --summary x | Out-Null; Rc 'edit missing issue -> 4 (404)' 4 $script:RC
+
     # 8/9. comments: plain-text + raw ADF ------------------------------------
     $cmtFile = Join-Path $TMP 'cmt.txt'
     [IO.File]::WriteAllText($cmtFile, "PR target branch: development.`nSecond line of the note.`n")
