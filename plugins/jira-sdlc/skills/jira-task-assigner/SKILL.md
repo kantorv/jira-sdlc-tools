@@ -369,6 +369,8 @@ comment posted before reporting back.
   `--assignee "$ASSIGNEE_EMAIL"`** on every create — top-level AND each
   sub-task — resolved once at the top of 6A. One flag does it on create; do
   not issue a separate `issue assign`.
+- **Revise an issue this run created** with `jira.sh --role assigner issue edit <KEY> [--summary "..."] [--desc-file <file>]`,
+  not a second create (a duplicate key) or `raw` (`../_shared/jira-api-reference.md` §9).
 - Quote `"Subtask"` exactly (no hyphen — this project's real type name,
   confirmed in `../_shared/jira-api-reference.md` §10).
 - **Text bodies** (`--body-file` on a comment, `--desc-file` on a create):
