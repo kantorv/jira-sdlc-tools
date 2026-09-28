@@ -16,13 +16,56 @@ Would rather be walked through it? `/jira-sdlc:jst-install`
 sections, in this order, and verifies each one with the Section 4 healthcheck
 before moving to the next.
 
+## Prerequisites
+
+### Tools
+
+| Tool | Title | Uses | Install URL | Local docs |
+| -- | -- | -- | -- | -- |
+| `git` | Version control | commit/push | [git-scm.com/downloads](https://git-scm.com/downloads) | — |
+| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github/GH-PAT-SESSION-LOGIN.md) |
+| `jq` | JSON processor | parse Jira REST responses (`jira.sh`) | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | — |
+| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | — |
+
+**Platform specific**
+
+| Platform | Needs | Tested on | Why |
+| -- | -- | -- | -- |
+| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
+| **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
+| **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
+
+`git` uses your machine's existing global credentials. `gh` authenticates
+with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
+API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
+`JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
+(see [Full Setup](#full-setup) below).
+
+### Tokens and auth
+
+Before configuring the table below, create the following tokens:
+
+- **One GitHub PAT** — see [Creating a GitHub PAT](SECURITY.md#github)
+- **One (or three) Jira classic tokens** — see [Creating Jira tokens](SECURITY.md#jira) and [JIRA-ACCOUNTS-TBD](JIRA-ACCOUNTS-TBD.md)
+
+| Tool | Auth type | Scopes | Shared across roles | Description | Link |
+| -- | -- | -- | -- | -- | -- |
+| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#jira) |
+| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#github) |
+| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#git) |
+
+> ⚠️ **This plugin is designed to run in a shared environment** — the same
+> checkout where a coding assistant operates *and* where you yourself still
+> run `git` commands by hand. That's why `git` auth is left shared between
+> you and the agent rather than split out: a separate agent identity would
+> otherwise fight your own commits/pushes for the same repo state. If your
+> setup doesn't need that — the agent is the only thing ever touching
+> `git` here — it can authenticate with its own PAT instead, the same way
+> `gh` already does. That setup isn't documented yet.
+
 ## Section 1. Preparing environment
 
-1. **Install the required tools** — `git` and `gh`. There is nothing to
-   install for Jira: the skills drive it over the REST API through their own
-   client, `jira.sh` / `jira.ps1`, which ships with the plugin. On Linux and
-   macOS that client needs `curl` and `jq` on your `PATH`; the Windows
-   PowerShell port uses built-in cmdlets and needs neither.
+1. **Install the required tools** — `git` and `gh`. On Linux and macOS, the Jira client requires `curl` and `jq` on your `PATH`. On Windows, use PowerShell 5.1 or PowerShell 7; both have been tested. Python 3 is recommended on all platforms because the workflows handle substantial JSON data from the Jira and GitHub APIs, although it is not mandatory.
 2. **Have a git repository and a Jira account with a board created.**
    [GitHub for Jira](INSTALLING-GITHUB-FOR-JIRA.md) is a great, recommended
    integration — but it is **not** required.
@@ -34,6 +77,8 @@ before moving to the next.
    absolute path, never a relative one:
    ```
    WORKTREES_DIR=/home/you/src/myapp-worktrees
+   # Windows: the drive-letter form, not Git Bash's /c/... one
+   WORKTREES_DIR=C:\Users\you\projects\myapp-worktrees
    ```
 
 ### Verify your tokens
@@ -62,6 +107,7 @@ echo "$GITHUB_PAT_TOKEN" | gh auth login --with-token && gh auth status
 
 ```
 WORKTREES_DIR=/path/to/worktrees/PROJ-worktrees
+# Windows: WORKTREES_DIR=C:\Users\you\projects\PROJ-worktrees
 
 JIRA_ACCOUNT_URL=your-jira-site.atlassian.net
 
@@ -120,7 +166,10 @@ git switch -c development
 git push -u origin development
 ```
 
-Make `development` the repository default so PRs target it automatically:
+Making `development` the repository default is optional. It only saves people
+opening PRs by hand from picking the base in the GitHub UI — nothing in this
+plugin reads the repo default, because every `gh pr create` passes `--base`
+explicitly. If you want it:
 
 ```bash
 gh repo edit <OWNER>/<REPO> --default-branch development
@@ -160,10 +209,20 @@ mkdir -p ../myapp-worktrees
 cd ../myapp-worktrees && pwd   # the absolute path to paste below
 ```
 
+On **Windows**, `pwd` in Git Bash prints the MSYS form (`/c/Users/...`), which
+neither Windows git nor the plugin's PowerShell scripts can resolve — so
+convert it, and paste the drive-letter form instead:
+
+```bash
+cd ../myapp-worktrees && cygpath -w "$PWD"   # C:\Users\you\projects\myapp-worktrees
+```
+
 Then point `WORKTREES_DIR` at it in `.jst/jira-sdlc-tools.local.env`, **as an
-absolute path** — `/home/you/src/myapp-worktrees`, not `../myapp-worktrees`.
+absolute path** — `/home/you/src/myapp-worktrees` (or
+`C:\Users\you\projects\myapp-worktrees` on Windows), not `../myapp-worktrees`.
 A relative value resolves against a different base from inside a worktree than
-from this clone, so the healthcheck FAILs on one. From here
+from this clone, so the healthcheck FAILs on one; an MSYS `/c/...` value is
+rooted only for Git Bash, so it WARNs. From here
 on, the loop is: run the assigner in this clone, then run the executor from
 inside each issue's worktree.
 
@@ -279,3 +338,26 @@ fix doubles as an end-to-end smoke test of all three skills.
 ready-to-paste prompt for that: the assigner creates a retroactive
 **JIRA-SDLC-TOOLS setup** issue and copies `.jst/` into its worktree, the
 executor commits and pushes it, and the reviewer confirms the settings work.
+
+### Optional — create `.jst/bootstrap.sh` and `.jst/teardown.sh`
+
+**Only if you'll run more than one worktree's app at a time.** Most projects
+never need this, and nothing above is unfinished without it — but the gap it
+closes is one people don't see coming. The assigner gives each issue its own
+worktree, which isolates the *source tree* and nothing else: a database, a
+cache, an uploads tree or a fixed port is shared between every worktree by
+default. Two instances against one migration-driven database will reshape the
+schema under each other, silently.
+
+The answer, once you've made it, goes in `.jst/bootstrap.sh` (`bootstrap.ps1`
+on Windows) — the optional hook `jira-task-executor` runs in its step 1, once
+per worktree, fail-soft. `.jst/teardown.sh` is the by-hand counterpart you run
+before `git worktree remove`; no skill invokes it. Statuscheck's `bootstrap`
+row reports whether you have one and never blocks either way.
+
+[Parallel instances](../parallel-instances/RUNNING-MULTIPLE-COPIES.md) is the
+whole story: the share-vs-isolate decision framework, the `JST_*` environment
+contract, and three worked examples to take the shape from — a
+[Python toolchain](../parallel-instances/python.md), a
+[React / Vite SPA](../parallel-instances/react.md), and a
+[multi-service docker-compose stack](../parallel-instances/docker-compose.md).

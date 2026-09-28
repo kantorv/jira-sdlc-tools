@@ -13,6 +13,15 @@ The skills are explicit-invocation only by design — never auto-triggered —
 and carry the corresponding setting on both specs: `disable-model-invocation`
 for Claude, `allow_implicit_invocation: false` for agentskills.io.
 
+## Trademarks
+
+Jira and Atlassian are trademarks or registered trademarks of Atlassian
+Pty Ltd, in the United States and/or other countries. This is an
+independent, community-built project that integrates with Jira through
+its public CLI and APIs; it is not affiliated with, endorsed by, or
+sponsored by Atlassian, and its references to Jira are solely to
+describe compatibility.
+
 ## ⚠️ Caution
 
 **This plugin acts as an authenticated user in both git and Jira.** Given
@@ -31,6 +40,159 @@ before the first run so you know which repo and which Jira project it's wired to
 What it deliberately never does on its own — merging into your base
 branch, deleting Jira issues, resolving conflicts — is listed in
 [Safety model](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/README.md#safety-model).
+
+## Environment setup
+
+You will need
+
+- **Git account + Repository + PAT token** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
+- **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
+- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+
+Check out installation docs [`docs/setup/STEP-BY-STEP.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/setup/STEP-BY-STEP.md).
+
+## Quick install
+
+### Claude Code
+
+#### Remote — from the marketplace (recommended)
+
+```
+/plugin marketplace add kantorv/jira-sdlc-tools
+/plugin install jira-sdlc@jira-sdlc-tools
+```
+
+#### Local — clone, then load with `--plugin-dir`
+
+```bash
+git clone https://github.com/kantorv/jira-sdlc-tools.git
+claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
+```
+
+See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md)
+
+### Non Claude Code assistants
+
+This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
+
+## Platform Compatibility Matrix
+
+The skills target the Claude skills spec, so `jira-sdlc` also works —
+natively or through the [Agent Skills](https://agentskills.io)
+adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
+Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
+and Kimi Code. See [**Platform Compatibility Matrix**](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
+platform-by-platform table — each one's spec, wiring, integration status,
+and a link to its detailed doc.
+
+| Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
+| -- | -- | -- | -- | -- | -- |
+| [Claude Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) |
+| [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) |
+| [Kilo Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) |
+| [Codex (CLI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) |
+| [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) |
+| [OpenCode](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) |
+| [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) |
+| [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) |
+| [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) |
+
+**Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
+with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
+yet exercised in this environment. See [Platform Compatibility Matrix](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
+full status legend.
+
+## Task lifecycle preview
+
+The three skills map to three phases of a task's life. The Jira states
+below use the default Kanban board names (To Do / In Progress / In
+Review) — these are configurable per project, so map them to your own
+workflow's status names.
+
+See **[Task lifecycle](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE.md)** for the
+full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
+
+```mermaid
+flowchart LR
+    Kickoff([👤<br/>Phase 0 · Kickoff<br/>Human<br/>invokes /jira-task-assigner]) -->|feature · task · bug| Plan
+    Plan([🤖<br/>Phase 1 · Plan<br/>jira-task-assigner<br/>To Do]) -->|create issues<br/>branches<br/>worktrees| Execute([🤖<br/>Phase 2 · Implement<br/>jira-task-executor<br/>In Progress])
+    Execute -->|implement<br/>run tests<br/>open PRs| Review([🤖<br/>Phase 3 · Review<br/>jira-task-reviewer<br/>In Review])
+    Review -->|changes requested<br/>back to In Progress| Execute
+    Review -->|approved<br/>verdicts posted| Merge([👤<br/>Phase 4 · Merge<br/>Human<br/>Done])
+```
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%">
+<strong>Phase 1 · Plan</strong><br>
+<code>jira-task-assigner</code><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md">
+  <div style="width:260px; height:450px; overflow:hidden;">
+    <img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-1.svg"
+         alt="Phase 1 (Plan) sequence diagram"
+         style="width:260px; height:auto; display:block;">
+  </div>
+</a>
+</td>
+<td align="center" valign="top" width="33%">
+<strong>Phase 2 · Implement</strong><br>
+<code>jira-task-executor</code><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md">
+  <div style="width:260px; height:450px; overflow:hidden;">
+    <img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-2.svg"
+         alt="Phase 2 (Implement) sequence diagram"
+         style="width:260px; height:auto; display:block;">
+  </div>
+</a>
+</td>
+<td align="center" valign="top" width="33%">
+<strong>Phase 3 · Review &amp; aggregate approval</strong><br>
+<code>jira-task-reviewer</code><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
+<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md">
+  <div style="width:260px; height:450px; overflow:hidden;">
+    <img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-3.svg"
+         alt="Phase 3 (Review) sequence diagram"
+         style="width:260px; height:auto; display:block;">
+  </div>
+</a>
+</td>
+</tr>
+</table>
+
+## Examples
+
+### JIRA-TASK-ASSIGNER
+
+```bash
+claude
+> /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action. The action is currently separated into two perform_create methods. Investigate the code to determine whether this flow could be simplified. Additionally, check for any redundant code. Reference: cropapp/catalog/views.py, lines 1265–1676"
+```
+
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-EXECUTOR
+
+```bash
+# cd into each worktree it creates, run this in each one (no key —
+# derived from that worktree's branch):
+claude
+> /jira-sdlc:jira-task-executor 
+```
+
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
+
+### JIRA-TASK-REVIEWER
+
+```bash
+# once the sub-task's PR is up, run from the same worktree:
+claude
+> /jira-sdlc:jira-task-reviewer 
+```
+
+<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
 
 ## What's here
 
@@ -73,137 +235,6 @@ Plus one that runs before all three, once per project:
   GitHub repo prep, Jira board prep, healthcheck — verifying each with the
   bundled `statuscheck` script before moving on, so a missing `development`
   branch or a misspelled status name surfaces at setup rather than mid-run.
-
-## What you need
-
-- **Git account + Repository** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
-- **Jira account + Space** — a Jira Cloud instance with a project/space where issues will be created
-- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
-
-## Examples
-
-### JIRA-TASK-ASSIGNER
-
-```bash
-claude
-> /jira-sdlc:jira-task-assigner "Refactor the InstantProductViewset create action. The action is currently separated into two perform_create methods. Investigate the code to determine whether this flow could be simplified. Additionally, check for any redundant code. Reference: cropapp/catalog/views.py, lines 1265–1676"
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-eefd438c-7cc4-4ffe-9bae-b429108bef70.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-### JIRA-TASK-EXECUTOR
-
-```bash
-# cd into each worktree it creates, run this in each one (no key —
-# derived from that worktree's branch):
-claude
-> /jira-sdlc:jira-task-executor 
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-1d92236c-4a57-4b3a-a902-e42d1c032128.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-### JIRA-TASK-REVIEWER
-
-```bash
-# once the sub-task's PR is up, run from the same worktree:
-claude
-> /jira-sdlc:jira-task-reviewer 
-```
-
-<img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/assets/claude-code-plugins-2c92cf94-1470-4d6a-9797-96355658a3f5.jsonl.gif" alt="Example conversation with the assigner, executor, and reviewer skills (placeholder recording — will be replaced)" width="800">
-
-## Platform Compatibility Matrix
-
-The skills target the Claude skills spec, so `jira-sdlc` also works —
-natively or through the [Agent Skills](https://agentskills.io)
-adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
-Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
-and Kimi Code. See [**Platform Compatibility Matrix**](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
-platform-by-platform table — each one's spec, wiring, integration status,
-and a link to its detailed doc.
-
-| Platform | Specification | How it loads | Integration status | Compatibility | Documentation |
-| -- | -- | -- | -- | -- | -- |
-| [Claude Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) | Native Claude skills | plugin marketplace · `.claude/skills/` drop-in copy · `--plugin-dir` | First-class (reference) | ✅ | [`CLAUDECODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md) |
-| [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) | Native Claude skills | shares the `~/.claude/` tree with Claude Code | Verified — Linux/macOS | ✅ | [`CURSOR.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md) |
-| [Kilo Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) | Native Claude skills | `kilo.jsonc` skills path | Working | ✅ | [`KILO.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KILO.md) |
-| [Codex (CLI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) | Agent Skills | `.codex/skills/` copy + per-skill `agents/openai.yml` | Working — sandbox & timing caveats, testing needed | ⚠️ | [`CODEX.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CODEX.md) |
-| [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) | Agent Skills | `.agent/skills/` discovery (live-tested) + per-skill `agents/openai.yml` | Verified — Antigravity IDE 1.23.2 & agy 1.0.8 work; other releases untested | ✅ | [`ANTIGRAVITY.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md) |
-| [OpenCode](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) | Native Claude skills | `.opencode/skills/` discovery + `opencode.json` override | Verified | ✅ | [`OPENCODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/OPENCODE.md) |
-| [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/GROK.md) |
-| [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/PI.md) |
-| [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md) |
-
-**Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
-with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
-yet exercised in this environment. See [Platform Compatibility Matrix](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
-full status legend.
-
-## Prerequisites
-
-### Tools
-
-| Tool | Title | Uses | Install URL | Local docs |
-| -- | -- | -- | -- | -- |
-| `git` | Version control | commit/push | [git-scm.com/downloads](https://git-scm.com/downloads) | — |
-| `gh` | GitHub CLI | pr create/update | [cli.github.com](https://cli.github.com/) | [GH-PAT-SESSION-LOGIN.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github/GH-PAT-SESSION-LOGIN.md) |
-| `jq` | JSON processor | parse Jira REST responses (`jira.sh`) | [jqlang.github.io/jq](https://jqlang.github.io/jq/download/) | — |
-| `python3` *(recommended)* | Scripting | scripting, JSON parsing, etc. | [python.org/downloads](https://www.python.org/downloads/) | — |
-
-**Platform specific**
-
-| Platform | Needs | Tested on | Why |
-| -- | -- | -- | -- |
-| **Windows** | [`pwsh`](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) (PowerShell 7+) **or** `powershell` (5.1, ships with Windows) | Windows 11 | execute `.ps1` scripts |
-| **Linux** | `bash` | Ubuntu 22.04 | execute `.sh` scripts |
-| **macOS** | `bash`/`sh` | ⚠️ not tested | execute `.sh` scripts |
-
-`git` uses your machine's existing global credentials. `gh` authenticates
-with a GitHub PAT (`GITHUB_PAT_TOKEN`) and `jira.sh` with a per-role Jira
-API token (`JIRA_EXECUTOR_TOKEN` / `JIRA_ASSIGNER_TOKEN` /
-`JIRA_REVIEWER_TOKEN`) — all set per repo in `jira-sdlc-tools.local.env`
-(see [Full Setup](#full-setup) below).
-
-### Tokens and auth
-
-| Tool | Auth type | Scopes | Shared across roles | Description | Link |
-| -- | -- | -- | -- | -- | -- |
-| Jira | Scoped `classic` token | <span style="white-space:nowrap">`read:jira-user`</span><br><span style="white-space:nowrap">`read:jira-work`</span><br><span style="white-space:nowrap">`write:jira-work`</span> (3 needed) | No | A **per-role** token (assigner, executor, reviewer), sent as per-request Basic auth on every call — there's no login session to share. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#jira) |
-| `gh` | GitHub PAT | <span style="white-space:nowrap">Contents (read/write)</span><br><span style="white-space:nowrap">Pull requests (read/write)</span> | ⚠️ Partial — re-logs in at the start of every run, never logs out | One `GITHUB_PAT_TOKEN` logs `gh` in for the whole run, so all three skills act as the same GitHub identity — unlike Jira, there's no per-role split. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#github) |
-| `git` | SSH key or credentials manager | N/A | Yes (uses your regular login) | Commits, pushes, and worktrees ride on your machine's existing git setup — the plugin configures no credentials of its own, so every commit lands under your own account. | [SECURITY.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/process/SECURITY.md#git) |
-
-> ⚠️ **This plugin is designed to run in a shared environment** — the same
-> checkout where a coding assistant operates *and* where you yourself still
-> run `git` commands by hand. That's why `git` auth is left shared between
-> you and the agent rather than split out: a separate agent identity would
-> otherwise fight your own commits/pushes for the same repo state. If your
-> setup doesn't need that — the agent is the only thing ever touching
-> `git` here — it can authenticate with its own PAT instead, the same way
-> `gh` already does. That setup isn't documented yet.
-
-## Quick install
-
-### Claude Code
-
-#### Remote — from the marketplace (recommended)
-
-```
-/plugin marketplace add kantorv/jira-sdlc-tools
-/plugin install jira-sdlc@jira-sdlc-tools
-```
-
-#### Local — clone, then load with `--plugin-dir`
-
-```bash
-git clone https://github.com/kantorv/jira-sdlc-tools.git
-claude --plugin-dir ./jira-sdlc-tools/plugins/jira-sdlc
-```
-
-See full doc: [CLAUDECODE.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CLAUDECODE.md)
-
-### Non Claude Code assistants
-
-This plugin can also be installed as a loose skill set with various coding assistants other than Claude Code, [Antigravity](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/ANTIGRAVITY.md), [Cursor](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/CURSOR.md), [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/integrations/KIMI-CODE.md), and more. See the [Platform Compatibility Matrix](#platform-compatibility-matrix) for the full list and integration status per platform.
 
 ## Full Setup
 
@@ -283,48 +314,6 @@ onto your board's real status names in `.jst/jira-sdlc-tools.env`. Who moves a
 card to which state — the three skills, GitHub Actions, a Jira automation
 app, or direct REST calls — is consolidated in
 **[Jira state movements](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/jira/JIRA-STATE-MOVEMENTS.md)**.
-
-## Task lifecycle preview
-
-The three skills map to three phases of a task's life. The Jira states
-below use the default Kanban board names (To Do / In Progress / In
-Review) — these are configurable per project, so map them to your own
-workflow's status names.
-
-```mermaid
-flowchart LR
-    Kickoff([👤<br/>Phase 0 · Kickoff<br/>Human<br/>invokes /jira-task-assigner]) -->|feature · task · bug| Plan
-    Plan([🤖<br/>Phase 1 · Plan<br/>jira-task-assigner<br/>To Do]) -->|create issues<br/>branches<br/>worktrees| Execute([🤖<br/>Phase 2 · Implement<br/>jira-task-executor<br/>In Progress])
-    Execute -->|implement<br/>run tests<br/>open PRs| Review([🤖<br/>Phase 3 · Review<br/>jira-task-reviewer<br/>In Review])
-    Review -->|changes requested<br/>back to In Progress| Execute
-    Review -->|approved<br/>verdicts posted| Merge([👤<br/>Phase 4 · Merge<br/>Human<br/>Done])
-```
-
-<table>
-<tr>
-<td align="center" valign="top" width="33%">
-<strong>Phase 1 · Plan</strong><br>
-<code>jira-task-assigner</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-1.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-1.svg" alt="Phase 1 (Plan) sequence diagram" width="260"></a>
-</td>
-<td align="center" valign="top" width="33%">
-<strong>Phase 2 · Implement</strong><br>
-<code>jira-task-executor</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-2.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-2.svg" alt="Phase 2 (Implement) sequence diagram" width="260"></a>
-</td>
-<td align="center" valign="top" width="33%">
-<strong>Phase 3 · Review &amp; aggregate approval</strong><br>
-<code>jira-task-reviewer</code><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md">Full diagram &amp; notes →</a><br><br>
-<a href="https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE-PHASE-3.md"><img src="https://raw.githubusercontent.com/kantorv/jira-sdlc-tools/main/docs/assets/task-lifecycle-phase-3.svg" alt="Phase 3 (Review) sequence diagram" width="260"></a>
-</td>
-</tr>
-</table>
-
-See **[Task lifecycle](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/task-lifecycle/TASK-LIFECYCLE.md)** for the
-full phase-by-phase breakdown (skills, Jira states, and per-phase steps).
 
 ## Repository layout
 
@@ -429,15 +418,6 @@ doing the work — it covers the constraints that are easy to break
 without realizing it (the `_shared/` reference-path relationship, what
 else to update if you rename a skill or the plugin, how to validate a
 change with no test suite to run).
-
-## Trademarks
-
-Jira and Atlassian are trademarks or registered trademarks of Atlassian
-Pty Ltd, in the United States and/or other countries. This is an
-independent, community-built project that integrates with Jira through
-its public CLI and APIs; it is not affiliated with, endorsed by, or
-sponsored by Atlassian, and its references to Jira are solely to
-describe compatibility.
 
 ## License
 

@@ -180,7 +180,7 @@ Each skill authenticates as its own role (§9), so a token only ever needs to
 cover that role's own calls:
 
 - **assigner** — `whoami`, `project exists`, `issue create` (which resolves
-  `--assignee` through a user search), `comment add`, `issue delete`
+  `--assignee` through a user search), `issue edit`, `comment add`, `issue delete`
 - **executor** — `whoami`, `project exists`, `issue view`, `issue transition`,
   `comment add` / `comment list`
 - **reviewer** — `whoami`, `project exists`, `issue view`, `comment add` /
@@ -206,7 +206,7 @@ every role reads issues and writes something back:
 | -- | -- |
 | `read:jira-user` | `GET /myself` (identity), `GET /user/search` (email → accountId) |
 | `read:jira-work` | `GET /issue`, `GET /issue/{key}/transitions`, `GET /issue/{key}/comment`, `GET /project/search` |
-| `write:jira-work` | `POST /issue`, `POST /issue/{key}/transitions`, `POST /issue/{key}/comment`, `PUT /issue/{key}/assignee`, `DELETE /issue/{key}` |
+| `write:jira-work` | `POST /issue`, `PUT /issue/{key}`, `POST /issue/{key}/transitions`, `POST /issue/{key}/comment`, `PUT /issue/{key}/assignee`, `DELETE /issue/{key}` |
 
 ⚠️ **The granular column documents a trap — it is not a recommendation.** The
 per-resource scopes are listed above because they're what you'd reach for, not
@@ -401,6 +401,8 @@ jira --role assigner|executor|reviewer <command>
   issue create    --project K --type T --summary S
                   [--parent K] [--assignee email|@me]
                   [--desc-file FILE | --adf-file FILE]   -> prints the new key on stdout
+  issue edit      <KEY> [--summary S]
+                  [--desc-file FILE | --adf-file FILE]   replace summary and/or description (below)
   issue transition <KEY> --to "In Review"   transition by target status NAME (resolves the id, §4)
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)   (§11)
@@ -419,13 +421,49 @@ inline comment body** — comments always come from a file (§11); and `create`
 ### Output & exit contract
 
 - **Reads** (`whoami`, `issue view`, `comment list`) print **raw JSON** on
-  stdout — pipe it to `jq`. **Writes** (`transition`, `assign`, `comment add`,
-  `delete`) print **nothing** on success (REST returns `204`). **`create`**
-  prints just the new key. Errors go to **stderr**.
+  stdout — pipe it to `jq`. **Writes** (`edit`, `transition`, `assign`,
+  `comment add`, `delete`) print **nothing** on success (REST returns `204`).
+  **`create`** prints just the new key. Errors go to **stderr**.
 - Exit codes: `0` ok · `1` transport · `2` usage · `3` auth (401) · `4`
   not-found/permission (404) · `5` validation (400) · `6` forbidden (403) ·
   `7` unexpected · `8` no such transition. A non-zero exit from a skill's
   `jira` call is a stop condition — relay the stderr line, don't retry blindly.
+
+### Editing an issue's summary / description
+
+`issue edit` is `PUT /issue/<KEY>` carrying only the fields you pass, so each
+one alone leaves the other untouched — and a description is *replaced*, not
+appended to. Pass at least one of `--summary`, `--desc-file`, `--adf-file`
+(none, or both description flags, is exit `2`); the description flags take the
+same inputs as `create`'s (§11). Read back to confirm — `204` means accepted,
+not "looks how you meant":
+
+```bash
+jira.sh --role assigner issue edit <KEY> --summary "New summary" --desc-file desc.txt
+jira.sh --role assigner issue view <KEY> --fields summary,description
+```
+
+For any other field, the raw shape is the same PUT (the §6 people-field PUT is
+this call too):
+
+```bash
+cat > edit.json <<'EOF'
+{"fields":{
+  "summary": "New summary",
+  "description": {"type":"doc","version":1,"content":[
+    {"type":"paragraph","content":[{"type":"text","text":"New description."}]}]}
+}}
+EOF
+jira.sh --role assigner raw PUT /issue/<KEY> --data-file edit.json   # → 204, prints nothing
+```
+
+- **`description` must be an ADF doc** on REST v3 — a plain string is `400`
+  (exit `5`). The body needs the `{"fields": …}` wrapper.
+- **A missing *Edit Issues* permission is `404`** (exit `4`), not `403` — the
+  §8 masking again. `editmeta` (§6) shows which fields this account may set.
+- **An emptied description reads back as an empty doc**
+  (`{"type":"doc","version":1,"content":[]}`), never `null` again — not even
+  after a PUT of `null`.
 
 ### Dispatch & config
 

@@ -235,7 +235,9 @@ relying on opaque GitHub-for-Jira transition rules:
 
 - **A worktrees directory that already exists**, as a sibling of your
   repo — the assigner refuses to create it for you. `WORKTREES_DIR` must
-  name it with an **absolute** path.
+  name it with an **absolute** path: `/home/you/src/myapp-worktrees`, or on
+  Windows the drive-letter form `C:\Users\you\projects\myapp-worktrees` (not
+  the `/c/…` MSYS path Git Bash's `pwd` prints).
 
 ## Installation
 

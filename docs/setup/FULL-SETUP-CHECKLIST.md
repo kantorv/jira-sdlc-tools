@@ -15,6 +15,12 @@ Guided version of it: `/jira-sdlc:jst-install`
 ([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md)), which ticks these items off
 with you and runs the healthcheck between stages.
 
+## Semi-automated setup
+
+Run this skill: `/jira-sdlc:jst-install`
+([`SKILL.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jst-install/SKILL.md))
+for a guided installation of this file. You will still need to create or confirm the existence of some folders, edit files, and install some tools yourself.
+
 ## Your PC
 
 Three CLIs must be installed and authenticated on your machine, plus a couple
@@ -144,6 +150,27 @@ git --version; gh --version; $PSVersionTable.PSVersion
   `/home/you/src/myapp-worktrees`. A relative value means a different
   directory depending on which checkout a skill runs from, so the
   healthcheck FAILs on one. Every issue gets its own worktree there.
+  On **Windows**, absolute means the drive-letter form,
+  `C:\Users\you\projects\myapp-worktrees` — *not* the MSYS path Git Bash's
+  `pwd` prints (`/c/Users/...`), which Windows git and the plugin's PowerShell
+  scripts can't resolve. `cygpath -w "$PWD"` converts one to the other, and
+  the healthcheck WARNs if you paste the MSYS form.
+- [ ] **Optional — `.jst/bootstrap.sh` and `.jst/teardown.sh` exist**, *if*
+  you'll run more than one worktree's app at the same time. Skip this and
+  nothing breaks: the `bootstrap` row is INFO either way and most projects
+  have no hook. A worktree isolates the source tree only, so a database,
+  cache, uploads tree or fixed port is shared across all of them until
+  something scopes it per worktree — and two instances on one
+  migration-driven database corrupt each other silently.
+  `jira-task-executor` runs `bootstrap.sh` (`bootstrap.ps1` on Windows) in
+  its step 1, once per worktree, fail-soft; `teardown.sh` is the by-hand
+  counterpart, run before `git worktree remove`. The decision framework, the
+  `JST_*` contract and three worked examples — Python, React/Vite,
+  multi-service docker-compose — are in
+  [Parallel instances](../parallel-instances/RUNNING-MULTIPLE-COPIES.md); a
+  full example pair to copy is at
+  [`bootstrap.example.sh`](../examples/bootstrap.example.sh) /
+  [`bootstrap.example.ps1`](../examples/bootstrap.example.ps1).
 
 ## Settings files
 
@@ -172,6 +199,7 @@ secrets:
 ```bash
 # GITHUB SETTINGS (machine-specific)
 WORKTREES_DIR=/home/you/src/myapp-worktrees
+# Windows: WORKTREES_DIR=C:\Users\you\projects\myapp-worktrees
 GITHUB_PAT_TOKEN="github_pat_…"
 
 # JIRA SITE
@@ -241,7 +269,7 @@ onto this checklist:
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |
 | `base_branch` | `DEFAULT_BASE_BRANCH` is set |
-| `worktrees_dir` | `WORKTREES_DIR` is absolute (FAIL if not) and exists (WARN if missing — the assigner won't create it) |
+| `worktrees_dir` | `WORKTREES_DIR` is absolute (FAIL if not; on Windows drive-letter and UNC forms count, and an MSYS `/c/…` value WARNs) and exists (WARN if missing — the assigner won't create it) |
 | `branch_pair` | `DEFAULT_BASE_BRANCH` and `PRODUCTION_BRANCH` are two *different* branches |
 
 Every FAIL row prints its own remedy line under the table. Relay those rather

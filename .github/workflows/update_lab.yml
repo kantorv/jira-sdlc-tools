@@ -5,7 +5,11 @@ on:
     branches:
       - lab          # direct pushes and merged PRs to lab
       - development  # keeps lab current as mainline moves
-  # workflow_dispatch:   # uncomment to trigger manually from the GitHub UI
+  # Manual dispatch from the Actions UI, or `gh workflow run`. This is how
+  # release.yml triggers the sync after a back-merge: that push is made with
+  # GITHUB_TOKEN, which creates no workflow runs, so the push triggers above
+  # never see it and lab would never pick the release back-merge up (JST-302).
+  workflow_dispatch:
 
 # Grant the default GITHUB_TOKEN permission to push the branch and tags.
 permissions:

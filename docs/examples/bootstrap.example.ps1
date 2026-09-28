@@ -21,7 +21,8 @@
 # re-invokes this script. Every step below is create-if-missing or reuse.
 #
 # Full contract: skills/_shared/project-config.md § the optional worktree hook.
-# Share-vs-isolate reasoning behind these decisions: docs/RUNNING-MULTIPLE-COPIES.md.
+# Share-vs-isolate reasoning behind these decisions, plus three worked examples:
+# https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

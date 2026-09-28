@@ -637,29 +637,84 @@ row jira_account_url INFO "JIRA_ACCOUNT_URL=${JIRA_ACCOUNT_URL:-unset} (browse l
 # the value resolved from *here* so the fix is a paste — but only when that
 # actually names a directory, since a hint resolved against the wrong base
 # would be worse than none.
+#
+# What counts as absolute is OS-dependent, and the POSIX-only /* glob used to
+# be the whole test — so on Windows a valid C:\… drive-letter value fell into
+# the catch-all and hard-blocked the run, while the PowerShell twin accepted
+# it: the two ports disagreed on identical input (JST-308). On os=windows,
+# drive-letter and UNC forms count as absolute too. The MSYS form (/c/…) is
+# rooted for Git Bash but neither Windows git nor the PowerShell port can
+# resolve it, so it WARNs rather than FAILs — a bash-only setup that works
+# today isn't hard-blocked, it's just told which form travels. Non-Windows
+# behaviour is unchanged: only /* is absolute.
+
+# /c/Users/you → C:\Users\you. Textual on purpose: statuscheck.ps1 does the
+# same transform, so both ports print the same string for the same value.
+msys_to_drive() {
+  case "$1" in
+    /[A-Za-z]|/[A-Za-z]/*)
+      _wd_rest=$(printf '%s' "$1" | cut -c3- | tr '/' '\\')
+      printf '%s:%s' "$(printf '%s' "$1" | cut -c2 | tr '[:lower:]' '[:upper:]')" "${_wd_rest:-\\}"
+      ;;
+  esac
+}
+
 WORKTREES_DIR=$(cfg WORKTREES_DIR || true)
-case "$WORKTREES_DIR" in
-  "")
-    row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
-    ;;
-  /*)
-    if [ -d "$WORKTREES_DIR" ]; then
-      row worktrees_dir INFO "$WORKTREES_DIR (present)"
-    else
-      row worktrees_dir WARN "$WORKTREES_DIR missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
+WD_UNC='\\'
+WD_ABSOLUTE=no
+WD_MSYS=no
+case "$WORKTREES_DIR" in /*) WD_ABSOLUTE=yes ;; esac
+if [ "$OS" = windows ]; then
+  case "$WORKTREES_DIR" in
+    /[A-Za-z]|/[A-Za-z]/*)                  WD_MSYS=yes ;;
+  esac
+  case "$WORKTREES_DIR" in
+    [A-Za-z]:|[A-Za-z]:[/\\]*|"$WD_UNC"*)   WD_ABSOLUTE=yes ;;
+  esac
+fi
+
+if [ -z "$WORKTREES_DIR" ]; then
+  row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
+elif [ "$WD_MSYS" = yes ]; then
+  row worktrees_dir WARN "$WORKTREES_DIR is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(msys_to_drive "$WORKTREES_DIR")) in .jst/jira-sdlc-tools.local.env so both dispatch paths agree"
+elif [ "$WD_ABSOLUTE" = yes ]; then
+  if [ -d "$WORKTREES_DIR" ]; then
+    row worktrees_dir INFO "$WORKTREES_DIR (present)"
+  else
+    row worktrees_dir WARN "$WORKTREES_DIR missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
+  fi
+else
+  WD_ABS=$(CDPATH= cd -- "$WORKTREES_DIR" 2>/dev/null && pwd)
+  WD_EXAMPLE='/home/you/src/myapp-worktrees'
+  if [ "$OS" = windows ]; then
+    WD_EXAMPLE='C:\Users\you\projects\myapp-worktrees'
+    # pwd prints MSYS form under Git Bash, so the old remedy told Windows users
+    # to paste /c/… — rooted for .NET, unresolvable for Windows git, i.e. worse
+    # than the config it replaced (JST-308). Convert, and offer the result only
+    # if it really is drive-letter/UNC: anything else (pwsh on Linux under
+    # STATUSCHECK_FORCE_OS) falls back to the example, which is also what keeps
+    # the two ports printing the same remedy.
+    if [ -n "$WD_ABS" ]; then
+      if command -v cygpath >/dev/null 2>&1; then
+        WD_ABS=$(cygpath -w -- "$WD_ABS" 2>/dev/null || printf '')
+      else
+        WD_ABS=$(msys_to_drive "$WD_ABS")
+      fi
+      case "$WD_ABS" in
+        [A-Za-z]:|[A-Za-z]:[/\\]*|"$WD_UNC"*) ;;
+        *) WD_ABS="" ;;
+      esac
     fi
-    ;;
-  *)
-    WD_ABS=$(CDPATH= cd -- "$WORKTREES_DIR" 2>/dev/null && pwd)
-    row worktrees_dir FAIL "WORKTREES_DIR=$WORKTREES_DIR is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" \
-      "$(if [ -n "$WD_ABS" ]; then printf 'set WORKTREES_DIR=%s in .jst/jira-sdlc-tools.local.env' "$WD_ABS"; else printf 'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. /home/you/src/myapp-worktrees)'; fi), then $RERUN."
-    ;;
-esac
+  fi
+  row worktrees_dir FAIL "WORKTREES_DIR=$WORKTREES_DIR is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" \
+    "$(if [ -n "$WD_ABS" ]; then printf 'set WORKTREES_DIR=%s in .jst/jira-sdlc-tools.local.env' "$WD_ABS"; else printf 'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. %s)' "$WD_EXAMPLE"; fi), then $RERUN."
+fi
 
 # .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,
 # tracked hook a project writes to turn a fresh worktree into a *runnable*
 # instance: clone the database, pick per-instance ports, install deps. See
-# project-config.md and docs/RUNNING-MULTIPLE-COPIES.md. Optional by design, so
+# project-config.md and https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies
+# (which carries three worked examples). Optional by design, so
 # it is INFO either way — never WARN or FAIL, because most projects won't have
 # one. This script only REPORTS it: jira-task-executor step 1 is what runs it,
 # which keeps a broken hook visible in that run's transcript instead of
