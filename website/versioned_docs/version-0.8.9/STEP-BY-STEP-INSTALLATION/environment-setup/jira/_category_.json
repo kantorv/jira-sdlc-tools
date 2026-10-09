@@ -1,0 +1,9 @@
+{
+  "label": "Jira",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/jira",
+    "description": "Project, board, workflow statuses and per-role API tokens."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "Issue to task / bug",
+  "position": 2,
+  "link": {
+    "type": "doc",
+    "id": "github-automations/chatops/issue-to-task/ci-issue-to-task-demo"
+  }
+}
