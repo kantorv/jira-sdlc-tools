@@ -1,3 +1,14 @@
+# ----------------------------------------------------------------------------
+# Example workflow distributed with the jira-sdlc plugin
+# (https://github.com/kantorv/jira-sdlc-tools). It ships as an example to
+# copy into your own repo's .github/workflows/ and adapt — it is not
+# installed with the plugin.
+#
+#   Guide:         https://kantorv.github.io/jira-sdlc-tools/docs/applications/ci-review-pr-demo
+#   All examples:  https://kantorv.github.io/jira-sdlc-tools/docs/applications
+#   Source:        https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-kimi-openrouter-reviewer.yml
+# ----------------------------------------------------------------------------
+
 name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 
 # Wiring smoke test for the jira-task-reviewer skill in CI. Triggered manually
@@ -12,7 +23,8 @@ name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
 # see demo-claude-reviewer.yml for that.
 #
 # GATES: owner-only author check on the precheck job (github.triggering_actor ==
-# github.repository_owner) and environment: production on the reviewer-smoke job.
+# github.repository_owner). No environment: the reviewer-smoke job reads
+# repository secrets.
 
 on:
   workflow_dispatch:
@@ -91,7 +103,6 @@ jobs:
     # so gating here skips them instead of spinning up a runner for a no-op.
     # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
     # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
-    environment: production
     runs-on: ubuntu-latest
     permissions:
       contents: read
