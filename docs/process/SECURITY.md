@@ -6,8 +6,7 @@ sidebar_label: Security
 
 # Security
 
-> **Stub — TBD.** [STEP-BY-STEP.md](../setup/STEP-BY-STEP.md) links here for the note
-> on Jira token types. Until this page is written, token guidance lives in
+> **Stub — TBD.** Until this page is written, token guidance lives in
 > [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
 > §5 and
 > [github/GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md).
@@ -21,8 +20,8 @@ sidebar_label: Security
   fail with `401 "scope does not match"`, because a single `GET /issue`
   requires a whole bundle of them at once. Full detail in
   [plugins/jira-sdlc/skills/\_shared/jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md)
-  §5. Resolve the wording against [STEP-BY-STEP.md](../setup/STEP-BY-STEP.md) and the
-  root README's Tokens table, which currently describe this differently.
+  §5 and the root README's Tokens table, which currently describe this
+  differently.
 - **GitHub PAT scope** — fine-grained, Contents + Pull requests read/write.
 - **Where secrets live:** `.jst/jira-sdlc-tools.local.env` is the untracked,
   per-machine file; `.jst/jira-sdlc-tools.env` is committed and must hold no

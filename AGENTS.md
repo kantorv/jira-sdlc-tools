@@ -165,13 +165,19 @@ nothing. `docs/assets/` (the four phase diagrams, one `.mmd` source, one PNG, ~5
 move with the docs and is referenced relatively.
 
 Files under `docs/` whose name starts with `_` are **not published** —
-Docusaurus treats them as partials, so `docs/integrations/_TEMPLATE.md` is a
+Docusaurus treats them as partials, so `docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/_TEMPLATE.md` is a
 contributor template and links to it are absolute like any other unpublished
 file. `scripts/docs-url-map.json` lists them under `unpublished`.
 
 `scripts/repair-doc-links.py` applies all of the above mechanically and is
 idempotent; run it after moving or renaming a doc rather than hand-editing
 links, then verify with `scripts/check-doc-links.sh` (below).
+
+The linked setup trees (step-by-step overview and site front page) are
+generated from the sidebar's own labels and positions, between
+`<!-- doc-tree: <dir> -->` markers. After adding, renaming or re-ordering a page
+under that section, run `python3 scripts/gen-doc-tree.py` (`--check` to verify)
+— never hand-edit between the markers.
 
 ## If you rename a skill or the plugin
 
