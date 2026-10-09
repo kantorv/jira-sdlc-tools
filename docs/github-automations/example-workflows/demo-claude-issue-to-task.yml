@@ -1,3 +1,14 @@
+# ----------------------------------------------------------------------------
+# Example workflow distributed with the jira-sdlc plugin
+# (https://github.com/kantorv/jira-sdlc-tools). It ships as an example to
+# copy into your own repo's .github/workflows/ and adapt — it is not
+# installed with the plugin.
+#
+#   Guide:         https://kantorv.github.io/jira-sdlc-tools/docs/applications/ci-issue-to-task-demo
+#   All examples:  https://kantorv.github.io/jira-sdlc-tools/docs/applications
+#   Source:        https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-issue-to-task.yml
+# ----------------------------------------------------------------------------
+
 # Demo — turn a GitHub issue into a Jira task via a `/make-task` comment,
 # using jira-task-assigner
 #

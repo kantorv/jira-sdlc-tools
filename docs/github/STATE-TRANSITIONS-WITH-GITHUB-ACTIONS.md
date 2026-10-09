@@ -122,11 +122,11 @@ anchor (`grep -n 'SOURCE=\|TARGET=\|DONE=' .github/workflows/jira_issue_transiti
 
 | File | Line | Literal | Role | Replace with your… |
 | -- | -- | -- | -- | -- |
-| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L35) | 35 | `SOURCE="To Do"` | only status it will advance *from* | `<STATUS_TODO>` |
-| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L36) | 36 | `TARGET="In Progress"` | where it moves the issue | `<STATUS_IN_PROGRESS>` |
-| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L44) | 44 | `TARGET="In Review"` | where it moves the issue | `<STATUS_IN_REVIEW>` |
-| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L45) | 45 | `DONE="Done"` | **guard only** — don't drag a closed issue back to In Review | `<STATUS_DONE>` |
-| [`jira_issue_transition_on_merge.yml`](../github-automations/example-workflows/jira_issue_transition_on_merge.yml#L45) | 45 | `TARGET="Done"` | where it moves the issue | `<STATUS_DONE>` |
+| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L47) | 47 | `SOURCE="To Do"` | only status it will advance *from* | `<STATUS_TODO>` |
+| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L48) | 48 | `TARGET="In Progress"` | where it moves the issue | `<STATUS_IN_PROGRESS>` |
+| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L55) | 55 | `TARGET="In Review"` | where it moves the issue | `<STATUS_IN_REVIEW>` |
+| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L56) | 56 | `DONE="Done"` | **guard only** — don't drag a closed issue back to In Review | `<STATUS_DONE>` |
+| [`jira_issue_transition_on_merge.yml`](../github-automations/example-workflows/jira_issue_transition_on_merge.yml#L56) | 56 | `TARGET="Done"` | where it moves the issue | `<STATUS_DONE>` |
 
 The fourth one is the easy miss: `DONE` in the PR-open workflow is not a
 target, it's the sentinel that stops a merged-and-closed issue being pulled

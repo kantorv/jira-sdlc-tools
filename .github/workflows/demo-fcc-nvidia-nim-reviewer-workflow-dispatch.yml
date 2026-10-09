@@ -1,3 +1,14 @@
+# ----------------------------------------------------------------------------
+# Example workflow distributed with the jira-sdlc plugin
+# (https://github.com/kantorv/jira-sdlc-tools). It ships as an example to
+# copy into your own repo's .github/workflows/ and adapt — it is not
+# installed with the plugin.
+#
+#   Guide:         https://kantorv.github.io/jira-sdlc-tools/docs/github-automations/manual-dispatch
+#   All examples:  https://kantorv.github.io/jira-sdlc-tools/docs/applications
+#   Source:        https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml
+# ----------------------------------------------------------------------------
+
 # Dispatch twin of `demo-fcc-nvidia-nim-reviewer.yml`.
 #
 # What it demonstrates: the same reviewer-skill-on-Free-Claude-Code + NVIDIA NIM
