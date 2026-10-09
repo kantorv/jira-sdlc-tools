@@ -1,0 +1,8 @@
+{
+  "label": "Manual review (workflow dispatch)",
+  "position": 3,
+  "link": {
+    "type": "doc",
+    "id": "github-automations/manual-dispatch/manual-dispatch"
+  }
+}

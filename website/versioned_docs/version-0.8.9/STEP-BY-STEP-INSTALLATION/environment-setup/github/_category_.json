@@ -1,0 +1,9 @@
+{
+  "label": "GitHub",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/github",
+    "description": "Account, PAT, branching model and the clone the skills work from."
+  }
+}

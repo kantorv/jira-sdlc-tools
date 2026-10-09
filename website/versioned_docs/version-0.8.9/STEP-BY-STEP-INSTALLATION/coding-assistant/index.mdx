@@ -1,0 +1,21 @@
+---
+title: Coding Assistant
+slug: /step-by-step-installation/coding-assistant
+sidebar_label: Coding Assistant
+---
+
+{/* Prose lives in the _intro.md / _matrix.md partials so the Markdown gates
+    (cedit canonicalize, scripts/check-doc-links.sh) keep covering it; this
+    .mdx exists only to render the child doc cards, which CommonMark .md pages
+    cannot. _matrix.md is shared with docs/integrations.mdx — one copy of the
+    compatibility table, imported twice. */}
+
+import Intro from './_intro.md';
+import Matrix from './_matrix.md';
+import DocCardList from '@theme/DocCardList';
+
+<Intro />
+
+<Matrix />
+
+<DocCardList />
