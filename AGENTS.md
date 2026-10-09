@@ -165,13 +165,19 @@ nothing. `docs/assets/` (the four phase diagrams, one `.mmd` source, one PNG, ~5
 move with the docs and is referenced relatively.
 
 Files under `docs/` whose name starts with `_` are **not published** —
-Docusaurus treats them as partials, so `docs/integrations/_TEMPLATE.md` is a
+Docusaurus treats them as partials, so `docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/_TEMPLATE.md` is a
 contributor template and links to it are absolute like any other unpublished
 file. `scripts/docs-url-map.json` lists them under `unpublished`.
 
 `scripts/repair-doc-links.py` applies all of the above mechanically and is
 idempotent; run it after moving or renaming a doc rather than hand-editing
 links, then verify with `scripts/check-doc-links.sh` (below).
+
+The linked setup trees (step-by-step overview and site front page) are
+generated from the sidebar's own labels and positions, between
+`<!-- doc-tree: <dir> -->` markers. After adding, renaming or re-ordering a page
+under that section, run `python3 scripts/gen-doc-tree.py` (`--check` to verify)
+— never hand-edit between the markers.
 
 ## If you rename a skill or the plugin
 
@@ -188,9 +194,10 @@ assuming you're done:
   rather than working from the list below** — they move between files as the
   skills are refactored, and a hand-maintained list is exactly what goes
   stale (this one did: the reviewer's re-run wording left its SKILL.md steps
-  for the shared template in JST-293). That grep reaches ~124 occurrences
-  across the plugin, `docs/`, the root prose and the
-  `.github/workflows/demo-*.yml` runners — all of which break on a rename.
+  for the shared template in JST-293). That grep reaches ~133 occurrences
+  across the plugin, `docs/` (including the example `demo-*.yml` runners in
+  `docs/github-automations/example-workflows/`), the root prose and the one
+  demo `.github/workflows/` also runs — all of which break on a rename.
   It excludes `website/`, whose `versioned_docs/` are published snapshots of
   older releases: those name the plugin as it *was* and must keep doing so.
   It does **not** exclude `docs/examples/reports/`, so four of those hits are
@@ -451,8 +458,20 @@ other expression/shell/schema mistakes before you push:
 
 ```bash
 actionlint .github/workflows/<file>.yml   # one file
-actionlint                                 # every workflow in the repo
+actionlint                                 # every workflow this repo runs
+actionlint docs/github-automations/example-workflows/*.yml   # the examples
 ```
+
+**Two directories, two jobs** (JST-319). `.github/workflows/` holds only what
+this repo runs. The demo and Jira-transition workflows shipped for other
+projects to copy live in `docs/github-automations/example-workflows/` and never
+run here, which is why the bare `actionlint` doesn't reach them. Two examples
+are also part of this repo's own flow — `jira_issue_transition_on_merge.yml`
+and `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` — so each exists in
+both directories, byte-identical. Edit one, `cp` it over the other, and
+`cmp` the two. Docs that present them as examples link the `docs/` copy;
+[docs/process/CI.md](docs/process/CI.md), which describes live CI, links the
+`.github/workflows/` one.
 
 `.jst/bootstrap.sh` installs `actionlint` into `venv/bin` (it's a Go binary,
 not a PyPI package, so it's fetched via its own install script rather than

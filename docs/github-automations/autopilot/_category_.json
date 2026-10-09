@@ -1,0 +1,8 @@
+{
+  "label": "Autopilot mode (issue → PR)",
+  "position": 4,
+  "link": {
+    "type": "doc",
+    "id": "github-automations/autopilot/autopilot"
+  }
+}

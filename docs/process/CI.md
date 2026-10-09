@@ -19,11 +19,20 @@ sidebar_label: CI / GitHub Actions
 
 ## Summary
 
-Eight workflows, in four functional groups. The plugin itself is prompt files
+Eight workflows, in five functional groups. The plugin itself is prompt files
 plus two JSON manifests, so there is no build or test step for *it* — "CI" here
 means **structure validation**, **release automation**, **documentation
-publishing**, and **Jira status syncing**. The one thing that genuinely gets
-built is the documentation site in `website/`.
+publishing**, **Jira status syncing**, and one **on-demand review**. The one
+thing that genuinely gets built is the documentation site in `website/`.
+
+`.github/workflows/` holds **only what this repo runs**. The demo and Jira
+transition workflows shipped for other projects to copy live in
+[`docs/github-automations/example-workflows/`](https://github.com/kantorv/jira-sdlc-tools/tree/main/docs/github-automations/example-workflows)
+and never run here (JST-319). Two of them are also used by this repo's own flow,
+so each has a **byte-identical** copy in `.github/workflows/`:
+`jira_issue_transition_on_merge.yml` and
+`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`. Edit one copy, then `cp`
+it over the other.
 
 | Workflow | Trigger | What it does |
 | :- | :- | :- |
@@ -32,9 +41,9 @@ built is the documentation site in `website/`.
 | `release.yml` | PR **merged** into `main` from `release/*` or `hotfix/*` | Cuts the versioned-docs snapshot onto `main`, tags `vX.Y.Z`, publishes the GitHub Release, bumps the manifests on `main`, back-merges `main`→`development` (opens a sync PR on conflict), deletes the branch, then dispatches `docs.yml` and — only when the back-merge pushed rather than conflicted — `update_lab.yml`. SDLC Phase 4 / §4. |
 | `docs.yml` | push to `main` touching `docs/**`, `website/**` or itself; `workflow_dispatch` | Builds the Docusaurus site in `website/` and deploys it to GitHub Pages. See [The docs site](#the-docs-site). |
 | `update_lab.yml` | push to `development` or `lab`; `workflow_dispatch` (from `release.yml` after a back-merge) | Merges `development`→`lab` to keep the lab channel current, stamps the plugin manifests with a `X.Y.Z-lab.N` version **on the branch**, and tags the build `vX.Y.Z-lab.N`. See [Tagging Mechanics](#tagging-mechanics). |
-| `jira_issue_transition_on_branch.yml` | `create` (a `feature/*` or `hotfix/*` branch) | Advances the issue **To Do → In Progress**. |
-| `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from `feature/*` / `hotfix/*` | Advances the issue **→ In Review**. |
-| `jira_issue_transition_on_merge.yml` | PR closed (merged) on an issue branch | Advances the issue **→ Done**. |
+| `markdown-canonicalize.yml` | push / PR touching `**.md` | Runs `cedit md canonicalize --check` on every changed Markdown file and fails on any that isn't canonical. |
+| [`jira_issue_transition_on_merge.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_merge.yml) | PR closed (merged) on an issue branch | Advances the issue **→ Done**. |
+| [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) | manual `workflow_dispatch` from an issue branch | Runs `jira-task-reviewer` on that branch's open PR (FCC + NVIDIA NIM, model chosen at dispatch). See [Manual dispatch](../github-automations/manual-dispatch/manual-dispatch.md). |
 
 ### How the pieces connect
 
@@ -63,8 +72,14 @@ built is the documentation site in `website/`.
   from the site's `/_edge/tenant_info`), because a scoped API token is
   rejected by Basic auth on the `*.atlassian.net` domain. Each transition is
   **guarded** to only advance from the expected source status, never regress.
-  To reuse these three in your own project — secrets, status-name edits, and
-  how they interleave with the skills — see
+  **Only the on-merge transition runs in this repo.** Its
+  `jira_issue_transition_on_branch.yml` and `jira_issue_transition_on_pr_open.yml`
+  siblings are examples since JST-319, so here Jira no longer moves an issue
+  to In Review when its PR opens (the on-branch one was already switched off
+  with `if: false`, so nothing changes for branch creation). The executor skill
+  makes both moves itself (steps 3 and 11). To
+  reuse all three in your own project — secrets, status-name edits, and how they
+  interleave with the skills — see
   [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
 
 ### Secrets used
@@ -73,7 +88,8 @@ built is the documentation site in `website/`.
 | :- | :- |
 | `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs, and dispatch `docs.yml` and `update_lab.yml`. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
 | *(none)* | `docs.yml` — `actions/deploy-pages` authenticates to Pages via OIDC (`id-token: write`), so no secret is configured for it. |
-| `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | the three Jira transition workflows |
+| `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | `jira_issue_transition_on_merge.yml` |
+| `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`, `NVIDIA_NIM_API_KEY` (repository secrets) | `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` |
 
 These Jira secrets are the **CI bot's own** credential, separate from the
 skills' local auth: the skills authenticate per-request as

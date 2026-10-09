@@ -22,7 +22,7 @@ which they ask about, and which belong to you.
 | **[`jira-task-executor`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jira-task-executor/SKILL.md)** | ❌ | ✅ step 3, when it picks the issue up | ✅ step 11, right after it opens the PR | ❌ step 11 explicitly leaves Done to the merge, whoever does it |
 | **[`jira-task-reviewer`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/jira-task-reviewer/SKILL.md)** | ❌ | ✅ step 3d, on a CHANGES REQUESTED verdict — sub-task or single-step only, never the multistep parent on a 5b reject | ❌ it only *reads* this status, to pick which sub-tasks to review | ⚠️ step 7 asks once at the end of a run, for approved issues only, and moves nothing you don't confirm |
 | **[GitHub Actions](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** [^ci] | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
-| **[Jira Automation](../setup/INSTALLING-GITHUB-FOR-JIRA.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
+| **[Jira Automation](JIRA-GITHUB-API.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
 
 Read the three skill rows down a column and you get that state's whole
 skill-side story — `<STATUS_IN_REVIEW>`, for instance, is written by the
@@ -79,7 +79,7 @@ Say no and the card is closed by one of the other three rows in the table:
 you by hand, a merge workflow like this repo's
 `jira_issue_transition_on_merge.yml` ([CI.md](../process/CI.md)), or a Jira rule —
 either the GitHub-for-Jira app's merge automation
-([INSTALLING-GITHUB-FOR-JIRA.md](../setup/INSTALLING-GITHUB-FOR-JIRA.md)) or your own,
+([JIRA-GITHUB-API.md](JIRA-GITHUB-API.md)) or your own,
 e.g. *all sub-tasks Done → move the Story to Done*
 ([JIRA-KANBAN-BOARD.md](JIRA-KANBAN-BOARD.md)). With none of them wired up and
 the question declined, cards simply stay in `<STATUS_IN_REVIEW>` after their
@@ -98,8 +98,9 @@ PRs merge — expected, not a bug.
   between these anchors. That's the anchor-mapping contract: the skills
   touch the anchors, everything between them is yours.
 
-[^ci]: These three workflows are **this repo's own CI** (`.github/workflows/`),
-    not files the plugin installs — a marketplace install copies only
-    `plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
+[^ci]: These three workflows are **example workflows** shipped in this repo's
+    `docs/github-automations/example-workflows/` (this repo itself runs only the
+    on-merge one), not files the plugin installs — a marketplace install copies
+    only `plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
     secrets and guards are in
     [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).
