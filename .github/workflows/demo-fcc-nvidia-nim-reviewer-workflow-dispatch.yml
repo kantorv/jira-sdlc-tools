@@ -312,8 +312,8 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           uv tool install --force --refresh-package free-claude-code \
-            --python 3.14.0 \
-            "free-claude-code @ https://github.com/Alishahryar1/free-claude-code/archive/refs/heads/main.zip"
+            --python 3.14.7 \
+            "free-claude-code @ git+https://github.com/Alishahryar1/free-claude-code.git@main"
           echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
 
       - name: Start fcc-server (background)
