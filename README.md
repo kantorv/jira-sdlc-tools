@@ -256,7 +256,7 @@ sections interactively, checking each one before moving to the next.
 Beyond the walkthrough above, the plugin is consumed two ways — as a Claude
 Code marketplace plugin, or as a loose skillset copied into a project's own
 skills folder — and this repo ships demo GitHub Actions workflows under
-[`.github/workflows/`](https://github.com/kantorv/jira-sdlc-tools/tree/main/.github/workflows) showing both consumption modes
+[`docs/github-automations/example-workflows/`](https://github.com/kantorv/jira-sdlc-tools/tree/main/docs/github-automations/example-workflows) showing both consumption modes
 driving the three skills headlessly in CI, from a standalone reviewer gate on
 an open PR up to the full assigner → executor → reviewer chain on the feature
 and hotfix paths. Full detail, including production-environment setup and
@@ -271,22 +271,22 @@ Four scenarios, each with its own walkthrough. "Approvals" counts the
   GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
   and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
   3 approvals.
-  [`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-feature-flow.yml)
+  [`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-feature-flow.yml)
   (Claude Code · `/make-feature`) ·
-  [`demo-fcc-nvidia-nim-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-feature-flow.yml)
+  [`demo-fcc-nvidia-nim-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-fcc-nvidia-nim-feature-flow.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-make-feature`)
 - **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-hotfix-flow-demo.md)**
   — the same chain on the emergency path: `hotfix/*` cut off
   `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
   Comment-triggered, up to 3 approvals.
-  [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-hotfix-flow.yml)
+  [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-hotfix-flow.yml)
   (Claude Code · `/make-hotfix`)
 - **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/review/ci-review-pr-demo.md)** —
   the reviewer on its own against an already-open PR, posting its verdict to
   GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
-  [`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-reviewer.yml)
+  [`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-reviewer.yml)
   (Claude Code · `/review`) ·
-  [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)
+  [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-fcc-nvidia-nim-reviewer.yml)
   (Free Claude Code + NVIDIA NIM · `/fcc-review`)
 - **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md)**
   — the assigner alone: a commented issue becomes a Jira Task (or Bug) with its
@@ -295,9 +295,9 @@ Four scenarios, each with its own walkthrough. "Approvals" counts the
   **no approval gate**: `environment: production` was dropped, so the comment
   guard is the only boundary and its secrets resolve from the repo level
   (pending the environment-secret redistribution flagged by JST-225 AC#4).
-  [`demo-claude-issue-to-task.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-task.yml)
+  [`demo-claude-issue-to-task.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-issue-to-task.yml)
   (Claude Code · `/make-task`) ·
-  [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
+  [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-issue-to-bug.yml)
   (Claude Code · `/make-bug`)
 
 ## Jira states - who can move a card

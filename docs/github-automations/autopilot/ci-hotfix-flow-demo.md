@@ -7,7 +7,7 @@ sidebar_label: Hotfix flow
 # CI application: the hotfix-flow demo (assigner → executor → reviewer)
 
 > **Note on this document:** this describes
-> [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-hotfix-flow.yml)
+> [`demo-claude-hotfix-flow.yml`](../example-workflows/demo-claude-hotfix-flow.yml)
 > at the **marketplace repo root** — a GitHub Actions workflow that chains all
 > three `jira-sdlc` skills headlessly, one job per skill, to turn a GitHub
 > issue into a reviewed hotfix PR when someone comments `/make-hotfix` on it.

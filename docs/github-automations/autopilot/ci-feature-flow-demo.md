@@ -7,7 +7,7 @@ sidebar_label: Feature flow
 # CI application: the feature-flow demo (assigner → executor → reviewer)
 
 > **Note on this document:** this describes
-> [`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-feature-flow.yml)
+> [`demo-claude-feature-flow.yml`](../example-workflows/demo-claude-feature-flow.yml)
 > at the **marketplace repo root** — a GitHub Actions workflow that chains all
 > three `jira-sdlc` skills headlessly, one job per skill, turning a GitHub
 > issue into a reviewed feature PR when someone comments `/make-feature` on it.

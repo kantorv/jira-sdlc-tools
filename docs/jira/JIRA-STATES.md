@@ -98,8 +98,9 @@ PRs merge — expected, not a bug.
   between these anchors. That's the anchor-mapping contract: the skills
   touch the anchors, everything between them is yours.
 
-[^ci]: These three workflows are **this repo's own CI** (`.github/workflows/`),
-    not files the plugin installs — a marketplace install copies only
-    `plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
+[^ci]: These three workflows are **example workflows** shipped in this repo's
+    `docs/github-automations/example-workflows/` (this repo itself runs only the
+    on-merge one), not files the plugin installs — a marketplace install copies
+    only `plugins/jira-sdlc/`. Copy them into your project to get these rows; setup,
     secrets and guards are in
     [STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md).

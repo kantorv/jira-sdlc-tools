@@ -14,7 +14,8 @@ This file is both halves of that:
   implements, and the direct-REST path for callers that can't use it — a
   GitHub Actions runner, or a **scoped** API token. Every `curl` below is a
   *verified working call*, run against a live Jira Cloud instance and the
-  exact shapes the `.github/workflows/jira_issue_transition_*.yml` workflows
+  exact shapes the example `jira_issue_transition_*.yml` workflows
+  ([example-workflows](https://github.com/kantorv/jira-sdlc-tools/tree/main/docs/github-automations/example-workflows))
   use.
 
 Project-specific values are `<TOKEN>`s resolved from the two config files in

@@ -10,11 +10,11 @@ sidebar_label: Review a PR
 > `jira-task-reviewer` skill run headlessly in CI against a PR that already
 > exists. Unlike its siblings it is not one file: two workflows at the
 > marketplace repo root implement it on different model backends
-> ([`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-reviewer.yml)
+> ([`demo-claude-reviewer.yml`](../../example-workflows/demo-claude-reviewer.yml)
 > and
-> [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-fcc-nvidia-nim-reviewer.yml)).
+> [`demo-fcc-nvidia-nim-reviewer.yml`](../../example-workflows/demo-fcc-nvidia-nim-reviewer.yml)).
 > Despite its filename,
-> [`demo-kimi-openrouter-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-kimi-openrouter-reviewer.yml)
+> [`demo-kimi-openrouter-reviewer.yml`](../../example-workflows/demo-kimi-openrouter-reviewer.yml)
 > is **not** one of them — it invokes no skill (see "Why
 > `demo-kimi-openrouter-reviewer.yml` isn't a third one" below).
 > It is an **application demo**: a worked example meant to be read next to the
@@ -277,7 +277,7 @@ Unlike the feature and hotfix flow demos, **no workflow-side comment is posted
 back to the triggering issue.** The skill owns everything that gets written;
 the workflow only uploads artifacts. If you want the transcript echoed onto
 the issue, copy that step out of
-[`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-feature-flow.yml).
+[`demo-claude-feature-flow.yml`](../../example-workflows/demo-claude-feature-flow.yml).
 
 Nothing is ever merged. That stays a human act.
 

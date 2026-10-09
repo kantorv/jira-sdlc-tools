@@ -17,8 +17,8 @@ sidebar_label: Overview
 
 | Workflow file | Trigger | What it does |
 | -- | -- | -- |
-| [`jira_issue_transition_on_pr_open.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_pr_open.yml) | PR opened/reopened, head branch `feature/*` or `hotfix/*` | Transitions the issue to **In Review**. No-ops if already In Review or Done — it never regresses a later status. |
-| [`jira_issue_transition_on_merge.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_merge.yml) | PR closed **and** merged, head branch `feature/*` or `hotfix/*` | Transitions the issue to **Done**. No-ops if already Done. |
+| [`jira_issue_transition_on_pr_open.yml`](../example-workflows/jira_issue_transition_on_pr_open.yml) | PR opened/reopened, head branch `feature/*` or `hotfix/*` | Transitions the issue to **In Review**. No-ops if already In Review or Done — it never regresses a later status. |
+| [`jira_issue_transition_on_merge.yml`](../example-workflows/jira_issue_transition_on_merge.yml) | PR closed **and** merged, head branch `feature/*` or `hotfix/*` | Transitions the issue to **Done**. No-ops if already Done. |
 
 Both extract the Jira key from the branch name
 (`^(feature|hotfix)/([A-Z]+-[0-9]+)-`) — a branch that doesn't match the
@@ -50,7 +50,7 @@ run):
 
 ## The third file: `jira_issue_transition_on_branch.yml`
 
-[`jira_issue_transition_on_branch.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_branch.yml)
+[`jira_issue_transition_on_branch.yml`](../example-workflows/jira_issue_transition_on_branch.yml)
 would advance **To Do → In Progress** on branch creation, mirroring the other
 two. It ships with a hardcoded `if: false` (the real condition is left
 commented out just below it) — GitHub's `create` event fires for every

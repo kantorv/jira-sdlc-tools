@@ -2,8 +2,10 @@
 # conversation_metrics.sh — print a markdown table of what a Claude Code run
 # actually cost: turns, tokens, cache hits, wall clock, tool calls, tool errors.
 #
-# Written for the demo workflows in .github/workflows/, which pipe its stdout
-# straight into a `gh issue comment` / `gh pr comment` body:
+# Written for the example demo workflows in
+# docs/github-automations/example-workflows/ (copy this script along with any
+# you adopt), which pipe its stdout straight into a `gh issue comment` /
+# `gh pr comment` body:
 #
 #   { printf '### 2 · executor — conversation metrics\n\n'
 #     bash .github/scripts/conversation_metrics.sh

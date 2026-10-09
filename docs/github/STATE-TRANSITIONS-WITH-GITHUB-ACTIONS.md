@@ -17,10 +17,12 @@ merges the PR.
 | `jira_issue_transition_on_pr_open.yml` | PR opened/reopened from a `feature/*` / `hotfix/*` head | → `<STATUS_IN_REVIEW>` |
 | `jira_issue_transition_on_merge.yml` | PR closed **as merged** on an issue branch | → `<STATUS_DONE>` |
 
-They live in **this repo's own `.github/workflows/`**, not inside
-`plugins/jira-sdlc/` — a marketplace install copies only the plugin root, so
-you won't get them by installing the plugin. Copy the three files out of this
-repository into your project.
+They live in this repo's
+[`docs/github-automations/example-workflows/`](https://github.com/kantorv/jira-sdlc-tools/tree/main/docs/github-automations/example-workflows),
+not inside `plugins/jira-sdlc/` — a marketplace install copies only the plugin
+root, so you won't get them by installing the plugin. Copy the three files out
+of this repository into your project. This repo itself runs only the on-merge
+one, from a copy in its own `.github/workflows/` ([CI.md](../process/CI.md)).
 
 This is an alternative to [GitHub for Jira](../jira/JIRA-GITHUB-API.md),
 not a companion to it. The app is less setup and covers more surface; these
@@ -120,11 +122,11 @@ anchor (`grep -n 'SOURCE=\|TARGET=\|DONE=' .github/workflows/jira_issue_transiti
 
 | File | Line | Literal | Role | Replace with your… |
 | -- | -- | -- | -- | -- |
-| [`jira_issue_transition_on_branch.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_branch.yml#L35) | 35 | `SOURCE="To Do"` | only status it will advance *from* | `<STATUS_TODO>` |
-| [`jira_issue_transition_on_branch.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_branch.yml#L36) | 36 | `TARGET="In Progress"` | where it moves the issue | `<STATUS_IN_PROGRESS>` |
-| [`jira_issue_transition_on_pr_open.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_pr_open.yml#L44) | 44 | `TARGET="In Review"` | where it moves the issue | `<STATUS_IN_REVIEW>` |
-| [`jira_issue_transition_on_pr_open.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_pr_open.yml#L45) | 45 | `DONE="Done"` | **guard only** — don't drag a closed issue back to In Review | `<STATUS_DONE>` |
-| [`jira_issue_transition_on_merge.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/jira_issue_transition_on_merge.yml#L45) | 45 | `TARGET="Done"` | where it moves the issue | `<STATUS_DONE>` |
+| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L35) | 35 | `SOURCE="To Do"` | only status it will advance *from* | `<STATUS_TODO>` |
+| [`jira_issue_transition_on_branch.yml`](../github-automations/example-workflows/jira_issue_transition_on_branch.yml#L36) | 36 | `TARGET="In Progress"` | where it moves the issue | `<STATUS_IN_PROGRESS>` |
+| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L44) | 44 | `TARGET="In Review"` | where it moves the issue | `<STATUS_IN_REVIEW>` |
+| [`jira_issue_transition_on_pr_open.yml`](../github-automations/example-workflows/jira_issue_transition_on_pr_open.yml#L45) | 45 | `DONE="Done"` | **guard only** — don't drag a closed issue back to In Review | `<STATUS_DONE>` |
+| [`jira_issue_transition_on_merge.yml`](../github-automations/example-workflows/jira_issue_transition_on_merge.yml#L45) | 45 | `TARGET="Done"` | where it moves the issue | `<STATUS_DONE>` |
 
 The fourth one is the easy miss: `DONE` in the PR-open workflow is not a
 target, it's the sentinel that stops a merged-and-closed issue being pulled

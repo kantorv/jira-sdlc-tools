@@ -7,7 +7,7 @@ sidebar_label: Issue to task
 # CI application: the issue-to-task / issue-to-bug demo (jira-task-assigner alone)
 
 > **Note on this document:** this describes
-> [`demo-claude-issue-to-task.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-task.yml)
+> [`demo-claude-issue-to-task.yml`](../../example-workflows/demo-claude-issue-to-task.yml)
 > at the **marketplace repo root** — a GitHub Actions workflow that runs the
 > `jira-task-assigner` skill headlessly when a maintainer comments `/make-task`
 > on a GitHub issue, turning it into a Jira Task plus a pushed `feature/*`
@@ -17,7 +17,7 @@ sidebar_label: Issue to task
 > ([SDLC.md](../../../process/SDLC.md)). The workflow-by-workflow CI reference is
 > [CI.md](../../../process/CI.md).
 >
-> [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
+> [`demo-claude-issue-to-bug.yml`](../../example-workflows/demo-claude-issue-to-bug.yml)
 > is a **byte-identical twin** — the `/make-bug` counterpart — that differs
 > only in its workflow name, its command token, the prose-step `COMMAND`, and
 > the one prompt line that says *Jira Bug* instead of *Jira Task*. Everything
@@ -263,7 +263,7 @@ Two things the flow demos have and this one doesn't: there is **no comment
 posted back to the GitHub issue** (it lacks the permission to), and **no
 transcript GIF** artifact. If you want either, copy the corresponding step out
 of
-[`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-feature-flow.yml)
+[`demo-claude-feature-flow.yml`](../../example-workflows/demo-claude-feature-flow.yml)
 and add `issues: write` for the comment.
 
 So the Actions log and the `assigner-log` artifact are the only places the run
