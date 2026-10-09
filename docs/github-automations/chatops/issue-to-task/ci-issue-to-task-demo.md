@@ -7,7 +7,7 @@ sidebar_label: Issue to task
 # CI application: the issue-to-task / issue-to-bug demo (jira-task-assigner alone)
 
 > **Note on this document:** this describes
-> [`demo-claude-issue-to-task.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-task.yml)
+> [`demo-claude-issue-to-task.yml`](../../example-workflows/demo-claude-issue-to-task.yml)
 > at the **marketplace repo root** — a GitHub Actions workflow that runs the
 > `jira-task-assigner` skill headlessly when a maintainer comments `/make-task`
 > on a GitHub issue, turning it into a Jira Task plus a pushed `feature/*`
@@ -17,7 +17,7 @@ sidebar_label: Issue to task
 > ([SDLC.md](../../../process/SDLC.md)). The workflow-by-workflow CI reference is
 > [CI.md](../../../process/CI.md).
 >
-> [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-issue-to-bug.yml)
+> [`demo-claude-issue-to-bug.yml`](../../example-workflows/demo-claude-issue-to-bug.yml)
 > is a **byte-identical twin** — the `/make-bug` counterpart — that differs
 > only in its workflow name, its command token, the prose-step `COMMAND`, and
 > the one prompt line that says *Jira Bug* instead of *Jira Task*. Everything
@@ -50,7 +50,7 @@ flowchart TB
 ```
 
 There is **no approval gate** between the guard and the assigner — see
-"Dropping the production gate" below. The invocation is the same one a
+"No production gate" below. The invocation is the same one a
 developer types, with the issue's text (plus any prose from the comment) as the
 free-form description:
 
@@ -93,31 +93,15 @@ notification, so a public repo doesn't accumulate a red X for every unrelated
 comment. The `/make-bug` twin's guard is byte-identical with the token swapped
 for `/make-bug`.
 
-### ── Dropping the production gate ─────────────────────────────────────────────
+### ── No production gate ────────────────────────────────────────────────────
 
 Earlier revisions of this workflow declared `environment: production` on the
-job so GitHub paused for a human approval before the assigner ran that approval
-was the gate the demo leaned on instead of the comment-command guard above.
-That gate is now **gone**: the job declares no environment, and the OWNER/MEMBER
-comment guard is the sole security boundary.
-
-The consequence the acceptance criteria call out (JST-225 AC#4): the secrets
-below used to live as *environment* secrets on `production`, so `${{ secrets.* }}`
-resolved from there; with `environment: production` removed they now resolve
-from **repo-level** secrets. The bootstrap step still checks the whole set up
-front and fails loud with
-
-```
-::error::missing or empty secret(s) in the 'production' environment: …
-```
-
-— the message deliberately still names `production` as the redistribution
-signal — until those same secrets also exist at the repo level (or are
-renamed/resourced). That secret redistribution is a **separate follow-up this
-PR deliberately flags rather than fixes**: the workflow can merge now but will
-not run a comment-triggered job successfully until that is done. See "Secrets"
-below and [APPLICATIONS.md §3.2 and §3.5](../../GITHUB-AUTOMATIONS.md) for the updated
-two-gate convention and secret-location guidance.
+job, so GitHub paused for a human approval before the assigner ran. That gate
+is **gone**, as it is from every example workflow: the job declares no
+environment, the OWNER comment guard is the sole security boundary, and the
+secrets below are **repository secrets**. See
+[APPLICATIONS.md §3](../../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows)
+for the gating convention and secret-location guidance.
 
 ### Steering one run from the comment
 
@@ -227,11 +211,7 @@ doesn't exist here.
 
 ## Secrets and the credentials that aren't ones
 
-These are **repo-level secrets** now, not environment secrets on `production`
-(see "Dropping the production gate" above). The job no longer declares
-`environment: production`, so `${{ secrets.* }}` resolves from the repo rather
-than an environment — until the redistribution from environment to repo-level
-secrets is done (JST-225 AC#4), the bootstrap check fails loud. Each is named
+These are **repository secrets** (see "No production gate" above). Each is named
 exactly as the `.jst/jira-sdlc-tools.local.env` key it becomes, so the bootstrap
 is one loop over a `KEYS` list:
 
@@ -263,7 +243,7 @@ Two things the flow demos have and this one doesn't: there is **no comment
 posted back to the GitHub issue** (it lacks the permission to), and **no
 transcript GIF** artifact. If you want either, copy the corresponding step out
 of
-[`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/.github/workflows/demo-claude-feature-flow.yml)
+[`demo-claude-feature-flow.yml`](../../example-workflows/demo-claude-feature-flow.yml)
 and add `issues: write` for the comment.
 
 So the Actions log and the `assigner-log` artifact are the only places the run
@@ -284,14 +264,9 @@ read like a task description, not a question.
 
 ## Running it
 
-1. **Redistribute the secrets to the repo level** (JST-225 AC#4 — until this
-   is done the bootstrap fails loud). They used to be environment secrets on
-   `production`; with the `environment:` line gone, each `${{ secrets.* }}`
-   now resolves from repo-level secrets, so set the keys from the table above
-   as repo secrets. See
-   [APPLICATIONS.md §3.4](../../GITHUB-AUTOMATIONS.md#34-setting-secrets-via-github-cli)
-   for the `gh secret set` commands (drop the `--env production` so they land
-   at the repo).
+1. Add the keys from the table above as **repository secrets** — see
+   [APPLICATIONS.md §3.3](../../GITHUB-AUTOMATIONS.md#33-setting-secrets-via-github-cli)
+   for the `gh secret set` commands.
 2. Confirm `.jst/jira-sdlc-tools.env` sets `DEFAULT_BASE_BRANCH`.
 3. Open a GitHub issue whose title and body read as a task description (or the
    bug report you want turned into a Jira Bug).
@@ -311,7 +286,7 @@ Typical successful runs in this repo take **2–7 minutes**.
   issue, and the uploaded log. The worktree is gone with the VM.
 - **Not gated by an approval.** Its security boundary is the OWNER
   comment guard, not a human approval — the earlier `environment: production`
-  gate is gone (see "Dropping the production gate").
+  gate is gone (see "No production gate").
 - **Not a triage bot.** It does not label, dedupe, or close issues, and it
   fires only on a qualifying `/make-task` (or `/make-bug`) *comment* — opening,
   reopening, or editing an issue does nothing; a mid-sentence mention of the

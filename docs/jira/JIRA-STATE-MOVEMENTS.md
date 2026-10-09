@@ -29,10 +29,11 @@ status names in `.jst/jira-sdlc-tools.env`.
 | **[GitHub Actions](../github/STATE-TRANSITIONS-WITH-GITHUB-ACTIONS.md)** | ❌ none ships | ✅ `jira_issue_transition_on_branch.yml` — on `create` of a `feature/*`/`hotfix/*` branch, and only from `<STATUS_TODO>` | ✅ `jira_issue_transition_on_pr_open.yml` — on PR opened/reopened, skipped if already In Review or Done | ✅ `jira_issue_transition_on_merge.yml` — on PR closed-as-merged, skipped if already Done |
 | **[Jira Automation](JIRA-GITHUB-API.md)** (incl. GitHub for Jira) | ✅ possible (a rule on issue create), rarely needed | ✅ possible — e.g. the dev-panel *branch created* trigger | ✅ possible — e.g. the *pull request created* trigger | ✅ the common one — *pull request merged*, or *all sub-tasks Done → close the parent* |
 
-The **GitHub Actions** row is **this repo's own CI** (`.github/workflows/`),
-not files the plugin installs — a marketplace install copies only
-`plugins/jira-sdlc/`. Copy the three workflows into your project to get that
-row.
+The **GitHub Actions** row is **example workflows** shipped in this repo's
+`docs/github-automations/example-workflows/` (this repo itself runs only the
+on-merge one), not files the plugin installs — a marketplace install copies
+only `plugins/jira-sdlc/`. Copy the three workflows into your project to get
+that row.
 
 Read the three skill rows down a column for that state's whole skill-side
 story; read across to compare the four mechanisms. The sections below hand
