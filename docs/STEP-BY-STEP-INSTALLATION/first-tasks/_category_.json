@@ -1,0 +1,9 @@
+{
+  "label": "First tasks",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/first-tasks",
+    "description": "Ready-to-run first tasks for a freshly configured project: commit the setup, add worktree bootstrap scripts, and automate a release cycle."
+  }
+}

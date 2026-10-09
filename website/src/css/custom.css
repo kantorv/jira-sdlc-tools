@@ -42,3 +42,19 @@
   max-width: 100%;
   height: auto;
 }
+
+/* The linked setup trees written by scripts/gen-doc-tree.py: box-drawing
+   characters only line up in a monospace font, and a long label should scroll
+   rather than wrap under the branch lines. */
+.doc-tree {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: var(--ifm-code-font-size);
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow-x: auto;
+  margin-bottom: var(--ifm-leading);
+}
+
+.doc-tree p {
+  margin: 0;
+}

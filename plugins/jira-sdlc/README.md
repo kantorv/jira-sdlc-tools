@@ -57,7 +57,7 @@ A fourth skill sits outside that lifecycle and runs before it:
 
 | Skill | Runs | Does |
 | -- | -- | -- |
-| `jst-install` | Once per project, before the first assigner run | Sets up: walks [STEP-BY-STEP.md](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step)'s four sections — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
+| `jst-install` | Once per project, before the first assigner run | Sets up: walks [Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation) — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
 
 ## Quick start
 
