@@ -173,6 +173,12 @@ file. `scripts/docs-url-map.json` lists them under `unpublished`.
 idempotent; run it after moving or renaming a doc rather than hand-editing
 links, then verify with `scripts/check-doc-links.sh` (below).
 
+The linked setup trees (step-by-step overview and site front page) are
+generated from the sidebar's own labels and positions, between
+`<!-- doc-tree: <dir> -->` markers. After adding, renaming or re-ordering a page
+under that section, run `python3 scripts/gen-doc-tree.py` (`--check` to verify)
+— never hand-edit between the markers.
+
 ## If you rename a skill or the plugin
 
 Renames aren't self-contained here — grep for the old name before
