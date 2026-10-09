@@ -17,9 +17,8 @@ automatically — that stays a human act on both the Jira and GitHub sides.
 | [`demo-fcc-nvidia-nim-feature-flow.yml`](../example-workflows/demo-fcc-nvidia-nim-feature-flow.yml) | Comment `/fcc-make-feature` on an issue | Same as above | Same skills, same job shape as `demo-claude-feature-flow.yml` — the only difference is the model backend (Free Claude Code + NVIDIA NIM instead of the Claude Code CLI). See [ci-feature-flow-demo.md](ci-feature-flow-demo.md). |
 | [`demo-claude-hotfix-flow.yml`](../example-workflows/demo-claude-hotfix-flow.yml) | Comment `/make-hotfix` on an issue | `hotfix/<KEY>-<slug>` off `origin/<PRODUCTION_BRANCH>`; PR into `<PRODUCTION_BRANCH>` | [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md) |
 
-Every job in this category declares `environment: production` — up to 3
-approval pauses per run if the environment's **Required reviewers** rule is
-enabled (see
-[GITHUB-AUTOMATIONS.md §3](../GITHUB-AUTOMATIONS.md#3-the-two-gate-convention-for-assistant-workflows)
-for the full two-gate convention shared by every workflow that runs a coding
+No job in this category declares an environment, so a run that passes the
+OWNER comment guard goes start to finish with no approval pause (see
+[GITHUB-AUTOMATIONS.md §3](../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows)
+for the gating convention shared by every workflow that runs a coding
 assistant).

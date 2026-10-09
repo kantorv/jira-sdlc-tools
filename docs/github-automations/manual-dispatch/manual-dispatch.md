@@ -11,9 +11,8 @@ PR/issue comment. It carries **no author gate and no environment gate**: only
 users with write access can dispatch a workflow at all, and an owner-only
 `github.triggering_actor == github.repository_owner` check never matches on an
 org-owned repo, where the owner is the org rather than a person (see
-[GITHUB-AUTOMATIONS.md §3.2](../GITHUB-AUTOMATIONS.md#32-rule-2-owner-only-author-gate--cheap-precheck-before-the-environment-gate)).
-Its secrets are therefore plain **repository secrets**, not `production`
-environment secrets.
+[GITHUB-AUTOMATIONS.md §3.1](../GITHUB-AUTOMATIONS.md#31-the-author-gate--a-cheap-precheck-before-any-assistant-job)).
+Like every example workflow, it reads **repository secrets**.
 
 | Workflow file | What it does | Deep dive |
 | -- | -- | -- |

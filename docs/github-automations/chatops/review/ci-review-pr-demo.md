@@ -152,22 +152,15 @@ Then `check_pr_exists` validates the branch name against
 and looks for an open PR on that branch. If there is no PR, the reviewer job
 is skipped rather than failed — there is simply nothing to review.
 
-## The `environment: production` gate
+## Gating
 
-The reviewer job declares `environment: production`. That always scopes which
-secrets it can read, and — if the environment has **Required reviewers**
-enabled — makes GitHub pause for a human before it starts. There is only one
-skill here, so there is at most one gate: the point at which you can eyeball
-the diff before the review spends tokens on it. With Required reviewers left
-unchecked the job runs unattended, still correctly scoped to the environment's
-secrets. See [APPLICATIONS.md §3.1–3.2](../../GITHUB-AUTOMATIONS.md) for the full
-two-gate convention. Setup is
-[APPLICATIONS.md §3](../../GITHUB-AUTOMATIONS.md#3-the-two-gate-convention-for-assistant-workflows).
-
-The gating job runs *before* the environment gate, deliberately: resolving the
-branch and confirming a PR exists is cheap and needs no secrets, so a comment
-on a PR that doesn't qualify is rejected without ever asking a human to
-approve anything.
+The reviewer job declares no `environment:`, so there is no approval pause and
+it reads **repository secrets**. What decides whether it runs is the gating
+job before it: resolving the branch and confirming a PR exists is cheap and
+needs no secrets, so a comment on a PR that doesn't qualify is rejected before
+a runner holding credentials starts or a model token is spent. See
+[APPLICATIONS.md §3](../../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows)
+for the gating convention.
 
 ## The one constraint that shapes the whole job
 
@@ -248,7 +241,7 @@ is the pre-skill baseline the Claude demo replaced: it installs Kimi Code,
 writes a `~/.kimi-code/config.toml` pointing `extra_skill_dirs` at this
 plugin's `skills/`, then reviews with a hand-written prompt fed `gh pr diff`
 and posts the result via `gh pr review --comment`. It writes nothing to Jira,
-builds no worktree, and has no environment gate.
+builds no worktree, and needs only its OpenRouter key.
 
 That makes it a **smoke test**, not a review implementation — it proves a
 backend installs, authenticates, sees the skills, and returns a completion,
@@ -283,17 +276,15 @@ Nothing is ever merged. That stays a human act.
 
 ## Running it
 
-1. Ensure the `production` environment exists with the reviewer secrets —
-   `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`,
+1. Add the reviewer secrets as **repository secrets** — `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`,
    `CLAUDE_CODE_OAUTH_TOKEN` (or `NVIDIA_NIM_API_KEY` for the FCC variant).
-   See [APPLICATIONS.md §3.4](../../GITHUB-AUTOMATIONS.md#34-setting-secrets-via-github-cli).
+   See [APPLICATIONS.md §3.3](../../GITHUB-AUTOMATIONS.md#33-setting-secrets-via-github-cli).
 2. Open a PR from a `feature/<KEY>-…` or `hotfix/<KEY>-…` branch.
 3. Comment `/review` on it (`/fcc-review` for the FCC variant) as an OWNER or
    OWNER of the repo — bare, or followed by a space or newline and whatever
    you want this review to focus on (see *Steering the review from the
-   comment*).
-4. Approve the `production` gate if GitHub pauses (it will only pause when the
-   environment has Required reviewers enabled).
+   comment*). The reviewer job starts right away — there is no approval
+   pause.
 
 A comment on a PR whose head isn't an issue branch fails the gate by design —
 the reviewer derives its issue key from that branch name. A comment on a

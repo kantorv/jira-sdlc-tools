@@ -51,10 +51,10 @@ env:
   DEFAULT_REVIEWER_MODEL: "nvidia_nim/z-ai/glm-5.3-flash"
 
 jobs:
-  # ── Gating job — cheap, secret-free, and runs before the environment gate ──
+  # ── Gating job — cheap, secret-free, and runs before the reviewer job ─────
   # Resolves the commented-on PR and its issue key. Proceeds only when that PR
   # is OPEN on a feature/*|hotfix/* branch, so an unqualified comment is
-  # rejected without ever asking a human to approve a run.
+  # rejected before a reviewer runner starts or a model token is spent.
   check_pr_exists:
     #
     # The command clause accepts the bare command or the command plus a
@@ -144,7 +144,6 @@ jobs:
     name: Reviewer skill (Claude)
     needs: check_pr_exists
     if: needs.check_pr_exists.outputs.pr_exists == '1'
-    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

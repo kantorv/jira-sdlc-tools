@@ -123,35 +123,16 @@ job 1's outputs and invoke their skills as they always have.
 [ci-feature-flow-demo.md](ci-feature-flow-demo.md) carries the fuller
 worked example.
 
-## The `environment: production` gate — one approval per skill
+## Gating and secrets
 
-Every job in the workflow declares:
+No job declares an `environment:`, so there is no approval pause: once the
+OWNER comment guard passes, the three jobs run back to back. That guard is
+the only boundary — see
+[GITHUB-AUTOMATIONS.md §3](../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows).
 
-```yaml
-environment: production
-```
-
-and the `production` environment in this repo has GitHub's **Required
-reviewers** rule checked. See [APPLICATIONS.md §3.1–3.2](../GITHUB-AUTOMATIONS.md)
-for the full two-gate convention. The `production` environment in this repo has GitHub's **Required
-reviewers** protection rule checked. Environment protection is evaluated
-**before each job starts**, so one `/make-hotfix` comment pauses three times:
-
-| Pause | Approving it releases | What has happened so far |
-| :- | :- | :- |
-| before job 1 | the assigner | nothing — this is the "should this run at all" gate, and the first place a human reads the issue text with the run in mind |
-| before job 2 | the executor | a Jira Bug exists and `hotfix/<KEY>-<slug>` is pushed — the owner can inspect both before any code is written |
-| before job 3 | the reviewer | the fix is pushed and the PR is open — the owner can eyeball the diff before the automated review spends tokens on it |
-
-That is the point of reusing **one** environment across all three jobs rather
-than defining three: the protection rule fires per *job*, so one environment
-already yields one human checkpoint per skill. Three separate environments
-would buy nothing but configuration to keep in sync.
-
-The environment is also the **secret scope**. Every credential the demo needs
-is an environment secret on `production`, not a repo-level secret — so a job
-that forgot its `environment:` line would see empty strings (and fail the
-explicit up-front secret check), never real credentials:
+Every credential the demo needs is a **repository secret** (Settings →
+Secrets and variables → Actions). Each job checks its full set up front and
+fails loud on any missing one, never running with a half-filled env file:
 
 | Secret | Used by | Notes |
 | :- | :- | :- |
@@ -402,21 +383,17 @@ there either way.
 
 ## Running it
 
-1. Create the `production` environment (repo → Settings → Environments),
-   check **Required reviewers**, and add the owner (or whoever should gate
-   each step) as a reviewer.
-2. Add the secrets from the table above **to that environment**.
-3. Open a GitHub issue whose title and body describe the bug the way you'd
+1. Add the secrets from the table above as **repository secrets**.
+2. Open a GitHub issue whose title and body describe the bug the way you'd
    describe it to `/jira-sdlc:jira-task-assigner` interactively — phrased as
    the emergency it simulates, since the workflow's prompt wraps it in the
    explicit hotfix directive the assigner's step 5C requires.
-4. Comment `/make-hotfix` on it, as an OWNER — bare, or followed by
+3. Comment `/make-hotfix` on it, as an OWNER — bare, or followed by
    a space or newline and any direction you want to give *this* run (see
    *Steering one run from the comment*).
-5. Approve each of the three pauses as it arrives, inspecting the Jira
-   issue / branch / PR — plus each job's report comment on the issue —
-   between them.
-6. When job 3 finishes, read the review verdict on the PR. Merging it (and
+4. Follow the run through each job's report comment on the issue — the jobs
+   don't pause between them.
+5. When job 3 finishes, read the review verdict on the PR. Merging it (and
    the patch release that follows) is yours.
 
 Runs are serialized by a `concurrency` group — two at once would race on the
@@ -432,6 +409,5 @@ is only the *branch semantics* — assigner step 5C's
 `hotfix/<KEY>-<slug>` cut from `origin/<PRODUCTION_BRANCH>`, single-step
 scope forced, PR aimed at production — which are real and identical to what
 the skills do on a developer machine. The wiring around them (the comment
-trigger and its gate, job chaining, output handoff, environment gates,
-reporting back to the issue) is the CI pattern this document exists to
+trigger and its gate, job chaining, output handoff, reporting back to the issue) is the CI pattern this document exists to
 explain.

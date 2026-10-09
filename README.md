@@ -259,18 +259,18 @@ skills folder — and this repo ships demo GitHub Actions workflows under
 [`docs/github-automations/example-workflows/`](https://github.com/kantorv/jira-sdlc-tools/tree/main/docs/github-automations/example-workflows) showing both consumption modes
 driving the three skills headlessly in CI, from a standalone reviewer gate on
 an open PR up to the full assigner → executor → reviewer chain on the feature
-and hotfix paths. Full detail, including production-environment setup and
-which secrets each demo reads, is in
+and hotfix paths. Full detail, including which repository secrets each demo
+reads, is in
 **[GitHub Automations](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/GITHUB-AUTOMATIONS.md)**.
 
-Four scenarios, each with its own walkthrough. "Approvals" counts the
-`environment: production` pauses a run waits on before it can continue.
+Four scenarios, each with its own walkthrough. None of them pauses for
+approval: each is gated only on who can trigger it (an OWNER comment), then
+runs start to finish on repository secrets.
 
 - **[Feature flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-feature-flow-demo.md)**
   — the whole assigner → executor → reviewer chain on the planned path: a
   GitHub issue becomes a Jira issue and a `feature/*` branch, gets implemented,
-  and ends as an open, reviewed PR. Nothing is merged. Comment-triggered, up to
-  3 approvals.
+  and ends as an open, reviewed PR. Nothing is merged. Comment-triggered.
   [`demo-claude-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-feature-flow.yml)
   (Claude Code · `/make-feature`) ·
   [`demo-fcc-nvidia-nim-feature-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-fcc-nvidia-nim-feature-flow.yml)
@@ -278,12 +278,12 @@ Four scenarios, each with its own walkthrough. "Approvals" counts the
 - **[Hotfix flow](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/autopilot/ci-hotfix-flow-demo.md)**
   — the same chain on the emergency path: `hotfix/*` cut off
   `<PRODUCTION_BRANCH>`, PR aimed back at it, assigner forced single-step.
-  Comment-triggered, up to 3 approvals.
+  Comment-triggered.
   [`demo-claude-hotfix-flow.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-hotfix-flow.yml)
   (Claude Code · `/make-hotfix`)
 - **[Review a PR](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/review/ci-review-pr-demo.md)** —
   the reviewer on its own against an already-open PR, posting its verdict to
-  GitHub and Jira and merging nothing. Comment-triggered, 1 approval.
+  GitHub and Jira and merging nothing. Comment-triggered.
   [`demo-claude-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-reviewer.yml)
   (Claude Code · `/review`) ·
   [`demo-fcc-nvidia-nim-reviewer.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-fcc-nvidia-nim-reviewer.yml)
@@ -291,10 +291,7 @@ Four scenarios, each with its own walkthrough. "Approvals" counts the
 - **[Issue to task / bug](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/chatops/issue-to-task/ci-issue-to-task-demo.md)**
   — the assigner alone: a commented issue becomes a Jira Task (or Bug) with its
   branch and worktree, and the run stops there. Comment-triggered
-  (`/make-task` / `/make-bug`), gated by the OWNER/MEMBER author check — and
-  **no approval gate**: `environment: production` was dropped, so the comment
-  guard is the only boundary and its secrets resolve from the repo level
-  (pending the environment-secret redistribution flagged by JST-225 AC#4).
+  (`/make-task` / `/make-bug`), gated by the OWNER author check.
   [`demo-claude-issue-to-task.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-issue-to-task.yml)
   (Claude Code · `/make-task`) ·
   [`demo-claude-issue-to-bug.yml`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-claude-issue-to-bug.yml)

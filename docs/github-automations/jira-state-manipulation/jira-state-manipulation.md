@@ -46,7 +46,7 @@ run):
 | -- | -- |
 | `JIRA_ACCOUNT_URL` | Site host, e.g. `<your-site>.atlassian.net` (a scheme is stripped if present). |
 | `JIRA_ACCOUNT_EMAIL` | The identity the transition is made as. |
-| `JIRA_ISSUE_TRANSITION_TOKEN` | API token for that identity — deliberately a separate secret from the assigner/executor/reviewer tokens (see [ChatOps → the two-gate convention](../GITHUB-AUTOMATIONS.md#3-the-two-gate-convention-for-assistant-workflows) for why per-role credentials matter elsewhere in this repo too). |
+| `JIRA_ISSUE_TRANSITION_TOKEN` | API token for that identity — deliberately a separate secret from the assigner/executor/reviewer tokens (see [GitHub Automations → gating assistant workflows](../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows) for why per-role credentials matter elsewhere in this repo too). |
 
 ## The third file: `jira_issue_transition_on_branch.yml`
 

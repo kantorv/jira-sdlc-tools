@@ -41,9 +41,9 @@
 #   * `author_association` is OWNER. **This is the security
 #     boundary**: `issue_comment` fires for *any* commenter on a public repo,
 #     and what follows runs an LLM with write permissions on a runner. Do not
-#     loosen it to CONTRIBUTOR (a merged PR earns that) or drop it in favour of
-#     "the environment approval will catch it" — an approval prompt is a poor
-#     place to be reading attacker-supplied text for the first time.
+#     loosen it to CONTRIBUTOR (a merged PR earns that) or drop it: no job
+#     declares an environment, so there is no approval prompt behind it — this
+#     guard is the only gate.
 #   * the comment is on an **issue, not a pull request**. `issue_comment` fires
 #     for PR comments too, and `github.event.issue` would then be the PR —
 #     handing the assigner a PR description as a feature request. Excluded
@@ -112,7 +112,7 @@
 #     executor and reviewer both stop unless `.git` is a file (a linked
 #     worktree) on a `feature/*` / `hotfix/*` branch, which a bare
 #     `actions/checkout` is not. Same reason every job rebuilds
-#     `.jst/jira-sdlc-tools.local.env` from its own environment secrets: there
+#     `.jst/jira-sdlc-tools.local.env` from its own repository secrets: there
 #     is no earlier job's copy to inherit. Those bootstrap steps are
 #     near-identical **on purpose** and are not factored into a composite
 #     action — this repo has no CI-reuse mechanism anywhere, and these
@@ -154,9 +154,8 @@
 #
 # ── Secrets ───────────────────────────────────────────────────────────────
 #
-# All of them are **environment secrets on `production`** (so a job that
-# forgets `environment: production` sees empty strings, not repo-level
-# values), and each is named **exactly as the `jira-sdlc-tools.local.env` key
+# All of them are **repository secrets** (Settings → Secrets and variables →
+# Actions — no job declares an environment), and each is named **exactly as the `jira-sdlc-tools.local.env` key
 # it becomes** — which is what lets each job's first step be a single loop
 # over a `KEYS` list rather than a hand-mapped list of printfs:
 #
@@ -232,7 +231,6 @@ jobs:
        startsWith(github.event.comment.body, format('/make-feature{0}', fromJSON('"\r"')))) &&
       github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
-    environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
@@ -258,7 +256,7 @@ jobs:
       - name: Write .jst/jira-sdlc-tools.local.env (assigner role only)
         shell: bash
         env:
-          # Environment secrets on `production`, each named exactly as the
+          # Repository secrets, each named exactly as the
           # env-file key it becomes — which is what lets the step below be one
           # loop instead of a hand-mapped list. KEYS is the whole contract.
           KEYS: JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN
@@ -284,7 +282,7 @@ jobs:
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            echo "::error::missing or empty repository secret(s): ${missing[*]} — this demo cannot run without them (Settings → Secrets and variables → Actions)"
             exit 1
           fi
 
@@ -715,7 +713,6 @@ jobs:
     name: 2 · executor — implement and open the PR
     needs: assign
     runs-on: ubuntu-latest
-    environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
@@ -736,7 +733,7 @@ jobs:
       - name: Write .jst/jira-sdlc-tools.local.env (executor role only)
         shell: bash
         env:
-          # Same shape as job 1, one role over: environment secrets named
+          # Same shape as job 1, one role over: repository secrets named
           # exactly as the env-file keys they become.
           KEYS: JIRA_ACCOUNT_URL JIRA_EXECUTOR_EMAIL JIRA_EXECUTOR_TOKEN GITHUB_PAT_TOKEN
           JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
@@ -754,7 +751,7 @@ jobs:
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            echo "::error::missing or empty repository secret(s): ${missing[*]} — this demo cannot run without them (Settings → Secrets and variables → Actions)"
             exit 1
           fi
 
@@ -1076,7 +1073,6 @@ jobs:
     name: 3 · reviewer — review the PR
     needs: [assign, execute]
     runs-on: ubuntu-latest
-    environment: production
     # +5 over the skill step's own timeout-minutes below, so the GIF
     # render at the end of this job still fits inside the job budget
     # after a skill run that used all of its own.
@@ -1109,7 +1105,7 @@ jobs:
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            echo "::error::missing or empty repository secret(s): ${missing[*]} — this demo cannot run without them (Settings → Secrets and variables → Actions)"
             exit 1
           fi
 

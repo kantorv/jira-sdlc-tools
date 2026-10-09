@@ -33,8 +33,8 @@ skill it happens to run:
 | [Autopilot mode (issue → PR)](autopilot/autopilot.md) | The full assigner → executor → reviewer chain, comment-triggered, ending in an open reviewed PR. |
 
 The rest of this document (§1 onward) is the same reference it always was —
-plugin installation modes, the demo-workflow catalogue, and the two-gate
-security convention every one of these workflows follows.
+plugin installation modes, the demo-workflow catalogue, and the gating
+convention every one of these workflows follows.
 
 ______________________________________________________________________
 
@@ -115,7 +115,7 @@ a copy of in its own `.github/workflows/` ([CI.md](../process/CI.md)).
 | [`demo-claude-reviewer.yml`](example-workflows/demo-claude-reviewer.yml) | Comment `/review` on a PR | **Reviewer only**, against an already-open PR — a standalone review gate. Deep dive: [ci-review-pr-demo.md](chatops/review/ci-review-pr-demo.md). |
 | [`demo-claude-issue-to-task.yml`](example-workflows/demo-claude-issue-to-task.yml) | Comment `/make-task` on an issue | **Assigner only** — turns the commented GitHub issue into a Jira Task + branch + worktree on the runner. Stops there (nothing persists past the job on a hosted runner). Deep dive: [ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md). |
 | [`demo-claude-issue-to-bug.yml`](example-workflows/demo-claude-issue-to-bug.yml) | Comment `/make-bug` on an issue | **Assigner only** — the byte-identical `/make-bug` twin of the row above; same run, producing a Jira Bug instead of a Task. Deep dive: [ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md). |
-| [`demo-claude-feature-flow.yml`](example-workflows/demo-claude-feature-flow.yml) | Comment `/make-feature` on an issue | **Full feature flow**: assigner → executor → reviewer, chained, one manual-approval gate per skill. Branch `feature/<KEY>-<slug>` off `<DEFAULT_BASE_BRANCH>`; PR targets `<DEFAULT_BASE_BRANCH>`. Deep dive: [ci-feature-flow-demo.md](autopilot/ci-feature-flow-demo.md). |
+| [`demo-claude-feature-flow.yml`](example-workflows/demo-claude-feature-flow.yml) | Comment `/make-feature` on an issue | **Full feature flow**: assigner → executor → reviewer, chained, one job per skill. Branch `feature/<KEY>-<slug>` off `<DEFAULT_BASE_BRANCH>`; PR targets `<DEFAULT_BASE_BRANCH>`. Deep dive: [ci-feature-flow-demo.md](autopilot/ci-feature-flow-demo.md). |
 | [`demo-claude-hotfix-flow.yml`](example-workflows/demo-claude-hotfix-flow.yml) | Comment `/make-hotfix` on an issue | **Full hotfix flow**, same three-job chain and gating. Branch `hotfix/<KEY>-<slug>` off `origin/<PRODUCTION_BRANCH>`; PR targets `<PRODUCTION_BRANCH>`. Deep dive: [ci-hotfix-flow-demo.md](autopilot/ci-hotfix-flow-demo.md). |
 | [`demo-fcc-nvidia-nim-feature-flow.yml`](example-workflows/demo-fcc-nvidia-nim-feature-flow.yml) | Comment `/fcc-make-feature` on an issue | Same three-job feature flow, but on **Free Claude Code + NVIDIA NIM** as the model backend instead of the Claude Code CLI — shows how to swap the LLM provider. Deliberately a different trigger word than `/make-feature` so the two workflows don't both fire off one comment. |
 | [`demo-fcc-nvidia-nim-reviewer.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer.yml) | Comment `/fcc-review` on a PR | Reviewer-only, FCC + NVIDIA NIM backend — the provider-swap counterpart to `demo-claude-reviewer.yml`. |
@@ -129,19 +129,14 @@ a copy of in its own `.github/workflows/` ([CI.md](../process/CI.md)).
   `$RUNNER_TEMP/worktrees`. Jobs 2/3 reconstruct a *linked* worktree from the
   branch job 1 pushed; the executor and reviewer skills hard-stop unless
   they're running in a linked worktree on a `feature/*` or `hotfix/*` branch.
-- **Environment-gated approvals** — every demo except the two issue-to-\*
-  twins declares `environment: production` on its skill jobs.
-  That always scopes their secrets, and additionally makes GitHub pause for a
-  human before each job *if* the environment has Required reviewers enabled.
-  The issue-to-task/bug twins are the exception (see the next bullet): they
-  dropped the gate, so the OWNER comment guard is their only boundary.
-  See §3.1–3.2.
-- **Secrets are environment secrets on `production`** (named exactly as the
+- **No environment, no approval pause** — no demo declares `environment:`.
+  Who may trigger a run is decided by a cheap precheck (the OWNER comment
+  guard, or write access for `workflow_dispatch`), and after that the jobs run
+  start to finish. See §3.1.
+- **Secrets are repository secrets** named exactly as the
   `.jst/jira-sdlc-tools.local.env` keys they become — this is what lets a job's
   bootstrap step be a single loop over a `KEYS` list instead of a hand-mapped
-  one), except the issue-to-task/bug twins, which dropped `environment: production` so their secrets resolve from the **repo** level instead — until
-  redistributed from the `production` environment (JST-225 AC#4) their
-  bootstrap fails loud. See §3.5 and [ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md).
+  one. See §3.2.
 - **No `GH_TOKEN`/`GITHUB_TOKEN` exported into skill steps** — statuscheck
   logs `gh` in from `GITHUB_PAT_TOKEN` read out of the env file; exporting
   either token variable into the environment makes `gh auth login` refuse,
@@ -165,29 +160,14 @@ implement it. Several scenarios ship more than once: same skills, same job
 shape, different model backend behind them. Pick the row for the flow you
 want, then the implementation whose backend you have credentials for.
 
-| Scenario | What the flow does | Trigger | Approval | Implementations |
-| -- | -- | -- | -- | -- |
-| [**Feature flow**](autopilot/ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](example-workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](example-workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
-| [**Hotfix flow**](autopilot/ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](example-workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
-| [**Review a PR**](chatops/review/ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated. The `workflow_dispatch` variant has **none**: no environment, repository secrets | • [`demo-claude-reviewer.yml`](example-workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
-| [**Issue to task / bug**](chatops/issue-to-task/ci-issue-to-task-demo.md) | Assigner alone. A commented GitHub issue becomes a Jira Task (`/make-task`) or Bug (`/make-bug`) with its branch and worktree, and the run stops there — no implementation, no PR. | **comment** — bare or with prose | **None** — the OWNER comment guard is the only gate; `environment: production` was dropped. ⚠️ Secrets moved from the `production` environment to repo-level, pending redistribution (JST-225 AC#4) — until done the bootstrap fails loud. | • [`demo-claude-issue-to-task.yml`](example-workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `/make-task`<br>• [`demo-claude-issue-to-bug.yml`](example-workflows/demo-claude-issue-to-bug.yml) — Claude Code CLI · `/make-bug` |
+| Scenario | What the flow does | Trigger | Implementations |
+| -- | -- | -- | -- |
+| [**Feature flow**](autopilot/ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | • [`demo-claude-feature-flow.yml`](example-workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](example-workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
+| [**Hotfix flow**](autopilot/ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | • [`demo-claude-hotfix-flow.yml`](example-workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
+| [**Review a PR**](chatops/review/ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | • [`demo-claude-reviewer.yml`](example-workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
+| [**Issue to task / bug**](chatops/issue-to-task/ci-issue-to-task-demo.md) | Assigner alone. A commented GitHub issue becomes a Jira Task (`/make-task`) or Bug (`/make-bug`) with its branch and worktree, and the run stops there — no implementation, no PR. | **comment** — bare or with prose | • [`demo-claude-issue-to-task.yml`](example-workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `/make-task`<br>• [`demo-claude-issue-to-bug.yml`](example-workflows/demo-claude-issue-to-bug.yml) — Claude Code CLI · `/make-bug` |
 
-**"Up to" is doing real work in that column.** `environment: production` in a
-workflow file does two separable things, and only one of them is automatic:
-
-- **Always** — it scopes which secrets the job can read. A job without it sees
-  empty strings for every environment secret and fails its own up-front check.
-- **Only if you ask for it** — it pauses for a human. The pause comes from the
-  **Required reviewers** protection rule on the environment itself
-  ([§3.3](#33-create-the-environment)), not from the workflow file. Leave that
-  box unchecked and every one of these runs start to finish with no approval
-  prompt at all, still correctly scoped to the environment's secrets.
-
-So the counts above are the number of jobs that *would* pause — one gate per
-gated job — once Required reviewers is enabled. Toggling that one checkbox is
-what turns these demos from unattended to fully gated, with no workflow edit.
-
-Three more things the matrix makes visible:
+Three things the matrix makes visible:
 
 - **Backend coverage is uneven, deliberately.** The feature flow and the PR
   review exist on more than one backend because those are the two flows worth
@@ -221,41 +201,31 @@ Three more things the matrix makes visible:
 
 ______________________________________________________________________
 
-## 3. The two-gate convention for assistant workflows
+## 3. Gating assistant workflows
 
-Every workflow that executes a coding assistant declares **two separable gates**
-to control when and by whom the assistant can be invoked. The convention is
-named and linkable so every new workflow added to this repo gets both gates
-by construction rather than by someone remembering.
+Every workflow that executes a coding assistant is gated on **who can trigger
+it**, and nothing else. A cheap, secret-free precheck job decides that before
+any assistant job starts. None of them declares an `environment:`, so there is
+no `production` environment to create and no approval pause: once the
+precheck passes, the jobs run start to finish on repository secrets. (Earlier
+revisions declared `environment: production` on every assistant job to scope
+secrets and optionally pause for a Required-reviewers approval. JST-319
+dropped it.)
 
-### 3.1 Rule 1: Environment gate — scopes secrets and pauses for approval
-
-Every job that executes a coding assistant declares `environment: production`.
-That does two separable things:
-
-- **Always** — it scopes which secrets the job can read. A job without it sees
-  empty strings for every environment secret and fails its own up-front check.
-- **Only if you ask for it** — it pauses for a human. The pause comes from the
-  **Required reviewers** protection rule on the environment itself (see §3.3
-  below), not from the workflow file. Leave that box unchecked and every one
-  of these runs start to finish with no approval prompt at all, still correctly
-  scoped to the environment's secrets.
-
-The **exception that proves the rule**: precheck and gating jobs (e.g.,
-`check_pr_exists`, `check_branch`, and equivalents) stay **ungated and
-secret-free** deliberately. They must run before the environment gate so a bad
-trigger is rejected without asking a human to approve anything and without
-spending a model token.
-
-### 3.2 Rule 2: Owner-only author gate — cheap precheck before the environment gate
+### 3.1 The author gate — a cheap precheck before any assistant job
 
 Every workflow reachable by someone other than the repository owner carries an
-owner-only author gate on a cheap, secret-free precheck job that runs **before**
-the environment gate. The predicate depends on the trigger:
+author gate on a precheck job (`check_pr_exists`, `check_branch`, or the
+job-level `if:` of a single-job demo). That job stays **secret-free**
+deliberately, so a bad trigger is rejected before a runner holding
+credentials starts and before a model token is spent. The predicate depends on
+the trigger:
 
 - **`issue_comment`** — `github.event.comment.author_association == 'OWNER'`.
   `MEMBER` is **not** accepted — a single merged PR earns `MEMBER` association,
   which is too loose for a trigger that runs an LLM with write permissions.
+  With no approval pause behind it, this guard is the **only** boundary, so
+  never loosen it.
 - **`workflow_dispatch`** — usually **no author gate at all**: only users with
   write access can dispatch a workflow, so the trigger is already restricted.
   An owner-only `github.triggering_actor == github.repository_owner` check also
@@ -265,38 +235,14 @@ the environment gate. The predicate depends on the trigger:
   works in a user-owned repo. If you do keep one, prefer `triggering_actor`
   over `actor` so a non-owner cannot re-run an owner's earlier dispatch.
 
-### 3.3 Create the environment
+### 3.2 Repository secrets
 
-1. Repo **Settings → Environments → New environment**.
-2. Name it **`production`** — this exact name is hardcoded in the workflows.
-3. *(Optional, but the point of the demos)* Check **Required reviewers** and
-   add the approver(s). **This is the step the approval gates come from — with
-   it unchecked the workflows still run, just unattended.** Steps 1–2 alone
-   only give the jobs access to the environment's secrets.
-4. Click **Save protection rules**.
-
-### 3.4 What each gate buys you
-
-Assuming Required reviewers is enabled on the `production` environment:
-
-| Job | Pauses before | What you can inspect at that point |
-| -- | -- | -- |
-| **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
-| **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
-| **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
-
-One `production` environment reused by every job is enough — the rule fires
-per job, so it still yields one checkpoint per skill.
-
-### 3.5 Environment secrets
-
-All credentials live as **environment secrets on `production`**, not
-repo-level secrets — a job that forgets `environment: production` reads
-empty strings and fails its own up-front secret check rather than silently
-running with the wrong identity. The issue-to-task/bug twins are the one
-exception: they read **repo-level** secrets (the gate is gone), pending the
-redistribution from `production` called out in
-[ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md).
+All credentials live as **repository secrets** (Settings → Secrets and
+variables → Actions). Each job checks its whole set up front and fails loud,
+naming every missing one, rather than letting the CLI die halfway through.
+The trade-off of dropping the environment: a repository secret is readable by
+every workflow in the repo, on any branch someone with write access pushes,
+where an environment secret was readable only by jobs that declared it.
 
 | Secret | Used by | Notes |
 | -- | -- | -- |
@@ -316,36 +262,35 @@ the skills' `statuscheck` reads it from
 there, for local/dev use. One limitation of the built-in token carries over
 unchanged in CI: PRs it opens don't trigger other workflows.
 
-### 3.6 Setting secrets via GitHub CLI
+### 3.3 Setting secrets via GitHub CLI
 
 ```bash
-gh secret set JIRA_ACCOUNT_URL      --repo <OWNER>/<REPO> --body "<your-site>.atlassian.net" --env production
-gh secret set JIRA_ASSIGNER_EMAIL   --repo <OWNER>/<REPO> --body "<assigner-identity-email>"  --env production
-gh secret set JIRA_ASSIGNER_TOKEN   --repo <OWNER>/<REPO> --body "<assigner-api-token>"        --env production
-gh secret set JIRA_EXECUTOR_EMAIL   --repo <OWNER>/<REPO> --body "<executor-identity-email>"  --env production
-gh secret set JIRA_EXECUTOR_TOKEN   --repo <OWNER>/<REPO> --body "<executor-api-token>"        --env production
-gh secret set JIRA_REVIEWER_EMAIL   --repo <OWNER>/<REPO> --body "<reviewer-identity-email>"  --env production
-gh secret set JIRA_REVIEWER_TOKEN   --repo <OWNER>/<REPO> --body "<reviewer-api-token>"        --env production
-gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <OWNER>/<REPO> --body "<claude-code-oauth-token>" --env production
+gh secret set JIRA_ACCOUNT_URL      --repo <OWNER>/<REPO> --body "<your-site>.atlassian.net"
+gh secret set JIRA_ASSIGNER_EMAIL   --repo <OWNER>/<REPO> --body "<assigner-identity-email>"
+gh secret set JIRA_ASSIGNER_TOKEN   --repo <OWNER>/<REPO> --body "<assigner-api-token>"
+gh secret set JIRA_EXECUTOR_EMAIL   --repo <OWNER>/<REPO> --body "<executor-identity-email>"
+gh secret set JIRA_EXECUTOR_TOKEN   --repo <OWNER>/<REPO> --body "<executor-api-token>"
+gh secret set JIRA_REVIEWER_EMAIL   --repo <OWNER>/<REPO> --body "<reviewer-identity-email>"
+gh secret set JIRA_REVIEWER_TOKEN   --repo <OWNER>/<REPO> --body "<reviewer-api-token>"
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <OWNER>/<REPO> --body "<claude-code-oauth-token>"
 # Only for the FCC + NVIDIA NIM demos, in place of CLAUDE_CODE_OAUTH_TOKEN
-gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-api-key>"         --env production
+gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-api-key>"
 ```
 
-`--env production` scopes each secret to that environment, so it's only
-readable from jobs that declare `environment: production`. The issue-to-task
-and issue-to-bug twins are the exception — those jobs dropped `environment: production`, so set the same keys as **repo** secrets (drop the `--env production`) rather than environment ones, until the redistribution called out
-by JST-225 AC#4 is done.
+Secrets already stored on a `production` environment from an earlier setup are
+**not** visible to these jobs any more. Re-create them at the repository level
+with the commands above.
 
-### 3.7 Copy-pasteable gate snippets
+### 3.4 Copy-pasteable gate snippet
 
-#### For `issue_comment`-triggered workflows
+For an `issue_comment`-triggered workflow:
 
 ```yaml
 jobs:
   check_comment:
     name: guard — comment gate
     runs-on: ubuntu-latest
-    # No environment: production — this is the precheck gate
+    # Secret-free precheck: decides who may trigger the run
     outputs:
       should_run: ${{ steps.guard.outputs.should_run }}
     steps:
@@ -361,109 +306,13 @@ jobs:
     needs: check_comment
     if: needs.check_comment.outputs.should_run == 'true'
     runs-on: ubuntu-latest
-    environment: production  # ← environment gate here
     steps:
       # ... skill steps
 ```
 
-#### For `workflow_dispatch`-triggered workflows
-
-```yaml
-on:
-  workflow_dispatch:
-
-jobs:
-  check_actor:
-    name: guard — dispatch gate
-    runs-on: ubuntu-latest
-    # No environment: production — this is the precheck gate
-    outputs:
-      should_run: ${{ steps.guard.outputs.should_run }}
-    steps:
-      - id: guard
-        if: github.triggering_actor == github.repository_owner
-        run: echo "should_run=true" >> $GITHUB_OUTPUT
-
-  assign:
-    name: assigner
-    needs: check_actor
-    if: needs.check_actor.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
-    environment: production  # ← environment gate here
-    steps:
-      # ... skill steps
-```
-
-### 3.1 Create the environment
-
-1. Repo **Settings → Environments → New environment**.
-2. Name it **`production`** — this exact name is hardcoded in the workflows.
-3. *(Optional, but the point of the demos)* Check **Required reviewers** and
-   add the approver(s). **This is the step the approval gates come from — with
-   it unchecked the workflows still run, just unattended.** Steps 1–2 alone
-   only give the jobs access to the environment's secrets.
-4. Click **Save protection rules**.
-
-### 3.2 What each gate buys you
-
-Assuming Required reviewers is enabled:
-
-| Job | Pauses before | What you can inspect at that point |
-| -- | -- | -- |
-| **Assigner** | Job starts | Nothing yet created — first chance to decide the issue is even worth turning into work. |
-| **Executor** | Job starts | Jira issue exists, `feature/*`/`hotfix/*` branch is pushed — inspect before any code gets written. |
-| **Reviewer** | Job starts | Implementation is pushed, PR is open — eyeball the diff before spending review tokens on it. |
-
-One `production` environment reused by every job is enough — the rule fires
-per job, so it still yields one checkpoint per skill.
-
-### 3.3 Environment secrets
-
-All credentials live as **environment secrets on `production`**, not
-repo-level secrets — a job that forgets `environment: production` reads
-empty strings and fails its own up-front secret check rather than silently
-running with the wrong identity. The issue-to-task/bug twins are the one
-exception: they read **repo-level** secrets (the gate is gone), pending the
-redistribution from `production` called out in
-[ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md).
-
-| Secret | Used by | Notes |
-| -- | -- | -- |
-| `JIRA_ACCOUNT_URL` | every job | e.g. `<your-site>.atlassian.net`, no scheme. |
-| `JIRA_ASSIGNER_EMAIL` / `JIRA_ASSIGNER_TOKEN` | assigner job | Assigner's own Jira identity. |
-| `JIRA_EXECUTOR_EMAIL` / `JIRA_EXECUTOR_TOKEN` | executor job (+ `_EMAIL` also read by the assigner job, as the assignment target, not a credential) | Executor's own Jira identity. |
-| `JIRA_REVIEWER_EMAIL` / `JIRA_REVIEWER_TOKEN` | reviewer job | Reviewer's own Jira identity. |
-| `CLAUDE_CODE_OAUTH_TOKEN` | every job on the Claude-Code-backed demos | Read by the `claude` CLI from the environment — never written into the env file. Not used by the FCC + NVIDIA NIM demos, which authenticate to NIM instead (see below). |
-| `NVIDIA_NIM_API_KEY` | `demo-fcc-nvidia-nim-feature-flow.yml`, `demo-fcc-nvidia-nim-reviewer.yml`, `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` | The FCC + NIM demos' equivalent of `CLAUDE_CODE_OAUTH_TOKEN` — model backend credential instead of the Claude Code CLI's. |
-
-`GITHUB_PAT_TOKEN` is not a secret to create here: every workflow always
-populates it from the runner's built-in `secrets.GITHUB_TOKEN`, which can
-push, open a PR, and comment given each job's `permissions:` block. It stays
-an env-file key (see "Common patterns across the CI demos" above) because
-the skills' `statuscheck` reads it from
-`.jst/jira-sdlc-tools.local.env` to log `gh` in — a real PAT is only needed
-there, for local/dev use. One limitation of the built-in token carries over
-unchanged in CI: PRs it opens don't trigger other workflows.
-
-### 3.4 Setting secrets via GitHub CLI
-
-```bash
-gh secret set JIRA_ACCOUNT_URL      --repo <OWNER>/<REPO> --body "<your-site>.atlassian.net" --env production
-gh secret set JIRA_ASSIGNER_EMAIL   --repo <OWNER>/<REPO> --body "<assigner-identity-email>"  --env production
-gh secret set JIRA_ASSIGNER_TOKEN   --repo <OWNER>/<REPO> --body "<assigner-api-token>"        --env production
-gh secret set JIRA_EXECUTOR_EMAIL   --repo <OWNER>/<REPO> --body "<executor-identity-email>"  --env production
-gh secret set JIRA_EXECUTOR_TOKEN   --repo <OWNER>/<REPO> --body "<executor-api-token>"        --env production
-gh secret set JIRA_REVIEWER_EMAIL   --repo <OWNER>/<REPO> --body "<reviewer-identity-email>"  --env production
-gh secret set JIRA_REVIEWER_TOKEN   --repo <OWNER>/<REPO> --body "<reviewer-api-token>"        --env production
-gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <OWNER>/<REPO> --body "<claude-code-oauth-token>" --env production
-# Only for the FCC + NVIDIA NIM demos, in place of CLAUDE_CODE_OAUTH_TOKEN
-gh secret set NVIDIA_NIM_API_KEY    --repo <OWNER>/<REPO> --body "<nvidia-nim-api-key>"         --env production
-```
-
-`--env production` scopes each secret to that environment, so it's only
-readable from jobs that declare `environment: production`. The issue-to-task
-and issue-to-bug twins are the exception — those jobs dropped `environment: production`, so set the same keys as **repo** secrets (drop the `--env production`) rather than environment ones, until the redistribution called out
-by JST-225 AC#4 is done.
+A `workflow_dispatch` workflow needs no author guard (§3.1). Its precheck
+validates the dispatch instead — see the `check_branch` job in
+[`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml).
 
 ______________________________________________________________________
 
@@ -471,7 +320,7 @@ ______________________________________________________________________
 
 | Goal | Start with |
 | -- | -- |
-| See a full feature flow in CI with approval gates | `demo-claude-feature-flow.yml` + [ci-feature-flow-demo.md](autopilot/ci-feature-flow-demo.md) |
+| See a full feature flow in CI | `demo-claude-feature-flow.yml` + [ci-feature-flow-demo.md](autopilot/ci-feature-flow-demo.md) |
 | See a hotfix flow targeting production | `demo-claude-hotfix-flow.yml` + [ci-hotfix-flow-demo.md](autopilot/ci-hotfix-flow-demo.md) |
 | Just want automated PR review on a comment | `demo-claude-reviewer.yml` |
 | Turn a commented issue into a Jira Task (or Bug) with the assigner alone | `demo-claude-issue-to-task.yml` / `demo-claude-issue-to-bug.yml` + [ci-issue-to-task-demo.md](chatops/issue-to-task/ci-issue-to-task-demo.md) |

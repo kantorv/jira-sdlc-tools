@@ -163,28 +163,19 @@ separate VMs off job 1's outputs and invoke their skills as they always have.
 Direction meant for the reviewer goes in a `/review` comment on the PR instead
 ([ci-review-pr-demo.md](../chatops/review/ci-review-pr-demo.md)).
 
-## The `environment: production` gate — one approval per skill
+## Gating and secrets
 
-Every job declares `environment: production`, and that environment has
-GitHub's **Required reviewers** rule checked. Protection is evaluated **before
-each job starts**, so one `/make-feature` comment pauses three times. See
-[APPLICATIONS.md §3.1–3.2](../GITHUB-AUTOMATIONS.md) for the full two-gate convention:
+No job declares an `environment:`, so there is no approval pause: once the
+OWNER comment guard passes, the three jobs run back to back. That guard is
+the only boundary — see
+[GITHUB-AUTOMATIONS.md §3](../GITHUB-AUTOMATIONS.md#3-gating-assistant-workflows).
+Between jobs you can still watch each one's report comment land on the issue,
+but nothing waits for you.
 
-| Pause | Approving it releases | What has happened so far |
-| :- | :- | :- |
-| before job 1 | the assigner | nothing — this is the "should this issue become work at all" gate, and the first place a human reads the issue text with the run in mind |
-| before job 2 | the executor | a Jira issue exists and `feature/<KEY>-<slug>` is pushed — inspect both before any code is written |
-| before job 3 | the reviewer | the change is pushed and the PR is open — eyeball the diff before the automated review spends tokens on it |
-
-One environment reused across all three jobs is enough: the rule fires per
-*job*, so it already yields one checkpoint per skill. Three environments would
-buy nothing but configuration to keep in sync.
-
-The environment is also the **secret scope** — every credential is an
-environment secret on `production`, so a job that forgot its `environment:`
-line would see empty strings (and fail its explicit up-front secret check),
-never real credentials. The secret table is identical to the hotfix demo's:
-see [ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md#the-environment-production-gate--one-approval-per-skill).
+Every credential is a **repository secret**. Each job checks its full set up
+front and fails loud on any missing one. The secret table is identical to the
+hotfix demo's: see
+[ci-hotfix-flow-demo.md](ci-hotfix-flow-demo.md#gating-and-secrets).
 Each secret is named **exactly as the `jira-sdlc-tools.local.env` key it
 becomes**, which is what lets each job's env-file bootstrap be one loop over a
 `KEYS` list instead of hand-mapped `printf`s.
@@ -415,19 +406,18 @@ most likely to skip its own GIF; the log artifact is always there either way.
 
 ## Running it
 
-1. Create the `production` environment (repo → Settings → Environments),
-   check **Required reviewers**, and add whoever should gate each step.
-2. Add the secrets from the hotfix demo's table **to that environment** — the
-   two workflows read the same set.
-3. Open a GitHub issue whose title and body describe the work the way you'd
+1. Add the secrets from the hotfix demo's table as **repository secrets**
+   (Settings → Secrets and variables → Actions) — the two workflows read the
+   same set.
+2. Open a GitHub issue whose title and body describe the work the way you'd
    describe it to `/jira-sdlc:jira-task-assigner` interactively. Keep it to
    one coherent, single-step piece of work (see *Headless means no questions*).
-4. Comment `/make-feature` on it, as an OWNER — bare, or followed by
+3. Comment `/make-feature` on it, as an OWNER — bare, or followed by
    a space or newline and any direction you want to give *this* run (see
    *Steering one run from the comment*).
-5. Approve each of the three pauses as it arrives, inspecting the Jira issue,
-   branch, and PR — plus each job's report comment on the issue — between them.
-6. When job 3 finishes, read the review verdict on the PR. Merging it is yours.
+4. Follow the run through each job's report comment on the issue — the jobs
+   don't pause between them.
+5. When job 3 finishes, read the review verdict on the PR. Merging it is yours.
 
 Runs are serialized by a `concurrency` group — two at once would race on the
 same Jira project and the same worktrees dir — and the group is per-workflow
@@ -440,5 +430,5 @@ end to end. What the demo borrows is only the *flow semantics* —
 `feature/<KEY>-<slug>` off the base branch, a PR aimed back at it, one leaf
 one PR — which are real and identical to what the skills do on a developer
 machine. The wiring around them (the comment trigger and its gate, job
-chaining, output handoff, environment gates, reporting back to the issue) is
+chaining, output handoff, reporting back to the issue) is
 the CI pattern this document exists to explain.

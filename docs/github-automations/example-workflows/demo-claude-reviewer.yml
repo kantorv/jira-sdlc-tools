@@ -88,10 +88,10 @@
 #     *marketplace's* copy, not the PR head's — land skill changes on the
 #     plugin repo's default branch if you want them exercised here.
 #
-# ── Secrets (environment secrets on `production`) ───────────────────────────
+# ── Secrets (repository secrets) ─────────────────────────────────────────────
 #
-#  The reviewer job declares `environment: production`, so these are read from
-#  that environment, not repo-level. The env-file-writing step checks every one
+#  Repository secrets (Settings → Secrets and variables → Actions) — no job
+#  declares an environment. The env-file-writing step checks every one
 #  up front and fails loud with `::error::` if any is empty/unset, rather than
 #  letting the claude CLI die halfway through on a missing key.
 #
@@ -141,10 +141,10 @@ env:
 
 
 jobs:
-  # ── Gating job — cheap, secret-free, and runs before the environment gate ──
+  # ── Gating job — cheap, secret-free, and runs before the reviewer job ─────
   # Resolves the commented-on PR and its issue key. Proceeds only when that PR
   # is OPEN on a feature/*|hotfix/* branch, so an unqualified comment is
-  # rejected without ever asking a human to approve a run.
+  # rejected before a reviewer runner starts or a model token is spent.
   check_pr_exists:
     #
     # The command clause accepts the bare command or the command plus a
@@ -233,7 +233,6 @@ jobs:
     name: Reviewer skill (Claude)
     needs: check_pr_exists
     if: needs.check_pr_exists.outputs.pr_exists == '1'
-    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

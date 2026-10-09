@@ -25,7 +25,7 @@
 # demo-claude-issue-to-bug.yml is the byte-identical `/make-bug` twin.
 #
 # Security boundary — there is NO human approval gate on this job (see
-# "Dropping the production gate" below): the job-level `if` requires the
+# "No production gate" below): the job-level `if` requires the
 # comment body to be exactly `/make-task` (or `/make-task` followed by a space
 # or newline and free-form prose) AND `author_association` to be OWNER
 # `issue_comment` fires for any commenter on a public repo, and what
@@ -40,20 +40,12 @@
 # and the fixed CI instruction, never replaces either; a bare command leaves
 # the section out entirely.
 #
-# ── Restoring the production gate ────────────────────────────────────────────
+# ── No production gate ───────────────────────────────────────────────────────
 #
 # Earlier revisions declared `environment: production` on this job so GitHub
-# paused for a human approval before the assigner ran — a gate this demo
-# leaned on instead of the comment-command / owner guard. That gate is now
-# gone: the job declares no environment, and the OWNER/MEMBER comment guard
-# above is the sole security boundary. Consequence the acceptance criteria call
-# out: the secrets below used to live as *environment* secrets on `production`,
-# so `${{ secrets.* }}` resolves from there.
-# The bootstrap step still
-# checks the whole set up front and fails loud with
-# `::error::missing or empty secret(s) in the 'production' environment …` (the
-# message still names `production` as the redistribution signal) until those
-# same secrets also exist on the production environment. That
+# paused for a human approval before the assigner ran. No job declares an
+# environment any more: the OWNER comment guard above is the sole security
+# boundary, and every secret below is a repository secret.
 #
 # ── The worktree-persistence caveat (read this before copying the file) ─────
 #
@@ -102,11 +94,8 @@
 #
 # ── Secrets (repo-level) ─────────────────────────────────────────────────────
 #
-#  These live as repo-level secrets: the job no longer declares
-#  `environment: production`, so `${{ secrets.* }}` resolves from the repo
-#  rather than an environment (see "Dropping the production gate" above —
-#  until the redistribution from environment to repo-level secrets is done the
-#  bootstrap check fails loud). Each is named exactly as the
+#  These live as repository secrets — the job declares no environment (see
+#  "No production gate" above). Each is named exactly as the
 #  `jira-sdlc-tools.local.env` key it becomes — which is what lets the bootstrap
 #  step below be one loop over a KEYS list rather than a hand-mapped list of
 #  printfs (secret -> file via env, no sed — the demo-kimi-openrouter-reviewer.yml
@@ -172,7 +161,6 @@ jobs:
        startsWith(github.event.comment.body, format('/make-task{0}', fromJSON('"\r"')))) &&
       github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 30
     permissions:
       contents: write # the assigner pushes the new feature branch to origin
@@ -193,9 +181,9 @@ jobs:
         env:
           # Repo-level secrets, each named exactly as the env-file key it
           # becomes — which is what lets the step below be one loop instead of
-          # a hand-mapped list. KEYS is the whole contract. (The job no longer
-          # declares `environment: production`, so these resolve from the repo;
-          # see the header's "Dropping the production gate" note.)
+          # a hand-mapped list. KEYS is the whole contract. (The job declares no
+          # environment, so these resolve from the repo; see the header's
+          # "No production gate" note.)
           KEYS: JIRA_ACCOUNT_URL JIRA_ASSIGNER_EMAIL JIRA_ASSIGNER_TOKEN JIRA_EXECUTOR_EMAIL GITHUB_PAT_TOKEN
           JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
           JIRA_ASSIGNER_EMAIL: ${{ secrets.JIRA_ASSIGNER_EMAIL }}
@@ -219,7 +207,7 @@ jobs:
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them"
+            echo "::error::missing or empty repository secret(s): ${missing[*]} — this demo cannot run without them (Settings → Secrets and variables → Actions)"
             exit 1
           fi
 
