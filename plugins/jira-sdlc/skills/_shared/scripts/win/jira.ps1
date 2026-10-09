@@ -48,6 +48,8 @@ usage: jira.sh --role assigner|executor|reviewer <command>
   issue create    --project K --type T --summary S
                   [--parent K] [--assignee email|@me]
                   [--desc-file FILE | --adf-file FILE]   -> prints the new key
+  issue edit      <KEY> [--summary S]
+                  [--desc-file FILE | --adf-file FILE]   replace summary and/or description
   issue transition <KEY> --to "In Review"        transition by target status name
   issue assign     <KEY> (--to email|@me | --remove)
   issue comment add  <KEY> (--body-file FILE | --adf-file FILE)
@@ -267,6 +269,8 @@ function Op-IssueCreate {
     [Console]::Out.WriteLine($k); return $EX_OK
 }
 
+function Op-IssueEdit { param([string]$Key, [string]$Body) return (Invoke-Request PUT "/issue/$Key" $Body) }  # {"fields":…}; 204, prints nothing
+
 function Op-TransitionTo {
     param([string]$Key, [string]$Status)
     $rc = Invoke-Request GET "/issue/$Key/transitions"; if ($rc -ne 0) { return $rc }
@@ -466,6 +470,38 @@ switch ($group) {
                 elseif ($adfFile)  { $fields += ',"description":' + (Get-Content -LiteralPath $adfFile -Raw) }
                 $fields += '}'
                 exit (Op-IssueCreate ('{"fields":' + $fields + '}'))
+            }
+            'edit' {
+                # Only the fields you pass are sent, so the rest of the issue is untouched.
+                if ($rest2.Count -lt 1) { Usage }
+                $key = $rest2[0]; $summary = ''; $descFile = ''; $adfFile = ''; $k = 1
+                while ($k -lt $rest2.Count) {
+                    if ($k + 1 -ge $rest2.Count) { Usage }   # every flag here takes a value
+                    switch ($rest2[$k]) {
+                        '--summary'   { $summary  = $rest2[$k + 1]; $k += 2 }
+                        '--desc-file' { $descFile = $rest2[$k + 1]; $k += 2 }
+                        '--adf-file'  { $adfFile  = $rest2[$k + 1]; $k += 2 }
+                        default       { Usage }
+                    }
+                }
+                if (-not ($summary -or $descFile -or $adfFile)) { Usage }
+                if ($descFile -and $adfFile) { Die $EX_USAGE 'give --desc-file OR --adf-file, not both.' }
+                foreach ($f in @($descFile, $adfFile)) {
+                    if ($f -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { Die $EX_ERR "file not found: $f" }
+                }
+                $adf = ''
+                if ($adfFile) {
+                    $adf = [string](Get-Content -LiteralPath $adfFile -Raw)
+                    $isObj = $false
+                    try { $isObj = $adf.TrimStart().StartsWith('{') -and ($null -ne ($adf | ConvertFrom-Json)) } catch { }
+                    if (-not $isObj) { Die $EX_USAGE "--adf-file must hold one ADF doc object: $adfFile" }
+                }
+                Invoke-Ready
+                $parts = @()
+                if ($summary) { $parts += '"summary":' + (JsonStr $summary) }
+                if     ($descFile) { $parts += '"description":' + (ConvertTo-AdfDoc $descFile) }
+                elseif ($adfFile)  { $parts += '"description":' + $adf }
+                exit (Op-IssueEdit $key ('{"fields":{' + ($parts -join ',') + '}}'))
             }
             'comment' {
                 $sub   = if ($rest2.Count -ge 1) { $rest2[0] } else { '' }

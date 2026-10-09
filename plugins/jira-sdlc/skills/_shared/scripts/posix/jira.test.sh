@@ -97,6 +97,28 @@ eq "parent lists the sub-task" "[\"$SUB\"]" "$subs"
 dtext=$(J issue view "$PARENT" --fields description | jq -r '.fields.description.content[0].content[0].text // empty')
 eq "description first paragraph stored" "Live test parent for jira.sh." "$dtext"
 
+# 7b. edit: each field alone leaves the other untouched; usage + HTTP errors --
+out=$(J issue edit "$PARENT" --summary "jira.sh live test (parent, edited)"); rc "edit --summary -> 0" 0 $?
+eq "edit prints nothing" "" "$out"
+v=$(J issue view "$PARENT" --fields summary,description)
+eq "summary replaced" "jira.sh live test (parent, edited)" "$(jq -r '.fields.summary' <<<"$v")"
+eq "description untouched by --summary" "Live test parent for jira.sh." "$(jq -r '.fields.description.content[0].content[0].text' <<<"$v")"
+printf 'Edited description.\n' > "$TMP/desc2.txt"
+J issue edit "$PARENT" --desc-file "$TMP/desc2.txt"; rc "edit --desc-file -> 0" 0 $?
+v=$(J issue view "$PARENT" --fields summary,description)
+eq "description replaced" "Edited description." "$(jq -r '.fields.description.content[0].content[0].text' <<<"$v")"
+eq "summary untouched by --desc-file" "jira.sh live test (parent, edited)" "$(jq -r '.fields.summary' <<<"$v")"
+printf '{"type":"doc","version":1,"content":[{"type":"heading","attrs":{"level":3},"content":[{"type":"text","text":"ADF description"}]}]}' > "$TMP/desc.adf.json"
+J issue edit "$PARENT" --adf-file "$TMP/desc.adf.json"; rc "edit --adf-file -> 0" 0 $?
+eq "ADF description stored" "heading:ADF description" \
+  "$(J issue view "$PARENT" --fields description | jq -r '.fields.description.content[0] | "\(.type):\(.content[0].text)"')"
+J issue edit "$PARENT" >/dev/null 2>&1; rc "edit with no fields -> 2" 2 $?
+J issue edit "$PARENT" --desc-file "$TMP/desc2.txt" --adf-file "$TMP/desc.adf.json" >/dev/null 2>&1
+rc "edit --desc-file + --adf-file -> 2" 2 $?
+J issue edit "$PARENT" --summary >/dev/null 2>&1; rc "edit --summary with no value -> 2" 2 $?
+J issue edit "$PARENT" --summary "$(printf 'x%.0s' {1..300})" >/dev/null 2>&1; rc "edit 300-char summary -> 5 (400)" 5 $?
+J issue edit "$PROJECT_KEY-0" --summary x >/dev/null 2>&1; rc "edit missing issue -> 4 (404)" 4 $?
+
 # 8/9. comments: plain-text + raw ADF ----------------------------------------
 printf 'PR target branch: development.\nSecond line of the note.\n' > "$TMP/cmt.txt"
 J issue comment add "$PARENT" --body-file "$TMP/cmt.txt" >/dev/null; rc "comment add (--body-file) -> 0" 0 $?
