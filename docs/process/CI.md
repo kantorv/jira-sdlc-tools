@@ -89,7 +89,7 @@ it over the other.
 | `GITHUB_TOKEN` (default) | `cut-release`, `release`, `update_lab` — push tags/branches, create releases & PRs, and dispatch `docs.yml` and `update_lab.yml`. Sufficient while `main`/`development` are unprotected; see AGENTS.md for the `RELEASE_PAT` swap if you enable branch protection. |
 | *(none)* | `docs.yml` — `actions/deploy-pages` authenticates to Pages via OIDC (`id-token: write`), so no secret is configured for it. |
 | `JIRA_ACCOUNT_URL`, `JIRA_ACCOUNT_EMAIL`, `JIRA_ISSUE_TRANSITION_TOKEN` | `jira_issue_transition_on_merge.yml` |
-| `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`, `NVIDIA_NIM_API_KEY` (in the `production` environment) | `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` |
+| `JIRA_ACCOUNT_URL`, `JIRA_REVIEWER_EMAIL`, `JIRA_REVIEWER_TOKEN`, `NVIDIA_NIM_API_KEY` (repository secrets) | `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` |
 
 These Jira secrets are the **CI bot's own** credential, separate from the
 skills' local auth: the skills authenticate per-request as

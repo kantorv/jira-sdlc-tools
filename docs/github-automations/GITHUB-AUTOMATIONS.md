@@ -169,7 +169,7 @@ want, then the implementation whose backend you have credentials for.
 | -- | -- | -- | -- | -- |
 | [**Feature flow**](autopilot/ci-feature-flow-demo.md) | Full three-skill chain: assigner → executor → reviewer. GitHub issue becomes a Jira issue + `feature/<KEY>-<slug>` branch off `<DEFAULT_BASE_BRANCH>`, gets implemented, and ends as an open reviewed PR into `<DEFAULT_BASE_BRANCH>`. Nothing is merged. | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-feature-flow.yml`](example-workflows/demo-claude-feature-flow.yml) — Claude Code CLI · `/make-feature`<br>• [`demo-fcc-nvidia-nim-feature-flow.yml`](example-workflows/demo-fcc-nvidia-nim-feature-flow.yml) — Free Claude Code + NVIDIA NIM · `/fcc-make-feature` |
 | [**Hotfix flow**](autopilot/ci-hotfix-flow-demo.md) | The same three-skill chain on the emergency path: `hotfix/<KEY>-<slug>` cut off `origin/<PRODUCTION_BRANCH>`, PR targets `<PRODUCTION_BRANCH>`, and the assigner is forced single-step (no sub-tasks). | **comment** — bare or with prose | **Up to 3** — `environment: production` on every job (assigner, executor, reviewer) | • [`demo-claude-hotfix-flow.yml`](example-workflows/demo-claude-hotfix-flow.yml) — Claude Code CLI · `/make-hotfix` |
-| [**Review a PR**](chatops/review/ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated | • [`demo-claude-reviewer.yml`](example-workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
+| [**Review a PR**](chatops/review/ci-review-pr-demo.md) | Reviewer skill alone, against an already-open PR. Rebuilds a linked worktree for the PR branch, reviews the diff, and posts the verdict to GitHub (as a comment) and Jira. Merges nothing. | **comment** — bare or with prose, **or** manual `workflow_dispatch` | **Up to 1** — `environment: production` on the reviewer job; the gating job runs before it, ungated. The `workflow_dispatch` variant has **none**: no environment, repository secrets | • [`demo-claude-reviewer.yml`](example-workflows/demo-claude-reviewer.yml) — Claude Code CLI · `/review`<br>• [`demo-fcc-nvidia-nim-reviewer.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer.yml) — Free Claude Code + NVIDIA NIM · `/fcc-review`<br>• [`demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml`](example-workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml) — Free Claude Code + NVIDIA NIM · `workflow_dispatch` (model-pickable, no comment) |
 | [**Issue to task / bug**](chatops/issue-to-task/ci-issue-to-task-demo.md) | Assigner alone. A commented GitHub issue becomes a Jira Task (`/make-task`) or Bug (`/make-bug`) with its branch and worktree, and the run stops there — no implementation, no PR. | **comment** — bare or with prose | **None** — the OWNER comment guard is the only gate; `environment: production` was dropped. ⚠️ Secrets moved from the `production` environment to repo-level, pending redistribution (JST-225 AC#4) — until done the bootstrap fails loud. | • [`demo-claude-issue-to-task.yml`](example-workflows/demo-claude-issue-to-task.yml) — Claude Code CLI · `/make-task`<br>• [`demo-claude-issue-to-bug.yml`](example-workflows/demo-claude-issue-to-bug.yml) — Claude Code CLI · `/make-bug` |
 
 **"Up to" is doing real work in that column.** `environment: production` in a
@@ -256,10 +256,14 @@ the environment gate. The predicate depends on the trigger:
 - **`issue_comment`** — `github.event.comment.author_association == 'OWNER'`.
   `MEMBER` is **not** accepted — a single merged PR earns `MEMBER` association,
   which is too loose for a trigger that runs an LLM with write permissions.
-- **`workflow_dispatch`** — `github.triggering_actor == github.repository_owner`,
-  because there is no comment and therefore no `author_association`. Prefer
-  `triggering_actor` over `actor` so a non-owner cannot re-run an owner's
-  earlier dispatch.
+- **`workflow_dispatch`** — usually **no author gate at all**: only users with
+  write access can dispatch a workflow, so the trigger is already restricted.
+  An owner-only `github.triggering_actor == github.repository_owner` check also
+  never matches on an **org-owned** repo, where `repository_owner` is the org,
+  not a person. `demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml` carries
+  none. `demo-kimi-openrouter-reviewer.yml` still uses that check, and it only
+  works in a user-owned repo. If you do keep one, prefer `triggering_actor`
+  over `actor` so a non-owner cannot re-run an owner's earlier dispatch.
 
 ### 3.3 Create the environment
 

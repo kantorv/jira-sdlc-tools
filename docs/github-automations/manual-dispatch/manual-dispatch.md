@@ -7,9 +7,13 @@ sidebar_label: Overview
 # Manual review (workflow dispatch)
 
 This workflow runs from the **Actions tab** (`workflow_dispatch`), not from a
-PR/issue comment — there's no `author_association` to check, so it gates on
-`github.triggering_actor == github.repository_owner` instead (see
+PR/issue comment. It carries **no author gate and no environment gate**: only
+users with write access can dispatch a workflow at all, and an owner-only
+`github.triggering_actor == github.repository_owner` check never matches on an
+org-owned repo, where the owner is the org rather than a person (see
 [GITHUB-AUTOMATIONS.md §3.2](../GITHUB-AUTOMATIONS.md#32-rule-2-owner-only-author-gate--cheap-precheck-before-the-environment-gate)).
+Its secrets are therefore plain **repository secrets**, not `production`
+environment secrets.
 
 | Workflow file | What it does | Deep dive |
 | -- | -- | -- |

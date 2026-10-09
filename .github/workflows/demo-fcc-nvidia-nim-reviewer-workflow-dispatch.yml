@@ -72,9 +72,9 @@
 #
 # ── Secrets ──────────────────────────────────────────────────────────────────
 #
-# All **environment secrets on `production`** (so a job that forgets
-# `environment: production` sees empty strings, not repo-level values), each
-# named exactly as the .jst/jira-sdlc-tools.local.env key it becomes:
+# All **repository secrets** (Settings → Secrets and variables → Actions —
+# no `production` environment, this workflow declares none), each named
+# exactly as the .jst/jira-sdlc-tools.local.env key it becomes:
 #
 #   NVIDIA_NIM_API_KEY       the model backend credential (only needed at run)
 #   JIRA_ACCOUNT_URL         reviewer role
@@ -112,12 +112,16 @@ env:
   DEFAULT_REVIEWER_MODEL: "nvidia_nim/${{ inputs.model }}"
 
 jobs:
-  # ── Gating job — cheap, secret-free, and runs before the environment gate ───
+  # ── Gating job — cheap, secret-free, and runs before the reviewer job ──────
   # The comment twin resolves the PR from the triggering `/fcc-review` comment;
   # this one resolves it from the dispatch branch (github.ref_name). Proceeds
   # only when there is an OPEN PR on a feature/*|hotfix/* branch, so a dispatch
   # from the wrong branch — or a branch with no open PR — fails here, before a
-  # human is ever asked to approve a run and before a token is spent.
+  # token is spent.
+  #
+  # No author gate: only users with write access can dispatch a workflow at
+  # all, and `github.triggering_actor == github.repository_owner` never
+  # matches on an org-owned repo (the owner is the org, not a person).
   check_branch:
     runs-on: ubuntu-latest
     name: Check dispatch branch & open PR
@@ -125,7 +129,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    if: github.triggering_actor == github.repository_owner
     outputs:
       pr_exists: ${{ steps.check_branch.outputs.pr_exists }}
       pr_number: ${{ steps.check_branch.outputs.pr_number }}
@@ -138,7 +141,7 @@ jobs:
         # IS the PR head — see the header. This step validates the branch
         # format, extracts the issue key, and finds the OPEN PR whose base the
         # reviewer diffs against. A failure here is exactly the cheap,
-        # secret-free gate that runs before the environment-gated reviewer job.
+        # secret-free gate that runs before the reviewer job.
         id: check_branch
         shell: bash
         env:
@@ -198,7 +201,6 @@ jobs:
     name: Reviewer skill (Claude)
     needs: check_branch
     if: needs.check_branch.outputs.pr_exists == '1'
-    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -234,7 +236,7 @@ jobs:
             [ -n "${!k:-}" ] || missing+=("$k")
           done
           if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::missing or empty secret(s) in the 'production' environment: ${missing[*]} — this demo cannot run without them. Add them under Settings → Environments → production → Secrets."
+            echo "::error::missing or empty secret(s) ${missing[*]} — this demo cannot run without them. Add them as repository secrets under Settings → Secrets and variables → Actions."
             exit 1
           fi
 
