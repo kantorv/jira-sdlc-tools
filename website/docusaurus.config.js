@@ -104,7 +104,7 @@ const config = {
             // "no longer actively maintained" — with current as the last, that
             // includes the newest snapshot, which is the *shipped* release and
             // is exactly where the dropdown sends readers. Suppress it there
-            // only: 0.8.3 and older keep the banner, which is true of them.
+            // only: any older snapshot keeps the banner, which is true of it.
             ...(latestRelease ? {[latestRelease]: {banner: 'none'}} : {}),
           },
         },
@@ -131,7 +131,7 @@ const config = {
             label: 'Docs',
           },
           // Every released snapshot is published, but until JST-294 nothing on
-          // the site linked to one — a reader could only reach /docs/0.8.3/…
+          // the site linked to one — a reader could only reach /docs/<version>/…
           // by typing it. This is that missing affordance; it needs no
           // maintenance as versions are cut, since it reads versions.json.
           {
