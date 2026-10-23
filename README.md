@@ -43,14 +43,42 @@ branch, deleting Jira issues, resolving conflicts — is listed in
 
 ## Environment setup
 
-You will need
+You will need:
 
-- **Git account + Repository + PAT token** — a GitHub (or GitLab/Bitbucket) account and a repository to work in
-- **Jira account + Board + Token(s)** — a Jira Cloud instance with a project/space where issues will be created
-- **Coding Assistant** (Claude or any other compatible solution — see [Platform Compatibility Matrix](#platform-compatibility-matrix))
+- **Software** — see [Software](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/software)
+  - Install `git`, `gh`, and `jq`
+- **GitHub** — see [GitHub](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/github)
+  - Account (can be free)
+  - Repository
+  - fine-grained PAT scoped to the repository with the following permissions:
+    - `Contents` (read/write)
+    - `Pull requests` (read/write)
+    - `Meta` (read) - added automatically
+- **Jira** — see [Jira](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/jira)
+  - Account (can be free)
+  - Space with a Board (you will have a `Project Key`, e.g. `XYZ`)
+  - Four configured workflow statuses (names can differ):
+    - `TODO`
+    - `IN_PROGRESS`
+    - `IN_REVIEW`
+    - `DONE`
+  - Users: can be only the owner, or additionally a dedicated user per each of
+    the skills - `assigner`, `executor`, `reviewer` (fits the free tier - up to
+    10 users in org).
+  - Classic Jira API token (either for owner, or for each of the 3 users -
+    `assigner`, `executor`, `reviewer`) with the following permissions:
+    - `read:jira-user`
+    - `read:jira-work`
+    - `write:jira-work`
+- **Coding Assistant** — see [Coding Assistant](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/coding-assistant)
+  - Claude or any other compatible solution
+    (see [Platform Compatibility Matrix](#platform-compatibility-matrix))
 
-Check out the installation docs:
-[Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation).
+Prefer a single tickable list over this section-by-section walkthrough? See
+[Full setup checklist](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/full-setup-checklist).
+
+Detailed reference for each item:
+[Environment setup](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/environment-setup).
 
 ## Quick install
 
