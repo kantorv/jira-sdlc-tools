@@ -186,9 +186,13 @@
       "slug": "/step-by-step-installation/create-the-jst-scaffold",
       "sidebar_position": 1
     },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-shared-env.md": {
+      "slug": "/step-by-step-installation/fill-the-shared-env",
+      "sidebar_position": 2
+    },
     "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-local-env.md": {
       "slug": "/step-by-step-installation/fill-the-local-env",
-      "sidebar_position": 2
+      "sidebar_position": 3
     },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
       "slug": "/step-by-step-installation/healthcheck",

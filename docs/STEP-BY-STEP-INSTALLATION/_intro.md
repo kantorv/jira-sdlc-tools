@@ -50,6 +50,7 @@ edit the pages, not this list.
 │       └── [Jira setup gate](./environment-setup/jira/jira-setup-gate.md)\
 ├── [Configuration](./configuration/index.mdx)\
 │   ├── [Create the .jst/ scaffold](./configuration/create-the-jst-scaffold.md)\
+│   ├── [Fill .jst/jira-sdlc-tools.env](./configuration/fill-the-shared-env.md)\
 │   └── [Fill .jst/jira-sdlc-tools.local.env](./configuration/fill-the-local-env.md)\
 ├── [Coding Assistant](./coding-assistant/index.mdx)\
 │   ├── [Claude Code (extended)](./coding-assistant/claude-code.md)\

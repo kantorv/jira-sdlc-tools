@@ -65,6 +65,7 @@ The whole step-by-step installation at a glance — every entry is a link.
 │       └── [Jira setup gate](/docs/step-by-step-installation/jira-setup-gate)\
 ├── [Configuration](/docs/step-by-step-installation/configuration)\
 │   ├── [Create the .jst/ scaffold](/docs/step-by-step-installation/create-the-jst-scaffold)\
+│   ├── [Fill .jst/jira-sdlc-tools.env](/docs/step-by-step-installation/fill-the-shared-env)\
 │   └── [Fill .jst/jira-sdlc-tools.local.env](/docs/step-by-step-installation/fill-the-local-env)\
 ├── [Coding Assistant](/docs/step-by-step-installation/coding-assistant)\
 │   ├── [Claude Code (extended)](/docs/integrations/claude-code)\
