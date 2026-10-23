@@ -11,7 +11,7 @@ each issue its own worktree, which isolates the source tree and nothing else. A
 database, a cache, an uploads tree or a fixed port stays shared between every
 worktree until something provisions a per-worktree copy. That something is
 `.jst/bootstrap.sh`, and this task writes it. Why it matters, and how to decide
-what to isolate: [Optional: parallel worktrees](../optional-parallel-worktrees.md)
+what to isolate: [Optional: parallel worktrees](../configuration/optional-parallel-worktrees.md)
 and [Parallel instances](../../parallel-instances/RUNNING-MULTIPLE-COPIES.md).
 
 What the scripts contain depends entirely on the kind of project, so this page

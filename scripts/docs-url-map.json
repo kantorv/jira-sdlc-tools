@@ -194,6 +194,10 @@
       "slug": "/step-by-step-installation/fill-the-local-env",
       "sidebar_position": 3
     },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-parallel-worktrees.md": {
+      "slug": "/step-by-step-installation/optional-parallel-worktrees",
+      "sidebar_position": 4
+    },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
       "slug": "/step-by-step-installation/healthcheck",
       "sidebar_position": 4
@@ -210,10 +214,7 @@
       "slug": "/step-by-step-installation/create-a-release-cycle",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
-      "slug": "/step-by-step-installation/optional-parallel-worktrees",
-      "sidebar_position": 6
-    },
+
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
       "sidebar_position": 0

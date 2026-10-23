@@ -41,6 +41,6 @@ statuses above are only the documented defaults. The status names must match
 your Jira workflow **exactly**, including case — the skills transition by name.
 
 Keep credentials out of this file; they belong in
-[`.jst/jira-sdlc-tools.local.env`](./fill-the-local-env.md), which is never
+[`.jst/jira-sdlc-tools.local.env`](fill-the-local-env.md), which is never
 committed. Every variable is described in
 [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md).
