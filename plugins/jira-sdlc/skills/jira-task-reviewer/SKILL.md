@@ -425,7 +425,10 @@ except where a dimension itself carves out an exception (dimension 3 does):
    of an unrelated module is not).
 4. **No obvious regressions** — Won't break imports, types, or dependencies.
 5. **Test coverage** — Has corresponding test coverage if changes are
-   non-trivial.
+   non-trivial. Run what runs as it is; **never source, copy or read a
+   project's secrets** (`.env*`, credential files) to make a test run —
+   a review is no reason to put them in this session. Report what wasn't
+   run, and why, instead.
 6. **Build hygiene** — No debug leftovers (`console.log`, TODO markers not
    in original codebase style), no accidentally-committed files (`.env`,
    large binaries, etc.).
