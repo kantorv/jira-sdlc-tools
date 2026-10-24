@@ -215,3 +215,27 @@ H3–H6 need member PRs that the executor can't open yet (phase 4). They're made
   Jira `CTA`). It's a real, active project, not a throwaway: a reviewer run posts verdicts on PRs and moves Jira
   issues. So H1/H2 run only against a test issue and PR made for the purpose, or one the user picks, and the user is
   asked before each run.
+
+## 9. Progress
+
+- **Slice 1, commit `5de94ad`:** `prs`, `gate`, `land` in both ports. 140 checks in `check-repos.sh`. Against the
+  pilot's real SKL-2 history, `gate` reads `merged` in both ports.
+
+- **Slice 2, the reviewer:** `gate`/`prs`, `-R <slug>` everywhere, dimension 7, step 5L, and the `R-*` outcomes.
+
+  - 6,348 → 6,199 words; the allowance went from 6,500 to 6,250.
+  - The size estimate (§4) missed. The first draft came out *longer*, at 6,507, so it took a deliberate compression
+    pass: every rule and its reason kept, restatements cut.
+
+- **H1 (chess-app CTA-265, PR #271), three runs:**
+
+  1. S-APPROVED, the right result, but **`gate` never ran**. The model took PR #271 from statuscheck's `current_pr`
+     row, which statuscheck still prints, and went straight to step 3. On a project with members that misses every
+     member PR, the THS-2 failure itself.
+  2. After a sentence saying "Run `gate` (*Reading PRs* above)": the same skip. A cross-reference doesn't beat a PR
+     number already sitting in the statuscheck output.
+  3. After putting the `gate` command block **inside each phase check**, with "never on `current_pr`, which can't see
+     member repos": `gate` runs, and 3a's idempotency path is correct (already approved, no new commits, no second
+     comment).
+
+  Lesson: a command the model must run goes at the point of use, not one section up.

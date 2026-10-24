@@ -97,37 +97,26 @@ never an unignored credential.
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/ensure_local_env.sh" || exit 1
 ```
 
-**Discovery and healthcheck — run before step 1.** This skill reads Jira
-status, calls `gh pr list` / `gh pr review`, and — on the reject path —
-transitions issues; finding a busted environment mid-review wastes a pass
-and can leave an inconsistent verdict trail. Run the shared healthcheck
-first, as the only tool call in its message, because its rows decide whether
-the next step happens at all — anything batched alongside it has already run
-before that decision existed. Override its rerun hint to name this skill
-instead of the executor default:
+**Discovery and healthcheck — run before step 1**, as the only tool call in
+its message: its rows decide whether the next step happens at all, and
+anything batched alongside it has already run before that decision existed (a
+busted environment found mid-review wastes a pass and can leave an
+inconsistent verdict trail). Override its rerun hint to name this skill:
 
 ```bash
 STATUSCHECK_RERUN="rerun /jira-sdlc:jira-task-reviewer" \
   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/statuscheck.sh" --role reviewer
 ```
 
-It prints one markdown table (`check | status | detail`), where status is
-`OK`, `FAIL` (blocks, with a remedy line printed under the table), `WARN`
-(suspicious, not blocking), or `INFO` (context only), and exits non-zero if
-any row is `FAIL`. `gh_auth` and `jira_auth` are load-bearing here (every
-verdict comment, `gh pr list` call, and Jira transition depends on them —
-and `jira_auth` probes the reviewer credential specifically), and
-`jira_account_url` (INFO) is the site domain for
-`https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links — the only source they may be
-built from, so no step opens the credential-bearing
+It prints one markdown table (`check | status | detail`; status `OK`,
+`FAIL` — blocks, remedy printed under the table — `WARN`, or `INFO`) and
+exits non-zero on any `FAIL`. `gh_auth` and `jira_auth` (the reviewer
+credential) carry every verdict, PR lookup and transition; `jira_account_url`
+is the site domain for `https://<JIRA_ACCOUNT_URL>/browse/<KEY>` links — their
+only source, so no step opens the credential-bearing
 `.jst/jira-sdlc-tools.local.env` (`../_shared/project-config.md` § *Issue
-browse links*).
-
-Only the rows this skill reads in a role-specific way, or relies on later,
-are spelled out here; the rest are role-independent preconditions defined in
-`statuscheck.sh` itself (their `detail` column is self-explanatory in the
-printed output — that live output, not this table, is what the skill
-actually acts on).
+browse links*). The table spells out only the rows this skill reads in a
+role-specific way; the live output of the rest explains itself.
 
 | row | what it verifies / gathers |
 | -- | -- |
@@ -135,13 +124,13 @@ actually acts on).
 | `branch` | INFO, never FAIL — base branch vs. `feature/*`/`hotfix/*` issue branch (§12) vs. neither. **Stop unless it reads a feature/hotfix issue branch**: the parent's or a sub-task's own — the row can't tell the two apart, and step 1 climbs to the parent rather than failing |
 | `issue_key` | the key derived from the branch name — seeds step 1, which resolves it to `<PARENT-KEY>` (climbing from a sub-task to its parent if needed; the branch is the sole source of truth) |
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` for the *current* branch — the sub-task's parent, not the base, when this is a sub-task worktree, so step 1 keys the base lookup off `<PARENT-BRANCH>` instead |
-| `current_pr` | INFO/WARN, never FAIL: every PR whose head is the *current* branch (`gh pr list --head <branch> --state all`, no `--base`) as `#<n> <STATE> → <base> (<url>)`, or `none (…)`. The phase checks, 5a, and the sub-task-worktree step 2 read it — see *Reading PRs* after the walk table |
+| `repo_strategy` | `single`, or `submodules` with its member repos — an issue's PRs can then sit in several repos; *Reading PRs* reads them all either way |
 
 Reading the result: **any FAIL row** → stop, relay the script's remedy line
 to the user, and wait — don't self-repair. Apply the `worktree` and `branch`
 stop conditions from the table yourself, since those rows never FAIL.
 Otherwise, state what the role-specific rows read — `worktree`, `branch`,
-`issue_key`, `parent_branch`, `current_pr` — before your first call after the healthcheck;
+`issue_key`, `parent_branch`, `repo_strategy` — before your first call after the healthcheck;
 a message batched with the healthcheck can't state them, because the values
 don't exist yet.
 
@@ -196,14 +185,8 @@ don't exist yet.
   Exactly one match → that's `<PARENT-BRANCH>`. Zero or multiple → ask the
   user rather than guessing.
 
-- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into. Run
-  §13's resolver with `--branch <PARENT-BRANCH>`, which is what makes it
-  work from here: without it the script keys on `git branch --show-current`,
-  and from a sub-task's own worktree that is the sub-task's branch, whose
-  `parentbranch` is `<PARENT-BRANCH>` — so `<BASE_BRANCH>` would come back as
-  `<PARENT-BRANCH>` and 5a would open a parent PR into itself. Branch config
-  lives in the shared `.git/config`, so naming the branch works from any
-  worktree:
+- **Resolve `<BASE_BRANCH>`** — the base `<PARENT-BRANCH>` merges into — with
+  §13's resolver, naming the branch and passing **no `--parent-key`**:
 
   ```bash
   S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/pr_base.ps1 on Windows
@@ -212,15 +195,15 @@ don't exist yet.
   printf '%s\nBASE_BRANCH=%s (rc=%s)\n' "$OUT" "$BASE_BRANCH" "$RC"
   ```
 
-  **Pass no `--parent-key` here** — `<PARENT-KEY>` is already the top-level
-  issue (step 1 climbed), so enabling §13's parent-branch search would match
-  `<PARENT-BRANCH>` itself and set `<BASE_BRANCH>` = `<PARENT-BRANCH>`, the
-  same PR-into-itself bug. Omitting it also keeps the env default reachable,
-  which is the correct last resort for a top-level issue. (The
-  sub-task-worktree path passes `--parent-key` too — but on its *other*
-  resolver call, the one that resolves `<PARENT-BRANCH>` from the sub-task's
-  own branch. This call, the `<BASE_BRANCH>` one, never passes it on any
-  path.)
+  Both guard against one bug — `<BASE_BRANCH>` coming back as
+  `<PARENT-BRANCH>`, so 5a opens a parent PR into itself. Without `--branch`
+  the script keys on the current branch, which from a sub-task's worktree is
+  the sub-task's (whose `parentbranch` *is* `<PARENT-BRANCH>`); with
+  `--parent-key`, §13's parent-branch search matches `<PARENT-BRANCH>`
+  itself, and the env default — the right last resort for a top-level issue —
+  goes unreachable. (The sub-task-worktree path passes `--parent-key` only on
+  its *other* call, the one resolving `<PARENT-BRANCH>`.) Branch config is
+  shared, so naming the branch works from any worktree.
 
   Act on `source=`: `git-config` or `jira-comment` → proceed; `env-default`
   → proceed but flag it in the report; `unresolved` (exit 1) → ask the user.
@@ -253,59 +236,60 @@ don't exist yet.
 
 | you are in | PR set | walk |
 | -- | -- | -- |
-| parent's worktree, no sub-tasks (**single-step**) | the one parent PR (`<PARENT-BRANCH>` → `<BASE_BRANCH>`) | single-step phase check → 3 → 4c → 6 → 7 |
+| parent's worktree, no sub-tasks (**single-step**) | the one parent PR (`<PARENT-BRANCH>` → `<BASE_BRANCH>`) — or, with member repos, one PR per member, then the landing PR | single-step phase check → 3 → 4c *(or 5L)* → 6 → 7 |
 | parent's worktree, has sub-tasks (**multistep**) | each sub-task PR in `<STATUS_IN_REVIEW>` (→ `<PARENT-BRANCH>`) | multistep phase check → 2 → 3 → 4a *(all approved)* / 4b *(any rejected)* → 5 *(only when every sub-task is `<STATUS_DONE>`)* → 6 → 7 |
 | a **sub-task's** worktree | that one sub-task's PR | 2 *(for this sub-task only)* → 3 → 6 → 7 |
 
-### Reading PRs — `current_pr` for this branch, one rule for any other
+### Reading PRs — `repos.sh`, never a hand-typed `gh pr list`
 
-**The current branch** (the phase checks and 5a — from the parent's worktree
-it *is* `<PARENT-BRANCH>` — and step 2 on the sub-task-worktree path): read
-the healthcheck's `current_pr` row, which queried it with the bare branch
-name, `--state all` and no `--base`. **Don't re-run `gh pr list` for the
-current branch** — `gh` answers a filter that misses with `[]`, not an error,
-so hand-typed variants (an `owner:branch` head, a narrowed `--state`, a
-`--base`) read an open PR as none (JST-310). Then:
+PRs come from two verbs, each covering every repo of the set (a single repo is
+a set of one): `gate` for this issue's own branch — the phase checks below run
+it — and `prs` for any other:
 
-- Several PRs → act on the OPEN one.
-- `skipped (…)`, or a branch other than the current one → the rule below.
-- Any other **WARN** (several OPEN, OPEN off `parent_branch`, a `gh` error),
-  or an OPEN PR off the base the step expects (`<BASE_BRANCH>`; a sub-task's
-  is `<PARENT-BRANCH>`) → stop and ask — never exit as "no PR" or open a
-  second one.
-- A **CLOSED, unmerged** PR matches none of the enumerated states → stop and
-  ask: someone abandoned this branch's PR deliberately, so opening a
-  replacement or reviewing a dead one both guess at intent.
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+bash "$S/repos.sh" prs --branch "<other-branch>" [--state open]
+```
 
-**Any other branch** (step 2's sub-task lookup, 5a's merged-URL lookup):
-
-1. Run the command as written: `--head` takes the bare branch name, never
-   `owner:branch`; don't narrow `--state`.
-2. `[]` alone never proves absence. Before concluding "no PR" (skip, exit, or
-   create), confirm once with
-   `gh pr list --head <branch> --state all --json number,state,baseRefName,url`
-   and show the `baseRefName`s. Still nothing the step wants → absent. A PR on
-   an unexpected base → report it and stop to ask.
+`gate` prints `phase=`, `reason=`, `root=` (the PR from `<PARENT-BRANCH>` in the
+root repo) and `members=`, then the PR rows; `prs` prints the rows alone. Every
+row carries `slug`: pass it as `-R <slug>` to **every** `gh pr` command below.
+**Statuscheck's `current_pr` row is not a substitute**: it sees the root repo
+only, so on a project with member repos it misses every member PR. Don't
+re-query by hand either — `gh` answers a filter that misses with `[]`, not an
+error, so a narrowed query reads an open PR as none (JST-310); the script asks
+the one exact query twice before it says `none`. A row in state `error` is
+unknown, never none: stop and name the repo.
 
 ### Single-step phase check (only for the single-step track)
 
-Read `current_pr` (*Reading PRs* above) — has the executor opened
-`<PARENT-BRANCH>` → `<BASE_BRANCH>`?
+Run `gate` and act on its `phase=` — never on `current_pr`, which can't see
+member repos:
 
-- **`none` — no PR exists yet** → The executor hasn't opened one. Report:
-  "Single-step issue `<PARENT-KEY>` has no open PR yet. The reviewer will
-  run once the PR is created." Exit.
-- **PR exists and is OPEN** → Proceed to step 3 to review this PR (skip step
-  2; jump to the review loop).
-- **PR exists and is MERGED** → The human already merged it: jump to the
-  step-6 report with the S-MERGED outcome and exit.
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+bash "$S/repos.sh" gate --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"
+```
+
+| phase | means | do |
+| -- | -- | -- |
+| `none` | no PR in any repo yet | report "`<PARENT-KEY>` has no PR yet — the reviewer runs once the executor opens one" and exit |
+| `review` | the issue's PR is open — or, with member repos, member PRs are | step 3 on the OPEN rows (skip step 2) |
+| `land` / `review-landing` | every member PR merged; the workspace's landing PR is missing / open | step 5L |
+| `merged` | the issue's PR (or the landing PR) is merged | the step-6 report with S-MERGED (R-COMPLETE for a landing PR), then exit |
+| `stop` | anything else — a CLOSED PR, an off-base one, a branch pushed with no PR, a `gh` error | relay `reason=` and ask; never read it as "no PR", never open a second one |
 
 ### Multistep phase check (only for the multistep track)
 
-Read `current_pr` (*Reading PRs* above) for the parent PR,
-`<PARENT-BRANCH>` → `<BASE_BRANCH>`:
+Run `gate` with `--multistep` and read its `root=` for the parent PR,
+`<PARENT-BRANCH>` → `<BASE_BRANCH>`; `phase=stop` → relay `reason=` and ask:
 
-- **`none` — no parent PR exists yet** → split on the sub-task statuses step 1 just
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+bash "$S/repos.sh" gate --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>" --multistep
+```
+
+- **`root=none` — no parent PR exists yet** → split on the sub-task statuses step 1 just
   fetched, because "no parent PR" has two very different causes:
   - **Any sub-task not yet `<STATUS_DONE>`** → they are genuinely still in
     flight. Continue to step 2 for a full review pass.
@@ -315,13 +299,13 @@ Read `current_pr` (*Reading PRs* above) for the parent PR,
     lands; reading it as "sub-tasks outstanding" strands the run, because
     step 2 finds zero open PRs and exits while step 5 is the only place the
     parent PR is ever created.
-- **A parent PR exists and is OPEN** → split on the sub-task statuses, same
+- **`root=open`** → split on the sub-task statuses, same
   as above: **every sub-task `<STATUS_DONE>`** → the merges have happened,
   skip straight to step 5 to review the parent PR. **Any sub-task not yet
   `<STATUS_DONE>`** → the parent PR was opened early; the sub-tasks are still
   the work, so continue to step 2 for a full review pass and leave the parent
   PR to a later run.
-- **A parent PR exists and is MERGED** → The user merged the aggregate PR
+- **`root=merged`** → The user merged the aggregate PR
   manually: jump to the step-6 report with the M-FULLY-COMPLETE outcome and
   exit.
 
@@ -336,11 +320,12 @@ For each `<SUBTASK-KEY>` that passed the status filter:
 - Find its branch with step 1's listing, with `<SUBTASK-KEY>` in place of
   `<PARENT-KEY>` in both `--list` patterns. If no branch exists yet, that
   sub-task hasn't been implemented — flag it in the report and skip it.
-- Find the open PR — on the sub-task-worktree path the sub-task's branch is
-  the current one, so read `current_pr`; otherwise run `gh pr list --head <subtask-branch> --base <PARENT-BRANCH> --state open --json number,title,state,url` under *Reading PRs*' rule for other branches. `--state open` is deliberate here (unlike `current_pr`'s `--state all`): an already-merged
-  sub-task PR is finished work, and it's the phase check that reads those.
-  If no PR exists — after that rule's confirmation query — flag and skip. If more than one open PR, ask the user which one to review.
-- Record: `{ key, branch, prNumber, prUrl }`.
+- Find the open PR: `repos.sh prs --branch <subtask-branch> --state open`
+  (*Reading PRs*). `--state open` is deliberate: an already-merged sub-task
+  PR is finished work, and it's the phase check that reads those. No OPEN
+  row → flag and skip; several, or one whose base isn't `<PARENT-BRANCH>` →
+  ask the user.
+- Record: `{ key, branch, prNumber, prUrl, slug }`.
 
 If **zero** sub-tasks have open PRs, report and exit — **except on the
 multistep track**, where the phase check's split applies first: every
@@ -376,12 +361,10 @@ in ascending key order. Treat each PR individually — do not hold results for
 a batch. The loop body below is the same for every PR in the set regardless
 of track.
 
-Resolve this skill's GitHub identity **once here, before the loop**, and
-**substitute the value literally** into 3a below as `<SELF>` — do not carry
-it in a shell variable. Each Bash call is a fresh shell (same reason `S` is
-re-set per block), and an unexpanded `$SELF` doesn't error: the jq filter
-becomes `== ""`, matches nothing, and 3a silently reports "not reviewed yet"
-forever.
+Resolve this skill's GitHub identity **once, before the loop**, and
+**substitute the value literally** as `<SELF>` in 3a — never a shell
+variable: each Bash call is a fresh shell, and an unexpanded `$SELF` makes the
+jq filter `== ""`, so 3a silently reports "not reviewed yet" forever.
 
 ```bash
 gh api user --jq .login    # -> <SELF>, e.g. task-executor-bot
@@ -396,7 +379,7 @@ Before reviewing a PR, check whether **this skill's GitHub identity**
 comment on it:
 
 ```bash
-gh pr view <prNumber> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | .body'
+gh pr view <prNumber> -R <slug> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | .body'
 ```
 
 Take the **most recent** self-review body (they come back in chronological
@@ -419,12 +402,13 @@ review state to key on.
 ### 3b. Fetch the diff
 
 ```bash
-gh pr diff <prNumber>
+gh pr diff <prNumber> -R <slug>
 ```
 
 Read the full diff. If it's very large (>1000 lines), list changed files via
-`gh pr diff <prNumber> --name-only` and `Read` relevant files for context.
-Do not skip any file in the diff.
+`gh pr diff <prNumber> -R <slug> --name-only` and `Read` relevant files for
+context — a member PR's files sit under that member's folder in this
+worktree. Do not skip any file in the diff.
 
 ### 3c. Review criteria
 
@@ -445,10 +429,16 @@ except where a dimension itself carves out an exception (dimension 3 does):
 6. **Build hygiene** — No debug leftovers (`console.log`, TODO markers not
    in original codebase style), no accidentally-committed files (`.env`,
    large binaries, etc.).
+7. **Consistency across the set** — only when the set spans member repos.
+   An interface one PR changes (an API field, a CLI flag, an event name, a
+   shared constant) is matched by the PR on the other side — the project's
+   docs say which interfaces cross repos — and no repo the change needs is
+   missing. Decide the merge order (what's depended on merges first) and
+   state it in the report.
 
 ### 3d. Execute verdict immediately
 
-Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> --comment --body-file`: in this plugin's default
+Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> -R <slug> --comment --body-file`: in this plugin's default
 deployment the executor and reviewer share one `gh` account, and GitHub's
 self-review restriction blocks an author from approving *or* requesting
 changes on their own PR, so neither verdict can use a state-based review. The
@@ -462,19 +452,17 @@ scoped to this one PR — not a terse one-liner. Write **one** report body to a
 temp file and post that same file to both destinations, so GitHub and Jira
 read identically.
 
-**Post the Jira half only when 3d's destination differs from step 6's** —
-i.e. on a sub-task PR, where 3d lands on `<SUBTASK-KEY>` and step 6 on
-`<PARENT-KEY>`. On the single-step track both are `<PARENT-KEY>` and the PR
-set is this one PR, so step 6's report *is* this body: post the GitHub
-comment (and, on the reject path, the transition — that's a gate, not a
-report) and let step 6 be the single Jira record. Same reasoning that skips
-3e on the sub-task-worktree path.
+**Post the Jira half only on a sub-task PR**, where 3d lands on
+`<SUBTASK-KEY>` and step 6 on `<PARENT-KEY>`. Otherwise both land on
+`<PARENT-KEY>` and step 6's report covers this PR: post the GitHub comment
+(and, on the reject path, the transition — a gate, not a report) and let step
+6 be the single Jira record.
 
 - **If APPROVE (all dimensions pass):** fill the canonical template with the
   per-PR approve outcome **for this kind of PR** — **S-APPROVED** for the
-  single-step parent PR, **M-SUBTASK-APPROVED** for a sub-task PR (the
-  multistep loop, or the sub-task-worktree path of step 1; the template says
-  why they differ). Set `### Verdict recorded` → GitHub: APPROVED comment on
+  single-step parent PR, **R-MEMBER-APPROVED** for a member repo's PR,
+  **M-SUBTASK-APPROVED** for a sub-task PR (the multistep loop, or the
+  sub-task-worktree path of step 1; the template says why they differ). Set `### Verdict recorded` → GitHub: APPROVED comment on
   PR #<n>; Jira: note posted (or "—" when the rule above skips it), status
   not moved. Verdict-header line `APPROVED — <one-line summary>`:
 
@@ -485,7 +473,7 @@ report) and let step 6 be the single Jira record. Same reasoning that skips
 
   ## Review Status: ...        # the full canonical report, scoped to this PR
   EOF
-  gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
+  gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY> --body-file /tmp/<KEY>-report.md   # sub-task PRs only — see above
   ```
 
@@ -497,6 +485,7 @@ report) and let step 6 be the single Jira record. Same reasoning that skips
 - **If REQUEST_CHANGES (one or more dimensions fail):** fill the same
   canonical template with the per-PR reject outcome **for this kind of PR** —
   **S-CHANGES-REQUESTED** when this is the single-step parent PR,
+  **R-MEMBER-CHANGES-REQUESTED** for a member repo's PR,
   **M-SUBTASK-CHANGES-REQUESTED** when this is a sub-task PR — and
   verdict-header line `CHANGES REQUESTED — <one-line summary>`; the
   `file:line` findings for each failed dimension go in the report's `### What I reviewed` section (never dropped). Post the one body per the rule
@@ -510,7 +499,7 @@ report) and let step 6 be the single Jira record. Same reasoning that skips
 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
   EOF
-  gh pr review <prNumber> --comment --body-file /tmp/<KEY>-report.md
+  gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY> --body-file /tmp/<KEY>-report.md   # sub-task PRs only — see above
   bash "$S/jira.sh" --role reviewer issue transition <SUBTASK-KEY-or-PARENT-KEY> --to "<STATUS_IN_PROGRESS>"
   ```
@@ -523,16 +512,10 @@ report) and let step 6 be the single Jira record. Same reasoning that skips
 sub-task-worktree path skips it because step 6's run-level report already
 lands on `<PARENT-KEY>` carrying this same body.)*
 
-Regardless of whether the review above was approved or rejected, immediately
-post the **canonical review report** (see *The canonical review report*
-above), scoped to the sub-task just reviewed, to the parent Jira issue
-`<PARENT-KEY>` so the progress is visible. You have already written this
-exact body to `/tmp/<KEY>-report.md` in 3d; reuse that file rather than
-composing a second shape.
-
-A **fresh comment per sub-task is intentional** — the audit trail the
-template's *One run-level render per run* describes. So do **not** use
-`-e/--edit-last`; post a new comment each time:
+Whatever the verdict, immediately post 3d's `/tmp/<KEY>-report.md` — the
+canonical report, scoped to the sub-task — to `<PARENT-KEY>` too, so progress
+is visible. A **fresh comment per sub-task is intentional** (the template's
+*One run-level render per run*), so never `-e/--edit-last`:
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
@@ -541,11 +524,9 @@ bash "$S/jira.sh" --role reviewer issue comment add <PARENT-KEY> --body-file /tm
 
 ## 4. After the PR set has been reviewed (loop complete)
 
-Once step 3 has processed every PR in the set, the reviewer ends the session
-with a report **even if some were rejected**. The human fixes and re-runs;
-on a later run, any sub-tasks whose Jira status is no longer
-`<STATUS_IN_REVIEW>` will be skipped, and only resumed-yet-still-in-review
-items are picked up.
+Once step 3 has processed every PR in the set, the run ends with a report
+**even if some were rejected**; the human fixes and re-runs, and a later run
+picks up only what's back in `<STATUS_IN_REVIEW>`.
 
 The post-loop outcome is mutually exclusive; the walk table picks which of
 4a/4b/4c applies, and step 6 posts the written report keyed to the same
@@ -553,7 +534,7 @@ label.
 
 ### 4a. *(Multistep)* All approved — merge and re-run
 
-1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> --json state` for each).
+1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> -R <slug> --json state` for each).
 2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user its
    `Next step` wording from the template — merge them manually, then re-run.
    (Step 6 posts the written report to Jira.)
@@ -581,8 +562,10 @@ label.
 
 After the PR is reviewed in step 3:
 **approved** → outcome **S-APPROVED**; **changes requested** → outcome
-**S-CHANGES-REQUESTED**. Tell the user that outcome's `Next step` wording
-from the template rather than composing your own.
+**S-CHANGES-REQUESTED**. With member PRs instead: every one approved →
+**R-MEMBERS-APPROVED** (its `Next step` carries the merge order); any
+rejected → **M-SOME-BLOCKED**. Tell the user that outcome's `Next step`
+wording from the template rather than composing your own.
 
 ## 5. Parent PR management
 
@@ -591,15 +574,15 @@ from the template rather than composing your own.
 
 ### 5a. Find or create the parent PR
 
-Read `current_pr` again (*Reading PRs* above) — still current, since this
-run has opened no PR. Re-querying is how 5a once missed an off-base parent PR
-and nearly opened a *second* one (JST-286).
+Use the phase check's `root=` — still current, since this run has opened no
+PR. Re-querying by hand is how 5a once missed an off-base parent PR and nearly
+opened a *second* one (JST-286).
 
-- **`none` — no PR exists** → create one (write the body to a temp file — see the
+- **`root=none`** → create one (write the body to a temp file — see the
   body mechanics in the preamble). The sub-task PR URLs come from
   step 2's records; when the phase check jumped straight here, step 2 never
-  ran — list the sub-task keys and resolve each URL with `gh pr list --head <subtask-branch> --state merged --json url` under *Reading PRs*' rule for other branches, or omit the URLs rather than
-  inventing them:
+  ran — list the sub-task keys and resolve each URL with `repos.sh prs --branch <subtask-branch>`, or omit the
+  URLs rather than inventing them:
   ```bash
   cat > /tmp/<PARENT-KEY>-pr-body.md <<'EOF'
   Aggregate PR for <PARENT-KEY>.
@@ -608,29 +591,24 @@ and nearly opened a *second* one (JST-286).
   - <SUBTASK-KEY>: <PR URL>
   - ...
   EOF
-  gh pr create --base <BASE_BRANCH> --head <PARENT-BRANCH> \
+  gh pr create -R <slug> --base <BASE_BRANCH> --head <PARENT-BRANCH> \   # the root row's slug
     --title "<PARENT-KEY>: <summary>" \
     --body-file /tmp/<PARENT-KEY>-pr-body.md
   ```
-- **PR exists (state OPEN)** → use it.
-- **PR exists and is MERGED** → the user already merged the aggregate PR:
-  report it via the step-6 report with the M-FULLY-COMPLETE outcome and
-  exit.
-- **PR exists and is CLOSED** → stop and let the user decide (same rule as
-  the phase checks).
+- **`root=open`** → use it.
+- **`root=merged`** → the user already merged the aggregate PR: report it
+  via the step-6 report with the M-FULLY-COMPLETE outcome and exit.
 
 ### 5b. Review the parent PR (apply the 3a idempotency check first)
 
-Ensure `<SELF>` is resolved first — the all-sub-tasks-merged re-run path
-jumps straight here from step 1, skipping step 3 where `<SELF>` is normally
-resolved. If you don't have it, run `gh api user --jq .login` now and
-substitute it here too (if that errors, see *Edge cases*). Then apply the **3a
-body-prefix idempotency check** before reviewing: a prior self-review whose
+Resolve `<SELF>` now if step 3 never ran (the all-sub-tasks-merged path and
+5L land here directly): `gh api user --jq .login`, substituted literally (an
+error → *Edge cases*). Then apply the **3a body-prefix idempotency check**: a prior self-review whose
 body starts `APPROVED —` → report "Parent PR already reviewed — waiting for
 manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the
 fresh aggregate code. Otherwise:
 
-1. Check the PR is mergeable — `gh pr view <prNumber> --json mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
+1. Check the PR is mergeable — `gh pr view <prNumber> -R <slug> --json mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
    fallen behind `<BASE_BRANCH>`: stop and report, since a diff that can't
    merge gives the user nothing to act on. This is the only detection path
    the *parent branch is behind its base* edge case has.
@@ -640,12 +618,31 @@ fresh aggregate code. Otherwise:
    combine.
 3. **If approved** → outcome **M-PARENT-READY**: post the **full canonical
    review report** (see *The canonical review report* above), scoped to the
-   parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
+   parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
    just the aggregate PR). Do NOT merge. Tell the user the parent PR is
    approved and awaiting their manual merge; step 6 posts the run-level
    report.
 4. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post
-   the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> --comment --body-file`. Then go to step 6.
+   the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> -R <slug> --comment --body-file`. Then go to step 6.
+
+### 5L. Land the member PRs, then review the landing PR
+
+*(Single-step, on `gate`'s `land` or `review-landing`.)* The member PRs are
+merged; the workspace's gitlinks still point at the old commits. On `land`,
+run `land`: it moves each gitlink to its PR's merged commit, commits, pushes
+and opens the landing PR, checking everything first. `error=` → relay it and
+stop.
+
+```bash
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+bash "$S/repos.sh" land --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"           # on `land` only
+bash "$S/repos.sh" land --check --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"
+```
+
+Then review the landing PR (its row in `gate`, or `land`'s `pr=`) as 5b does,
+3a's idempotency check first. Its diff is gitlinks only, so the review is
+`land --check`: every row `ok` → **R-LANDING-READY**; any failing row →
+**R-LANDING-CHANGES-REQUESTED**, that row being the finding.
 
 ## 6. Report back
 
@@ -659,8 +656,8 @@ rejected, else `APPROVED — …`). Fill the template; don't re-spell its shape.
 Pick **exactly one** outcome from the catalogue in
 `../_shared/templates/review-report.md` — chosen by the step-1 track × the
 current phase (decided in step 4, or detected in step 1/5/6). Use its
-**run-level** blocks — the `S-*` ones on the single-step track, the `M-*`
-ones on the multistep track. The two `M-SUBTASK-*` blocks belong to the 3d/3e
+**run-level** blocks — the `S-*` ones on the single-step track (`R-*` when
+its set spans member repos), the `M-*` ones on the multistep track. The two `M-SUBTASK-*` blocks belong to the 3d/3e
 per-PR emissions and are never this report's pick — except on the
 sub-task-worktree path, where the run's whole PR set *is* that one sub-task
 PR.
@@ -679,25 +676,24 @@ S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windo
 bash "$S/jira.sh" --role reviewer issue transition <KEY> --to "<STATUS_DONE>"
 ```
 
-Ask rather than decide, because an approval is not a merge — this skill never
-merges, so every PR you just approved is still open. Teams whose Done means
-"merged" get there by automation (a GitHub-for-Jira merge rule, a Jira
-automation), and moving the card here jumps ahead of it; teams that close at
-approval have no such automation and want exactly this. Nothing in the repo
-says which kind this project is, so the user decides. If they decline, or no
-answer comes, change nothing — approved-but-open is the safe resting state,
-and a later re-run detects the merge on its own.
+Ask rather than decide: this skill never merges, so every PR you just
+approved is still open. Teams whose Done means "merged" get there by
+automation, and moving the card here jumps ahead of it; teams that close at
+approval want exactly this — and nothing in the repo says which kind this is.
+Declined, or no answer → change nothing: approved-but-open is the safe
+resting state, and a later re-run detects the merge on its own.
 
 Which issues to name:
 
-- **Single-step** — `<PARENT-KEY>`, on the S-APPROVED outcome.
+- **Single-step** — `<PARENT-KEY>`, on S-APPROVED, or with member repos on
+  R-LANDING-READY only: approved member PRs haven't landed yet.
 - **Sub-task worktree** (step 1's `Subtask` branch) — just `<RUN-KEY>`, when
   3d approved it. Never `<PARENT-KEY>`: that run reviewed one sub-task PR and
   looked at nothing else.
 - **Multistep** — every sub-task approved in this run, plus any 3a reported
   as already approved, plus `<PARENT-KEY>` itself when 5b approved the parent
   PR (M-PARENT-READY). On M-SOME-BLOCKED offer only the approved subset.
-- **Already merged** (S-MERGED, M-FULLY-COMPLETE) — skip the question
+- **Already merged** (S-MERGED, M-FULLY-COMPLETE, R-COMPLETE) — skip the question
   entirely; those issues are Done already.
 
 Post nothing further to Jira here. The step-6 report is the run's single
@@ -707,22 +703,15 @@ instead.
 
 ## Edge cases
 
-- **No sub-tasks in review status, but sub-tasks exist** → report that the
-  executor hasn't pushed any PRs to In Review yet; the user may re-run
-  later.
-- **Sub-task with no branch / no PR**: flag in the report. The skill can
-  only review what has been pushed and has a PR open. Don't attempt to
-  create branches or PRs — that's the executor's job.
+- **Sub-tasks exist, none in review / one without a branch or PR** → report
+  it; the user re-runs later. Never create branches or PRs for them — that's
+  the executor's job (5a's parent PR and 5L's landing PR are the reviewer's).
 - **A review (or approval) from someone else**: the skill always does its
   own review — an existing review by another account doesn't skip the
   code-review step. The 3a idempotency check only looks at *this skill's
   own* prior comments, keyed on `<SELF>`'s login + body prefix.
-- Covered inline, pointers only: **already reviewed** → 3a (`$ARGUMENTS` can
-  override its skip); **`gh` missing or logged out** → step 3's identity
-  resolution fails, so report the error and hand the user the PR URLs;
-  **parent branch behind its base** → 5b.1's `mergeable` check is the only
-  detector, so stop and let the user rebase; **single-step PR already merged**
-  → the step-1 phase check (S-MERGED).
+- **`gh` missing or logged out** → step 3's identity resolution fails:
+  report the error and hand the user the PR URLs.
 
 Reference: `../_shared/jira-api-reference.md` is the operational + REST
 reference — the `jira.sh` command surface, confirmed issue types, and

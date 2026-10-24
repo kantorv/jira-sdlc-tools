@@ -66,15 +66,17 @@ reasoning, caveats, and how we plan to test them live in
   `jira-task-reviewer` 415 → 714 lines while its word count moved by
   *five*, and the long lines it replaced had hidden a real overage for
   years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
-  width. `jira-task-reviewer` is a recorded exception at ~6,500 (the ceiling itself) — it is
+  width. `jira-task-reviewer` is a recorded exception at 6,250 — it is
   the only skill carrying two tracks plus a phase machine, and no
   realistic trim clears the target — so it reports `WARN (accepted)`.
   JST-310 raised it from 6,100 to 6,350 for the *Reading PRs* rule (read
   `current_pr`, confirm any other `[]` before concluding "no PR"): its
   absence let the reviewer exit on an open PR, so correctness won over
-  words — then to 6,500 to leave ~150 words of headroom for updates. The
-  allowance now equals the ceiling, so there is nothing left to raise: the
-  next addition goes to `skills/_shared/`, not inline.
+  words — then to 6,500 to leave ~150 words of headroom for updates. JST-322
+  then moved the reviewer's PR reading and phase checks into `repos.sh`
+  (`gate`, `prs`), taking it from 6,348 to 6,124 words while adding the
+  submodules flow, and the allowance ratcheted down to 6,250. The next
+  addition still goes to `skills/_shared/`, not inline.
   An exception is a number, not a pass: exceed it and the plain WARN
   comes back, and if the file shrinks the script tells you to ratchet the
   allowance down. Add one only when the alternative is a warning nobody
@@ -194,7 +196,7 @@ assuming you're done:
   rather than working from the list below** — they move between files as the
   skills are refactored, and a hand-maintained list is exactly what goes
   stale (this one did: the reviewer's re-run wording left its SKILL.md steps
-  for the shared template in JST-293). That grep reaches ~133 occurrences
+  for the shared template in JST-293). That grep reaches ~138 occurrences
   across the plugin, `docs/` (including the example `demo-*.yml` runners in
   `docs/github-automations/example-workflows/`), the root prose and the one
   demo `.github/workflows/` also runs — all of which break on a rename.
@@ -208,7 +210,7 @@ assuming you're done:
   step 1 Discovery & healthcheck `STATUSCHECK_RERUN` override, and step 8),
   `jira-task-executor` (step 11), `jira-task-reviewer` (its Discovery &
   healthcheck `STATUSCHECK_RERUN` override — and *only* that),
-  `skills/_shared/templates/review-report.md` (six, in the outcome
+  `skills/_shared/templates/review-report.md` (ten, in the outcome
   catalogue's `Next step` blocks, which is where the reviewer's re-run
   instructions actually live), `jst-install` (its `STATUSCHECK_RERUN`
   overrides in the *Verification* section and step 4a, the remedy-default
