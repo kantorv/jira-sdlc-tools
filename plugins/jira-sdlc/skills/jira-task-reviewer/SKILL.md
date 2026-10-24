@@ -689,7 +689,8 @@ resting state, and a later re-run detects the merge on its own.
 Which issues to name:
 
 - **Single-step** — `<PARENT-KEY>`, on S-APPROVED, or with member repos on
-  R-LANDING-READY only: approved member PRs haven't landed yet.
+  R-LANDING-READY only. On R-MEMBERS-APPROVED **don't ask at all**, not even
+  "anyway": approved member PRs haven't landed, so Done would be false.
 - **Sub-task worktree** (step 1's `Subtask` branch) — just `<RUN-KEY>`, when
   3d approved it. Never `<PARENT-KEY>`: that run reviewed one sub-task PR and
   looked at nothing else.
