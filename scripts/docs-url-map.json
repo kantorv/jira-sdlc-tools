@@ -472,6 +472,10 @@
     "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-member-repos.md": {
       "slug": "/step-by-step-installation/optional-member-repos",
       "sidebar_position": 5
+    },
+    "docs/submodules/history.md": {
+      "slug": "/submodules/history",
+      "sidebar_position": 8
     }
   }
 }

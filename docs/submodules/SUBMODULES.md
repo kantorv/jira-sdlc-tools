@@ -39,6 +39,7 @@ worktree.
 | [`repos.sh` reference](./repos-sh.md) | You're an agent or contributor reading or calling the script |
 | [Troubleshooting](./troubleshooting.md) | A healthcheck row fails, a run stops, or something looks odd |
 | [Other multi-repo layouts](./other-layouts.md) | Your project's repos aren't submodules (git-ignored clones, a monorepo, a manifest) |
+| [History: choosing submodules](./history.md) | You want to know how the layouts were weighed and why submodules came first |
 
 ## What works, and what doesn't yet
 
