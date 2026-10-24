@@ -24,15 +24,6 @@ git switch -c development
 git push -u origin development
 ```
 
-Making `development` the repository default is optional. It only saves people
-opening PRs by hand from picking the base in the GitHub UI — the plugin passes
-`--base` explicitly. The command requires repository administration permission;
-it is not needed for the plugin itself.
-
-```bash
-gh repo edit <OWNER>/<REPO> --default-branch development
-```
-
 Then record both in `.jst/jira-sdlc-tools.env`:
 
 ```text

@@ -186,9 +186,17 @@
       "slug": "/step-by-step-installation/create-the-jst-scaffold",
       "sidebar_position": 1
     },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-shared-env.md": {
+      "slug": "/step-by-step-installation/fill-the-shared-env",
+      "sidebar_position": 2
+    },
     "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-local-env.md": {
       "slug": "/step-by-step-installation/fill-the-local-env",
-      "sidebar_position": 2
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-parallel-worktrees.md": {
+      "slug": "/step-by-step-installation/optional-parallel-worktrees",
+      "sidebar_position": 4
     },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
       "slug": "/step-by-step-installation/healthcheck",
@@ -205,10 +213,6 @@
     "docs/STEP-BY-STEP-INSTALLATION/first-tasks/create-a-release-cycle.md": {
       "slug": "/step-by-step-installation/create-a-release-cycle",
       "sidebar_position": 3
-    },
-    "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
-      "slug": "/step-by-step-installation/optional-parallel-worktrees",
-      "sidebar_position": 6
     },
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
@@ -436,6 +440,42 @@
     "docs/integrations.mdx": {
       "slug": "/integrations",
       "sidebar_position": 7
+    },
+    "docs/submodules/SUBMODULES.md": {
+      "slug": "/submodules",
+      "sidebar_position": 1
+    },
+    "docs/submodules/setup.md": {
+      "slug": "/submodules/setup",
+      "sidebar_position": 2
+    },
+    "docs/submodules/how-the-skills-work.md": {
+      "slug": "/submodules/how-the-skills-work",
+      "sidebar_position": 3
+    },
+    "docs/submodules/design.md": {
+      "slug": "/submodules/design",
+      "sidebar_position": 4
+    },
+    "docs/submodules/repos-sh.md": {
+      "slug": "/submodules/repos-sh",
+      "sidebar_position": 5
+    },
+    "docs/submodules/troubleshooting.md": {
+      "slug": "/submodules/troubleshooting",
+      "sidebar_position": 6
+    },
+    "docs/submodules/other-layouts.md": {
+      "slug": "/submodules/other-layouts",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-member-repos.md": {
+      "slug": "/step-by-step-installation/optional-member-repos",
+      "sidebar_position": 5
+    },
+    "docs/submodules/history.md": {
+      "slug": "/submodules/history",
+      "sidebar_position": 8
     }
   }
 }

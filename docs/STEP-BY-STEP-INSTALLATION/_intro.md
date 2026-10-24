@@ -50,7 +50,10 @@ edit the pages, not this list.
 │       └── [Jira setup gate](./environment-setup/jira/jira-setup-gate.md)\
 ├── [Configuration](./configuration/index.mdx)\
 │   ├── [Create the .jst/ scaffold](./configuration/create-the-jst-scaffold.md)\
-│   └── [Fill .jst/jira-sdlc-tools.local.env](./configuration/fill-the-local-env.md)\
+│   ├── [Fill .jst/jira-sdlc-tools.env](./configuration/fill-the-shared-env.md)\
+│   ├── [Fill .jst/jira-sdlc-tools.local.env](./configuration/fill-the-local-env.md)\
+│   ├── [Optional: parallel worktrees](./configuration/optional-parallel-worktrees.md)\
+│   └── [Optional: member repos](./configuration/optional-member-repos.md)\
 ├── [Coding Assistant](./coding-assistant/index.mdx)\
 │   ├── [Claude Code (extended)](./coding-assistant/claude-code.md)\
 │   └── [Non Claude clients](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/non-claude-clients)\
@@ -68,7 +71,6 @@ edit the pages, not this list.
 │   ├── [Commit the setup](./first-tasks/commit-the-setup.md)\
 │   ├── [Add bootstrap and teardown scripts](./first-tasks/add-bootstrap-and-teardown-scripts.md)\
 │   └── [Create a release cycle](./first-tasks/create-a-release-cycle.md)\
-├── [Optional: parallel worktrees](./optional-parallel-worktrees.md)\
 └── [Full setup checklist](./full-setup-checklist.md)
 
 </div>

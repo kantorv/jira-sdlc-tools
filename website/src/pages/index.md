@@ -65,7 +65,10 @@ The whole step-by-step installation at a glance — every entry is a link.
 │       └── [Jira setup gate](/docs/step-by-step-installation/jira-setup-gate)\
 ├── [Configuration](/docs/step-by-step-installation/configuration)\
 │   ├── [Create the .jst/ scaffold](/docs/step-by-step-installation/create-the-jst-scaffold)\
-│   └── [Fill .jst/jira-sdlc-tools.local.env](/docs/step-by-step-installation/fill-the-local-env)\
+│   ├── [Fill .jst/jira-sdlc-tools.env](/docs/step-by-step-installation/fill-the-shared-env)\
+│   ├── [Fill .jst/jira-sdlc-tools.local.env](/docs/step-by-step-installation/fill-the-local-env)\
+│   ├── [Optional: parallel worktrees](/docs/step-by-step-installation/optional-parallel-worktrees)\
+│   └── [Optional: member repos](/docs/step-by-step-installation/optional-member-repos)\
 ├── [Coding Assistant](/docs/step-by-step-installation/coding-assistant)\
 │   ├── [Claude Code (extended)](/docs/integrations/claude-code)\
 │   └── [Non Claude clients](/docs/step-by-step-installation/non-claude-clients)\
@@ -83,7 +86,6 @@ The whole step-by-step installation at a glance — every entry is a link.
 │   ├── [Commit the setup](/docs/step-by-step-installation/commit-the-setup)\
 │   ├── [Add bootstrap and teardown scripts](/docs/step-by-step-installation/add-bootstrap-and-teardown-scripts)\
 │   └── [Create a release cycle](/docs/step-by-step-installation/create-a-release-cycle)\
-├── [Optional: parallel worktrees](/docs/step-by-step-installation/optional-parallel-worktrees)\
 └── [Full setup checklist](/docs/step-by-step-installation/full-setup-checklist)
 
 </div>

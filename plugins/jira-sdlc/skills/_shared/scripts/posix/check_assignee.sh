@@ -23,6 +23,7 @@
 #          commit, comment, or work the issue.
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
@@ -43,7 +44,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
 # --- config (site for the fixup URL) -----------------------------------------
-CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")/.jst
+CFG_DIR=$(jst_root || printf '%s' "$PWD")/.jst
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do

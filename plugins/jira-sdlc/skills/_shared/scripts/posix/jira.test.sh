@@ -14,6 +14,7 @@
 # Exit 0 — all checks passed.   Exit 1 — one or more checks failed.
 
 set -u
+. "$(dirname "$0")/_jst_root.sh"   # jst_root: the same root jira.sh reads its config from
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 JIRA_SH="$HERE/jira.sh"
@@ -21,7 +22,7 @@ ROLE="${JIRA_TEST_ROLE:-assigner}"
 J() { bash "$JIRA_SH" --role "$ROLE" "$@"; }
 
 # --- resolve config the same way jira.sh does (local overrides team) ---------
-cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.jst
+cfg_dir=$(jst_root || pwd)/.jst
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
