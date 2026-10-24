@@ -38,7 +38,8 @@
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_matrix.md",
     "docs/research/_intro.md",
-    "docs/proposals/_multi-repo-workspaces-brainstorm.md"
+    "docs/proposals/_multi-repo-workspaces-brainstorm.md",
+    "docs/proposals/_submodules-phase-1-plan.md"
   ],
   "categories": {
     "docs/process": {

@@ -211,3 +211,5 @@ Pre-pilot fix: the workspace `CLAUDE.md` says the workspace and the server have 
 - **2026-10-24:** reverted to an explicit `JST_MEMBERS` list. It fails closed: no setting means today's behaviour, so
   an upgrade can't change a project that vendors via submodules, and a new vendored submodule can't silently become a
   member. `.gitmodules` now validates the list instead of defining it (strategy doc §7).
+- **2026-10-24:** phase 1 planned in detail: [\_submodules-phase-1-plan.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-1-plan.md). The lab
+  confirmed that `ensure_local_env` run inside a member of the main checkout copies the credential file into the member.
