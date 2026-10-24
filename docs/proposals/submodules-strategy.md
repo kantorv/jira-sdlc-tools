@@ -248,14 +248,14 @@ Every place a skill touches git or GitHub today, plus what's new:
 | Verb | Replaces in the skills | single | submodules |
 | -- | -- | -- | -- |
 | `list` | (new) | one row: `.` | the parent plus each member: path, slug, base, in scope, branch, dirty, ahead |
-| `provision` | assigner step 6 (branch, push, worktree), executor step 1 | what the assigner does now | plus member branches and the member step (MS-SC-2) |
+| `provision` | assigner step 6 (branch, push, worktree), executor step 1 | what the assigner does now | plus member branches and the member step (MS-SC-2), then `branch.<b>.parentbranch` in each *worktree* member: a worktree's members have their own git directories, so config set in the main checkout's members doesn't reach them (§10) |
 | `sync` | executor step 2 (bring the branch current) | today's merge | per member; a conflict stops the run with the repo named |
 | `push` | executor step 9 | `git push -u` | each member, then the parent, with `push.recurseSubmodules=check` |
 | `prs` | reading `current_pr` (executor step 10, the reviewer's phase checks) | one row, the same as `current_pr` | one row per repo, with the "unknown is not none" rule |
 | `open-prs` | executor step 10's create-or-comment | `pr_base` + `gh pr create`, or a comment on the open PR | the same per repo with commits, always with `-R <slug>` |
 | `gate` | the reviewer's phase decisions | `next=review`, `wait-merge`, `done` | adds `next=merge-members`, `land`, `merge-parent` |
 | `land` | (new) | "nothing to land" | MS-LA-2; `--check` is the MS-LA-3 gate |
-| `remove-check` | (new) | dirty / unpushed check | the same across the parent and every member (MS-CO-2) |
+| `remove-check` | (new) | dirty / unpushed check | the same across the parent and every member (MS-CO-2). A commit on no remote is safe when it's the head of a merged PR, or an ancestor of that head: a squash merge leaves exactly that behind (§10) |
 
 `gate` matters most. When the script prints the next action, the reviewer's phase machine becomes a lookup instead of
 prose. That's the only realistic way to add multi-repo to the reviewer under its word ceiling, and it should free words
@@ -336,9 +336,41 @@ and initialized, `origin` reachable with the PAT, base branch on `origin`.
 4. Update the workspace `CLAUDE.md`: "commit and push each repo separately" becomes this document's rules.
 
 Then, by hand, before any plugin work: create one issue branch in the workspace and one member, run the member
-step, commit in the member, open both PRs, merge the member PR with each merge method, run landing, then remove the worktree (MS-CO-2 check, then
-`--force`). That checks
-§3–§6 on the real project.
+step, commit in the member, open both PRs, merge the member PR, run landing, then remove the worktree (MS-CO-2 check,
+then `--force`). That checks §3–§6 on the real project.
+
+### Results (2026-10-24, issue SKL-2)
+
+The conversion is commit `14fe106` in `kantorv/threejs-skeleton-studio`. `git submodule add` adopts an existing clone in
+place, and `git submodule absorbgitdirs` then moves its `.git` into the parent. The members' ignored files (`venv`,
+`node_modules`, the server's Postgres data) stay where they are. A fresh `git clone --recurse-submodules` rebuilds the
+layout, with the relative URLs resolving to the right SSH remotes.
+
+The by-hand check ran on the real repos, and each step behaved as §3–§6 predict:
+
+| Step | Result |
+| -- | -- |
+| Member step in a new worktree | The server, in scope, on the issue branch tracking `origin`. The app, out of scope, detached at its gitlink. Nothing written to shared config. About 9 s and 1.7 MB per worktree |
+| `ensure_local_env` + statuscheck run from inside the member | `.jst/` provisioned in the worktree root, nothing in the member. The rows describe the worktree (branch, `SKL-2`), and both `member_repo` rows are OK against GitHub |
+| A parent gitlink commit pointing at an unpushed member commit | `push.recurseSubmodules=check` refuses the push, naming the member |
+| Member PR `threejs-skeleton-server#1`, **squash-merged**, branch deleted | The feature commit `84b8f93` is on no branch; GitHub's commit `b22696c` is on `development` |
+| Landing | Gitlink moved to `b22696c`; MS-LA-3 passes for both gitlinks; parent PR `threejs-skeleton-studio#1` is just the gitlink diff, merged |
+| Fresh `--recurse-submodules` clone of `development` | The server at `b22696c`, with the change |
+| Removal | `git worktree remove` refuses, `--force` works and also removes the member copies |
+
+Two findings that change the design (both now in §8's verbs table):
+
+- **A squash merge looks like unpushed work.** After it, the member's local issue branch holds a commit that's on no
+  remote, so a naive "commits missing from `origin`" check blocks every removal. `remove-check` has to accept a commit
+  that is the head of a merged PR, or an ancestor of it (here: `84b8f93` was PR #1's head, and its diff against
+  `b22696c` is empty).
+- **Member git config doesn't reach worktree members.** A worktree's members have their own git directories
+  (`.git/worktrees/<wt>/modules/<name>`), so `branch.<b>.parentbranch` set in the main checkout's member is absent in
+  the worktree's (lab-confirmed). `provision` sets it inside the worktree's members, or `pr_base --repo` falls back to
+  mapping the workspace's base.
+
+On Q4: opening the parent PR at landing time worked well. Its diff is exactly the integration change, and there was
+nothing to keep in sync while the member PR was open.
 
 ## 11. Delivery plan
 

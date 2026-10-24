@@ -213,3 +213,6 @@ Pre-pilot fix: the workspace `CLAUDE.md` says the workspace and the server have 
   member. `.gitmodules` now validates the list instead of defining it (strategy doc §7).
 - **2026-10-24:** phase 1 planned in detail: [\_submodules-phase-1-plan.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-1-plan.md). The lab
   confirmed that `ensure_local_env` run inside a member of the main checkout copies the credential file into the member.
+- **2026-10-24:** phase 1 done (commits `3eb0221`, `48eb897`). Phase 2 done: the pilot was converted to submodules
+  (`threejs-skeleton-studio` `14fe106`), and the by-hand check ran as Jira SKL-2, with a squash-merged member PR and
+  landing. Results and two design findings are in the strategy doc's §10.
