@@ -513,6 +513,67 @@ else
   esac
 fi
 
+# --- repo strategy and member repos (repos.sh) --------------------------------
+# Which strategy applies: single, or a parent holding member repos as git
+# submodules (JST_MEMBERS). For submodules, one row per member: checked out,
+# reachable with the PAT, its base branch on GitHub. repos.sh owns the rules
+# (which paths are members, each one's base); these rows only judge its output.
+# The branch probe goes through gh like gh_repo_access, not `git ls-remote`, so
+# it uses the same PAT and can't stall on an SSH prompt.
+if [ -n "$WT_ROOT" ]; then
+  RS_OUT=$(bash "$SC_DIR/repos.sh" strategy 2>/dev/null); RS_RC=$?
+  rs() { printf '%s\n' "$RS_OUT" | sed -n "s/^$1=//p"; }
+  RS_ERR=$(rs error); RS_MEMBERS=$(rs members); RS_PINNED=$(rs pinned)
+  if [ "$RS_RC" -eq 2 ] && [ -n "$RS_ERR" ]; then
+    row repo_strategy FAIL "$RS_ERR" \
+      "fix JST_MEMBERS in .jst/jira-sdlc-tools.env — the submodule paths that take part in issues, space-separated, as 'git submodule status' prints them; leave it empty for a single-repo project (see skills/_shared/project-config.md) — then $RERUN."
+  elif [ "$RS_RC" -ne 0 ]; then
+    row repo_strategy WARN "repos.sh strategy failed (exit $RS_RC) — the repo set is unknown"
+  elif [ "$(rs strategy)" = single ]; then
+    if [ -n "$RS_PINNED" ]; then
+      row repo_strategy INFO "single ($(printf '%s' "$RS_PINNED" | wc -w | tr -d ' ') submodule(s) present, none in JST_MEMBERS: $RS_PINNED)"
+    else
+      row repo_strategy INFO "single"
+    fi
+  else
+    row repo_strategy OK "submodules — members: $RS_MEMBERS${RS_PINNED:+ · pinned: $RS_PINNED}"
+    while IFS=$'\t' read -r M_PATH M_ROLE M_INIT M_SLUG M_BASE M_BRANCH _ _; do
+      [ "$M_ROLE" = member ] || continue
+      M_ROW="member_repo[$M_PATH]"
+      if [ "$M_INIT" != yes ]; then
+        row "$M_ROW" FAIL "not checked out" \
+          "run 'git submodule update --init $M_PATH' in the project root, then $RERUN."
+      elif [ "$M_BASE" = error ]; then
+        row "$M_ROW" FAIL ".gitmodules sets 'branch = .' for $M_PATH — a member's base has to be a real branch name" \
+          "name its base explicitly: git submodule set-branch --branch <base> $M_PATH, commit .gitmodules, then $RERUN."
+      elif [ "$M_SLUG" = - ]; then
+        row "$M_ROW" WARN "origin is not a github.com remote — can't probe it with gh, and 'gh pr create' won't work against it"
+      elif [ -z "$GH_OK" ]; then
+        row "$M_ROW" WARN "skipped (gh_auth failed — the member probe needs a logged-in gh; see rows above)"
+      elif ! M_ERR=$($TMOUT_CMD gh api "repos/$M_SLUG" 2>&1 >/dev/null); then
+        case "$M_ERR" in
+          *404*|*"Not Found"*|*"Could not resolve"*)
+            row "$M_ROW" FAIL "the PAT authenticates but 404s on $M_SLUG — the fine-grained token's 'only selected repositories' list probably doesn't include this member" \
+              "add $M_SLUG to GITHUB_PAT_TOKEN's repository access at https://github.com/settings/personal-access-tokens (Contents: read/write, Pull requests: read/write), or remove $M_PATH from JST_MEMBERS if it isn't a member — then $RERUN." ;;
+          *)
+            M_ERR=$(printf '%s' "$M_ERR" | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
+            row "$M_ROW" FAIL "GET /repos/$M_SLUG failed: ${M_ERR:-(no error output from gh)}" \
+              "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $RERUN." ;;
+        esac
+      elif ! M_BRANCHES=$($TMOUT_CMD gh api --paginate "repos/$M_SLUG/branches" --jq '.[].name' 2>/dev/null); then
+        row "$M_ROW" WARN "$M_SLUG reachable, but listing its branches failed — base '$M_BASE' unchecked"
+      elif ! printf '%s\n' "$M_BRANCHES" | grep -qxF "$M_BASE"; then
+        row "$M_ROW" FAIL "base branch '$M_BASE' isn't on $M_SLUG — issue branches are cut from it and PRs target it" \
+          "push '$M_BASE' to $M_SLUG, or set the member's base in .gitmodules (git submodule set-branch --branch <base> $M_PATH), then $RERUN."
+      elif [ -n "$PRODUCTION_BRANCH" ] && ! printf '%s\n' "$M_BRANCHES" | grep -qxF "$PRODUCTION_BRANCH"; then
+        row "$M_ROW" WARN "$M_SLUG · base $M_BASE · on $M_BRANCH — no '$PRODUCTION_BRANCH' branch there, so a hotfix can't touch this member"
+      else
+        row "$M_ROW" OK "$M_SLUG · base $M_BASE · on $M_BRANCH"
+      fi
+    done < <(bash "$SC_DIR/repos.sh" list 2>/dev/null | tail -n +2)
+  fi
+fi
+
 # --- the current branch's PR(s) ----------------------------------------------
 # Answers "which PR does the branch I'm standing on have" once, the same way on
 # every run, so no skill hand-types that lookup (JST-310). gh answers a filter

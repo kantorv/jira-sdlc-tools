@@ -480,6 +480,78 @@ if (-not $WtRoot) {
     }
 }
 
+# --- repo strategy and member repos (repos.ps1) -------------------------------
+# Twin of statuscheck.sh's block: the strategy row, then one row per submodules
+# member. repos.ps1 owns the rules; these rows only judge its output. It writes
+# with Write-Output, so `&` captures it in-process.
+if ($WtRoot) {
+    $reposPs = Join-Path $PSScriptRoot 'repos.ps1'
+    $rsOut = @(& $reposPs strategy 2>$null)
+    $rsRc = $LASTEXITCODE
+    function Get-RsValue { param([string]$Key)
+        $rsL = @($rsOut | Where-Object { ([string]$_).StartsWith("$Key=") }) | Select-Object -First 1
+        if ($rsL) { return ([string]$rsL).Substring($Key.Length + 1) } else { return '' } }
+    $rsErr = Get-RsValue 'error'; $rsMembers = Get-RsValue 'members'; $rsPinned = Get-RsValue 'pinned'
+    if ($rsRc -eq 2 -and $rsErr) {
+        Add-Row repo_strategy FAIL $rsErr `
+            "fix JST_MEMBERS in .jst/jira-sdlc-tools.env — the submodule paths that take part in issues, space-separated, as 'git submodule status' prints them; leave it empty for a single-repo project (see skills/_shared/project-config.md) — then $Rerun."
+    } elseif ($rsRc -ne 0) {
+        Add-Row repo_strategy WARN "repos.sh strategy failed (exit $rsRc) — the repo set is unknown"
+    } elseif ((Get-RsValue 'strategy') -eq 'single') {
+        if ($rsPinned) {
+            $rsN = @($rsPinned -split '\s+' | Where-Object { $_ }).Count
+            Add-Row repo_strategy INFO "single ($rsN submodule(s) present, none in JST_MEMBERS: $rsPinned)"
+        } else {
+            Add-Row repo_strategy INFO 'single'
+        }
+    } else {
+        $rsPinNote = if ($rsPinned) { " · pinned: $rsPinned" } else { '' }
+        Add-Row repo_strategy OK "submodules — members: $rsMembers$rsPinNote"
+        $rsLines = @(& $reposPs list 2>$null | Select-Object -Skip 1)
+        foreach ($rsLine in $rsLines) {
+            $rsF = ([string]$rsLine) -split "`t"
+            if ($rsF.Count -lt 8 -or $rsF[1] -ne 'member') { continue }
+            $mPath = $rsF[0]; $mInit = $rsF[2]; $mSlug = $rsF[3]; $mBase = $rsF[4]; $mBranch = $rsF[5]
+            $mRow = "member_repo[$mPath]"
+            if ($mInit -ne 'yes') {
+                Add-Row $mRow FAIL 'not checked out' "run 'git submodule update --init $mPath' in the project root, then $Rerun."
+            } elseif ($mBase -eq 'error') {
+                Add-Row $mRow FAIL ".gitmodules sets 'branch = .' for $mPath — a member's base has to be a real branch name" `
+                    "name its base explicitly: git submodule set-branch --branch <base> $mPath, commit .gitmodules, then $Rerun."
+            } elseif ($mSlug -eq '-') {
+                Add-Row $mRow WARN "origin is not a github.com remote — can't probe it with gh, and 'gh pr create' won't work against it"
+            } elseif (-not $GhOk) {
+                Add-Row $mRow WARN 'skipped (gh_auth failed — the member probe needs a logged-in gh; see rows above)'
+            } else {
+                $mErr = ((& gh api "repos/$mSlug" 2>&1) | Out-String)
+                if ($LASTEXITCODE -ne 0) {
+                    if ($mErr -match '404|Not Found|Could not resolve') {
+                        Add-Row $mRow FAIL "the PAT authenticates but 404s on $mSlug — the fine-grained token's 'only selected repositories' list probably doesn't include this member" `
+                            "add $mSlug to GITHUB_PAT_TOKEN's repository access at https://github.com/settings/personal-access-tokens (Contents: read/write, Pull requests: read/write), or remove $mPath from JST_MEMBERS if it isn't a member — then $Rerun."
+                    } else {
+                        $mE = (($mErr -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1)
+                        $mE = if ($mE) { $mE.Trim() } else { '(no error output from gh)' }
+                        Add-Row $mRow FAIL "GET /repos/$mSlug failed: $mE" `
+                            "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $Rerun."
+                    }
+                } else {
+                    $mBranches = @(& gh api --paginate "repos/$mSlug/branches" --jq '.[].name' 2>$null)
+                    if ($LASTEXITCODE -ne 0) {
+                        Add-Row $mRow WARN "$mSlug reachable, but listing its branches failed — base '$mBase' unchecked"
+                    } elseif (@($mBranches | ForEach-Object { ([string]$_).Trim() }) -cnotcontains $mBase) {
+                        Add-Row $mRow FAIL "base branch '$mBase' isn't on $mSlug — issue branches are cut from it and PRs target it" `
+                            "push '$mBase' to $mSlug, or set the member's base in .gitmodules (git submodule set-branch --branch <base> $mPath), then $Rerun."
+                    } elseif ($ProductionBranch -and (@($mBranches | ForEach-Object { ([string]$_).Trim() }) -cnotcontains $ProductionBranch)) {
+                        Add-Row $mRow WARN "$mSlug · base $mBase · on $mBranch — no '$ProductionBranch' branch there, so a hotfix can't touch this member"
+                    } else {
+                        Add-Row $mRow OK "$mSlug · base $mBase · on $mBranch"
+                    }
+                }
+            }
+        }
+    }
+}
+
 # --- the current branch's PR(s) ------------------------------------------------
 # Answers "which PR does the branch I'm standing on have" once, the same way on
 # every run, so no skill hand-types that lookup (JST-310). gh answers a filter

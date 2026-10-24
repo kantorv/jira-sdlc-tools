@@ -96,7 +96,7 @@ purpose, and saying so keeps the user from chasing them:
 | section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
 | -- | -- | -- |
 | 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
-| 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir` | `jira_auth`, `jira_project` |
+| 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir`, `repo_strategy` (INFO for a single repo), `member_repo[…]` (one per `JST_MEMBERS` path; none for a single repo) | `jira_auth`, `jira_project` |
 | 3 · Jira | `env_config`, `jira_auth`, `jira_project` | — |
 | 4 · healthcheck | every row, for all three roles | — |
 

@@ -246,9 +246,11 @@ bash scripts/check-skill-size.sh
 bash scripts/check-ensure-local-env.sh [--ports]
 
 # how every script finds the project root (_jst_root), from submodules and
-# worktrees, plus the single-repo regression: statuscheck's table must be
-# byte-identical to the base commit's for a project without members. Run it
-# after touching _jst_root or statuscheck. --ports adds the win/ ports.
+# worktrees; the single-repo regression (statuscheck's table must match the
+# base commit's for a project without members, plus exactly one INFO
+# repo_strategy row); repos.sh against golden output; and the repo_strategy /
+# member_repo rows, driven by a fake gh. Run it after touching _jst_root,
+# repos.sh or its strategies/, or statuscheck. --ports adds the win/ ports.
 bash scripts/check-repos.sh [--ports]
 
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
@@ -337,7 +339,8 @@ fonts could flag SVGs whose source never changed.
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
 The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`get_assignee_email`, `check_assignee`, `jira`, `pr_base`) ship **twice**: the
+`get_assignee_email`, `check_assignee`, `jira`, `pr_base`), and `repos` with its
+`strategies/` (statuscheck calls it), ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
 arguments, same markdown-table / stdout, same exit codes and stderr — so the
@@ -356,15 +359,16 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env get_assignee_email check_assignee jira pr_base; do
+for s in statuscheck ensure_local_env get_assignee_email check_assignee jira pr_base repos; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
 done   # add the args each one needs: --role <role> to statuscheck; --role <role>
        # plus an issue key to check_assignee; --role <role> and a subcommand
        # (e.g. whoami) to jira; --role <role> plus --parent-key <KEY> to
-       # pr_base. All four now REQUIRE --role — auth is role-scoped, with no
-       # default credential.
+       # pr_base; a verb (strategy or list) to repos. Those four REQUIRE
+       # --role — auth is role-scoped, with no default credential; repos
+       # touches no credential and takes none.
 ```
 
 `pr_base` is the one whose *result* depends on where you run it — it resolves

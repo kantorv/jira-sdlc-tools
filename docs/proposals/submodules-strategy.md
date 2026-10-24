@@ -276,6 +276,9 @@ For example, executor steps 9–10 would read roughly: *"Run `repos.sh push`, th
 `repos.sh open-prs`. Act on each row: `created` / `updated` → carry the link to step 11; `unresolved` → stop and ask
 which base."*
 
+Phase 1's implementation details (the root rule, the `strategy` and `list` output formats, the statuscheck rows) are in
+the [phase 1 plan](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-1-plan.md).
+
 ### Fixes to existing scripts
 
 **Finding `.jst/`.** Every script finds it with `git rev-parse --show-toplevel`: `jira.sh`, `check_assignee.sh`,

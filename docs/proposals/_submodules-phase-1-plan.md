@@ -2,7 +2,7 @@
 
 |  |  |
 | -- | -- |
-| Status | Plan, not started. Decisions D1–D6 confirmed. Unpublished (`_` prefix): a working document that goes stale once the work lands |
+| Status | Implemented (both PRs, on the JST-322 branch); see §7 for what changed against the plan. Decisions D1–D6 confirmed. Unpublished (`_` prefix): a working document that goes stale once the work lands |
 | Written | 2026-10-24, against plugin 0.8.10, on `feature/JST-322-submodules-support-pilot-implementation` |
 | Implements | Phase 1 of [the submodules strategy](submodules-strategy.md) §11 |
 
@@ -172,7 +172,7 @@ Both rows are built from `repos.sh strategy` and `repos.sh list`, so the rules e
 | Row | When | Status |
 | -- | -- | -- |
 | `repo_strategy` | Always | `INFO single`, with `(N submodules present, none in JST_MEMBERS)` when `pinned` isn't empty. `OK submodules`: members and pinned paths. `FAIL` on exit 2, relaying `error=` as the detail, with the remedy "fix `JST_MEMBERS` in `.jst/jira-sdlc-tools.env`" |
-| `member_repo[<path>]` | `submodules` only, one per member | `FAIL` if not initialized (remedy: `git submodule update --init <path>`). `FAIL` if `gh api repos/<slug>` 404s/403s (remedy: "give the PAT access to `<slug>`, or remove `<path>` from `JST_MEMBERS`"). `FAIL` if `base` isn't on the member's `origin` (`git ls-remote --heads`). `WARN` if the production branch isn't there (it's only needed for hotfixes). Otherwise `OK`, with slug, base, branch |
+| `member_repo[<path>]` | `submodules` only, one per member | `FAIL` if not initialized (remedy: `git submodule update --init <path>`). `FAIL` if `gh api repos/<slug>` 404s/403s (remedy: "give the PAT access to `<slug>`, or remove `<path>` from `JST_MEMBERS`"). `FAIL` if `base` isn't among the member's GitHub branches (`gh api repos/<slug>/branches`). `WARN` if the production branch isn't there (it's only needed for hotfixes). Otherwise `OK`, with slug, base, branch |
 
 - Placement: right after `gh_repo_access`. The member probes are gated the same way: `WARN skipped` when `gh_auth`
   failed or the slug isn't a GitHub one. Each probe runs under the existing 30-second `TMOUT_CMD`.
@@ -253,3 +253,23 @@ Two PRs, so the security-relevant fix doesn't wait on the new script:
 - **D5, member probes in statuscheck:** two network calls per member per run.
 - **D6, CI:** whether to run `check-ensure-local-env.sh` and `check-repos.sh` in a workflow. Neither runs anywhere
   automatically today.
+
+## 7. Progress and deviations
+
+- **PR 1 (P1-1 to P1-3), commit `3eb0221`:** the root rule, `ensure_local_env`, statuscheck's `cd`. Tests: 51 checks in
+  `check-ensure-local-env.sh`. Run against `development`'s scripts, 11 of the 12 new checks fail.
+- **PR 2 (P1-4 to P1-8):** `repos.sh` + `strategies/{single,submodules}.sh`, their `win/` twins, the two statuscheck
+  rows, the `JST_MEMBERS` docs and jst-install's row-map cell. `check-repos.sh` grows to 73 checks.
+- **Deviation, P1-5:** a member's branches are read with `gh api repos/<slug>/branches`, not `git ls-remote`. It uses
+  the same PAT as every other probe and can't stall on an SSH prompt. Still two calls per member.
+- **Deviation, invalid `JST_MEMBERS`:** `strategy` prints `members=` and `pinned=` empty next to `error=`, because a
+  half-validated list would read as a real one.
+- **Found while testing, fixed:**
+  - PR 1's single-repo regression check ran statuscheck alone. In a fresh worktree that stops at the `jst_dir` gate,
+    so the two worktree cases compared one row. It now runs `ensure_local_env` first, as a skill's step 1 does, and
+    compares the full table. PR 1's change passes the stronger version.
+  - In `statuscheck.ps1`, a `$rows` variable overwrote `$script:Rows` (PowerShell variable names are
+    case-insensitive), deleting every row above it. The port-parity checks caught it. The block's variables now use
+    an `rs`/`m` prefix.
+- **Real-world check:** in the pilot (`threejs-skeleton-proj`, still git-ignored clones), `development`'s statuscheck
+  and PR 1's give identical output, stderr and exit codes, in the main checkout and inside a clone.
