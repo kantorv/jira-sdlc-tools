@@ -374,27 +374,28 @@ nothing to keep in sync while the member PR was open.
 
 ## 11. Delivery plan
 
-1. **Foundations, no behaviour change:** the `.jst/` lookup fix, the `ensure_local_env` guard and its test case, the
-   `repos.sh` front door with strategy selection and `list`, and statuscheck's `repo_strategy` and `member_repo` rows.
-   Golden-output tests for `strategies/single.sh` start here.
-2. **Convert the pilot** to submodules (§10), and do the by-hand check.
-3. **Reviewer:** `prs` and `gate`. It's the most blind today, and the word savings land where they're needed.
-4. **Executor:** `sync`, `push`, `open-prs`.
-5. **Assigner:** `provision`, and choosing the in-scope repos.
-6. **Landing and jst-install:** `land`, `remove-check`, and jst-install's submodule questions and checks.
+| Phase | Scope | Status |
+| -- | -- | -- |
+| 1. Foundations | the `.jst/` lookup fix, the `ensure_local_env` guard, `repos.sh` with `strategy` and `list`, statuscheck's `repo_strategy` and `member_repo` rows | **Done** (`3eb0221`, `48eb897`) |
+| 2. The pilot | convert `threejs-skeleton-proj` to submodules; the by-hand check (SKL-2) | **Done** (§10) |
+| 3. Reviewer | `prs`, `gate`, `land` / `land --check` (moved here from phase 6: the reviewer runs landing, Q2), and the reviewer reading every repo | **Done**: six headless runs on the pilot and chess-app ([phase 3 plan](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-3-plan.md)) |
+| 4. Executor | `provision` (the member step, and `parentbranch` *inside* worktree members, §10), `sync`, `push`, `open-prs` with a PR-set section | Next. First test: fix-and-re-run on SKL-4 |
+| 5. Assigner | `provision` from the assigner's side (issue branches in every in-scope member, eagerly), and choosing the in-scope repos | — |
+| 6. Setup and cleanup | `remove-check` (accepting the head of a merged PR, §10), jst-install's submodule questions and checks, a docs-site page | — |
 
-Each phase ships on its own and leaves single-repo behaviour unchanged, checked by the golden-output tests.
+Each phase ships on its own and leaves single-repo behaviour unchanged, checked by the golden-output tests. Multistep
+issues across members (phase 3's D2) and the type-1 strategy (Q5) come after phase 6.
 
 ## 12. Open questions
 
 - **Q1, per-member branch names:** both pilot members use `development`/`main`. Is `.gitmodules`'s `branch` enough for
   the base, with production assumed the same as the parent's, or does this need a per-member setting from the start?
-- **Q2, who runs landing:** the reviewer after approval, a re-run of the executor, or a parent-repo GitHub Action
-  triggered by the last member merge?
+- **Q2, who runs landing — answered: the reviewer.** On `gate`'s `land` phase it runs `repos.sh land`, the same
+  kind of mechanical step as opening the multistep parent PR (H4 on SKL-3).
 - **Q3, member merge method:** with MS-LA-1 any method is safe. Is it still worth recommending merge commits, to keep
   member history readable from the parent?
-- **Q4, the parent PR when the parent has no own changes:** it exists only to carry the landing bump. Open it at
-  landing time, or at the start as a draft that collects the PR set (the multi-repo proposal's umbrella PR)?
+- **Q4, the parent PR when the parent has no own changes — answered: at landing time.** `land` opens it, and its
+  diff is exactly the integration change (SKL-2, SKL-3).
 - **Q5, type 1 later:** most of §8 (the `.jst/` lookup, `repos.sh` and its verbs, the reviewer changes) carries over to the
   multi-repo proposal's type 1. It becomes one more `strategies/` file: Discover and Checkout are the strategy-specific parts.
 

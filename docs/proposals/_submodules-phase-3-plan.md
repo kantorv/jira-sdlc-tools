@@ -2,7 +2,7 @@
 
 |  |  |
 | -- | -- |
-| Status | Plan, not started. Decisions D1–D7 settled (§8). Unpublished (`_` prefix) |
+| Status | **Done** (§9). Decisions D1–D7 settled (§8). Unpublished (`_` prefix) |
 | Written | 2026-10-24, on `feature/JST-322-submodules-support-pilot-implementation` (after phases 1 and 2) |
 | Implements | Phase 3 of [the submodules strategy](submodules-strategy.md) §11 |
 
@@ -269,4 +269,14 @@ H3–H6 need member PRs that the executor can't open yet (phase 4). They're made
   `skelserver/.env.local` into its shell (not printed). A reviewer sourcing project secrets is a choice the skills
   should make explicitly, probably "don't, say what wasn't run".
 
-- **Not run yet:** H2 (chess-app, multistep). It needs a parent, two sub-tasks and three PRs on a real project.
+- H2 ran last, below.
+
+- **H2, chess-app CTA-266 (multistep, single repo), two passes:**
+
+  - Pass 1: `gate --multistep` → `root=none`, sub-tasks not Done → `prs` per sub-task → both reviewed → M-ALL-APPROVED.
+  - Pass 2, after the sub-task merges: `phase=none` with every sub-task Done, and the reviewer correctly read
+    `root=none` (the JST-286 strand doesn't recur) → opened the parent PR through 5a → 5b → M-PARENT-READY.
+  - All fixtures closed: PRs #272/#273 merged only into the deleted parent branch, #274 closed unmerged, CTA-265/266 Done.
+
+- **Phase 3 is done.** The reviewer is at 6,240 of its 6,250 allowance: the next reviewer change goes to
+  `skills/_shared/`.
