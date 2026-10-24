@@ -204,3 +204,10 @@ Pre-pilot fix: the workspace `CLAUDE.md` says the workspace and the server have 
 - **2026-10-24:** user overruled the clone: keep worktrees and remove with `--force`. Tested and agreed. Consequences
   written into the strategy doc: worktree git config is shared, so the branch freeze is a one-shot `git -c`; never
   combine `--remote` with `--recursive` (it moves pinned nested submodules to their branch tip).
+- **2026-10-24:** implementation shape agreed: no per-strategy sections in the skills; one flow over a set of repos,
+  behind a `repos.sh` front door with `strategies/*.sh` (single goes through it too, guarded by golden-output tests).
+  User's amendment: members are detected from `.gitmodules`, with `JST_MEMBERS_EXCLUDE` for vendored libraries.
+  Strategy doc §7, §8 and §11 (delivery plan) updated.
+- **2026-10-24:** reverted to an explicit `JST_MEMBERS` list. It fails closed: no setting means today's behaviour, so
+  an upgrade can't change a project that vendors via submodules, and a new vendored submodule can't silently become a
+  member. `.gitmodules` now validates the list instead of defining it (strategy doc §7).

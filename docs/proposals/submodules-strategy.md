@@ -103,7 +103,7 @@ GitHub for Jira from the start). Any later run, or a fresh clone, re-derives the
 
 1. `git submodule update --init --recursive`: every submodule, nested ones included, at the commits the parent and
    members record.
-2. For each member listed in `<JST_MEMBERS>` (§7):
+2. For each member (§7):
    - **branch on `origin`:** `git -c submodule.<name>.branch=<issue branch> submodule update --remote <name>`, *without*
      `--recursive`; then `git switch <issue branch>` inside the member (`--remote` leaves a detached HEAD; `switch`
      gives a local branch tracking `origin`, *tested*); then `git submodule update --init --recursive` inside the
@@ -177,32 +177,115 @@ parent records integrated states, not individual issues.
 member's base. One `git merge-base --is-ancestor` per member, so scriptable. Any other value means CHANGES REQUESTED.
 It's also a good candidate for a CI check on the parent repo.
 
-## 7. Configuration
+## 7. Configuration: members are listed explicitly
 
-Not every submodule is a member: a vendored third-party library must never get issue branches. So membership is
-explicit:
+**Rule MS-CF-1, membership:** the strategy follows one explicit setting.
 
-- **`JST_MEMBERS`** in `.jst/jira-sdlc-tools.env`: the submodule names that take part in issues, space-separated. No
-  value, or no `.gitmodules`, means single-repo mode, unchanged (the multi-repo proposal's G5).
-- Each member's **base** and **production** branch names come from `.gitmodules`'s `branch` (the base) or, when they
-  differ from the parent's, from per-member settings. Whether that needs a setting at all is open (§11).
+- **`JST_MEMBERS`** in `.jst/jira-sdlc-tools.env`: the submodule **paths** that take part in issues, space-separated.
+  Paths as `git submodule status` prints them, not the `.gitmodules` section names, which can differ after a move.
+- Empty or unset → **single**, exactly as today, whether or not the parent has submodules.
+- Set → **submodules**. Every listed path is a member; every other submodule stays pinned and never gets an issue
+  branch (vendored third-party libraries, for example).
+
+Nested submodules (a member's own `.gitmodules`) are never members. They stay pinned at whatever the member records
+(MS-SC-4).
+
+**Why explicit and not detected from `.gitmodules`** (the alternative was "every submodule, minus an exclude list"):
+an explicit list fails closed. A missing setting leaves a project on today's behaviour, so upgrading the plugin never
+changes a project that uses submodules only for vendoring (the multi-repo proposal's G5), and a vendored submodule
+added later can't silently start getting issue branches. Detection's one advantage, zero configuration, mostly
+disappears because jst-install writes the value either way (§8).
+
+`.gitmodules` still checks the list:
+
+- Every listed path must be a top-level entry in `.gitmodules`. Otherwise statuscheck's `repo_strategy` row FAILs,
+  naming the path.
+- The same row lists the submodules that *aren't* members as `pinned`, so a member someone forgot to list is visible
+  on every run. If work does land in a pinned submodule, `push.recurseSubmodules=check` stops the parent from being
+  pushed with commits that aren't on any remote.
+- Each member gets a `member_repo[<path>]` row (§8).
+
+Other settings:
+
+- Each member's **base** is `.gitmodules`'s `branch`. Its **production** branch is assumed to have the parent's name;
+  whether a per-member override is needed is open (§12, Q1).
 - **Relative URLs** in `.gitmodules` (`../threejs-skeleton-editor.git`) are recommended: members then resolve against
   the parent's `origin`, so SSH and HTTPS clones both work.
 - Credentials stay single-sourced in the parent's `.jst/jira-sdlc-tools.local.env`. Members never get one.
 
 ## 8. What changes in the plugin
 
-### Finding `.jst/` (the "home vs target" fix)
+### The shape: one flow over a set of repos, strategies in scripts
 
-Every script finds `.jst/` with `git rev-parse --show-toplevel`: `jira.sh`, `check_assignee.sh`,
+The skills don't get per-strategy sections. They say "each repo in the set", and a single-repo project is a set of
+one, so one sentence covers both. Everything strategy-specific lives behind one front door:
+
+```text
+skills (prose: judgement only)
+   │   "run repos.sh <verb>, act on its rows"
+   ▼
+_shared/scripts/posix/repos.sh  ← the only script the skills call for repo work
+   │   picks the strategy from JST_MEMBERS (MS-CF-1)
+   ├── strategies/single.sh      ← today's commands, today's behaviour
+   ├── strategies/submodules.sh  ← this document's rules
+   └── strategies/<future>.sh    ← a new strategy is a new file, not a skill edit
+```
+
+Each has a `win/` PowerShell twin. The front door keeps that to about three files per port instead of one per verb.
+
+**Rule MS-AR-1, single goes through the scripts too.** One flow means single-repo projects run `repos.sh` as well.
+`strategies/single.sh` wraps exactly the commands the skills run today, and golden-output tests compare it against
+current behaviour. The alternative, prose for single and scripts for submodules, is the per-strategy sections again
+under another name.
+
+**Rule MS-AR-2, scripts stop, the model recovers.** A verb never resolves a conflict, guesses a base or retries a
+failed push. It prints the row and exits non-zero. Judgement and recovery stay in the skill.
+
+### The verbs
+
+Every place a skill touches git or GitHub today, plus what's new:
+
+| Verb | Replaces in the skills | single | submodules |
+| -- | -- | -- | -- |
+| `list` | (new) | one row: `.` | the parent plus each member: path, slug, base, in scope, branch, dirty, ahead |
+| `provision` | assigner step 6 (branch, push, worktree), executor step 1 | what the assigner does now | plus member branches and the member step (MS-SC-2) |
+| `sync` | executor step 2 (bring the branch current) | today's merge | per member; a conflict stops the run with the repo named |
+| `push` | executor step 9 | `git push -u` | each member, then the parent, with `push.recurseSubmodules=check` |
+| `prs` | reading `current_pr` (executor step 10, the reviewer's phase checks) | one row, the same as `current_pr` | one row per repo, with the "unknown is not none" rule |
+| `open-prs` | executor step 10's create-or-comment | `pr_base` + `gh pr create`, or a comment on the open PR | the same per repo with commits, always with `-R <slug>` |
+| `gate` | the reviewer's phase decisions | `next=review`, `wait-merge`, `done` | adds `next=merge-members`, `land`, `merge-parent` |
+| `land` | (new) | "nothing to land" | MS-LA-2; `--check` is the MS-LA-3 gate |
+| `remove-check` | (new) | dirty / unpushed check | the same across the parent and every member (MS-CO-2) |
+
+`gate` matters most. When the script prints the next action, the reviewer's phase machine becomes a lookup instead of
+prose. That's the only realistic way to add multi-repo to the reviewer under its word ceiling, and it should free words
+rather than cost them.
+
+### What stays in the skills
+
+All of it is judgement, and none of it depends on the strategy:
+
+- **Assigner:** which repos are in scope. In single mode that's trivially the one.
+- **Executor:** what to stage and commit in each repo, and the PR body. The model writes the body file; `open-prs`
+  opens or updates the PRs from it.
+- **Reviewer:** the review itself, plus a seventh dimension, *consistency across the set*: contracts changed on one
+  side are matched on the other, using the interfaces the project's docs list. Skipped when the set has one repo.
+- **Recovery** from anything a verb stops on (MS-AR-2).
+
+For example, executor steps 9–10 would read roughly: *"Run `repos.sh push`, then write the PR body to a file and run
+`repos.sh open-prs`. Act on each row: `created` / `updated` → carry the link to step 11; `unresolved` → stop and ask
+which base."*
+
+### Fixes to existing scripts
+
+**Finding `.jst/`.** Every script finds it with `git rev-parse --show-toplevel`: `jira.sh`, `check_assignee.sh`,
 `get_assignee_email.sh`, `pr_base.sh`, `statuscheck.sh`, `ensure_local_env.sh`, `list_subtasks.sh`,
 `create_parent_and_subtasks.sh`, and their `win/*.ps1` twins. Inside a member, that returns the **member's** root, so
 `.jst/` isn't found. Fix: prefer `git rev-parse --show-superproject-working-tree` when it's non-empty.
 
-### `ensure_local_env`: run inside a member, it misreads where it is (found by reading the code, not run)
-
-It decides "issue worktree vs main checkout" by whether `.git` is a file, then walks three levels up from the gitdir to
-find the main checkout. A submodule's `.git` is *also* a file (`gitdir: ../.git/modules/<name>`):
+**`ensure_local_env` misreads where it is when run inside a member** (found by reading the code, not run). It decides
+"issue worktree vs main checkout" by whether `.git` is a file, then walks three levels up from the gitdir to find the
+main checkout. A submodule's `.git` is *also* a file (`gitdir: ../.git/modules/<name>`):
 
 - **In a member of the main checkout,** the walk lands on the parent's root, which passes its "main checkout" test.
   It would create `.jst/` inside the member and copy `jira-sdlc-tools.local.env` there, protected only by an untracked
@@ -213,26 +296,17 @@ find the main checkout. A submodule's `.git` is *also* a file (`gitdir: ../.git/
 Running from the parent root (§2) avoids both. The script should also refuse to run inside a submodule. This is the
 safety property `scripts/check-ensure-local-env.sh` exists to protect, so it needs a test case.
 
-### New scripts (POSIX and PowerShell twins)
+**statuscheck** gains `repo_strategy` (§7) and, in submodules mode, one `member_repo[<path>]` row per member: present
+and initialized, `origin` reachable with the PAT, base branch on `origin`.
 
-| Script | Does |
-| -- | -- |
-| `members_checkout.sh` | The MS-SC-2 member step, run in the issue worktree. Idempotent, so the executor re-runs it on every start |
-| `members.sh` | Lists members from `JST_MEMBERS` + `.gitmodules`: name, path, slug, base, in scope (branch on `origin`), local state (branch, dirty, ahead/behind) |
-| `pr_set.sh` | Every PR whose head is the issue branch, in the parent and each member, as in the multi-repo proposal's MR-SCR-2, including its "unknown is not none" rule |
-| `land.sh` | MS-LA-2, and a `--check` mode for MS-LA-3 |
-
-### Skills, one line each
-
-Each skill gains "with `JST_MEMBERS` set, follow `skills/_shared/submodules.md`". The reviewer is at its word ceiling,
-so the detail lives in that shared file.
+### Per skill
 
 | Skill | Change |
 | -- | -- |
-| jst-install | Detect submodules, ask which are members, write `JST_MEMBERS`. Check the PAT can reach each member repo. Check each member's base and production branches exist on `origin`. Warn about merge → Done rules not scoped to the parent repo |
-| Assigner | Investigate members' code too. Decide the in-scope members; repos are not pieces (a cross-repo change can still be single-step). Create and push the issue branch in the parent and each in-scope member, then `members_checkout.sh` |
-| Executor | `members_checkout.sh` at start. Bring each member current with its base. Commit and push per member. One PR per member with commits, plus the parent PR when the parent has commits. In Review once every member with commits has a PR |
-| Reviewer | `pr_set.sh` instead of `current_pr`. Review each member PR with `-R <slug>`, plus a cross-repo consistency check (contracts listed in the project docs). After approval: tell the human to merge the members, then run landing. Review the parent PR with the MS-LA-3 gate |
+| jst-install | When `.gitmodules` exists: offer every top-level submodule as a member, let the human drop the vendored ones, write `JST_MEMBERS`. Check the PAT reaches each member, and each member's base and production branches exist on `origin`. Set `push.recurseSubmodules=check`. Warn about merge → Done rules not scoped to the parent repo |
+| Assigner | Investigate members' code too. Decide the in-scope repos; repos are not pieces (a cross-repo change can still be single-step). `repos.sh provision` |
+| Executor | `repos.sh provision` at start (idempotent), then `sync`, `push`, `open-prs`. In Review once every repo with commits has a PR |
+| Reviewer | `repos.sh gate` and `prs` instead of the phase-check prose and `current_pr`. Review each PR with `-R <slug>`, plus the consistency dimension. Relay `gate`'s next action |
 | Done | The parent PR merging. Scope the merge → Done automation to the parent repo, or member merges will close the issue early |
 
 ## 9. Multistep and hotfix
@@ -263,7 +337,20 @@ step, commit in the member, open both PRs, merge the member PR with each merge m
 `--force`). That checks
 §3–§6 on the real project.
 
-## 11. Open questions
+## 11. Delivery plan
+
+1. **Foundations, no behaviour change:** the `.jst/` lookup fix, the `ensure_local_env` guard and its test case, the
+   `repos.sh` front door with strategy selection and `list`, and statuscheck's `repo_strategy` and `member_repo` rows.
+   Golden-output tests for `strategies/single.sh` start here.
+2. **Convert the pilot** to submodules (§10), and do the by-hand check.
+3. **Reviewer:** `prs` and `gate`. It's the most blind today, and the word savings land where they're needed.
+4. **Executor:** `sync`, `push`, `open-prs`.
+5. **Assigner:** `provision`, and choosing the in-scope repos.
+6. **Landing and jst-install:** `land`, `remove-check`, and jst-install's submodule questions and checks.
+
+Each phase ships on its own and leaves single-repo behaviour unchanged, checked by the golden-output tests.
+
+## 12. Open questions
 
 - **Q1, per-member branch names:** both pilot members use `development`/`main`. Is `.gitmodules`'s `branch` enough for
   the base, with production assumed the same as the parent's, or does this need a per-member setting from the start?
@@ -273,10 +360,10 @@ step, commit in the member, open both PRs, merge the member PR with each merge m
   member history readable from the parent?
 - **Q4, the parent PR when the parent has no own changes:** it exists only to carry the landing bump. Open it at
   landing time, or at the start as a draft that collects the PR set (the multi-repo proposal's umbrella PR)?
-- **Q5, type 1 later:** most of §8 (the `.jst/` lookup, `pr_set.sh`, the reviewer changes) carries over to the
-  multi-repo proposal's type 1. Keep the seam: Discover and Checkout are the submodule-specific parts.
+- **Q5, type 1 later:** most of §8 (the `.jst/` lookup, `repos.sh` and its verbs, the reviewer changes) carries over to the
+  multi-repo proposal's type 1. It becomes one more `strategies/` file: Discover and Checkout are the strategy-specific parts.
 
-## 12. Evidence
+## 13. Evidence
 
 The *tested* rows above came from a scratch superproject with two members and local bare remotes. In summary:
 
