@@ -42,8 +42,8 @@ if (Get-Command pwsh -ErrorAction SilentlyContinue) {
 if (-not $psExe) { Die "check_assignee: no PowerShell runtime (pwsh/powershell) found to run jira.ps1." }
 
 # --- config (site for the fixup URL) -----------------------------------------
-$CfgDir = $null
-try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $CfgDir = ([string]$t).Trim() } } catch { }
+. (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
+$CfgDir = Get-JstRoot
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
 $CfgDir = Join-Path $CfgDir '.jst'
 function Get-Cfg {

@@ -52,7 +52,8 @@ edit the pages, not this list.
 │   ├── [Create the .jst/ scaffold](./configuration/create-the-jst-scaffold.md)\
 │   ├── [Fill .jst/jira-sdlc-tools.env](./configuration/fill-the-shared-env.md)\
 │   ├── [Fill .jst/jira-sdlc-tools.local.env](./configuration/fill-the-local-env.md)\
-│   └── [Optional: parallel worktrees](./configuration/optional-parallel-worktrees.md)\
+│   ├── [Optional: parallel worktrees](./configuration/optional-parallel-worktrees.md)\
+│   └── [Optional: member repos](./configuration/optional-member-repos.md)\
 ├── [Coding Assistant](./coding-assistant/index.mdx)\
 │   ├── [Claude Code (extended)](./coding-assistant/claude-code.md)\
 │   └── [Non Claude clients](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/non-claude-clients)\

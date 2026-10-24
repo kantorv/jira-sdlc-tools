@@ -35,7 +35,7 @@ is why "just read the config" is the wrong instinct:
 
 | File | Contents | Reading it |
 | -- | -- | -- |
-| `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names | Committed and secret-free — read it whole, freely |
+| `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names, and the optional `JST_MEMBERS` | Committed and secret-free — read it whole, freely |
 | `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `CONVERSATIONS_*` — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
 
 Almost nothing needs the second file: `statuscheck`'s rows already carry
@@ -110,6 +110,7 @@ ports use identical names:
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
 | `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
 | `JST_PROJECT_KEY` | `<PROJECT-KEY>` from `jira-sdlc-tools.env` |
+| `JST_MEMBERS` | the member repos on the issue branch, space-separated (`repos.sh provision`'s `provisioned=`), already checked out when the hook runs; empty for a single-repo project |
 
 Env vars rather than positional arguments so the set can grow later without
 breaking scripts already written against it — a script that ignores a variable
@@ -148,6 +149,12 @@ without it halts rather than running half-configured.
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
 | `<STATUS_DONE>` | Final status reached when PRs are merged (typically by GitHub-for-Jira automation when a PR is merged into the base/parent branch). No skill transitions to this state on its own: `jira-task-reviewer` step 7 offers it for approved issues at the end of a run and moves only what you approve; otherwise it is handled by automation or a manual `jira.sh issue transition <KEY> --to "<STATUS_DONE>"`. Must match your workflow's real status name exactly. | `Done` |
+
+## Optional (in `.jst/jira-sdlc-tools.env`)
+
+| Token | What it is | Example |
+| -- | -- | -- |
+| `<JST_MEMBERS>` | For a project that holds its repos as **git submodules** of a parent repo: the submodule paths that take part in issues, space-separated, as `git submodule status` prints them (not the `.gitmodules` section names). Unset or empty means a single-repo project, exactly as before, even when the repo has submodules. Every unlisted submodule (a vendored library, say) stays pinned and never gets an issue branch. Listing members explicitly, rather than taking every submodule, is deliberate: a missing setting can't change how an existing project behaves. `repos.sh` reads it, and statuscheck's `repo_strategy` row shows the result on every run — FAIL when a listed path isn't a top-level submodule — with one `member_repo[<path>]` row per member. An issue is done when its workspace **landing PR** merges, not its first member PR: scope any merge → Done automation (GitHub for Jira, a Jira rule) to the parent repo. Design: https://kantorv.github.io/jira-sdlc-tools/docs/submodules | `threejs-skeleton threejs-skeleton-server` |
 
 ## Required (in `.jst/jira-sdlc-tools.local.env`)
 

@@ -54,6 +54,27 @@ mkproj() {
 }
 wt() { git -C "$1" worktree add -q "$2" -b "$3"; }
 
+# A member repo, with a nested submodule of its own, added to project $1 at
+# app/ — the shape of a project that holds its repos as submodules. Its remotes
+# are local bare repos beside the project, so nothing touches the network.
+gsub() { git -c protocol.file.allow=always "$@"; }
+mkmember() {
+  local r="$1.remotes" n
+  mkdir -p "$r"
+  for n in lib app; do
+    git init -q -b development "$r/seed-$n"
+    git -C "$r/seed-$n" config user.email t@t; git -C "$r/seed-$n" config user.name t
+    echo "$n" > "$r/seed-$n/f.txt"; git -C "$r/seed-$n" add f.txt
+    [ "$n" = app ] && gsub -C "$r/seed-app" submodule add -q "$r/lib.git" lib
+    git -C "$r/seed-$n" commit -qm "$n"
+    git clone -q --bare "$r/seed-$n" "$r/$n.git"
+  done
+  gsub -C "$1" submodule add -q -b development "$r/app.git" app
+  gsub -C "$1" submodule update -q --init --recursive
+  git -C "$1" commit -qm "add app"   # .jst/ stays untracked, as jst-install leaves it
+}
+wtsub() { wt "$1" "$2" "$3"; gsub -C "$2" submodule update -q --init --recursive; }
+
 echo "ensure_local_env — safety contract"
 
 # 1. The reported bug: a worktree cut from an untracked .jst/ is born empty,
@@ -150,6 +171,36 @@ printf '%s\n' "$COLLIDE" | while read -r p; do [ -n "$p" ] && rm -f "$LAB/w9/$p"
 git -C "$LAB/w9" check-ignore -q .jst/jira-sdlc-tools.local.env \
   && ok "credential still ignored after the merge" || no "CREDENTIAL NOT IGNORED after merge"
 
+echo "inside a member submodule — the project root, never the member"
+
+# 11. A member of the main checkout used to be read as a linked worktree (its
+#     .git is a file too) and got the credential copied into it.
+mkproj "$LAB/p11"; mkmember "$LAB/p11"
+( cd "$LAB/p11/app" && bash "$SH" >/dev/null 2>&1 ); is "member of the main checkout -> exit 0" "$?" 0
+[ -e "$LAB/p11/app/.jst" ] && no "WROTE .jst/ INTO THE MEMBER" || ok "nothing written into the member"
+is "member's working tree still clean" "$(git -C "$LAB/p11/app" status --porcelain)" ""
+
+# 12. A member of a fresh worktree provisions the worktree — the right target.
+mkproj "$LAB/p12"; mkmember "$LAB/p12"; wtsub "$LAB/p12" "$LAB/w12" feature/XX-12-a
+( cd "$LAB/w12/app" && bash "$SH" >/dev/null 2>&1 ); is "member of a worktree -> exit 0" "$?" 0
+git -C "$LAB/w12" check-ignore -q .jst/jira-sdlc-tools.local.env \
+  && ok "the worktree's credential is provisioned and ignored" || no "worktree credential missing or NOT IGNORED"
+[ -e "$LAB/w12/app/.jst" ] && no "WROTE .jst/ INTO THE MEMBER" || ok "nothing written into the member"
+
+# 13. The same from a nested submodule, two levels down.
+mkproj "$LAB/p13"; mkmember "$LAB/p13"; wtsub "$LAB/p13" "$LAB/w13" feature/XX-13-a
+( cd "$LAB/w13/app/lib" && bash "$SH" >/dev/null 2>&1 ); is "nested submodule -> exit 0" "$?" 0
+[ -f "$LAB/w13/.jst/jira-sdlc-tools.local.env" ] && ok "provisioned the worktree" || no "worktree not provisioned"
+[ -e "$LAB/w13/app/.jst" ] || [ -e "$LAB/w13/app/lib/.jst" ] \
+  && no "WROTE .jst/ INTO A SUBMODULE" || ok "nothing written into either submodule"
+
+# 14. statuscheck from inside a member reports the project, not the member's
+#     detached HEAD.
+R14=$( cd "$LAB/w12/app" && GITHUB_PAT_TOKEN= bash "$SC" --role executor 2>/dev/null )
+printf '%s' "$R14" | grep -qF "| jst_dir | OK | $LAB/w12/.jst |" && ok "jst_dir is the worktree's" || no "jst_dir: $(printf '%s' "$R14" | grep '^| jst_dir')"
+printf '%s' "$R14" | grep -q '^| branch | INFO | feature/XX-12-a ' && ok "branch is the worktree's" || no "branch: $(printf '%s' "$R14" | grep '^| branch |')"
+printf '%s' "$R14" | grep -q '^| worktree | INFO | linked worktree: w12 ' && ok "worktree row names the worktree" || no "worktree: $(printf '%s' "$R14" | grep '^| worktree')"
+
 # 10. Port parity, opt-in: same stdout, stderr and exit code on every branch.
 if [ -n "$PORTS" ]; then
   echo "posix vs win port parity"
@@ -163,6 +214,7 @@ if [ -n "$PORTS" ]; then
       for port in sh ps; do
         rm -rf "$LAB/pp$port"; mkdir -p "$LAB/pp$port"; "$2" "$LAB/pp$port"
         d="$LAB/pp$port/wt"; [ -d "$d" ] || d="$LAB/pp$port/proj"
+        [ -f "$LAB/pp$port/rundir" ] && d="$LAB/pp$port/$(cat "$LAB/pp$port/rundir")"
         if [ "$port" = sh ]; then ( cd "$d" && bash "$SH" ) >"$LAB/o.sh" 2>"$LAB/r.sh"; echo $? >"$LAB/c.sh"
         else ( cd "$d" && pwsh -NoProfile -File "$PS" ) >"$LAB/o.ps" 2>"$LAB/r.ps"; echo $? >"$LAB/c.ps"; fi
       done
@@ -184,6 +236,9 @@ if [ -n "$PORTS" ]; then
                   git -C "$1/proj" commit -qm tracked
                   ( cd "$1/wt" && git merge -q development --no-edit >/dev/null 2>&1 ); }
     p_norepo() { mkdir -p "$1/proj"; }
+    p_memmain() { mkproj "$1/proj"; mkmember "$1/proj"; echo proj/app > "$1/rundir"; }
+    p_memwt()   { mkproj "$1/proj"; mkmember "$1/proj"; wtsub "$1/proj" "$1/wt" feature/XX-7-a; echo wt/app > "$1/rundir"; }
+    p_nested()  { mkproj "$1/proj"; mkmember "$1/proj"; wtsub "$1/proj" "$1/wt" feature/XX-8-a; echo wt/app/lib > "$1/rundir"; }
     parity "fresh worktree"            p_fresh
     parity "idempotent re-run"         p_again
     parity "main checkout"             p_main
@@ -193,6 +248,9 @@ if [ -n "$PORTS" ]; then
     parity "unwritable .jst/"          p_locked
     parity "tracked credential"        p_tracked
     parity "not a git repo"            p_norepo
+    parity "member of main checkout"   p_memmain
+    parity "member of a worktree"      p_memwt
+    parity "nested submodule"          p_nested
     find "$LAB" -type d ! -perm -u+w -exec chmod u+w {} + 2>/dev/null
   fi
 fi

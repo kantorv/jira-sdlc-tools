@@ -67,7 +67,8 @@ The whole step-by-step installation at a glance — every entry is a link.
 │   ├── [Create the .jst/ scaffold](/docs/step-by-step-installation/create-the-jst-scaffold)\
 │   ├── [Fill .jst/jira-sdlc-tools.env](/docs/step-by-step-installation/fill-the-shared-env)\
 │   ├── [Fill .jst/jira-sdlc-tools.local.env](/docs/step-by-step-installation/fill-the-local-env)\
-│   └── [Optional: parallel worktrees](/docs/step-by-step-installation/optional-parallel-worktrees)\
+│   ├── [Optional: parallel worktrees](/docs/step-by-step-installation/optional-parallel-worktrees)\
+│   └── [Optional: member repos](/docs/step-by-step-installation/optional-member-repos)\
 ├── [Coding Assistant](/docs/step-by-step-installation/coding-assistant)\
 │   ├── [Claude Code (extended)](/docs/integrations/claude-code)\
 │   └── [Non Claude clients](/docs/step-by-step-installation/non-claude-clients)\

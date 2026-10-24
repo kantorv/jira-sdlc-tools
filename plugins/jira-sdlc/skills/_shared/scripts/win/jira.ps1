@@ -66,13 +66,7 @@ usage: jira.sh --role assigner|executor|reviewer <command>
 
 # ─── Layer 1: config resolution ─────────────────────────────────────────────
 
-function Get-GitTop {
-    try {
-        $t = (& git rev-parse --show-toplevel 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() }
-    } catch { }
-    return $null
-}
+. (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
 
 # Same `NAME = value` parser + local-overrides-team precedence as jira.sh's _cfg
 # (and statuscheck.ps1). Last match in a file wins.
@@ -137,7 +131,7 @@ function Resolve-CloudId {
 }
 
 function Invoke-Ready {
-    $script:CFGDIR = Get-GitTop
+    $script:CFGDIR = Get-JstRoot
     if (-not $script:CFGDIR) { $script:CFGDIR = (Get-Location).Path }
     $script:CFGDIR = Join-Path $script:CFGDIR '.jst'
     $u = Get-Cfg 'JIRA_ACCOUNT_URL'

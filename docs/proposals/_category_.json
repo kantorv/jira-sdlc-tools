@@ -1,9 +1,0 @@
-{
-  "label": "Proposals",
-  "position": 10.5,
-  "link": {
-    "type": "generated-index",
-    "slug": "/proposals",
-    "description": "Designs not implemented yet: requirements to build from. Once shipped, a proposal moves to History."
-  }
-}

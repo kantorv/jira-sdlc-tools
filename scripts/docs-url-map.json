@@ -76,10 +76,6 @@
     "docs/STEP-BY-STEP-INSTALLATION/first-tasks": {
       "slug": "/step-by-step-installation/first-tasks"
     }
-,
-    "docs/proposals": {
-      "slug": "/proposals"
-    }
   },
   "pages": {
     "docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md": {
@@ -218,7 +214,6 @@
       "slug": "/step-by-step-installation/create-a-release-cycle",
       "sidebar_position": 3
     },
-
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
       "sidebar_position": 0
@@ -446,9 +441,41 @@
       "slug": "/integrations",
       "sidebar_position": 7
     },
-    "docs/proposals/multi-repo-workspaces.md": {
-      "slug": "/proposals/multi-repo-workspaces",
+    "docs/submodules/SUBMODULES.md": {
+      "slug": "/submodules",
       "sidebar_position": 1
+    },
+    "docs/submodules/setup.md": {
+      "slug": "/submodules/setup",
+      "sidebar_position": 2
+    },
+    "docs/submodules/how-the-skills-work.md": {
+      "slug": "/submodules/how-the-skills-work",
+      "sidebar_position": 3
+    },
+    "docs/submodules/design.md": {
+      "slug": "/submodules/design",
+      "sidebar_position": 4
+    },
+    "docs/submodules/repos-sh.md": {
+      "slug": "/submodules/repos-sh",
+      "sidebar_position": 5
+    },
+    "docs/submodules/troubleshooting.md": {
+      "slug": "/submodules/troubleshooting",
+      "sidebar_position": 6
+    },
+    "docs/submodules/other-layouts.md": {
+      "slug": "/submodules/other-layouts",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-member-repos.md": {
+      "slug": "/step-by-step-installation/optional-member-repos",
+      "sidebar_position": 5
+    },
+    "docs/submodules/history.md": {
+      "slug": "/submodules/history",
+      "sidebar_position": 8
     }
   }
 }
