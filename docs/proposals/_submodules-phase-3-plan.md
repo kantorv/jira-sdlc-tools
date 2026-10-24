@@ -239,3 +239,34 @@ H3–H6 need member PRs that the executor can't open yet (phase 4). They're made
      comment).
 
   Lesson: a command the model must run goes at the point of use, not one section up.
+
+- **H3, pilot SKL-3 (a `--source-license` flag across both members):**
+
+  - `gate` → `review`, then both member PRs reviewed with `-R`.
+  - Dimension 7 checked the contract: the reviewer ran `convert.ts` on a real poses file and ran the cross-repo sync
+    test.
+  - R-MEMBERS-APPROVED with "app first, then server", no Done offer, and exactly one Jira report.
+  - It also caught a stale line in the server's `ARCHITECTURE.md`.
+
+- **H4, SKL-3 after the member merges** (app squash-merged, server with a merge commit):
+
+  - `gate` → `land`, then `land` → the landing PR `threejs-skeleton-studio#2`.
+  - `land --check` passed both rows → R-LANDING-READY, and Done is offered only now.
+  - After the landing PR merged, a fresh `git clone --recurse-submodules` has both members at their merged commits.
+
+- **H6, pilot SKL-4, the app branch pushed with no PR:** `gate` → `stop` "pushed, no PR". The reviewer named the
+  repo and commit, reviewed and posted nothing, and offered next steps.
+
+- **H5, SKL-4 with the incomplete app PR:**
+
+  - The app PR was rejected under dimension 7: `convert.ts` lacks the flag the server passes, proven by the sync test.
+  - The server PR was rejected for a real bug in the test fixture: its new test was spliced into the middle of an
+    existing one.
+  - SKL-4 went back to In Progress, with one Jira report.
+  - SKL-4 stays open as the executor's fix-and-re-run case for phase 4.
+
+- **Observed, worth a rule:** to run the server's DB tests, the H5 reviewer loaded the main checkout's
+  `skelserver/.env.local` into its shell (not printed). A reviewer sourcing project secrets is a choice the skills
+  should make explicitly, probably "don't, say what wasn't run".
+
+- **Not run yet:** H2 (chess-app, multistep). It needs a parent, two sub-tasks and three PRs on a real project.
