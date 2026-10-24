@@ -2,7 +2,7 @@
 
 |  |  |
 | -- | -- |
-| Status | In progress. Unpublished (`_` prefix) |
+| Status | **Done** (§6). Unpublished (`_` prefix) |
 | Written | 2026-10-24, on `feature/JST-322-submodules-support-pilot-implementation` (after phase 3) |
 | Implements | Phase 4 of [the submodules strategy](submodules-strategy.md) §11 |
 
@@ -76,4 +76,27 @@ Out of scope: multistep across members (still deferred), the assigner's side of 
 
 ## 6. Progress
 
-(Filled in as the work lands.)
+- **Slice 1, commit `27d5b1d`:** `provision`, `sync`, `push`, `open-prs` in both ports. `check-repos.sh` is at 186
+  checks, and the PowerShell port passed first time.
+- **Slice 2, the executor:**
+  - It reads the repo set through `repos.sh`: `provision` before the hook (with `JST_MEMBERS` added to the hook
+    contract), `sync` after the root's merge, commits per member (never a member's gitlink in the root), then `push`,
+    then `prs` and `open-prs`.
+  - A sub-task with member repos stops, because multistep across members is deferred.
+  - 4,122 → 4,453 words, within budget.
+- **E2, pilot SKL-4, the fix-and-re-run** (Sonnet, `--effort medium`):
+  - The executor ran `provision`, the root merge plus `sync`, fixed both findings (the app's `--source-language` flag
+    and the spliced server test), committed per member, then `push`, then `prs`.
+  - It posted fix summaries on both PRs with `-R`, then In Review, in 16 turns.
+  - Gap found: it skipped `open-prs`, because both PRs were open, so their PR-set sections never got written. Step 10
+    now says to run `open-prs` every time. Run once by hand, it reported `exists` for both PRs and wrote the section.
+  - Then the reviewer re-reviewed both (their last verdicts were CHANGES REQUESTED), approved them with "app first",
+    and kept the new no-secrets rule (it listed the tests it couldn't run instead of sourcing `.env.local`).
+  - Both member PRs were squash-merged, and the reviewer landed them (`threejs-skeleton-studio#3`, `land --check` ok,
+    R-LANDING-READY).
+  - Merged, SKL-4 Done: the whole reject → fix → approve → land loop works.
+- **E1, chess-app CTA-269, single repo:**
+  - `provision`/`sync` did nothing, the bootstrap hook ran with an empty `JST_MEMBERS`, and `pr_base` resolved the
+    base.
+  - `open-prs` opened PR #275 into `development` with no PR-set section, then In Review, in 9 turns.
+  - The fixture is closed; the bug it fixed (a blank line before §14's rule) is real and still open.

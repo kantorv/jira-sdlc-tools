@@ -125,7 +125,7 @@ note below**:
 | `production_branch` | INFO: `<PRODUCTION_BRANCH>` — this skill's only source for it, consumed by step 10's prefix/base sanity check |
 | `bootstrap` | INFO either way: whether this project ships an optional `.jst/bootstrap.sh` (POSIX) / `.jst/bootstrap.ps1` (Windows). Present → step 1 runs it; absent → nothing to do, and most projects won't have one |
 | `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
-| `current_pr` | INFO/WARN, never FAIL: every PR whose head is this branch (`gh pr list --head <branch> --state all`, no `--base`) as `#<n> <STATE> → <base> (<url>)`, or `none (…)` — step 10's existing-PR check |
+| `repo_strategy` | `single`, or `submodules` with its member repos — the issue's work can then span several repos, one PR per member it touches. Steps 1, 2 and 6–12 cover them through `repos.sh`, which does nothing extra for a single repo |
 
 Two of those other rows matter later: `gh_auth` and `gh_repo_access` together
 are what step 10's `gh pr create` depends on (a login *and* a PAT that can see
@@ -144,8 +144,19 @@ context.
 
 01. **Run the project's bootstrap hook, then fetch the issue.**
 
-    **1a. Bootstrap the worktree** — only if Discovery's `bootstrap` row read
-    *present*. A worktree is a source tree, not a running instance; this hook is
+    **1a. Put the member repos on the issue branch, then bootstrap.** First,
+    always — for a single repo it prints `provisioned=` and does nothing:
+
+    ```bash
+    S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+    bash "$S/repos.sh" provision
+    ```
+
+    `provisioned=` lists the members whose issue branch exists — they take part
+    in this issue, and are now checked out on it; `pinned=` lists the rest,
+    left at their recorded commits. `error=` → relay it and stop.
+
+    Then bootstrap — only if Discovery's `bootstrap` row read *present*. A worktree is a source tree, not a running instance; this hook is
     how a project closes that gap (clone the database, pick per-instance ports,
     install deps). Run it from the worktree root, **automatically — no
     confirmation prompt** — passing the `JST_*` contract
@@ -156,10 +167,11 @@ context.
     cd "$(git rev-parse --show-toplevel)"
     JST_ISSUE_KEY=<KEY> JST_WORKTREE_DIR="$PWD" JST_BRANCH="$(git branch --show-current)" \
     JST_PARENT_BRANCH="<parent_branch row, empty when unset>" JST_PROJECT_KEY="<PROJECT-KEY>" \
+    JST_MEMBERS="<provision's provisioned= value>" \
       bash .jst/bootstrap.sh; echo "bootstrap exit: $?"
     ```
 
-    (Windows: set the same five as `$env:JST_*`, then
+    (Windows: set the same six as `$env:JST_*`, then
     `pwsh -NoProfile -File .jst\bootstrap.ps1`.)
     **Fail-soft, always**: report a non-zero exit and its output in your final
     report, then carry on with the issue — a broken hook is the project's
@@ -190,7 +202,10 @@ context.
         and breaks the "every leaf gets its own PR" invariant. Confirm with
         the user before continuing — not on a "this one's small" call.
       - **Empty** → `<KEY>` is a leaf: a sub-task, or a single-step top-level
-        issue the assigner provisioned for direct implementation. Proceed.
+        issue the assigner provisioned for direct implementation. Proceed —
+        except a **sub-task with member repos** (`repo_strategy` lists
+        members): its PRs would have to target the parent branch in each
+        member, which isn't supported yet. Stop and say so.
 
 02. **Bring the worktree branch current.** Discovery already guaranteed you're
     on `<KEY>`'s own issue branch inside its own linked worktree, so there is
@@ -242,6 +257,10 @@ context.
       resolver handles an unset parentbranch (Jira comment, then env
       default).
 
+    Then bring the member repos current with their own bases — nothing to do
+    for a single repo: `bash "$S/repos.sh" sync`. `conflict=` names the repo
+    and `files=`: stop and ask, the same rule as the root's.
+
 03. **Transition the issue to `<STATUS_IN_PROGRESS>`** — unless step 1b's
     `status` already reads it, which is the normal state on a re-run after a
     reject (the reviewer put it back there). Workflows generally offer no
@@ -280,7 +299,10 @@ context.
     someone *has* picked the issue up — so don't roll it back to
     `<STATUS_TODO>` even if the answer never comes.
 
-06. **Implement** the change.
+06. **Implement** the change. With member repos, each member's files are
+    changed in its folder, on the issue branch. A **pinned** member isn't part
+    of the issue yet: run `bash "$S/repos.sh" provision --add <path>` before
+    changing it (that creates its issue branch), and say so in the report.
 
     - **Record task memory as you go — but only when it's worth preserving.**
       Post a `Task memory (jira-task-executor)` comment (per the Task-memory
@@ -297,7 +319,8 @@ context.
       uses, how it selects a single test, and how it runs the whole suite
       all vary too much to ship a plugin default. Look for `CLAUDE.md`,
       `AGENTS.md`, a "Tests" section in `README.md`, or similar in the
-      repo root.
+      repo root — and with member repos, in each member you changed: every
+      repo has its own commands, and each one gets tested.
 
       - **Both forms documented** (run a single test, run the full suite) →
         use those commands throughout the rest of this step.
@@ -343,37 +366,48 @@ context.
     (`git add <file>…`, not `-A`, which can sweep in strays), then
     `git commit -m "<KEY> <short message>"`. Split into multiple commits
     if the change has logically separate pieces; one is fine for a small
-    change.
+    change. With member repos, commit in each member you changed
+    (`git -C <member> …`), and **never stage a member's folder in the root**:
+    that records a move of its gitlink, which is landing's job, after the
+    member PRs merge.
 
-09. **Push** — `git push -u origin <branch-name>`.
+09. **Push** — every repo with work, members before the root:
+    `bash "$S/repos.sh" push`. `error=` → relay it and stop.
 
-10. **Open the PR — or update the one that's already open:**
+10. **Open the PRs — or update the ones already open.** A single repo has
+    one; with member repos, each member you committed in has its own (the
+    root gets none: its commits, if any, ride the landing PR).
 
-    - **Check for an existing PR first.** After a reject (step 11) this skill
-      re-runs on a branch that already has one, step 9's push has already
-      updated it, and `gh pr create` would fail with "a pull request already
-      exists". Read Discovery's `current_pr` row — a push doesn't open a PR, so
-      it still holds — and **don't re-run `gh pr list` for this branch**: `gh`
-      answers a filter that misses with `[]`, so a hand-typed variant (an
-      `owner:branch` head, an added `--base`) reads an open PR as none. A
-      `current_pr` WARN (several OPEN, an OPEN PR off `parent_branch`, a `gh`
-      error) → stop and ask; it never means "create one". (On an issue branch
-      only a non-GitHub origin makes it read `skipped (…)`, and `gh pr create`
-      can't reach that either — see the failure fallback at the end of this step.)
-      - **An OPEN PR listed** → that PR now carries this run's commits. Don't create a
-        second one, and don't resolve a base — an open PR's base isn't this
-        run's decision. Write what changed to `/tmp/<KEY>-fix-summary.md`
+    - **Check for existing PRs first.** After a reject (step 11) this skill
+      re-runs on branches that already have PRs, step 9's push has already
+      updated them, and a second `gh pr create` would fail. Read them from
+      every repo at once — **not** from Discovery's `current_pr` row, which
+      sees the root only, and never with a hand-typed `gh pr list`: `gh`
+      answers a filter that misses with `[]`, so a variant (an `owner:branch`
+      head, an added `--base`) reads an open PR as none (JST-310):
+
+      ```bash
+      S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
+      bash "$S/repos.sh" prs --branch "<branch-name>"
+      ```
+
+      A row in state `error` is unknown, never none: stop and say which repo.
+
+      - **Each OPEN row** → that PR now carries this run's commits. Write what
+        changed in its repo to `/tmp/<KEY>-fix-summary.md`
         (`cat > … <<'EOF'`) and post it with
-        `gh pr comment <number> --body-file …`, so the reviewer's next pass
-        sees the fix instead of re-reading the whole diff. Carry that PR's
-        link into steps 11 and 12.
-      - **`none`, or only MERGED/CLOSED ones** → resolve the base and create
-        the PR, below.
+        `gh pr comment <pr> -R <slug> --body-file …`, so the reviewer's next
+        pass sees the fix instead of re-reading the whole diff.
+      - **Then run `open-prs` (below) every time**, even when every PR is
+        already open: it creates the missing ones, leaves the OPEN ones alone,
+        and keeps the PR-set section current in all of them.
+
     - Resolve the PR base with `pr_base.sh`, which *is*
       `../_shared/jira-api-reference.md` §13 (git config → the Jira
       `PR target branch:` comment → a parent-branch search for sub-tasks → the
       env default for top-level issues only). Passing step 1's `PARENT_KEY`
       is what keeps a sub-task from defaulting to the env base:
+
       ```bash
       S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/pr_base.ps1 on Windows
       OUT=$(bash "$S/pr_base.sh" --role executor \
@@ -381,8 +415,10 @@ context.
       PR_BASE=$(printf '%s\n' "$OUT" | sed -n 's/^base=//p')
       printf '%s (rc=%s)\n' "$OUT" "$RC"
       ```
+
       It prints `base=` and `source=` and exits non-zero when unresolved. Act
-      on that before touching `gh pr create`:
+      on that before running `open-prs`:
+
       - **`source=unresolved`** (exit 1) — a sub-task whose parent-branch
         search matched zero or several branches. **Stop and ask the user which
         branch is the base.** Don't open the PR, and don't substitute
@@ -401,30 +437,41 @@ context.
         `source=env-default` is the realistic case, and
         retargeting a production fix at staging neither ships it nor gets it
         versioned. A sub-task is exempt: its base is its parent's branch.
+
     - Link the issue from the PR body as
       `https://<JIRA_ACCOUNT_URL>/browse/<KEY>`, built from Discovery's
       `jira_account_url` row and from nothing else — not the REST `self` URL,
       not the git remote you just read for the PR
       (`../_shared/project-config.md` § *Issue browse links*).
-    - Write the PR body to a temp file and use `--body-file` — same reason as
-      Jira comments:
+
+    - Write the PR body to a temp file — same reason as Jira comments — and
+      open the PRs. `--base` is the root's (`$PR_BASE`); a member's PR targets
+      that member's own base. With member repos, say in the body which repo
+      merges first and why (what depends on what); the script appends the
+      PR-set section listing every PR, and keeps it current in all of them:
+
       ```bash
       cat > /tmp/<KEY>-pr-body.md <<'EOF'
       <what changed + link to the issue>
       EOF
-      gh pr create --base "$PR_BASE" --title "<KEY>: <summary>" \
-        --body-file /tmp/<KEY>-pr-body.md
+      bash "$S/repos.sh" open-prs --title "<KEY>: <summary>" \
+        --body-file /tmp/<KEY>-pr-body.md --base "$PR_BASE"
       ```
-    - Discovery already confirmed `gh` is installed and authenticated, so a
-      failure here is something else (a repo-permission problem, a transient
-      network issue). Don't fail silently — report the `gh` error and still
-      hand back the compare URL so the user can open the PR by hand:
-      `https://github.com/<org>/<repo>/compare/$PR_BASE...<branch-name>?expand=1`
-      (`<org>/<repo>` from `git remote get-url origin`).
+
+      One row per PR: `created` or `exists`, with its URL — carry them into
+      steps 11 and 12.
+
+    - Discovery already confirmed `gh` is installed and authenticated, so an
+      `error=` here is something else (a repo-permission problem, a transient
+      network issue). Don't fail silently — report it and still hand back the
+      compare URL per repo, so the user can open the PR by hand:
+      `https://github.com/<slug>/compare/<base>...<branch-name>?expand=1`
+      (`<slug>` from that repo's `prs` row).
 
 11. **Update Jira — status transition, no comment yet:**
-    The PR from step 10 is open (whether this run created it or updated an
-    existing one), so the work is under review — transition it unless it
+    Once step 10 shows a PR open for every repo you committed in (whether
+    this run created it or updated an existing one), the work is under
+    review — transition it unless it
     already reads `<STATUS_IN_REVIEW>` (step 3's exit-8 reason, and by now the
     work is committed and pushed, so a hard stop here would be the worst place
     to take one):
@@ -448,7 +495,8 @@ context.
       otherwise. Don't transition to Done here.
 
 12. **Report back** — branch name, what was implemented, test results,
-    commit(s), the PR link, and the issue's new status. Post this same report
+    commit(s), the PR link — with member repos, each repo's PR and the merge
+    order — and the issue's new status. Post this same report
     to the user in chat **and** as a single Jira comment: it is the one
     comprehensive **run report**, so don't fragment it (no separate trivial
     "PR opened" comment earlier). Step 10's fix-summary on a re-run isn't a

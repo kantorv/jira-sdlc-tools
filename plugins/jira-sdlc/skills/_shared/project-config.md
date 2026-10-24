@@ -110,6 +110,7 @@ ports use identical names:
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
 | `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
 | `JST_PROJECT_KEY` | `<PROJECT-KEY>` from `jira-sdlc-tools.env` |
+| `JST_MEMBERS` | the member repos on the issue branch, space-separated (`repos.sh provision`'s `provisioned=`), already checked out when the hook runs; empty for a single-repo project |
 
 Env vars rather than positional arguments so the set can grow later without
 breaking scripts already written against it — a script that ignores a variable
