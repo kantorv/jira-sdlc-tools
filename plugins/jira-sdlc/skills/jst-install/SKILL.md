@@ -272,7 +272,7 @@ PRODUCTION_BRANCH=main
 submodules** (a `.gitmodules` at the root; skip this step otherwise). A
 member is a submodule whose code issues change: the skills then give it the
 issue branch, a PR of its own, and land it in this repo afterwards
-(https://kantorv.github.io/jira-sdlc-tools/docs/multi-repo-projects). A
+(https://kantorv.github.io/jira-sdlc-tools/docs/submodules/setup). A
 vendored library stays pinned and must **not** be a member. List the
 top-level submodules, then ask which take part (`AskUserQuestion`,
 multi-select; offer them all as candidates, since only the user knows which are

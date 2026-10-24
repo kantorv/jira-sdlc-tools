@@ -37,12 +37,7 @@
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_matrix.md",
-    "docs/research/_intro.md",
-    "docs/proposals/_multi-repo-workspaces-brainstorm.md",
-    "docs/proposals/_submodules-phase-1-plan.md",
-    "docs/proposals/_submodules-phase-3-plan.md",
-    "docs/proposals/_submodules-phase-4-plan.md",
-    "docs/proposals/_submodules-phase-5-plan.md"
+    "docs/research/_intro.md"
   ],
   "categories": {
     "docs/process": {
@@ -80,10 +75,6 @@
     },
     "docs/STEP-BY-STEP-INSTALLATION/first-tasks": {
       "slug": "/step-by-step-installation/first-tasks"
-    }
-,
-    "docs/proposals": {
-      "slug": "/proposals"
     }
   },
   "pages": {
@@ -223,7 +214,6 @@
       "slug": "/step-by-step-installation/create-a-release-cycle",
       "sidebar_position": 3
     },
-
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
       "sidebar_position": 0
@@ -243,10 +233,6 @@
     "docs/parallel-instances/react.md": {
       "slug": "/parallel-instances/react",
       "sidebar_position": 3
-    },
-    "docs/multi-repo/MULTI-REPO-PROJECTS.md": {
-      "slug": "/multi-repo-projects",
-      "sidebar_position": 1
     },
     "docs/parallel-instances/docker-compose.md": {
       "slug": "/parallel-instances/docker-compose",
@@ -455,13 +441,37 @@
       "slug": "/integrations",
       "sidebar_position": 7
     },
-    "docs/proposals/multi-repo-workspaces.md": {
-      "slug": "/proposals/multi-repo-workspaces",
+    "docs/submodules/SUBMODULES.md": {
+      "slug": "/submodules",
       "sidebar_position": 1
     },
-    "docs/proposals/submodules-strategy.md": {
-      "slug": "/proposals/submodules-strategy",
+    "docs/submodules/setup.md": {
+      "slug": "/submodules/setup",
       "sidebar_position": 2
+    },
+    "docs/submodules/how-the-skills-work.md": {
+      "slug": "/submodules/how-the-skills-work",
+      "sidebar_position": 3
+    },
+    "docs/submodules/design.md": {
+      "slug": "/submodules/design",
+      "sidebar_position": 4
+    },
+    "docs/submodules/repos-sh.md": {
+      "slug": "/submodules/repos-sh",
+      "sidebar_position": 5
+    },
+    "docs/submodules/troubleshooting.md": {
+      "slug": "/submodules/troubleshooting",
+      "sidebar_position": 6
+    },
+    "docs/submodules/other-layouts.md": {
+      "slug": "/submodules/other-layouts",
+      "sidebar_position": 7
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-member-repos.md": {
+      "slug": "/step-by-step-installation/optional-member-repos",
+      "sidebar_position": 5
     }
   }
 }

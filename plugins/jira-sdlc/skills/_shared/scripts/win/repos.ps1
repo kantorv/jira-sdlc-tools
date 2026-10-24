@@ -1,7 +1,7 @@
 # repos.ps1 — Windows (PowerShell 5.1+) twin of repos.sh: the set of repos an
 # issue's work spans, behind one front door. Same arguments, same stdout, same
 # stderr, same exit codes; repos.sh carries the full rationale. Design:
-# https://kantorv.github.io/jira-sdlc-tools/docs/proposals/submodules-strategy
+# https://kantorv.github.io/jira-sdlc-tools/docs/submodules/repos-sh
 #
 # Usage: pwsh -File repos.ps1 <verb> [--branch <b>] [--state all|open]
 #                                    [--base <b>] [--check] [--multistep]

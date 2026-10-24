@@ -6,7 +6,7 @@
 # script for repo work and act on its output; which strategy applies, and what
 # it means for each verb, lives in strategies/<name>.sh. A single-repo project
 # is a set of one, so the same skill sentence covers both. Design:
-# https://kantorv.github.io/jira-sdlc-tools/docs/proposals/submodules-strategy
+# https://kantorv.github.io/jira-sdlc-tools/docs/submodules/repos-sh
 #
 # Usage: bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>]
 #                              [--check] [--multistep] [--add <path>]

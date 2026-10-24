@@ -35,6 +35,7 @@ STATUS_DONE=Done
 | `STATUS_IN_PROGRESS` | Status `jira-task-executor` moves an issue to when it starts work. | same |
 | `STATUS_IN_REVIEW` | Status an issue moves to once its PR is open. | same |
 | `STATUS_DONE` | Final status, reached when the PR merges. | same |
+| `JST_MEMBERS` | *Optional.* Only for a project whose repos are git submodules of this one: the submodule paths issues change, space-separated. Leave it out otherwise. | [Optional: member repos](optional-member-repos.md) |
 
 Every value is your choice, not a fixed name: `main`/`development` and the four
 statuses above are only the documented defaults. The status names must match
