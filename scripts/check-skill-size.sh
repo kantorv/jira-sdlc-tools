@@ -51,6 +51,8 @@ accepted_budget() {
   case "$1" in
     jira-task-reviewer/SKILL.md|*/jira-task-reviewer/SKILL.md)
       echo "6400 the only skill carrying two tracks plus a phase machine" ;;
+    jst-install/SKILL.md|*/jst-install/SKILL.md)
+      echo "5200 walks four setup sections, plus the member-repos step" ;;
   esac
 }
 

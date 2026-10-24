@@ -268,7 +268,43 @@ DEFAULT_BASE_BRANCH=development
 PRODUCTION_BRANCH=main
 ```
 
-**2e. Gate.** Run the gate. Two rows cover the PAT from 1c and they prove
+**2e. Member repos — only when the project holds its repos as git
+submodules** (a `.gitmodules` at the root; skip this step otherwise). A
+member is a submodule whose code issues change: the skills then give it the
+issue branch, a PR of its own, and land it in this repo afterwards
+(https://kantorv.github.io/jira-sdlc-tools/docs/multi-repo-projects). A
+vendored library stays pinned and must **not** be a member. List the
+top-level submodules, then ask which take part (`AskUserQuestion`,
+multi-select; offer them all as candidates, since only the user knows which are
+vendored):
+
+```bash
+git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | cut -d' ' -f2
+git submodule update --init --recursive    # members must be checked out
+```
+
+Append the chosen paths, space-separated, to `.jst/jira-sdlc-tools.env`, and
+turn on the push-order guard — it refuses to push this repo while it points at
+a member commit no remote has:
+
+```
+JST_MEMBERS=<path> <path>
+```
+
+```bash
+git config push.recurseSubmodules check
+```
+
+None chosen → write nothing: the project stays single-repo, exactly as without
+submodules. Then tell them two things the gate can't check:
+
+- **Done is the landing PR's merge**, not the first member PR's. If GitHub
+  for Jira (or a Jira automation rule) moves issues to Done on merge, scope it
+  to this repo, or the first member merge closes the issue early.
+- **Each member needs this repo's base and production branch names** on its
+  `origin`, since member PRs target the member's own base.
+
+**2f. Gate.** Run the gate. Two rows cover the PAT from 1c and they prove
 different things: `gh_auth` only proves a **login** succeeded, while
 `gh_repo_access` calls `gh api repos/<OWNER>/<REPO>` and is the one that proves
 the PAT can do the executor's job. A fine-grained token scoped to *selected
@@ -279,7 +315,10 @@ repo at github.com/settings/personal-access-tokens, keeping Contents and Pull
 requests at read/write, and expect org-owned repos to need admin approval.
 `base_branch`/`production_branch` should now read what 2d wrote, with
 `branch_pair` OK — it FAILs if those two names are equal — and `worktrees_dir`
-the directory 2c created. `jira_*` stays red; say so, so nobody goes looking.
+the directory 2c created. With members (2e), `repo_strategy` reads OK with
+their paths, and each `member_repo[<path>]` row checks what `gh_repo_access`
+checks, per member: a 404 there is the same fine-grained-PAT gap, fixed on the
+same settings page. `jira_*` stays red; say so, so nobody goes looking.
 
 ______________________________________________________________________
 
@@ -522,7 +561,13 @@ exports, and three worked examples to copy the shape from (a Python toolchain,
 a React/Vite SPA, a multi-service docker-compose stack). `jira-task-executor`
 runs `.jst/bootstrap.sh` (`bootstrap.ps1` on Windows) in its step 1, once per
 worktree, fail-soft; `.jst/teardown.sh` is its by-hand counterpart, run before
-`git worktree remove` — no skill invokes it. Statuscheck's `bootstrap` row
+`git worktree remove` — no skill invokes it. With member repos the hook matters
+more, not less: a worktree's members arrive without their venvs,
+`node_modules` or git-ignored env files, and without a hook the executor
+improvises them to run its tests. The hook gets the members in `JST_MEMBERS`,
+already checked out. Before removing such a worktree, `repos.sh remove-check`
+says whether it's safe (a squash-merged branch reads safe), and the removal
+then needs `git worktree remove --force`. Statuscheck's `bootstrap` row
 reports either way and never blocks, so leaving this until they actually hit the
 collision costs nothing. No → say the row will read "no `.jst/bootstrap.sh`" and
 that this is fine, so nobody reads it as an unfinished step.

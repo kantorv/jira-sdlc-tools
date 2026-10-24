@@ -114,6 +114,7 @@ deliberately never looked at.
 - **S-MERGED** — single-step PR already merged (detected by the step-1 phase check). Title: `Single-step PR merged — complete`. Next step:
   ```
   Single-step PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
   ```
 
 ### Single-step across member repos (run-level)
@@ -140,6 +141,7 @@ landing PR.
 - **R-COMPLETE** — the landing PR is merged (detected by the step-1 phase check). Title: `Fully complete — landing PR merged`. Next step:
   ```
   Landing PR #<n>: ✅ merged into <BASE_BRANCH>, so every member's change is in the workspace. No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
   ```
 
 ### Multistep track (run-level)
@@ -164,6 +166,7 @@ landing PR.
 - **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
   Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
   ```
 
 ### Per-sub-task-PR (3d/3e emissions only)

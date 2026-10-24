@@ -80,6 +80,9 @@ reasoning, caveats, and how we plan to test them live in
   project's secrets to run tests; no Done offer before the set lands), so the
   owner raised it to 6,400: a rule the model misses is worth more than the
   words. Prefer `skills/_shared/` for anything that isn't a rule.
+  `jst-install` is the second exception, at 5,200 (JST-322): it walks four
+  setup sections, and the member-repos step (2e) took it 21 words past the
+  target.
   An exception is a number, not a pass: exceed it and the plain WARN
   comes back, and if the file shrinks the script tells you to ratchet the
   allowance down. Add one only when the alternative is a warning nobody

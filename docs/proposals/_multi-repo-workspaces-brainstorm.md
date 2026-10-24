@@ -216,3 +216,7 @@ Pre-pilot fix: the workspace `CLAUDE.md` says the workspace and the server have 
 - **2026-10-24:** phase 1 done (commits `3eb0221`, `48eb897`). Phase 2 done: the pilot was converted to submodules
   (`threejs-skeleton-studio` `14fe106`), and the by-hand check ran as Jira SKL-2, with a squash-merged member PR and
   landing. Results and two design findings are in the strategy doc's §10.
+- **2026-10-24:** phases 4–6 done. The executor and assigner work across members. SKL-4 (reject → fix → land) and SKL-5
+  (the first fully automatic chain) are Done. `remove-check` cleared the finished pilot worktrees, jst-install has step
+  2e, and the site has a Multi-repo projects page. Deferred: multistep and hotfix across members, the type-1 strategy,
+  and a real Windows run.
