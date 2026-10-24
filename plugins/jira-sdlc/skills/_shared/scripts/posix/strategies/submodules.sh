@@ -95,3 +95,4 @@ s_provision() { v_provision; }
 s_sync()      { v_sync; }
 s_push()      { v_push; }
 s_open_prs()  { v_open_prs; }
+s_remove_check() { v_remove_check; }

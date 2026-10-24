@@ -27,3 +27,4 @@ function s_provision { v_provision }
 function s_sync      { v_sync }
 function s_push      { v_push }
 function s_open_prs  { v_open_prs }
+function s_remove_check { v_remove_check }

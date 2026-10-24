@@ -58,6 +58,14 @@
 #             base (the root's own commits ride the landing PR). --title and
 #             --body-file are the model's; with members, a PR-set section is
 #             appended and kept current in every open PR of the set.
+#   remove-check  is this worktree safe to delete? One row per repo (the root
+#             and every checked-out member): ok, dirty (uncommitted or
+#             untracked work), unpushed (commits on no remote), or unknown;
+#             then safe=yes|no (exit 0|1). A commit on no remote is still ok
+#             when it is the head of a merged PR, or an ancestor of it: a
+#             squash merge leaves exactly that behind. It deletes nothing —
+#             `git worktree remove` (with --force, when members are checked
+#             out) is the human's.
 #
 # The strategy comes from JST_MEMBERS in .jst/jira-sdlc-tools.env: the
 # submodule paths that take part in issues. Unset or empty → single, whether or
@@ -79,10 +87,10 @@ SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die_usage() { printf '%s\n' "repos: $1" >&2; exit 2; }
 
-VERBS="strategy, list, prs, gate, land, provision, sync, push, open-prs"
+VERBS="strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check"
 VERB="${1:-}"
 case "$VERB" in
-  strategy|list|prs|gate|land|provision|sync|push|open-prs) shift ;;
+  strategy|list|prs|gate|land|provision|sync|push|open-prs|remove-check) shift ;;
   "") die_usage "a verb is required — one of: $VERBS" ;;
   *)  die_usage "unknown verb '$VERB' — one of: $VERBS" ;;
 esac
@@ -618,6 +626,60 @@ EOF
   done
   rm -f "$ERRF.cur" "$ERRF.new"
   exit 0
+}
+
+# --- remove-check ---------------------------------------------------------------
+
+# unpushed_ok <dir> <slug> — print nothing when every commit on no remote is
+# covered by a merged PR's head, else the reason; exit 2 when it can't tell.
+unpushed_ok() {
+  local dir="$1" slug="$2" b tip heads h covered
+  git -C "$dir" rev-parse -q --verify HEAD >/dev/null || return 0
+  if [ -z "$(git -C "$dir" branch --show-current)" ] && [ -n "$(git -C "$dir" log HEAD --not --remotes --branches --format=%h -1 2>/dev/null)" ]; then
+    echo "a detached HEAD holds commits on no branch and no remote"; return 1
+  fi
+  for b in $(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads); do
+    [ -n "$(git -C "$dir" log "$b" --not --remotes --format=%h -1 2>/dev/null)" ] || continue
+    [ "$slug" != - ] || { echo "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked"; return 2; }
+    tip=$(git -C "$dir" rev-parse "$b")
+    heads=$($TMOUT_CMD gh pr list -R "$slug" --head "$b" --state merged --json headRefOid --jq '.[].headRefOid' 2>"$ERRF") \
+      || { echo "$b: merged PRs unknown: $(awk 'NF{print; exit}' "$ERRF")"; return 2; }
+    covered=""
+    for h in $heads; do
+      if [ "$h" = "$tip" ] || git -C "$dir" merge-base --is-ancestor "$tip" "$h" 2>/dev/null; then covered=1; break; fi
+    done
+    [ -n "$covered" ] || { echo "$b has commits on no remote ($(git -C "$dir" log "$b" --not --remotes --format=%h | wc -l | tr -d ' ')), and no merged PR covers them"; return 1; }
+  done
+  return 0
+}
+
+v_remove_check() {
+  local set repo slug base role dir st why rc res safe=yes
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  printf 'repo\tresult\tdetail\n'
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    dir="$ROOT"; [ "$repo" = . ] || dir="$ROOT/$repo"
+    if [ "$repo" != . ] && [ "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" != "$dir" ]; then
+      printf '%s\tok\tnot checked out here\n' "$repo"; continue
+    fi
+    # The root's gitlink drift isn't work: moving gitlinks is landing's job.
+    if [ "$repo" = . ]; then st=$(git -C "$dir" status --porcelain --ignore-submodules=all); else st=$(git -C "$dir" status --porcelain); fi
+    if [ -n "$st" ]; then
+      printf '%s\tdirty\t%s uncommitted or untracked path(s)\n' "$repo" "$(printf '%s\n' "$st" | wc -l | tr -d ' ')"; safe=no; continue
+    fi
+    why=$(unpushed_ok "$dir" "$slug"); rc=$?
+    case "$rc" in
+      0) res=ok; [ -n "$(git -C "$dir" log --branches --not --remotes --format=%h -1 2>/dev/null)" ] && why="commits on no remote are the head of a merged PR" || why="clean, everything pushed" ;;
+      1) res=unpushed; safe=no ;;
+      *) res=unknown; safe=no ;;
+    esac
+    printf '%s\t%s\t%s\n' "$repo" "$res" "$why"
+  done <<EOF
+$set
+EOF
+  printf 'safe=%s\n' "$safe"
+  [ "$safe" = yes ]; exit $?
 }
 
 "s_${VERB//-/_}"

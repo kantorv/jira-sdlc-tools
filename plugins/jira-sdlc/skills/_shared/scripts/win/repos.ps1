@@ -15,6 +15,7 @@
 #   sync      merge origin/<base> into each member on the issue branch
 #   push      push every repo with work its origin lacks, members first
 #   open-prs  one PR per repo that needs one, plus the PR-set section
+#   remove-check  is this worktree safe to delete? rows, then safe=yes|no
 #
 # Exit 0 — ok. Exit 1 — land refused or failed, or --check failed. Exit 2 —
 # usage error (stderr only), or JST_MEMBERS is invalid (stdout ends with an
@@ -36,10 +37,10 @@ function Stop-Usage {
     exit 2
 }
 
-$Verbs = 'strategy, list, prs, gate, land, provision, sync, push, open-prs'
+$Verbs = 'strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check'
 $Verb = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 if (-not $Verb) { Stop-Usage "a verb is required — one of: $Verbs" }
-if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'land', 'provision', 'sync', 'push', 'open-prs')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
+if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'land', 'provision', 'sync', 'push', 'open-prs', 'remove-check')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
 $OptBranch = ''; $OptState = 'all'; $OptBase = ''; $OptCheck = $false; $OptMultistep = $false
 $OptAdd = ''; $OptTitle = ''; $OptBody = ''
 $i = 1
@@ -603,6 +604,56 @@ function v_open_prs {
         }
     }
     Exit-With 0
+}
+
+# --- remove-check (twin of repos.sh's) -------------------------------------------
+
+function Get-UnpushedVerdict {   # @{Rc; Why}: 0 covered, 1 work at risk, 2 can't tell
+    param([string]$Dir, [string]$Slug)
+    & git -C $Dir rev-parse -q --verify HEAD > $null 2>&1
+    if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ Rc = 0; Why = '' } }
+    $cur = (& git -C $Dir branch --show-current 2>$null)
+    if (-not $cur) {
+        $d = @(& git -C $Dir log HEAD --not --remotes --branches --format=%h -1 2>$null | Where-Object { $_ })
+        if ($d.Count -gt 0) { return [pscustomobject]@{ Rc = 1; Why = 'a detached HEAD holds commits on no branch and no remote' } }
+    }
+    foreach ($b in @(& git -C $Dir for-each-ref --format='%(refname:short)' refs/heads 2>$null | Where-Object { $_ })) {
+        $u = @(& git -C $Dir log $b --not --remotes --format=%h 2>$null | Where-Object { $_ })
+        if ($u.Count -eq 0) { continue }
+        if ($Slug -eq '-') { return [pscustomobject]@{ Rc = 2; Why = "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked" } }
+        $tip = ([string](& git -C $Dir rev-parse $b 2>$null)).Trim()
+        $heads = @(& gh pr list -R $Slug --head $b --state merged --json headRefOid --jq '.[].headRefOid' 2> $ErrFile)
+        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ Rc = 2; Why = "${b}: merged PRs unknown: $(Get-FirstLine $ErrFile)" } }
+        $covered = $false
+        foreach ($h in @($heads | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })) {
+            if ($h -eq $tip) { $covered = $true; break }
+            & git -C $Dir merge-base --is-ancestor $tip $h 2>$null
+            if ($LASTEXITCODE -eq 0) { $covered = $true; break }
+        }
+        if (-not $covered) { return [pscustomobject]@{ Rc = 1; Why = "$b has commits on no remote ($($u.Count)), and no merged PR covers them" } }
+    }
+    return [pscustomobject]@{ Rc = 0; Why = '' }
+}
+
+function v_remove_check {
+    Assert-ValidSet
+    Write-Output (@('repo', 'result', 'detail') -join "`t")
+    $safe = 'yes'
+    foreach ($r in @(Get-RepoSet)) {
+        $dir = if ($r.Repo -eq '.') { $Root } else { "$Root/$($r.Repo)" }
+        if ($r.Repo -ne '.' -and -not (Test-IsCheckedOut $r.Repo)) { Write-Output "$($r.Repo)`tok`tnot checked out here"; continue }
+        $st = if ($r.Repo -eq '.') { @(& git -C $dir status --porcelain --ignore-submodules=all 2>$null | Where-Object { $_ }) } else { @(& git -C $dir status --porcelain 2>$null | Where-Object { $_ }) }
+        if ($st.Count -gt 0) { Write-Output "$($r.Repo)`tdirty`t$($st.Count) uncommitted or untracked path(s)"; $safe = 'no'; continue }
+        $v = Get-UnpushedVerdict $dir $r.Slug
+        if ($v.Rc -eq 0) {
+            $any = @(& git -C $dir log --branches --not --remotes --format=%h -1 2>$null | Where-Object { $_ })
+            $why = if ($any.Count -gt 0) { 'commits on no remote are the head of a merged PR' } else { 'clean, everything pushed' }
+            Write-Output "$($r.Repo)`tok`t$why"
+        } elseif ($v.Rc -eq 1) { Write-Output "$($r.Repo)`tunpushed`t$($v.Why)"; $safe = 'no' }
+        else { Write-Output "$($r.Repo)`tunknown`t$($v.Why)"; $safe = 'no' }
+    }
+    Write-Output "safe=$safe"
+    if ($safe -eq 'yes') { Exit-With 0 } else { Exit-With 1 }
 }
 
 & "s_$($Verb -replace '-', '_')"

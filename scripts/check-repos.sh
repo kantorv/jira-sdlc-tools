@@ -253,7 +253,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land, provision, sync, push, open-prs\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -377,6 +377,7 @@ opt() { local want="$1"; shift; while [ $# -gt 0 ]; do [ "$1" = "$want" ] && { p
 case "$1 $2" in
   "pr list")
     k=$(key "$(opt -R "$@")" "$(opt --head "$@")"); echo "pr list $k" >> "$D/calls"
+    if [ "$(opt --json "$@")" = headRefOid ]; then cat "$D/heads/$k" 2>/dev/null; exit 0; fi
     [ -f "$D/prs/$k.error" ] && { cat "$D/prs/$k.error" >&2; exit 1; }
     [ -f "$D/prs/$k.emptyonce" ] && { rm "$D/prs/$k.emptyonce"; exit 0; }
     [ -f "$D/prs/$k" ] && cat "$D/prs/$k"; exit 0 ;;
@@ -610,6 +611,29 @@ for port in sh ${PORTS:+ps}; do
   is "  …both on their origins$sfx" "$(for m in app server; do git -C "$WA/$m" ls-remote --heads origin "$E"; done | wc -l | tr -d ' ')" 2
   is "  …the main checkout's members didn't move$sfx" "$(git -C "$LAB/$ns/main/app" branch --show-current)" development
   is "provision --add again: idempotent$sfx" "$(rp $port "$WA" provision --add "app server")" "$(printf 'provisioned=app server\npinned=\nexit=0')"
+done
+# remove-check: is a worktree safe to delete? Squash merges leave commits on no remote.
+for port in sh ${PORTS:+ps}; do
+  ns="rc-$port"; mk5 "$ns"; WR="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  rp $port "$WR" provision >/dev/null
+  echo w > "$WR/app/w.txt"; git -C "$WR/app" add w.txt; git -C "$WR/app" commit -qm w; rp $port "$WR" push >/dev/null
+  RCH='repo\tresult\tdetail'
+  is "remove-check: everything pushed → safe$sfx" "$(rp $port "$WR" remove-check)" \
+    "$(printf "$RCH"'\n.\tok\tclean, everything pushed\napp\tok\tclean, everything pushed\nserver\tok\tclean, everything pushed\nsafe=yes\nexit=0')"
+  echo stray > "$WR/server/stray.txt"
+  is "remove-check: an untracked file in a member is work$sfx" "$(rp $port "$WR" remove-check | grep -E '^server|^safe|^exit')" \
+    "$(printf 'server\tdirty\t1 uncommitted or untracked path(s)\nsafe=no\nexit=1')"
+  rm "$WR/server/stray.txt"
+  echo u > "$WR/app/u.txt"; git -C "$WR/app" add u.txt; git -C "$WR/app" commit -qm u
+  is "remove-check: a commit pushed nowhere$sfx" "$(rp $port "$WR" remove-check | grep -E '^app|^safe')" \
+    "$(printf "app\tunpushed\t$E has commits on no remote (1), and no merged PR covers them\nsafe=no")"
+  # The squash case: the PR merged as a new commit and its branch was deleted.
+  git -C "$WR/app" push -q origin "$E"; git -C "$WR/app" push -q origin --delete "$E"; git -C "$WR/app" fetch -q --prune
+  mkdir -p "$FGH/heads"; git -C "$WR/app" rev-parse HEAD > "$FGH/heads/$(printf '%s@%s' "${ns}_app" "${E//\//%}")"
+  is "remove-check: commits on no remote, but the head of a merged PR → safe$sfx" "$(rp $port "$WR" remove-check | grep -E '^app|^safe')" \
+    "$(printf 'app\tok\tcommits on no remote are the head of a merged PR\nsafe=yes')"
+  git -C "$WR/app" rev-parse HEAD~1 > "$FGH/heads/$(printf '%s@%s' "${ns}_app" "${E//\//%}")"
+  is "remove-check: a merged PR whose head is older doesn't cover newer commits$sfx" "$(rp $port "$WR" remove-check | grep -E '^safe')" "safe=no"
 done
 # Single repo: push always pushes, open-prs opens the root's PR with no PR-set section.
 for port in sh ${PORTS:+ps}; do
