@@ -37,7 +37,8 @@
     "docs/STEP-BY-STEP-INSTALLATION/environment-setup/github/authentication/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_intro.md",
     "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/_matrix.md",
-    "docs/research/_intro.md"
+    "docs/research/_intro.md",
+    "docs/proposals/_multi-repo-workspaces-brainstorm.md"
   ],
   "categories": {
     "docs/process": {
@@ -449,6 +450,10 @@
     "docs/proposals/multi-repo-workspaces.md": {
       "slug": "/proposals/multi-repo-workspaces",
       "sidebar_position": 1
+    },
+    "docs/proposals/submodules-strategy.md": {
+      "slug": "/proposals/submodules-strategy",
+      "sidebar_position": 2
     }
   }
 }
