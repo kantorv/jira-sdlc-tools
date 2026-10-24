@@ -26,6 +26,7 @@
 # edit one, edit the other). Live smoke tests: jira.test.sh / ../win/jira.test.ps1.
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
 EX_OK=0; EX_ERR=1; EX_USAGE=2; EX_AUTH=3; EX_NOTFOUND=4
 EX_VALIDATION=5; EX_FORBIDDEN=6; EX_UNEXPECTED=7; EX_NOTRANSITION=8
@@ -112,7 +113,7 @@ _resolve_cloud_id() {
 _ready() {
   command -v curl >/dev/null 2>&1 || die "$EX_ERR" "curl is required but not installed."
   command -v jq   >/dev/null 2>&1 || die "$EX_ERR" "jq is required but not installed."
-  _cfg_dir=$(git rev-parse --show-toplevel 2>/dev/null || true); _cfg_dir="${_cfg_dir:-$PWD}/.jst"
+  _cfg_dir=$(jst_root || true); _cfg_dir="${_cfg_dir:-$PWD}/.jst"
   _SITE=$(_cfg JIRA_ACCOUNT_URL || true); _SITE="${_SITE#*://}"
   [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env."
   _resolve_cred

@@ -24,6 +24,7 @@
 # Exit <code> — the `jira.sh issue view` call failed (its stderr is relayed).
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
@@ -57,7 +58,7 @@ usage: list_subtasks.sh --parent <PARENT-KEY> [--role <role>] [--env <path>] [--
 # same from any subdirectory.
 resolve_project() {
   local p m root
-  root=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+  root=$(jst_root || printf '%s' "$PWD")
   for p in "$ENV_PATH" "$root/.jst/jira-sdlc-tools.env"; do
     [ -n "$p" ] || continue
     [ -f "$p" ] || continue

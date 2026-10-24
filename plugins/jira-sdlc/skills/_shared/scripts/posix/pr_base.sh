@@ -46,6 +46,7 @@
 # Exit 2 — usage or environment error (no --role, not a git repo, no issue key).
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
 die() { printf '%s\n' "$*" >&2; exit 2; }
 warn() { printf '%s\n' "$*" >&2; }
@@ -115,7 +116,7 @@ if [ -n "$PARENT_KEY" ]; then
 fi
 
 # --- 4. the env default — top-level issues only ------------------------------
-CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")/.jst
+CFG_DIR=$(jst_root || printf '%s' "$PWD")/.jst
 cfg() {
   local f v
   for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do

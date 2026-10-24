@@ -58,14 +58,6 @@ $script:Rows     = @()
 $script:Remedies = @()
 $script:Failed   = 0
 
-function Get-GitTop {
-    try {
-        $t = (& git rev-parse --show-toplevel 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() }
-    } catch { }
-    return $null
-}
-
 function Add-Row {  # Add-Row <name> <status> <detail> [remedy]
     param([string]$Name, [string]$Status, [string]$Detail, [string]$Remedy)
     $d = ($Detail -replace '\|', '/')   # keep the table parseable
@@ -91,6 +83,14 @@ function Write-Report {
     }
 }
 
+# --- the project root, resolved before anything reads git state --------------
+# And moved into: run from inside a member submodule, the branch, worktree and
+# PRs that matter are the project's, not the member's (often a detached HEAD).
+# statuscheck takes no path arguments, so moving changes nothing else.
+. (Join-Path $PSScriptRoot '_jst_root.ps1')
+$WtRoot = Get-JstRoot
+if ($WtRoot) { Set-Location -LiteralPath $WtRoot }
+
 # --- derive the issue key from the branch up front ---------------------------
 $Br = (& git branch --show-current 2>$null)
 $Br = if ($Br) { ([string]$Br).Trim() } else { '' }
@@ -109,8 +109,9 @@ if ($KeyArg -and ($KeyArg -notmatch '^[A-Za-z][A-Za-z0-9]*-[0-9]+$')) {
 }
 if (-not $Key) { $Key = $BrKey }   # best known key, for the title/remedies
 
-$WtRoot = Get-GitTop
-$IsWt   = ($WtRoot -and (Test-Path -LiteralPath (Join-Path $WtRoot '.git') -PathType Leaf))
+# $WtRoot is the project root, resolved at the top. A submodule's .git is a file
+# too, which is why the helper checks where it points.
+$IsWt   = ($WtRoot -and (Test-JstLinkedWorktree $WtRoot))
 
 # --- mandatory .jst/ gate (runs before every other check) --------------------
 # Both settings files live in <repo-root>/.jst/, and nothing reads a root-level
@@ -164,10 +165,7 @@ if ($WtRoot) {
     }
     if ((-not $preExisted) -and $IsWt -and (Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env'))) {
         $EnvLocalCopied = $true
-        $gd = (Get-Content -LiteralPath (Join-Path $WtRoot '.git') |
-            Where-Object { $_ -match '^gitdir:\s*(.*)$' } |
-            ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
-        if ($gd) { $EnvLocalCopiedFrom = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $gd)) }
+        $EnvLocalCopiedFrom = [string](Get-JstMainCheckout $WtRoot)
     }
 }
 

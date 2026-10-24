@@ -10,15 +10,9 @@
 # The env-file parser mirrors statuscheck.sh's cfg(): same `NAME = value`
 # match, same local-overrides-team precedence, last match in a file wins.
 
-function Get-GitTop {
-    try {
-        $t = (& git rev-parse --show-toplevel 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() }
-    } catch { }
-    return $null
-}
+. (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
 
-$CfgDir = Get-GitTop
+$CfgDir = Get-JstRoot
 if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
 $CfgDir = Join-Path $CfgDir '.jst'
 

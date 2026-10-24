@@ -79,6 +79,16 @@ case "$ROLE" in
 esac
 ROLE_UC=$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')
 
+# The project root, resolved before anything reads git state, and cd'd into:
+# run from inside a member submodule, the branch, worktree and PRs that matter
+# are the project's, not the member's (often a detached HEAD). statuscheck takes
+# no path arguments, so moving changes nothing else. Its own folder is resolved
+# first, because BASH_SOURCE may be a path relative to where it was started.
+SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+. "$SC_DIR/_jst_root.sh"
+WT_ROOT=$(jst_root || true)
+[ -n "$WT_ROOT" ] && cd "$WT_ROOT"
+
 # Derive the issue key from the branch up front: branch tail is
 # <KEY>-<slug>, so the leading <PROJ>-<n> is the key.
 BR=$(git branch --show-current 2>/dev/null || true)
@@ -132,11 +142,12 @@ print_report() {
   fi
 }
 
-WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+# WT_ROOT is the project root, resolved at the top.
 IS_WORKTREE=""
-# A linked worktree's .git is a *file* (pointer into the main repo's
-# .git/worktrees/); the main checkout's .git is a directory.
-if [ -n "$WT_ROOT" ] && [ -f "$WT_ROOT/.git" ]; then
+# A linked worktree's .git is a *file* pointing into the main repo's
+# .git/worktrees/; the main checkout's .git is a directory. (A submodule's .git
+# is a file too, which is why the helper checks where it points.)
+if [ -n "$WT_ROOT" ] && jst_is_linked_worktree "$WT_ROOT"; then
   IS_WORKTREE=1
 fi
 
@@ -178,7 +189,7 @@ ENV_LOCAL_COPIED_FROM=""
 if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
   [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
-  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  SCRIPT_DIR=$SC_DIR
   # Relay its stderr as the remedy rather than asserting a cause. It now fails
   # for three different reasons — nothing to copy, the path isn't ignored here,
   # the credential is tracked — and each needs a different fix, so a hardcoded
@@ -193,8 +204,7 @@ if [ -n "$WT_ROOT" ]; then
   fi
   if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ]; then
     ENV_LOCAL_COPIED=1
-    GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
-    ENV_LOCAL_COPIED_FROM=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
+    ENV_LOCAL_COPIED_FROM=$(jst_main_checkout "$WT_ROOT")
   fi
 fi
 
@@ -225,7 +235,7 @@ fi
 # scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
 # detection so the Windows branch can be exercised on Linux/CI (statuscheck.ps1
 # honors the same override and emits an identical row).
-PLAT_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+PLAT_SCRIPT_DIR=$SC_DIR
 _detect_os() {
   case "$(uname -s 2>/dev/null)" in
     Linux)                OS=linux ;;

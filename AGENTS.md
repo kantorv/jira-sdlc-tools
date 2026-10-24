@@ -240,8 +240,16 @@ bash scripts/check-skill-size.sh
 # property to protect (a worktree must never hold an unignored
 # jira-sdlc-tools.local.env). Run it after touching either ensure_local_env
 # port, statuscheck's env_* rows, or jira-task-executor step 2's merge
-# recovery. --ports adds a posix/win diff and needs pwsh.
+# recovery. It also covers runs from inside a member submodule, which must
+# provision the project, never the member. --ports adds a posix/win diff and
+# needs pwsh.
 bash scripts/check-ensure-local-env.sh [--ports]
+
+# how every script finds the project root (_jst_root), from submodules and
+# worktrees, plus the single-repo regression: statuscheck's table must be
+# byte-identical to the base commit's for a project without members. Run it
+# after touching _jst_root or statuscheck. --ports adds the win/ ports.
+bash scripts/check-repos.sh [--ports]
 
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
@@ -338,7 +346,10 @@ skills need only one dispatch rule (`bash …/X.sh` on POSIX,
 front from its own runtime, *before* the first script runs — statuscheck is
 itself one of the dispatched scripts, so it can't be what decides how to run
 it. Edit one port and
-you must edit the other, or Windows silently drifts. `statuscheck`'s `platform`
+you must edit the other, or Windows silently drifts. They share one sourced
+helper, `posix/_jst_root.sh` / `win/_jst_root.ps1`, which finds the project
+root (the outermost repo in the submodule chain that has `.jst/`). It has no
+output of its own to diff: `check-repos.sh --ports` compares the two directly. `statuscheck`'s `platform`
 row then *confirms* the OS and the Windows runtime/ports, and honors
 `STATUSCHECK_FORCE_OS` so the Windows branch is testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
 diff each port against its bash twin with the OS forced:
