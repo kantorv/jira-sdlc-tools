@@ -1,6 +1,6 @@
 ---
 slug: /step-by-step-installation/optional-parallel-worktrees
-sidebar_position: 6
+sidebar_position: 4
 sidebar_label: "Optional: parallel worktrees"
 ---
 
@@ -21,9 +21,9 @@ counterpart you run before `git worktree remove`; no skill invokes it.
 Statuscheck's `bootstrap` row reports whether you have one and never blocks
 either way.
 
-[Parallel instances](../parallel-instances/RUNNING-MULTIPLE-COPIES.md) is the
+[Parallel instances](../../parallel-instances/RUNNING-MULTIPLE-COPIES.md) is the
 whole story: the share-vs-isolate decision framework, the `JST_*` environment
 contract, and three worked examples:
-[Python toolchain](../parallel-instances/python.md),
-[React / Vite SPA](../parallel-instances/react.md), and
-[multi-service docker-compose stack](../parallel-instances/docker-compose.md).
+[Python toolchain](../../parallel-instances/python.md),
+[React / Vite SPA](../../parallel-instances/react.md), and
+[multi-service docker-compose stack](../../parallel-instances/docker-compose.md).
