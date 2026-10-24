@@ -76,6 +76,10 @@
     "docs/STEP-BY-STEP-INSTALLATION/first-tasks": {
       "slug": "/step-by-step-installation/first-tasks"
     }
+,
+    "docs/proposals": {
+      "slug": "/proposals"
+    }
   },
   "pages": {
     "docs/STEP-BY-STEP-INSTALLATION/full-setup-checklist.md": {
@@ -186,9 +190,17 @@
       "slug": "/step-by-step-installation/create-the-jst-scaffold",
       "sidebar_position": 1
     },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-shared-env.md": {
+      "slug": "/step-by-step-installation/fill-the-shared-env",
+      "sidebar_position": 2
+    },
     "docs/STEP-BY-STEP-INSTALLATION/configuration/fill-the-local-env.md": {
       "slug": "/step-by-step-installation/fill-the-local-env",
-      "sidebar_position": 2
+      "sidebar_position": 3
+    },
+    "docs/STEP-BY-STEP-INSTALLATION/configuration/optional-parallel-worktrees.md": {
+      "slug": "/step-by-step-installation/optional-parallel-worktrees",
+      "sidebar_position": 4
     },
     "docs/STEP-BY-STEP-INSTALLATION/healthcheck.md": {
       "slug": "/step-by-step-installation/healthcheck",
@@ -206,10 +218,7 @@
       "slug": "/step-by-step-installation/create-a-release-cycle",
       "sidebar_position": 3
     },
-    "docs/STEP-BY-STEP-INSTALLATION/optional-parallel-worktrees.md": {
-      "slug": "/step-by-step-installation/optional-parallel-worktrees",
-      "sidebar_position": 6
-    },
+
     "docs/STEP-BY-STEP-INSTALLATION/index.mdx": {
       "slug": "/step-by-step-installation",
       "sidebar_position": 0
@@ -436,6 +445,10 @@
     "docs/integrations.mdx": {
       "slug": "/integrations",
       "sidebar_position": 7
+    },
+    "docs/proposals/multi-repo-workspaces.md": {
+      "slug": "/proposals/multi-repo-workspaces",
+      "sidebar_position": 1
     }
   }
 }
