@@ -44,8 +44,10 @@
 #             onto that branch, with branch.<b>.parentbranch set to the
 #             member's base inside the member's own git directory (a worktree's
 #             members have their own); the rest stay pinned at their gitlinks.
-#             --add <path> first creates the issue branch in that member from
-#             origin/<base> and pushes it: scope growth. Idempotent.
+#             --add <paths> (space- or comma-separated) first creates the issue
+#             branch in each of those members from origin/<base> and pushes it:
+#             the assigner's in-scope members, or the executor's scope growth.
+#             Every listed path must be a member. Idempotent.
 #   sync      merge origin/<base> into each member on the issue branch. Stops
 #             at a conflict (conflict=, files=; exit 1) and leaves it for the
 #             user. The root's own merge is the skill's (its .jst/ recovery).
@@ -460,20 +462,22 @@ on_branch() { [ "$(git -C "$1" branch --show-current 2>/dev/null)" = "$OPT_BRANC
 members_of() { printf '%s\n' "$1" | awk -F'\t' '$4 == "member"'; }   # members_of <repo_set>
 
 v_provision() {
-  local set mem repo slug base role on pinned="" provisioned="" name
+  local set mem repo slug base role on pinned="" provisioned="" name a
   need_branch
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   mem=$(members_of "$set")
   if [ -z "$mem" ]; then printf 'provisioned=\npinned=\n'; exit 0; fi
   on_branch "$ROOT" || fail "run provision from the issue worktree, on $OPT_BRANCH (the root is on '$(git -C "$ROOT" branch --show-current 2>/dev/null)')"
-  if [ -n "$OPT_ADD" ]; then
-    printf '%s\n' "$mem" | awk -F'\t' -v p="$OPT_ADD" '$1 == p { f = 1 } END { exit !f }' \
-      || fail "--add $OPT_ADD: not a member (JST_MEMBERS lists the members)"
-  fi
+  OPT_ADD=$(printf '%s' "$OPT_ADD" | tr ',' ' ')
+  for a in $OPT_ADD; do
+    printf '%s\n' "$mem" | awk -F'\t' -v p="$a" '$1 == p { f = 1 } END { exit !f }' \
+      || fail "--add $a: not a member (JST_MEMBERS lists the members)"
+  done
   git -C "$ROOT" submodule update -q --init --recursive 2>"$ERRF" || fail "submodule update failed: $(awk 'NF{print; exit}' "$ERRF")"
   while IFS=$'\t' read -r repo slug base role; do
     [ -n "$repo" ] || continue
-    if [ "$repo" = "$OPT_ADD" ] && ! git -C "$ROOT/$repo" ls-remote --exit-code --heads origin "$OPT_BRANCH" >/dev/null 2>&1; then
+    if case " $OPT_ADD " in *" $repo "*) true ;; *) false ;; esac \
+       && ! git -C "$ROOT/$repo" ls-remote --exit-code --heads origin "$OPT_BRANCH" >/dev/null 2>&1; then
       git -C "$ROOT/$repo" fetch -q origin "$base" 2>"$ERRF" || fail "$repo: can't fetch origin/$base: $(awk 'NF{print; exit}' "$ERRF")"
       git -C "$ROOT/$repo" switch -q -c "$OPT_BRANCH" "origin/$base" 2>"$ERRF" || fail "$repo: can't create $OPT_BRANCH: $(awk 'NF{print; exit}' "$ERRF")"
       git -C "$ROOT/$repo" push -q -u origin "$OPT_BRANCH" 2>"$ERRF" || fail "$repo: created $OPT_BRANCH, but the push failed: $(awk 'NF{print; exit}' "$ERRF")"

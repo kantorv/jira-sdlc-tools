@@ -456,13 +456,14 @@ function v_provision {
         $c = (& git -C $Root branch --show-current 2>$null); $c = if ($c) { ([string]$c).Trim() } else { '' }
         Stop-Run "run provision from the issue worktree, on $($script:OptBranch) (the root is on '$c')"
     }
-    if ($OptAdd -and -not (@($mem | Where-Object { $_.Repo -eq $OptAdd }).Count)) { Stop-Run "--add ${OptAdd}: not a member (JST_MEMBERS lists the members)" }
+    $adds = @(($OptAdd -replace ',', ' ') -split '\s+' | Where-Object { $_ })
+    foreach ($a in $adds) { if (-not (@($mem | Where-Object { $_.Repo -eq $a }).Count)) { Stop-Run "--add ${a}: not a member (JST_MEMBERS lists the members)" } }
     & git -C $Root submodule update -q --init --recursive 2> $ErrFile
     if ($LASTEXITCODE -ne 0) { Stop-Run "submodule update failed: $(Get-FirstLine $ErrFile)" }
     $prov = @(); $pin = @()
     foreach ($r in $mem) {
         $d = "$Root/$($r.Repo)"
-        if ($r.Repo -eq $OptAdd -and -not (Test-RemoteBranch $d)) {
+        if (($adds -contains $r.Repo) -and -not (Test-RemoteBranch $d)) {
             & git -C $d fetch -q origin $r.Base 2> $ErrFile
             if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): can't fetch origin/$($r.Base): $(Get-FirstLine $ErrFile)" }
             & git -C $d switch -q -c $script:OptBranch "origin/$($r.Base)" 2> $ErrFile

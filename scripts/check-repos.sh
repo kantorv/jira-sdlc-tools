@@ -543,7 +543,7 @@ echo "repos.sh — provision, sync, push and open-prs (fake gh, real git)"
 # These verbs change state, so every port gets a workspace of its own: a parent
 # with members app and server, and bare remotes, under GitHub owner <ns>.
 E=feature/XX-8-exec
-mk5() { # mk5 <ns> — build $LAB/<ns>/W, the issue worktree, with app on $E and server not
+mk5() { # mk5 <ns> [none] — build $LAB/<ns>/W, the issue worktree, with app on $E (none: no member on it yet)
   local ns="$1" r="$LAB/$1/remotes" n
   mkdir -p "$r"
   for n in parent app server; do git config --global "url.$r/$n.git.insteadOf" "git@github.com:$ns/$n.git"; done
@@ -556,7 +556,9 @@ mk5() { # mk5 <ns> — build $LAB/<ns>/W, the issue worktree, with app on $E and
   git -C "$LAB/$ns/main" submodule add -q -b development "git@github.com:$ns/server.git" server
   git -C "$LAB/$ns/main" add .jst; git -C "$LAB/$ns/main" commit -qm members; git -C "$LAB/$ns/main" push -q origin development
   git -C "$LAB/$ns/main" branch "$E"; git -C "$LAB/$ns/main" push -q -u origin "$E"
-  git -C "$LAB/$ns/main/app" switch -qc "$E"; git -C "$LAB/$ns/main/app" push -q -u origin "$E"   # app takes part
+  if [ "${2:-}" != none ]; then
+    git -C "$LAB/$ns/main/app" switch -qc "$E"; git -C "$LAB/$ns/main/app" push -q -u origin "$E"   # app takes part
+  fi
   git -C "$LAB/$ns/main" worktree add -q "$LAB/$ns/W" "$E"
 }
 for port in sh ${PORTS:+ps}; do
@@ -596,6 +598,18 @@ for port in sh ${PORTS:+ps}; do
   rp $port "$W5" open-prs --title "XX-8: work" --body-file "$LAB/$ns/body.md" >/dev/null
   grep -q "^- $ns/server#8 — OPEN$" "$FGH/body/${ns}_app#7" && ok "  …a new PR is added to the set in the older PR$sfx" || no "  …app body: $(cat "$FGH/body/${ns}_app#7")"
   is "  …and the section isn't duplicated$sfx" "$(grep -c '<!-- jst:pr-set -->' "$FGH/body/${ns}_app#7")" 1
+done
+# The assigner's case: no member has the branch yet, and --add names the in-scope ones.
+for port in sh ${PORTS:+ps}; do
+  ns="a-$port"; mk5 "$ns" none; WA="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  is "provision --add with a non-member in the list stops first$sfx" "$(rp $port "$WA" provision --add "app,nope")" \
+    "$(printf 'error=--add nope: not a member (JST_MEMBERS lists the members)\nexit=1')"
+  is "  …and created nothing$sfx" "$(git ls-remote --heads "$LAB/$ns/remotes/app.git" "$E" | wc -l | tr -d ' ')" 0   # the remote itself: the member isn't checked out yet
+  is "provision --add \"app server\": both branches cut and pushed$sfx" "$(rp $port "$WA" provision --add "app server")" \
+    "$(printf 'provisioned=app server\npinned=\nexit=0')"
+  is "  …both on their origins$sfx" "$(for m in app server; do git -C "$WA/$m" ls-remote --heads origin "$E"; done | wc -l | tr -d ' ')" 2
+  is "  …the main checkout's members didn't move$sfx" "$(git -C "$LAB/$ns/main/app" branch --show-current)" development
+  is "provision --add again: idempotent$sfx" "$(rp $port "$WA" provision --add "app server")" "$(printf 'provisioned=app server\npinned=\nexit=0')"
 done
 # Single repo: push always pushes, open-prs opens the root's PR with no PR-set section.
 for port in sh ${PORTS:+ps}; do

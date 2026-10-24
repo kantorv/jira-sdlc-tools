@@ -101,6 +101,7 @@ long-lived branch — the opposite reading from the executor/reviewer:
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
 | `branch` | INFO: the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither* — match that yourself against the `production_branch` row. Step 2 judges every reading |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
+| `repo_strategy` | `single`, or `submodules` with its member repos — an issue's work can then span them (steps 3, 5D and 6A). Each member's `member_repo[…]` row FAILs when the PAT can't reach it or its base branch is missing, which blocks like any FAIL |
 
 Three other rows carry an assigner-specific reading: `gh_auth` still blocks
 even though this skill opens no PRs — verifying it now is what stops the
@@ -156,6 +157,11 @@ single owners for interfaces. Signs it's one piece, not two:
 - Changes that must land in a specific order to compile/test
 - A single module that all work touches sequentially
 - One person owns the interface all pieces must conform to
+
+With member repos (`repo_strategy`), investigate each member the task
+touches — its code is under its folder in this checkout — and the interfaces
+between them, which the project's docs list. **Repos are not pieces:** a
+change that has to land in one repo before another is still one piece (5A).
 
 Don't ask the user things you can find yourself.
 
@@ -244,6 +250,16 @@ If step 2 started you on `<PRODUCTION_BRANCH>` and this decision lands on
 the planned path cuts from your own checkout (step 6), so continuing from here
 would branch tomorrow's feature off production.
 
+**D. Decide the member repos in scope** *(only with member repos)*: the members
+whose code this issue changes, from step 3. When unsure about one, include it:
+an issue branch with nothing on it costs nothing (it gets no PR), while a
+missing one costs the executor a `provision --add` mid-run. The workspace
+itself needs no decision — it always gets the branch. **Members are supported
+on single-step planned work only**: with any member in scope, multistep (A) or
+the hotfix path (C) isn't supported yet — sub-task branches per member, and
+each member's production branch, aren't modelled. Stop and say so, offering
+single-step planned work if the task allows it.
+
 ## 6. Create the Jira issue(s), branch(es), and worktrees
 
 Because step 2 stopped you if you were already on an issue branch, you are
@@ -289,17 +305,34 @@ ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_as
    your only issue), passing `--assignee "$ASSIGNEE_EMAIL"` and
    `--desc-file <file>` holding the step 3 findings and the step 4 acceptance
    criteria.
+
 2. Create the branch: `git branch <PREFIX><PARENT-KEY>-<slug> <BRANCH_FROM>`,
    then `git push -u origin <PREFIX><PARENT-KEY>-<slug>`. This is the
    `PARENT_BRANCH`.
+
 3. Set parentbranch config: `git config branch.<PREFIX><PARENT-KEY>-<slug>.parentbranch <BASE_BRANCH>`
    — record `<BASE_BRANCH>`, never `<BRANCH_FROM>`: this value becomes the
    executor's `gh pr create --base`, and on the hotfix path `origin/main` isn't
    something `gh` can target while `main` is.
+
 4. **Always create a parent worktree:**
    `git worktree add <WORKTREES_DIR>/worktree-<PARENT-KEY> <PREFIX><PARENT-KEY>-<slug>`
    *(A worktree to check out when inspecting the assembled parent branch, and
    a base for future additions.)*
+
+5. **With in-scope members (5D):** give each one the issue branch, from inside
+   the new worktree:
+
+   ```bash
+   cd <WORKTREES_DIR>/worktree-<PARENT-KEY>
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/repos.sh" provision --add "<in-scope members>"
+   ```
+
+   It cuts each member's issue branch from that member's base, pushes it, and
+   leaves the worktree's copy of the member on it; the main checkout's
+   members don't move. `provisioned=` must list every in-scope member.
+   `error=` → relay it and stop, reporting what was created (the partial-failure
+   rule below).
 
 **B. If Single-step (Cohesive work):**
 The top-level issue is your only issue. You are done creating issues. Proceed
@@ -403,6 +436,9 @@ verbatim. Then list:
 - each branch created
 - each worktree path with the PR-target branch it's meant to merge into,
   explicitly calling out the parent worktree
+- with member repos: each in-scope member and its branch, and the order the
+  member PRs will likely merge in, when step 3 made it clear (what depends on
+  what)
 
 On the hotfix path, add that the fix also has to reach
 `<DEFAULT_BASE_BRANCH>` after it lands on `<PRODUCTION_BRANCH>`
