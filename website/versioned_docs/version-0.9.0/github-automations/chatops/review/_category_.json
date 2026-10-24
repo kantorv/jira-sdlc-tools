@@ -1,0 +1,8 @@
+{
+  "label": "/review command",
+  "position": 1,
+  "link": {
+    "type": "doc",
+    "id": "github-automations/chatops/review/ci-review-pr-demo"
+  }
+}
