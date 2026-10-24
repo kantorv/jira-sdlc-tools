@@ -81,3 +81,8 @@ function s_gate {
 }
 
 function s_land { v_land }
+
+function s_provision { v_provision }
+function s_sync      { v_sync }
+function s_push      { v_push }
+function s_open_prs  { v_open_prs }

@@ -9,7 +9,8 @@
 # https://kantorv.github.io/jira-sdlc-tools/docs/proposals/submodules-strategy
 #
 # Usage: bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>]
-#                              [--check] [--multistep]
+#                              [--check] [--multistep] [--add <path>]
+#                              [--title <t>] [--body-file <f>]
 #   strategy  which strategy applies — key=value lines:
 #               strategy=single|submodules
 #               root=<project root>
@@ -39,6 +40,22 @@
 #             before it changes anything. --check instead verifies the
 #             gitlinks --branch carries: each on its member's base, and
 #             .gitmodules unchanged against --base.
+#   provision put each member whose issue branch (--branch) is on its origin
+#             onto that branch, with branch.<b>.parentbranch set to the
+#             member's base inside the member's own git directory (a worktree's
+#             members have their own); the rest stay pinned at their gitlinks.
+#             --add <path> first creates the issue branch in that member from
+#             origin/<base> and pushes it: scope growth. Idempotent.
+#   sync      merge origin/<base> into each member on the issue branch. Stops
+#             at a conflict (conflict=, files=; exit 1) and leaves it for the
+#             user. The root's own merge is the skill's (its .jst/ recovery).
+#   push      push every repo on the issue branch with work its origin lacks:
+#             members first, the root last, under push.recurseSubmodules=check.
+#   open-prs  open one PR per repo that needs one — a single repo: the root,
+#             into --base; with members: each member with commits ahead of its
+#             base (the root's own commits ride the landing PR). --title and
+#             --body-file are the model's; with members, a PR-set section is
+#             appended and kept current in every open PR of the set.
 #
 # The strategy comes from JST_MEMBERS in .jst/jira-sdlc-tools.env: the
 # submodule paths that take part in issues. Unset or empty → single, whether or
@@ -60,14 +77,14 @@ SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die_usage() { printf '%s\n' "repos: $1" >&2; exit 2; }
 
-VERBS="strategy, list, prs, gate, land"
+VERBS="strategy, list, prs, gate, land, provision, sync, push, open-prs"
 VERB="${1:-}"
 case "$VERB" in
-  strategy|list|prs|gate|land) shift ;;
+  strategy|list|prs|gate|land|provision|sync|push|open-prs) shift ;;
   "") die_usage "a verb is required — one of: $VERBS" ;;
   *)  die_usage "unknown verb '$VERB' — one of: $VERBS" ;;
 esac
-OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP=""
+OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP="" OPT_ADD="" OPT_TITLE="" OPT_BODY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch)    OPT_BRANCH="${2:-}"; shift 2 ;;
@@ -78,6 +95,12 @@ while [ $# -gt 0 ]; do
     --base=*)    OPT_BASE="${1#--base=}"; shift ;;
     --check)     OPT_CHECK=1; shift ;;
     --multistep) OPT_MULTISTEP=1; shift ;;
+    --add)       OPT_ADD="${2:-}"; shift 2 ;;
+    --add=*)     OPT_ADD="${1#--add=}"; shift ;;
+    --title)     OPT_TITLE="${2:-}"; shift 2 ;;
+    --title=*)   OPT_TITLE="${1#--title=}"; shift ;;
+    --body-file) OPT_BODY="${2:-}"; shift 2 ;;
+    --body-file=*) OPT_BODY="${1#--body-file=}"; shift ;;
     *) die_usage "unknown argument '$1'" ;;
   esac
 done
@@ -427,4 +450,170 @@ Jira: https://$jurl/browse/$key}" > "$ERRF.body"
   exit 0
 }
 
-"s_$VERB"
+# --- the executor's verbs (provision, sync, push, open-prs) --------------------
+
+fail() { printf 'error=%s\n' "$1"; exit 1; }
+
+# on_branch <dir> — the repo at <dir> has the issue branch checked out.
+on_branch() { [ "$(git -C "$1" branch --show-current 2>/dev/null)" = "$OPT_BRANCH" ]; }
+
+members_of() { printf '%s\n' "$1" | awk -F'\t' '$4 == "member"'; }   # members_of <repo_set>
+
+v_provision() {
+  local set mem repo slug base role on pinned="" provisioned="" name
+  need_branch
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  mem=$(members_of "$set")
+  if [ -z "$mem" ]; then printf 'provisioned=\npinned=\n'; exit 0; fi
+  on_branch "$ROOT" || fail "run provision from the issue worktree, on $OPT_BRANCH (the root is on '$(git -C "$ROOT" branch --show-current 2>/dev/null)')"
+  if [ -n "$OPT_ADD" ]; then
+    printf '%s\n' "$mem" | awk -F'\t' -v p="$OPT_ADD" '$1 == p { f = 1 } END { exit !f }' \
+      || fail "--add $OPT_ADD: not a member (JST_MEMBERS lists the members)"
+  fi
+  git -C "$ROOT" submodule update -q --init --recursive 2>"$ERRF" || fail "submodule update failed: $(awk 'NF{print; exit}' "$ERRF")"
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    if [ "$repo" = "$OPT_ADD" ] && ! git -C "$ROOT/$repo" ls-remote --exit-code --heads origin "$OPT_BRANCH" >/dev/null 2>&1; then
+      git -C "$ROOT/$repo" fetch -q origin "$base" 2>"$ERRF" || fail "$repo: can't fetch origin/$base: $(awk 'NF{print; exit}' "$ERRF")"
+      git -C "$ROOT/$repo" switch -q -c "$OPT_BRANCH" "origin/$base" 2>"$ERRF" || fail "$repo: can't create $OPT_BRANCH: $(awk 'NF{print; exit}' "$ERRF")"
+      git -C "$ROOT/$repo" push -q -u origin "$OPT_BRANCH" 2>"$ERRF" || fail "$repo: created $OPT_BRANCH, but the push failed: $(awk 'NF{print; exit}' "$ERRF")"
+    fi
+    if git -C "$ROOT/$repo" ls-remote --exit-code --heads origin "$OPT_BRANCH" >/dev/null 2>&1; then
+      if ! on_branch "$ROOT/$repo"; then
+        git -C "$ROOT/$repo" fetch -q origin "$OPT_BRANCH" 2>/dev/null
+        if git -C "$ROOT/$repo" rev-parse -q --verify "refs/heads/$OPT_BRANCH" >/dev/null; then
+          git -C "$ROOT/$repo" switch -q "$OPT_BRANCH" 2>"$ERRF"
+        else
+          git -C "$ROOT/$repo" switch -q -c "$OPT_BRANCH" --track "origin/$OPT_BRANCH" 2>"$ERRF"
+        fi || fail "$repo: can't switch to $OPT_BRANCH: $(awk 'NF{print; exit}' "$ERRF")"
+      fi
+      git -C "$ROOT/$repo" config "branch.$OPT_BRANCH.parentbranch" "$base"
+      git -C "$ROOT/$repo" submodule update -q --init --recursive 2>/dev/null
+      provisioned="${provisioned:+$provisioned }$repo"
+    else
+      pinned="${pinned:+$pinned }$repo"
+    fi
+  done <<EOF
+$mem
+EOF
+  git -C "$ROOT" config push.recurseSubmodules check
+  printf 'provisioned=%s\npinned=%s\n' "$provisioned" "$pinned"
+  exit 0
+}
+
+v_sync() {
+  local set mem repo slug base role synced="" files
+  need_branch
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  mem=$(members_of "$set")
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    on_branch "$ROOT/$repo" || continue
+    git -C "$ROOT/$repo" fetch -q origin "$base" 2>"$ERRF" || fail "$repo: can't fetch origin/$base: $(awk 'NF{print; exit}' "$ERRF")"
+    if ! git -C "$ROOT/$repo" merge -q --no-edit "origin/$base" >/dev/null 2>"$ERRF"; then
+      files=$(git -C "$ROOT/$repo" diff --name-only --diff-filter=U | paste -sd' ' -)
+      printf 'conflict=%s\nfiles=%s\nsynced=%s\n' "$repo" "${files:-$(awk 'NF{print; exit}' "$ERRF")}" "$synced"
+      exit 1
+    fi
+    synced="${synced:+$synced }$repo"
+  done <<EOF
+$mem
+EOF
+  printf 'synced=%s\n' "$synced"
+  exit 0
+}
+
+# needs_push <dir> — the issue branch there has commits its upstream lacks, or no upstream.
+needs_push() {
+  local n
+  n=$(git -C "$1" rev-list --count '@{u}..HEAD' 2>/dev/null) || return 0
+  [ "${n:-0}" -gt 0 ]
+}
+
+v_push() {
+  local set mem repo slug base role pushed=""
+  need_branch
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  mem=$(members_of "$set")
+  while IFS=$'\t' read -r repo slug base role; do   # members first: the root may point at their commits
+    [ -n "$repo" ] || continue
+    on_branch "$ROOT/$repo" && needs_push "$ROOT/$repo" || continue
+    git -C "$ROOT/$repo" push -q -u origin "$OPT_BRANCH" 2>"$ERRF" || fail "$repo: push failed: $(awk 'NF{print; exit}' "$ERRF")"
+    pushed="${pushed:+$pushed }$repo"
+  done <<EOF
+$mem
+EOF
+  on_branch "$ROOT" || fail "the root isn't on $OPT_BRANCH"
+  # A single repo always pushes, as the executor always did; with members, only when it has work.
+  if [ -z "$mem" ] || needs_push "$ROOT"; then
+    git -C "$ROOT" -c push.recurseSubmodules=check push -q -u origin "$OPT_BRANCH" 2>"$ERRF" \
+      || fail "root: push failed: $(awk 'NF{print; exit}' "$ERRF")"
+    pushed="${pushed:+$pushed }."
+  fi
+  printf 'pushed=%s\n' "$pushed"
+  exit 0
+}
+
+PRSET_OPEN='<!-- jst:pr-set -->'; PRSET_CLOSE='<!-- /jst:pr-set -->'
+
+# with_set <body-file> <section> — the body without any old PR-set section, then the new one.
+with_set() {
+  awk -v o="$PRSET_OPEN" -v c="$PRSET_CLOSE" '$0 == o { skip = 1 } !skip { print } $0 == c { skip = 0 }' "$1" \
+    | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
+  printf '\n%s\n%s\n%s\n' "$PRSET_OPEN" "$2" "$PRSET_CLOSE"
+}
+
+v_open_prs() {
+  local set mem repo slug base role prsout rc eff ahead url targets="" rows="" key section
+  need_branch
+  [ -n "$OPT_TITLE" ] || die_usage "open-prs needs --title"
+  [ -f "$OPT_BODY" ] || die_usage "open-prs needs --body-file <an existing file>"
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  mem=$(members_of "$set")
+  key=$(printf '%s' "${OPT_BRANCH#*/}" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
+  if [ -z "$mem" ]; then
+    targets=$(printf '%s\n' "$set" | awk -F'\t' '$4 == "root"')
+  else
+    while IFS=$'\t' read -r repo slug base role; do
+      [ -n "$repo" ] || continue
+      git -C "$ROOT/$repo" fetch -q origin "$base" 2>/dev/null
+      ahead=$(git -C "$ROOT/$repo" rev-list --count "origin/$base..refs/heads/$OPT_BRANCH" 2>/dev/null || echo 0)
+      [ "${ahead:-0}" -gt 0 ] && targets="$targets$repo	$slug	$base	$role
+"
+    done <<EOF
+$mem
+EOF
+  fi
+  prsout=$(v_prs); rc=$?
+  [ "$rc" -eq 0 ] || fail "PRs unknown (prs exit $rc) — nothing opened"
+  printf 'repo\tslug\tpr\taction\turl\n'
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    eff=$(effective "$(printf '%s\n' "$prsout" | awk -F'\t' -v r="$repo" 'NR > 1 && $1 == r && $4 != "none"')" "$base")
+    case "$eff" in
+      stop*) fail "${eff#stop }" ;;
+      OPEN*) url=$(printf '%s\n' "$prsout" | awk -F'\t' -v r="$repo" -v n="${eff#OPEN }" 'NR > 1 && $1 == r && $3 == n { print $6 }')
+             printf '%s\t%s\t%s\texists\t%s\n' "$repo" "$slug" "${eff#OPEN }" "$url" ;;
+      *)     url=$($TMOUT_CMD gh pr create -R "$slug" --base "$base" --head "$OPT_BRANCH" --title "$OPT_TITLE" \
+                   --body-file "$OPT_BODY" 2>"$ERRF" | tail -1)
+             [ -n "$url" ] || fail "$slug: gh pr create failed: $(awk 'NF{print; exit}' "$ERRF")"
+             printf '%s\t%s\t%s\tcreated\t%s\n' "$repo" "$slug" "${url##*/}" "$url" ;;
+    esac
+  done <<EOF
+$targets
+EOF
+  [ -n "$mem" ] || exit 0
+  # Every open PR of the set lists the whole set, so a reviewer on any one sees the rest.
+  prsout=$(v_prs) || exit 0
+  section="**PR set** for $key (kept current by jira-sdlc):"$'\n'$(printf '%s\n' "$prsout" \
+    | awk -F'\t' 'NR > 1 && $3 != "-" { print "- " $2 "#" $3 " — " $4 }')
+  printf '%s\n' "$prsout" | awk -F'\t' 'NR > 1 && $4 == "OPEN" { print $2 "\t" $3 }' | while IFS=$'\t' read -r slug n; do
+    $TMOUT_CMD gh pr view "$n" -R "$slug" --json body --jq .body > "$ERRF.cur" 2>/dev/null || continue
+    with_set "$ERRF.cur" "$section" > "$ERRF.new"
+    cmp -s "$ERRF.cur" "$ERRF.new" || $TMOUT_CMD gh pr edit "$n" -R "$slug" --body-file "$ERRF.new" >/dev/null 2>&1
+  done
+  rm -f "$ERRF.cur" "$ERRF.new"
+  exit 0
+}
+
+"s_${VERB//-/_}"

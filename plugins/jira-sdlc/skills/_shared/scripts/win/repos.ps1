@@ -11,6 +11,10 @@
 #   prs       tab-separated PR rows: repo slug pr state base url
 #   gate      phase, reason, root, members — then the prs table
 #   land      land the merged member PRs; --check verifies the gitlinks
+#   provision put members whose issue branch is on origin onto it (--add: scope growth)
+#   sync      merge origin/<base> into each member on the issue branch
+#   push      push every repo with work its origin lacks, members first
+#   open-prs  one PR per repo that needs one, plus the PR-set section
 #
 # Exit 0 — ok. Exit 1 — land refused or failed, or --check failed. Exit 2 —
 # usage error (stderr only), or JST_MEMBERS is invalid (stdout ends with an
@@ -32,11 +36,12 @@ function Stop-Usage {
     exit 2
 }
 
-$Verbs = 'strategy, list, prs, gate, land'
+$Verbs = 'strategy, list, prs, gate, land, provision, sync, push, open-prs'
 $Verb = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 if (-not $Verb) { Stop-Usage "a verb is required — one of: $Verbs" }
-if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'land')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
+if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'land', 'provision', 'sync', 'push', 'open-prs')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
 $OptBranch = ''; $OptState = 'all'; $OptBase = ''; $OptCheck = $false; $OptMultistep = $false
+$OptAdd = ''; $OptTitle = ''; $OptBody = ''
 $i = 1
 while ($i -lt $args.Count) {
     $a = [string]$args[$i]
@@ -48,6 +53,12 @@ while ($i -lt $args.Count) {
     elseif ($a -like '--base=*')    { $OptBase = $a.Substring(7); $i += 1 }
     elseif ($a -eq '--check')       { $OptCheck = $true; $i += 1 }
     elseif ($a -eq '--multistep')   { $OptMultistep = $true; $i += 1 }
+    elseif ($a -eq '--add')         { $OptAdd = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--add=*')     { $OptAdd = $a.Substring(6); $i += 1 }
+    elseif ($a -eq '--title')       { $OptTitle = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--title=*')   { $OptTitle = $a.Substring(8); $i += 1 }
+    elseif ($a -eq '--body-file')   { $OptBody = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--body-file=*') { $OptBody = $a.Substring(12); $i += 1 }
     else { Stop-Usage "unknown argument '$a'" }
 }
 if ($OptState -notin @('all', 'open')) { Stop-Usage "--state must be all or open (got '$OptState')" }
@@ -423,5 +434,175 @@ function v_land {
     Exit-With 0
 }
 
-& "s_$Verb"
+# --- the executor's verbs (provision, sync, push, open-prs) --------------------
+
+function Stop-Run { param([string]$Message) Write-Output "error=$Message"; Exit-With 1 }
+
+function Test-OnBranch { param([string]$Dir)
+    $b = (& git -C $Dir branch --show-current 2>$null)
+    return ($b -and ([string]$b).Trim() -eq $script:OptBranch) }
+
+function Get-Members { param($Set) return @($Set | Where-Object { $_.Role -eq 'member' }) }
+
+function Test-RemoteBranch { param([string]$Dir)
+    & git -C $Dir ls-remote --exit-code --heads origin $script:OptBranch > $null 2>&1
+    return ($LASTEXITCODE -eq 0) }
+
+function v_provision {
+    Use-Branch; Assert-ValidSet
+    $set = @(Get-RepoSet); $mem = Get-Members $set
+    if ($mem.Count -eq 0) { Write-Output 'provisioned='; Write-Output 'pinned='; Exit-With 0 }
+    if (-not (Test-OnBranch $Root)) {
+        $c = (& git -C $Root branch --show-current 2>$null); $c = if ($c) { ([string]$c).Trim() } else { '' }
+        Stop-Run "run provision from the issue worktree, on $($script:OptBranch) (the root is on '$c')"
+    }
+    if ($OptAdd -and -not (@($mem | Where-Object { $_.Repo -eq $OptAdd }).Count)) { Stop-Run "--add ${OptAdd}: not a member (JST_MEMBERS lists the members)" }
+    & git -C $Root submodule update -q --init --recursive 2> $ErrFile
+    if ($LASTEXITCODE -ne 0) { Stop-Run "submodule update failed: $(Get-FirstLine $ErrFile)" }
+    $prov = @(); $pin = @()
+    foreach ($r in $mem) {
+        $d = "$Root/$($r.Repo)"
+        if ($r.Repo -eq $OptAdd -and -not (Test-RemoteBranch $d)) {
+            & git -C $d fetch -q origin $r.Base 2> $ErrFile
+            if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): can't fetch origin/$($r.Base): $(Get-FirstLine $ErrFile)" }
+            & git -C $d switch -q -c $script:OptBranch "origin/$($r.Base)" 2> $ErrFile
+            if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): can't create $($script:OptBranch): $(Get-FirstLine $ErrFile)" }
+            & git -C $d push -q -u origin $script:OptBranch 2> $ErrFile
+            if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): created $($script:OptBranch), but the push failed: $(Get-FirstLine $ErrFile)" }
+        }
+        if (Test-RemoteBranch $d) {
+            if (-not (Test-OnBranch $d)) {
+                & git -C $d fetch -q origin $script:OptBranch 2>$null | Out-Null
+                & git -C $d rev-parse -q --verify "refs/heads/$($script:OptBranch)" > $null 2>&1
+                if ($LASTEXITCODE -eq 0) { & git -C $d switch -q $script:OptBranch 2> $ErrFile }
+                else { & git -C $d switch -q -c $script:OptBranch --track "origin/$($script:OptBranch)" 2> $ErrFile }
+                if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): can't switch to $($script:OptBranch): $(Get-FirstLine $ErrFile)" }
+            }
+            & git -C $d config "branch.$($script:OptBranch).parentbranch" $r.Base
+            & git -C $d submodule update -q --init --recursive 2>$null | Out-Null
+            $prov += $r.Repo
+        } else { $pin += $r.Repo }
+    }
+    & git -C $Root config push.recurseSubmodules check
+    Write-Output "provisioned=$($prov -join ' ')"; Write-Output "pinned=$($pin -join ' ')"
+    Exit-With 0
+}
+
+function v_sync {
+    Use-Branch; Assert-ValidSet
+    $synced = @()
+    foreach ($r in (Get-Members @(Get-RepoSet))) {
+        $d = "$Root/$($r.Repo)"
+        if (-not (Test-OnBranch $d)) { continue }
+        & git -C $d fetch -q origin $r.Base 2> $ErrFile
+        if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): can't fetch origin/$($r.Base): $(Get-FirstLine $ErrFile)" }
+        & git -C $d merge -q --no-edit "origin/$($r.Base)" > $null 2> $ErrFile
+        if ($LASTEXITCODE -ne 0) {
+            $files = @(& git -C $d diff --name-only --diff-filter=U 2>$null | Where-Object { $_ }) -join ' '
+            if (-not $files) { $files = Get-FirstLine $ErrFile }
+            Write-Output "conflict=$($r.Repo)"; Write-Output "files=$files"; Write-Output "synced=$($synced -join ' ')"
+            Exit-With 1
+        }
+        $synced += $r.Repo
+    }
+    Write-Output "synced=$($synced -join ' ')"
+    Exit-With 0
+}
+
+function Test-NeedsPush { param([string]$Dir)
+    $n = (& git -C $Dir rev-list --count '@{u}..HEAD' 2>$null)
+    if ($LASTEXITCODE -ne 0) { return $true }
+    $k = 0; [void][int]::TryParse(([string]$n).Trim(), [ref]$k); return ($k -gt 0) }
+
+function v_push {
+    Use-Branch; Assert-ValidSet
+    $mem = Get-Members @(Get-RepoSet); $pushed = @()
+    foreach ($r in $mem) {
+        $d = "$Root/$($r.Repo)"
+        if (-not ((Test-OnBranch $d) -and (Test-NeedsPush $d))) { continue }
+        & git -C $d push -q -u origin $script:OptBranch 2> $ErrFile
+        if ($LASTEXITCODE -ne 0) { Stop-Run "$($r.Repo): push failed: $(Get-FirstLine $ErrFile)" }
+        $pushed += $r.Repo
+    }
+    if (-not (Test-OnBranch $Root)) { Stop-Run "the root isn't on $($script:OptBranch)" }
+    if ($mem.Count -eq 0 -or (Test-NeedsPush $Root)) {
+        & git -C $Root -c push.recurseSubmodules=check push -q -u origin $script:OptBranch 2> $ErrFile
+        if ($LASTEXITCODE -ne 0) { Stop-Run "root: push failed: $(Get-FirstLine $ErrFile)" }
+        $pushed += '.'
+    }
+    Write-Output "pushed=$($pushed -join ' ')"
+    Exit-With 0
+}
+
+$PrSetOpen = '<!-- jst:pr-set -->'; $PrSetClose = '<!-- /jst:pr-set -->'
+
+function Get-WithSet { param([string]$Body, [string]$Section)   # the body without an old PR-set section, then the new one
+    $keep = @(); $skip = $false
+    foreach ($l in ($Body -split "`r?`n")) {
+        if ($l -eq $PrSetOpen) { $skip = $true }
+        if (-not $skip) { $keep += $l }
+        if ($l -eq $PrSetClose) { $skip = $false }
+    }
+    while ($keep.Count -gt 0 -and -not $keep[-1].Trim()) { $keep = @($keep | Select-Object -First ($keep.Count - 1)) }
+    return (($keep -join "`n") + "`n`n$PrSetOpen`n$Section`n$PrSetClose`n")
+}
+
+function v_open_prs {
+    Use-Branch
+    if (-not $OptTitle) { Stop-Usage 'open-prs needs --title' }
+    if (-not ($OptBody -and (Test-Path -LiteralPath $OptBody -PathType Leaf))) { Stop-Usage 'open-prs needs --body-file <an existing file>' }
+    Assert-ValidSet
+    $set = @(Get-RepoSet); $mem = Get-Members $set
+    $tail = $script:OptBranch -replace '^[^/]*/', ''
+    $key = if ($tail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
+    $targets = @()
+    if ($mem.Count -eq 0) { $targets = @($set | Where-Object { $_.Role -eq 'root' }) }
+    else {
+        foreach ($r in $mem) {
+            $d = "$Root/$($r.Repo)"
+            & git -C $d fetch -q origin $r.Base 2>$null | Out-Null
+            $a = (& git -C $d rev-list --count "origin/$($r.Base)..refs/heads/$($script:OptBranch)" 2>$null)
+            $k = 0; [void][int]::TryParse(([string]$a).Trim(), [ref]$k)
+            if ($k -gt 0) { $targets += $r }
+        }
+    }
+    $t = Get-PrsTable
+    if ($t.Rc -ne 0) { Stop-Run "PRs unknown (prs exit $($t.Rc)) — nothing opened" }
+    $out = @((@('repo', 'slug', 'pr', 'action', 'url') -join "`t"))
+    foreach ($r in $targets) {
+        $eff = Get-Effective (Get-RepoPrRows $t.Lines $r.Repo) $r.Base
+        if ($eff.StartsWith('stop')) { Stop-Run $eff.Substring(5) }
+        if ($eff.StartsWith('OPEN')) {
+            $n = $eff.Substring(5)
+            $url = @($t.Lines | Select-Object -Skip 1 | Where-Object { $f = ([string]$_) -split "`t"; $f[0] -eq $r.Repo -and $f[2] -eq $n } | ForEach-Object { (([string]$_) -split "`t")[5] }) | Select-Object -First 1
+            $out += "$($r.Repo)`t$($r.Slug)`t$n`texists`t$url"
+        } else {
+            $url = @(& gh pr create -R $r.Slug --base $r.Base --head $script:OptBranch --title $OptTitle --body-file $OptBody 2> $ErrFile) | Select-Object -Last 1
+            if (-not $url) { Stop-Run "$($r.Slug): gh pr create failed: $(Get-FirstLine $ErrFile)" }
+            $url = ([string]$url).Trim()
+            $out += "$($r.Repo)`t$($r.Slug)`t$($url.Split('/')[-1])`tcreated`t$url"
+        }
+    }
+    $out | ForEach-Object { Write-Output $_ }
+    if ($mem.Count -eq 0) { Exit-With 0 }
+    $t2 = Get-PrsTable
+    if ($t2.Rc -ne 0) { Exit-With 0 }
+    $rows = @($t2.Lines | Select-Object -Skip 1 | Where-Object { (([string]$_) -split "`t")[2] -ne '-' })
+    $section = "**PR set** for $key (kept current by jira-sdlc):`n" + ((@($rows | ForEach-Object { $f = ([string]$_) -split "`t"; "- $($f[1])#$($f[2]) — $($f[3])" })) -join "`n")
+    foreach ($row in @($rows | Where-Object { (([string]$_) -split "`t")[3] -eq 'OPEN' })) {
+        $f = ([string]$row) -split "`t"
+        $cur = (& gh pr view $f[2] -R $f[1] --json body --jq .body 2>$null | Out-String)
+        if ($LASTEXITCODE -ne 0) { continue }
+        $cur = $cur -replace "`r?`n$", ''
+        $new = Get-WithSet $cur $section
+        if ($new -ne ($cur + "`n")) {
+            $nf = "$ErrFile.new"; [System.IO.File]::WriteAllText($nf, $new)
+            & gh pr edit $f[2] -R $f[1] --body-file $nf > $null 2>&1
+            Remove-Item -LiteralPath $nf -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Exit-With 0
+}
+
+& "s_$($Verb -replace '-', '_')"
 Exit-With 0

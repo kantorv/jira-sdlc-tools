@@ -21,3 +21,8 @@ s_list() {
 s_prs()  { v_prs; }
 s_gate() { v_gate; }
 s_land() { v_land; }
+
+s_provision() { v_provision; }
+s_sync()      { v_sync; }
+s_push()      { v_push; }
+s_open_prs()  { v_open_prs; }

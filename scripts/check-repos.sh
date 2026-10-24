@@ -253,7 +253,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land, provision, sync, push, open-prs\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -381,13 +381,20 @@ case "$1 $2" in
     [ -f "$D/prs/$k.emptyonce" ] && { rm "$D/prs/$k.emptyonce"; exit 0; }
     [ -f "$D/prs/$k" ] && cat "$D/prs/$k"; exit 0 ;;
   "pr view")
-    s=$(opt -R "$@"); cat "$D/merge/${s//\//_}#$3"; exit 0 ;;
+    s=$(opt -R "$@")
+    if [ "$(opt --json "$@")" = body ]; then cat "$D/body/${s//\//_}#$3" 2>/dev/null; exit 0; fi
+    cat "$D/merge/${s//\//_}#$3"; exit 0 ;;
+  "pr edit")
+    s=$(opt -R "$@"); cp "$(opt --body-file "$@")" "$D/body/${s//\//_}#$3"
+    echo "$s#$3" >> "$D/edited"; exit 0 ;;
   "pr create")
     s=$(opt -R "$@"); h=$(opt --head "$@"); b=$(opt --base "$@")
     cp "$(opt --body-file "$@")" "$D/created.body"
     printf '%s %s %s %s\n' "$s" "$b" "$h" "$(opt --title "$@")" >> "$D/created"
-    u="https://github.com/$s/pull/99"
-    printf '99\tOPEN\t%s\t%s\n' "$b" "$u" >> "$D/prs/$(key "$s" "$h")"
+    n=99; [ -f "$D/next" ] && n=$(cat "$D/next")
+    mkdir -p "$D/body"; cp "$(opt --body-file "$@")" "$D/body/${s//\//_}#$n"
+    u="https://github.com/$s/pull/$n"
+    printf '%s\tOPEN\t%s\t%s\n' "$n" "$b" "$u" >> "$D/prs/$(key "$s" "$h")"
     echo "$u"; exit 0 ;;
 esac
 if [ "$1" = api ]; then
@@ -530,6 +537,79 @@ git -C "$W/app" checkout -q "$FEATURE"; git -C "$W" add app; git -C "$W" commit 
 git -C "$W" -c push.recurseSubmodules=no push -q origin "$B"
 both4 "land --check: a gitlink off its member's base fails" "$W" \
   "$CH\napp\t${FEATURE:0:12}\tdevelopment\tnot on origin/development\nserver\t$(git -C "$W" ls-tree HEAD server | awk '{print substr($3,1,12)}')\tdevelopment\tok\nexit=1" land --check
+# --- 5. the executor's verbs: provision, sync, push, open-prs ----------------------
+echo "repos.sh — provision, sync, push and open-prs (fake gh, real git)"
+
+# These verbs change state, so every port gets a workspace of its own: a parent
+# with members app and server, and bare remotes, under GitHub owner <ns>.
+E=feature/XX-8-exec
+mk5() { # mk5 <ns> — build $LAB/<ns>/W, the issue worktree, with app on $E and server not
+  local ns="$1" r="$LAB/$1/remotes" n
+  mkdir -p "$r"
+  for n in parent app server; do git config --global "url.$r/$n.git.insteadOf" "git@github.com:$ns/$n.git"; done
+  mkremote "$r" app; mkremote "$r" server
+  mkrepo "$r/seed-parent"; git clone -q --bare "$r/seed-parent" "$r/parent.git"
+  git clone -q "git@github.com:$ns/parent.git" "$LAB/$ns/main"
+  mkdir -p "$LAB/$ns/main/.jst"
+  printf 'DEFAULT_BASE_BRANCH=development\nJST_MEMBERS = app server\n' > "$LAB/$ns/main/.jst/jira-sdlc-tools.env"
+  git -C "$LAB/$ns/main" submodule add -q -b development "git@github.com:$ns/app.git" app
+  git -C "$LAB/$ns/main" submodule add -q -b development "git@github.com:$ns/server.git" server
+  git -C "$LAB/$ns/main" add .jst; git -C "$LAB/$ns/main" commit -qm members; git -C "$LAB/$ns/main" push -q origin development
+  git -C "$LAB/$ns/main" branch "$E"; git -C "$LAB/$ns/main" push -q -u origin "$E"
+  git -C "$LAB/$ns/main/app" switch -qc "$E"; git -C "$LAB/$ns/main/app" push -q -u origin "$E"   # app takes part
+  git -C "$LAB/$ns/main" worktree add -q "$LAB/$ns/W" "$E"
+}
+for port in sh ${PORTS:+ps}; do
+  ns="e-$port"; mk5 "$ns"; W5="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  is "provision: app onto the branch, server pinned$sfx" "$(rp $port "$W5" provision)" "$(printf 'provisioned=app\npinned=server\nexit=0')"
+  is "  …app is on $E$sfx" "$(git -C "$W5/app" branch --show-current)" "$E"
+  is "  …its parentbranch is set inside the worktree's member$sfx" "$(git -C "$W5/app" config "branch.$E.parentbranch")" development
+  is "  …the push-order guard is on$sfx" "$(git -C "$W5" config push.recurseSubmodules)" check
+  is "provision again: the same, nothing changed$sfx" "$(rp $port "$W5" provision)" "$(printf 'provisioned=app\npinned=server\nexit=0')"
+  is "provision --add a non-member$sfx" "$(rp $port "$W5" provision --add nope)" "$(printf 'error=--add nope: not a member (JST_MEMBERS lists the members)\nexit=1')"
+  is "provision --add server: scope growth$sfx" "$(rp $port "$W5" provision --add server)" "$(printf 'provisioned=app server\npinned=\nexit=0')"
+  is "  …server's branch is on its origin$sfx" "$(git -C "$W5/server" ls-remote --heads origin "$E" | wc -l | tr -d ' ')" 1
+  is "sync: both current$sfx" "$(rp $port "$W5" sync)" "$(printf 'synced=app server\nexit=0')"
+  # A conflict: app's base and app's branch change the same line.
+  echo base > "$LAB/$ns/seed-tmp"; git clone -q "git@github.com:$ns/app.git" "$LAB/$ns/c"
+  echo "from base" > "$LAB/$ns/c/README.md"; git -C "$LAB/$ns/c" commit -qam base; git -C "$LAB/$ns/c" push -q origin development
+  echo "from the branch" > "$W5/app/README.md"; git -C "$W5/app" commit -qam branch
+  is "sync: a conflict stops the run and names it$sfx" "$(rp $port "$W5" sync)" "$(printf 'conflict=app\nfiles=README.md\nsynced=\nexit=1')"
+  git -C "$W5/app" merge --abort
+  git -C "$W5/app" reset -q --hard "origin/$E"   # back to the pushed branch
+  echo work > "$W5/app/work.txt"; git -C "$W5/app" add work.txt; git -C "$W5/app" commit -qm "XX-8 work"
+  is "push: the member with work, not the root$sfx" "$(rp $port "$W5" push)" "$(printf 'pushed=app\nexit=0')"
+  is "  …it reached the member's origin$sfx" "$(git -C "$W5/app" rev-list --count "origin/$E..HEAD")" 0
+  is "push again: nothing to push$sfx" "$(rp $port "$W5" push)" "$(printf 'pushed=\nexit=0')"
+  # open-prs: app has commits ahead of its base; server's branch is empty, so it gets no PR.
+  clearfgh; rm -rf "$FGH/body" "$FGH/created" "$FGH/edited"; echo 7 > "$FGH/next"
+  printf 'XX-8: the work.\n' > "$LAB/$ns/body.md"
+  is "open-prs: one PR, for the member with commits$sfx" "$(rp $port "$W5" open-prs --title "XX-8: work" --body-file "$LAB/$ns/body.md")" \
+    "$(printf 'repo\tslug\tpr\taction\turl\napp\t%s/app\t7\tcreated\thttps://github.com/%s/app/pull/7\nexit=0' "$ns" "$ns")"
+  is "  …it went to the member's base$sfx" "$(cat "$FGH/created")" "$ns/app development $E XX-8: work"
+  grep -q "^- $ns/app#7 — OPEN$" "$FGH/body/${ns}_app#7" && ok "  …its body carries the PR set$sfx" || no "  …PR-set section$sfx: $(cat "$FGH/body/${ns}_app#7")"
+  is "open-prs again: it exists, nothing created$sfx" "$(rp $port "$W5" open-prs --title "XX-8: work" --body-file "$LAB/$ns/body.md")" \
+    "$(printf 'repo\tslug\tpr\taction\turl\napp\t%s/app\t7\texists\thttps://github.com/%s/app/pull/7\nexit=0' "$ns" "$ns")"
+  # Scope grew: server gets a commit, and its new PR joins the set in both bodies.
+  echo more > "$W5/server/more.txt"; git -C "$W5/server" add more.txt; git -C "$W5/server" commit -qm "XX-8 more"; rp $port "$W5" push >/dev/null
+  echo 8 > "$FGH/next"
+  rp $port "$W5" open-prs --title "XX-8: work" --body-file "$LAB/$ns/body.md" >/dev/null
+  grep -q "^- $ns/server#8 — OPEN$" "$FGH/body/${ns}_app#7" && ok "  …a new PR is added to the set in the older PR$sfx" || no "  …app body: $(cat "$FGH/body/${ns}_app#7")"
+  is "  …and the section isn't duplicated$sfx" "$(grep -c '<!-- jst:pr-set -->' "$FGH/body/${ns}_app#7")" 1
+done
+# Single repo: push always pushes, open-prs opens the root's PR with no PR-set section.
+for port in sh ${PORTS:+ps}; do
+  sfx=""; [ "$port" = ps ] && sfx=" (win)"; S5="$LAB/solo-$port"
+  git clone -q git@github.com:acme/solo.git "$S5"; mkdir -p "$S5/.jst"; printf 'DEFAULT_BASE_BRANCH=development\n' > "$S5/.jst/jira-sdlc-tools.env"
+  git -C "$S5" switch -qc "feature/XX-9-$port"; echo x > "$S5/x.txt"; git -C "$S5" add x.txt; git -C "$S5" commit -qm x
+  is "single: provision has nothing to do$sfx" "$(rp $port "$S5" provision)" "$(printf 'provisioned=\npinned=\nexit=0')"
+  is "single: push pushes the branch$sfx" "$(rp $port "$S5" push)" "$(printf 'pushed=.\nexit=0')"
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; echo 3 > "$FGH/next"; printf 'XX-9.\n' > "$LAB/b9.md"
+  is "single: open-prs opens the root's PR into --base$sfx" "$(rp $port "$S5" open-prs --title "XX-9: x" --body-file "$LAB/b9.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\tacme/solo\t3\tcreated\thttps://github.com/acme/solo/pull/3\nexit=0')"
+  grep -q 'jst:pr-set' "$FGH/body/acme_solo#3" && no "single: a PR-set section was added$sfx" || ok "  …no PR-set section on a single repo$sfx"
+done
+
 unset GIT_CONFIG_GLOBAL
 
 echo
