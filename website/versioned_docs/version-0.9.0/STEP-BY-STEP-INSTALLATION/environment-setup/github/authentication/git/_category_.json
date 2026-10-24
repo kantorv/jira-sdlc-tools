@@ -1,0 +1,9 @@
+{
+  "label": "git",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/git-authentication",
+    "description": "How git itself (commits, pushes, branches) authenticates."
+  }
+}
