@@ -16,3 +16,9 @@ function s_list {
     $b = if ($BaseBranch) { $BaseBranch } else { '-' }
     Write-Output (Get-RepoRow '.' 'root' $b @())
 }
+
+# The PR verbs work on the repo set, and a single repo is a set of one: the
+# shared implementations in repos.ps1 need nothing from this strategy.
+function s_prs  { v_prs }
+function s_gate { v_gate }
+function s_land { v_land }

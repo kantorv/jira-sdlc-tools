@@ -15,3 +15,9 @@ s_list() {
   printf '%s\n' "$LIST_HEADER"
   repo_row . root "${BASE_BRANCH:--}" ""
 }
+
+# The PR verbs work on the repo set, and a single repo is a set of one: the
+# shared implementations in repos.sh need nothing from this strategy.
+s_prs()  { v_prs; }
+s_gate() { v_gate; }
+s_land() { v_land; }

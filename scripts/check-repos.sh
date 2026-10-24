@@ -253,7 +253,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -330,6 +330,207 @@ gsub -C "$M" submodule deinit -q -f server
 rows "a member not checked out" "$GHA\n$RSOK\n$APPOK\n| member_repo[server] | FAIL | not checked out |"
 setmembers "$M" "app nope"
 rows "invalid JST_MEMBERS" "$GHA\n| repo_strategy | FAIL | JST_MEMBERS lists 'nope', which isn't a top-level submodule in .gitmodules |"
+
+# --- 4. prs, gate and land ---------------------------------------------------------
+echo "repos.sh — prs, gate and land (fake gh, real git)"
+
+# Members with GitHub-shaped origins that really fetch from local bare repos:
+# url.*.insteadOf in a lab-only global config. The fake gh reads its answers
+# from $FGH: prs/<owner_repo>@<branch> holds `gh pr list`'s rows.
+export GIT_CONFIG_GLOBAL="$LAB/gitconfig"
+LR="$LAB/lr"; mkdir -p "$LR"
+git config --global protocol.file.allow always
+git config --global user.email t@t; git config --global user.name t
+for n in parent app server solo; do
+  git config --global "url.$LR/$n.git.insteadOf" "git@github.com:acme/$n.git"
+done
+for n in app server; do mkremote "$LR" "$n"; done
+mkrepo "$LR/seed-parent"; git clone -q --bare "$LR/seed-parent" "$LR/parent.git"
+mkrepo "$LR/seed-solo";   git clone -q --bare "$LR/seed-solo"   "$LR/solo.git"
+
+L="$LAB/L"
+git clone -q git@github.com:acme/parent.git "$L"
+mkdir -p "$L/.jst"
+printf 'PROJECT-KEY=XX\nDEFAULT_BASE_BRANCH=development\nPRODUCTION_BRANCH=main\nJST_MEMBERS = app server\n' > "$L/.jst/jira-sdlc-tools.env"
+printf 'jira-sdlc-tools.local.env\n' > "$L/.jst/.gitignore"
+printf 'JIRA_ACCOUNT_URL=example.atlassian.net\nGITHUB_PAT_TOKEN=\n' > "$L/.jst/jira-sdlc-tools.local.env"
+git -C "$L" submodule add -q -b development git@github.com:acme/app.git app
+git -C "$L" submodule add -q -b development git@github.com:acme/server.git server
+git -C "$L" add .jst/.gitignore .jst/jira-sdlc-tools.env; git -C "$L" commit -qm "members"; git -C "$L" push -q origin development
+
+B=feature/XX-5-land
+git -C "$L" branch "$B"; git -C "$L" push -q origin "$B"
+git -C "$L/app" switch -qc "$B"; echo change > "$L/app/f.txt"; git -C "$L/app" add f.txt; git -C "$L/app" commit -qm "XX-5 change"; git -C "$L/app" push -q origin "$B"
+FEATURE=$(git -C "$L/app" rev-parse HEAD)
+W="$LAB/W"; git -C "$L" worktree add -q "$W" "$B"
+( cd "$W" && bash "$ROOT/$SCRIPTS/posix/ensure_local_env.sh" >/dev/null )   # a skill's step 1: the worktree's credentials
+git -C "$W" submodule update -q --init
+git -C "$W/app" fetch -q origin; git -C "$W/app" switch -q "$B"
+
+FGH="$LAB/fgh"; mkdir -p "$FGH/prs" "$FGH/merge" "$FGH/branches" "$FGH/ahead" "$LAB/bin4"
+export FGH
+cat > "$LAB/bin4/gh" <<'GH'
+#!/usr/bin/env bash
+D="$FGH"; key() { local b="${2//\//%}"; printf '%s@%s' "${1//\//_}" "$b"; }
+dec() { printf '%s' "$1" | sed 's#%2F#/#g'; }
+opt() { local want="$1"; shift; while [ $# -gt 0 ]; do [ "$1" = "$want" ] && { printf '%s' "$2"; return; }; shift; done; }
+case "$1 $2" in
+  "pr list")
+    k=$(key "$(opt -R "$@")" "$(opt --head "$@")"); echo "pr list $k" >> "$D/calls"
+    [ -f "$D/prs/$k.error" ] && { cat "$D/prs/$k.error" >&2; exit 1; }
+    [ -f "$D/prs/$k.emptyonce" ] && { rm "$D/prs/$k.emptyonce"; exit 0; }
+    [ -f "$D/prs/$k" ] && cat "$D/prs/$k"; exit 0 ;;
+  "pr view")
+    s=$(opt -R "$@"); cat "$D/merge/${s//\//_}#$3"; exit 0 ;;
+  "pr create")
+    s=$(opt -R "$@"); h=$(opt --head "$@"); b=$(opt --base "$@")
+    cp "$(opt --body-file "$@")" "$D/created.body"
+    printf '%s %s %s %s\n' "$s" "$b" "$h" "$(opt --title "$@")" >> "$D/created"
+    u="https://github.com/$s/pull/99"
+    printf '99\tOPEN\t%s\t%s\n' "$b" "$u" >> "$D/prs/$(key "$s" "$h")"
+    echo "$u"; exit 0 ;;
+esac
+if [ "$1" = api ]; then
+  p=$2; s=$(printf '%s' "$p" | cut -d/ -f2,3)
+  case "$p" in
+    repos/*/branches/*)
+      [ -f "$D/branches/$(key "$s" "$(dec "$(printf '%s' "$p" | cut -d/ -f5-)")")" ] && { echo '{}'; exit 0; }
+      echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+    repos/*/compare/*)
+      spec=${p#*/compare/}; f="$D/ahead/$(key "$s" "$(dec "${spec#*...}")")"
+      if [ -f "$f" ]; then cat "$f"; else echo 0; fi; exit 0 ;;
+  esac
+fi
+echo "fake gh: unexpected: $*" >&2; exit 1
+GH
+chmod +x "$LAB/bin4/gh"
+K() { printf '%s@%s' "acme_$1" "${2//\//%}"; }            # K <repo> <branch> — a fake-gh data key ('/' → '%')
+setpr() { printf '%b\n' "$3" > "$FGH/prs/$(K "$1" "$2")"; } # setpr <repo> <branch> <rows, \t \n escapes>
+clearfgh() { rm -f "$FGH"/prs/* "$FGH"/branches/* "$FGH"/ahead/* "$FGH"/merge/* "$FGH/calls"; }
+
+rp() { # rp <port> <dir> <args…> — run repos with the fake gh; stdout, then exit=<rc>
+  local port="$1" dir="$2"; shift 2
+  if [ "$port" = sh ]; then ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" bash "$REPOS_SH" "$@" 2>/dev/null; echo "exit=$?" )
+  else ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" pwsh -NoProfile -File "$REPOS_PS" "$@" 2>/dev/null; echo "exit=$?" ); fi | norm
+}
+both4() { # both4 <label> <dir> <expected> <args…> — the same expected output from both ports
+  local label="$1" dir="$2" want port; want=$(printf '%b' "$3"); shift 3
+  for port in sh ${PORTS:+ps}; do
+    is "$label$([ "$port" = ps ] && echo ' (win)')" "$(rp "$port" "$dir" "$@")" "$want"
+  done
+}
+PH='repo\tslug\tpr\tstate\tbase\turl'
+U='https://github.com/acme'
+
+# prs
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
+both4 "prs: a member's open PR, none elsewhere" "$W" \
+  "$PH\n.\tacme/parent\t-\tnone\t-\t-\napp\tacme/app\t11\tOPEN\tdevelopment\t$U/app/pull/11\nserver\tacme/server\t-\tnone\t-\t-\nexit=0" prs
+touch "$FGH/prs/$(K app "$B").emptyonce"
+both4 "prs: an empty answer is asked again before it counts" "$W" \
+  "$PH\n.\tacme/parent\t-\tnone\t-\t-\napp\tacme/app\t11\tOPEN\tdevelopment\t$U/app/pull/11\nserver\tacme/server\t-\tnone\t-\t-\nexit=0" prs
+echo "gh: HTTP 502" > "$FGH/prs/$(K server "$B").error"
+both4 "prs: a gh failure is unknown, not none (exit 4)" "$W" \
+  "$PH\n.\tacme/parent\t-\tnone\t-\t-\napp\tacme/app\t11\tOPEN\tdevelopment\t$U/app/pull/11\nserver\tacme/server\t-\terror\t-\t-\nexit=4" prs
+rm "$FGH/prs/$(K server "$B").error"
+both4 "prs --state open drops the rest" "$W" \
+  "$PH\n.\tacme/parent\t-\tnone\t-\t-\napp\tacme/app\t-\tnone\t-\t-\nserver\tacme/server\t-\tnone\t-\t-\nexit=0" prs --state open --branch feature/XX-6-other
+
+# gate — the phases, on fake data (git state doesn't matter here)
+G() { printf 'phase=%s\nreason=%s\nroot=%s\nmembers=%s\n' "$1" "$2" "$3" "$4"; }
+T() { printf '%b' "$PH"; for r in "$@"; do printf '\n%b' "$r"; done; printf '\nexit=0'; }
+NP=".\tacme/parent\t-\tnone\t-\t-"; NA="app\tacme/app\t-\tnone\t-\t-"; NS="server\tacme/server\t-\tnone\t-\t-"
+OA="app\tacme/app\t11\tOPEN\tdevelopment\t$U/app/pull/11"; MA="app\tacme/app\t11\tMERGED\tdevelopment\t$U/app/pull/11"
+clearfgh
+both4 "gate: none" "$W" "$(G none "no PR on $B in any repo" none none)\n$(T "$NP" "$NA" "$NS")" gate
+setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
+both4 "gate: review (a member PR open)" "$W" "$(G review "member PRs open: app" none open)\n$(T "$NP" "$OA" "$NS")" gate
+setpr app "$B" "11\tMERGED\tdevelopment\t$U/app/pull/11"
+both4 "gate: land (every member PR merged, no root PR)" "$W" \
+  "$(G land "every member PR is merged (app); no root PR yet — land it" none merged)\n$(T "$NP" "$MA" "$NS")" gate
+setpr parent "$B" "99\tOPEN\tdevelopment\t$U/parent/pull/99"
+OP=".\tacme/parent\t99\tOPEN\tdevelopment\t$U/parent/pull/99"
+both4 "gate: review-landing" "$W" "$(G review-landing "root PR #99 open; every member PR is merged (app)" open merged)\n$(T "$OP" "$MA" "$NS")" gate
+setpr parent "$B" "99\tMERGED\tdevelopment\t$U/parent/pull/99"
+both4 "gate: merged" "$W" "$(G merged "root PR #99 merged" merged merged)\n$(T ".\tacme/parent\t99\tMERGED\tdevelopment\t$U/parent/pull/99" "$MA" "$NS")" gate
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"; setpr parent "$B" "99\tOPEN\tdevelopment\t$U/parent/pull/99"
+both4 "gate: stop — the root PR is open while a member's is" "$W" \
+  "$(G stop "the root PR #99 is open while member PRs are still open (app) — it lands only after they merge" open open)\n$(T "$OP" "$OA" "$NS")" gate
+clearfgh; setpr app "$B" "11\tCLOSED\tdevelopment\t$U/app/pull/11"
+both4 "gate: stop — closed without merging" "$W" \
+  "$(G stop "acme/app#11 was closed without merging — abandoned on purpose? Ask before reviewing or replacing it" none none)\n$(T "$NP" "app\tacme/app\t11\tCLOSED\tdevelopment\t$U/app/pull/11" "$NS")" gate
+setpr app "$B" "11\tOPEN\tmain\t$U/app/pull/11"
+both4 "gate: stop — an open PR off its base" "$W" \
+  "$(G stop "acme/app#11 targets 'main', but its base is 'development'" none none)\n$(T "$NP" "app\tacme/app\t11\tOPEN\tmain\t$U/app/pull/11" "$NS")" gate
+setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11\n12\tOPEN\tdevelopment\t$U/app/pull/12"
+both4 "gate: stop — several open PRs in one repo" "$W" \
+  "$(G stop "several OPEN PRs in app" none none)\n$(T "$NP" "$OA" "app\tacme/app\t12\tOPEN\tdevelopment\t$U/app/pull/12" "$NS")" gate
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"; touch "$FGH/branches/$(K server "$B")"; echo 2 > "$FGH/ahead/$(K server "$B")"
+both4 "gate: stop — pushed, no PR" "$W" \
+  "$(G stop "server has commits on $B ahead of development, but no PR — pushed, no PR" none open)\n$(T "$NP" "$OA" "$NS")" gate
+echo 0 > "$FGH/ahead/$(K server "$B")"
+both4 "gate: an empty member branch doesn't take part" "$W" "$(G review "member PRs open: app" none open)\n$(T "$NP" "$OA" "$NS")" gate
+clearfgh; echo "gh: HTTP 502" > "$FGH/prs/$(K app "$B").error"
+both4 "gate: stop — PRs unknown" "$W" \
+  "$(G stop "PRs unknown for: app — gh failed; unknown is not none" unknown unknown)\n$(T "$NP" "app\tacme/app\t-\terror\t-\t-" "$NS")" gate
+both4 "gate: stop — multistep across members" "$W" \
+  "phase=stop\nreason=multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand\nroot=unknown\nmembers=unknown\nexit=0" gate --multistep
+
+# gate on a single repo: today's single-step phase check
+SO="$LAB/solo"; git clone -q git@github.com:acme/solo.git "$SO"; mkdir -p "$SO/.jst"
+printf 'DEFAULT_BASE_BRANCH=development\n' > "$SO/.jst/jira-sdlc-tools.env"
+SB=feature/XX-7-solo; NSO=".\tacme/solo\t-\tnone\t-\t-"
+clearfgh
+both4 "single: gate none" "$SO" "$(G none "no PR on $SB in any repo" none n/a)\n$(T "$NSO")" gate --branch "$SB"
+setpr solo "$SB" "5\tOPEN\tdevelopment\t$U/solo/pull/5"
+both4 "single: gate review" "$SO" "$(G review "PR #5 open" open n/a)\n$(T ".\tacme/solo\t5\tOPEN\tdevelopment\t$U/solo/pull/5")" gate --branch "$SB"
+both4 "single: gate stop when the PR is off --base" "$SO" \
+  "$(G stop "acme/solo#5 targets 'development', but its base is 'main'" none n/a)\n$(T ".\tacme/solo\t5\tOPEN\tdevelopment\t$U/solo/pull/5")" gate --branch "$SB" --base main
+setpr solo "$SB" "5\tMERGED\tdevelopment\t$U/solo/pull/5"
+both4 "single: gate merged" "$SO" "$(G merged "PR #5 merged" merged n/a)\n$(T ".\tacme/solo\t5\tMERGED\tdevelopment\t$U/solo/pull/5")" gate --branch "$SB"
+both4 "single: land has nothing to land" "$SO" "landed=\nreason=nothing to land — the set has no member gitlinks\nexit=0" land --branch "$SB"
+
+# land — a real squash merge, then the landing commit, push and PR
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
+HEAD0=$(git -C "$W" rev-parse HEAD)
+both4 "land refuses while a member PR is open, and changes nothing" "$W" \
+  "error=acme/app#11 is still open — merge it first; nothing changed\nexit=1" land
+is "  …the root's HEAD didn't move" "$(git -C "$W" rev-parse HEAD)" "$HEAD0"
+both4 "land refuses off the issue branch" "$L" \
+  "error=run land from the issue worktree, on $B (the root is on 'development')\nexit=1" land --branch "$B"
+# "Squash-merge" the member PR on its remote and delete the branch, as GitHub would.
+SQ="$LAB/sq"; git clone -q git@github.com:acme/app.git "$SQ"; git -C "$SQ" merge -q --squash "origin/$B" >/dev/null 2>&1
+git -C "$SQ" commit -qm "XX-5 change (#11)"; git -C "$SQ" push -q origin development; git -C "$SQ" push -q origin --delete "$B"
+SQUASH=$(git -C "$SQ" rev-parse HEAD)
+setpr app "$B" "11\tMERGED\tdevelopment\t$U/app/pull/11"; printf '%s\n' "$SQUASH" > "$FGH/merge/acme_app#11"
+for port in sh ${PORTS:+ps}; do
+  sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  # each port lands from the same starting point
+  git -C "$W" reset -q --hard "$HEAD0"; git -C "$W" -c push.recurseSubmodules=no push -q -f origin "$B"
+  git -C "$W/app" checkout -q "$B" 2>/dev/null || true
+  rm -f "$FGH/prs/$(K parent "$B")" "$FGH/created"
+  OUT=$(rp "$port" "$W" land)
+  NEWHEAD=$(git -C "$W" rev-parse HEAD)
+  is "land: lands the squash commit and opens the root PR$sfx" "$OUT" \
+    "$(printf 'landed=app\ncommit=%s\npr=%s\nexit=0' "$NEWHEAD" "$U/parent/pull/99")"
+  is "  …the gitlink is the merged commit, not the feature one$sfx" "$(git -C "$W" ls-tree HEAD app | awk '{print $3}')" "$SQUASH"
+  is "  …the commit is pushed$sfx" "$(git -C "$W" ls-remote origin "refs/heads/$B" | cut -f1)" "$NEWHEAD"
+  is "  …the PR went to the root's base$sfx" "$(cat "$FGH/created")" "acme/parent development $B XX-5: land app"
+  grep -q "^Jira: https://example.atlassian.net/browse/XX-5$" "$FGH/created.body" \
+    && ok "  …its body links the issue$sfx" || no "  …its body links the issue$sfx: $(cat "$FGH/created.body")"
+  is "land again: reuses the open PR, no second commit$sfx" "$(rp "$port" "$W" land)" \
+    "$(printf 'landed=app\ncommit=%s\npr=%s\nexit=0' "$NEWHEAD" "$U/parent/pull/99")"
+  is "  …still one root PR$sfx" "$(wc -l < "$FGH/created" | tr -d ' ')" 1
+done
+CH='repo\tgitlink\tbase\tresult'
+both4 "land --check: every gitlink on its base" "$W" \
+  "$CH\napp\t${SQUASH:0:12}\tdevelopment\tok\nserver\t$(git -C "$W" ls-tree HEAD server | awk '{print substr($3,1,12)}')\tdevelopment\tok\nexit=0" land --check
+# A gitlink to the orphaned feature commit — what a landing without MS-LA-1 would push.
+git -C "$W/app" checkout -q "$FEATURE"; git -C "$W" add app; git -C "$W" commit -qm "bad gitlink"
+git -C "$W" -c push.recurseSubmodules=no push -q origin "$B"
+both4 "land --check: a gitlink off its member's base fails" "$W" \
+  "$CH\napp\t${FEATURE:0:12}\tdevelopment\tnot on origin/development\nserver\t$(git -C "$W" ls-tree HEAD server | awk '{print substr($3,1,12)}')\tdevelopment\tok\nexit=1" land --check
+unset GIT_CONFIG_GLOBAL
 
 echo
 printf 'check-repos: %d passed, %d failed\n' "$PASS" "$FAIL"

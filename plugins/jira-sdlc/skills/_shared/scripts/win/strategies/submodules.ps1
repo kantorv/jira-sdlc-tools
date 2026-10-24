@@ -64,3 +64,20 @@ function s_list {
         }
     }
 }
+
+function s_prs { v_prs }
+
+function s_gate {
+    # Multistep across members needs per-member parent PRs first (see the bash twin).
+    if ($OptMultistep) {
+        Use-Branch
+        Write-Output 'phase=stop'
+        Write-Output "reason=multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand"
+        Write-Output 'root=unknown'
+        Write-Output 'members=unknown'
+        Exit-With 0
+    }
+    v_gate
+}
+
+function s_land { v_land }
