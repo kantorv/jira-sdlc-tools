@@ -380,8 +380,8 @@ nothing to keep in sync while the member PR was open.
 | 2. The pilot | convert `threejs-skeleton-proj` to submodules; the by-hand check (SKL-2) | **Done** (§10) |
 | 3. Reviewer | `prs`, `gate`, `land` / `land --check` (moved here from phase 6: the reviewer runs landing, Q2), and the reviewer reading every repo | **Done**: six headless runs on the pilot and chess-app ([phase 3 plan](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-3-plan.md)) |
 | 4. Executor | `provision` (the member step, and `parentbranch` *inside* worktree members, §10), `sync`, `push`, `open-prs` with a PR-set section | **Done**: SKL-4's reject → fix → approve → land loop on the pilot, and a chess-app single-repo run ([phase 4 plan](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-4-plan.md)) |
-| 5. Assigner | `provision` from the assigner's side (issue branches in every in-scope member, eagerly), and choosing the in-scope repos | Next |
-| 6. Setup and cleanup | `remove-check` (accepting the head of a merged PR, §10), jst-install's submodule questions and checks, a docs-site page | — |
+| 5. Assigner | `provision` from the assigner's side (issue branches in every in-scope member, eagerly), and choosing the in-scope repos | **Done**: SKL-5 went assigner → executor → reviewer → landing → Done with no hand steps but the merges ([phase 5 plan](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/proposals/_submodules-phase-5-plan.md)) |
+| 6. Setup and cleanup | `remove-check` (accepting the head of a merged PR, §10), jst-install's submodule questions and checks, a docs-site page | Next |
 
 Each phase ships on its own and leaves single-repo behaviour unchanged, checked by the golden-output tests. Multistep
 issues across members (phase 3's D2) and the type-1 strategy (Q5) come after phase 6.

@@ -2,7 +2,7 @@
 
 |  |  |
 | -- | -- |
-| Status | In progress. Unpublished (`_` prefix) |
+| Status | **Done** (§5). Unpublished (`_` prefix) |
 | Written | 2026-10-24, on `feature/JST-322-submodules-support-pilot-implementation` (after phase 4) |
 | Implements | Phase 5 of [the submodules strategy](submodules-strategy.md) §11 |
 
@@ -54,4 +54,28 @@ MS-SC-1), and leaves the worktree with those members already on the branch. A si
 
 ## 5. Progress
 
-(Filled in as the work lands.)
+- **Commit `6e2819f`:** `provision --add` takes a list (198 checks, both ports), plus the assigner's step 1 row, step 3
+  members, 5D scope, 6A.5 and the report.
+- **A1, pilot SKL-5, the first fully automatic chain** (Sonnet, medium effort). The task description named no repos or
+  files.
+  - **Assigner:** found that both members are in scope, the right files on each side, and "app first". It ran
+    `provision --add`. Bug found: after `cd`-ing into the worktree for `provision`, its next `jira.sh` call ran there,
+    with no credentials. Fixed with a subshell (`615ac91`).
+  - **Executor:** started from the assigner's worktree and implemented both sides, using a custom date field because
+    the source is stored as JSON. It opened two member PRs, each with the order stated and the PR-set section, gave
+    the workspace no PR, and moved the issue to In Review.
+  - **Reviewer:** approved both with "app first". Wording found: it asked "move to Done anyway?" on
+    R-MEMBERS-APPROVED. Step 7 now says not to ask at all, which put the reviewer over its allowance, so it went to
+    6,400 (`819a1a4`).
+  - **Human:** merged the members (app squash, server merge commit).
+  - **Reviewer:** `land` → `threejs-skeleton-studio#4` → `land --check` ok → R-LANDING-READY.
+  - **Human:** merged the landing PR, then Done.
+  - **Executor behaviour to decide (open):** to run tests, it copied the server's git-ignored `.env.local` into the
+    worktree and started the pilot's Docker stack (left running). The reviewer has a no-secrets rule and the executor
+    doesn't. Turning a worktree into a runnable instance is meant to be the project's `.jst/bootstrap.sh` job, and the
+    pilot has none.
+- **A0, chess-app CTA-270 (the real §14 setext bug):** single repo, unchanged. One issue, a branch from `development`,
+  a worktree, both comments, no `repos.sh` calls.
+- **CTA-270's executor run** produced the real one-line fix as PR `pgntools/chess-trainer-app#276`, left open for the
+  owner. It also shows the pattern for the open executor question: chess-app's own `.jst/bootstrap.sh` copied
+  `.env.local` into the worktree. The project, not the skill, decides how a worktree gets its environment.
