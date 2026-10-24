@@ -16,8 +16,9 @@
 # `NAME = value` grep, same local-overrides-team precedence. Keep them in sync.
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
-CFG_DIR=$(git rev-parse --show-toplevel 2>/dev/null || true)
+CFG_DIR=$(jst_root || true)
 CFG_DIR="${CFG_DIR:-$PWD}/.jst"
 
 cfg() {

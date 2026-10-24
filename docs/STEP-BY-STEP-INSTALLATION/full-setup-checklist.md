@@ -97,6 +97,10 @@ git --version; gh --version; $PSVersionTable.PSVersion
   with an SSH `origin` nothing breaks until `gh pr create` fails mid-task.
   The `gh_repo_access` row probes it; by hand:
   `bash     gh api repos/<OWNER>/<REPO> >/dev/null && echo "PAT can see it"     `
+- [ ] **Optional — with member repos (git submodules), the PAT reaches every
+  member too**, with the same two permissions. Each member gets a
+  `member_repo[<path>]` healthcheck row, and a 404 there is this same gap.
+  See [Submodules → Setup](../submodules/setup.md).
 
 ## Jira
 
@@ -155,6 +159,13 @@ git --version; gh --version; $PSVersionTable.PSVersion
   `pwd` prints (`/c/Users/...`), which Windows git and the plugin's PowerShell
   scripts can't resolve. `cygpath -w "$PWD"` converts one to the other, and
   the healthcheck WARNs if you paste the MSYS form.
+- [ ] **Optional — `JST_MEMBERS` lists the member repos**, *if* this
+  project's repos are git submodules of it. List the submodule paths
+  issues change, leaving vendored ones out, then run
+  `git config push.recurseSubmodules check`, and scope any merge → Done
+  automation to this repo. The `repo_strategy` row confirms it.
+  [Optional: member repos](configuration/optional-member-repos.md) has the
+  steps.
 - [ ] **Optional — `.jst/bootstrap.sh` and `.jst/teardown.sh` exist**, *if*
   you'll run more than one worktree's app at the same time. Skip this and
   nothing breaks: the `bootstrap` row is INFO either way and most projects

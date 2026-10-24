@@ -26,6 +26,7 @@
 #     [--project PROJ] [--role assigner] [--keys-out ./keys.tsv] [--dry-run]
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
@@ -65,7 +66,7 @@ done
 # Anchored at the git top-level (like jira.sh) rather than walked up from cwd,
 # so it resolves the same from any subdirectory.
 if [ -z "$PROJECT_KEY" ]; then
-  CFG_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+  CFG_ROOT=$(jst_root || printf '%s' "$PWD")
   envfile="$CFG_ROOT/.jst/jira-sdlc-tools.env"
   if [ -f "$envfile" ]; then
     k=$(grep -E '^PROJECT[-_]KEY=' "$envfile" | tail -1 | cut -d= -f2-)

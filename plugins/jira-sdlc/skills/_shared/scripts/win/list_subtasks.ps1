@@ -46,8 +46,8 @@ if (-not $psExe) {
 # the git top-level (like jira.ps1) rather than walked up from cwd, so it
 # resolves the same from any subdirectory.
 function Get-ProjectKey {
-    $root = $null
-    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $root = ([string]$t).Trim() } } catch { }
+    . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
+    $root = Get-JstRoot
     if (-not $root) { $root = (Get-Location).Path }
     foreach ($p in @($EnvPath, (Join-Path $root '.jst/jira-sdlc-tools.env'))) {
         if (-not $p) { continue }

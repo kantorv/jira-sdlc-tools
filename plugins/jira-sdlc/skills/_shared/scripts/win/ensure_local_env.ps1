@@ -18,35 +18,19 @@
 
 $LocalEnvName = 'jira-sdlc-tools.local.env'
 
-function Get-GitTop {
-    try {
-        $t = (& git rev-parse --show-toplevel 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $t) { return ([string]$t).Trim() }
-    } catch { }
-    return $null
-}
+. (Join-Path $PSScriptRoot '_jst_root.ps1')
 
-$WtRoot = Get-GitTop
+# The project root, not the git toplevel: run from inside a member submodule,
+# the toplevel is the member, whose .git is a file too — read as a worktree, it
+# used to get the credential file copied into it.
+$WtRoot = Get-JstRoot
 if (-not $WtRoot) { exit 0 }   # not a git repo — statuscheck's git_repo row FAILs on this
 
-# A linked worktree's .git is a *file* (pointer into the main repo's
-# .git/worktrees/<name>); the main checkout's .git is a directory.
-$DotGit = Join-Path $WtRoot '.git'
-if (-not (Test-Path -LiteralPath $DotGit -PathType Leaf)) { exit 0 }   # main checkout — nothing to copy
+if (-not (Test-JstLinkedWorktree $WtRoot)) { exit 0 }   # main checkout — nothing to copy
 
-# .git points at "gitdir: <main>/.git/worktrees/<name>"; <main> sits three
-# parents up (worktrees/<name> -> .git -> repo root).
-$GitDir = (Get-Content -LiteralPath $DotGit |
-    Where-Object { $_ -match '^gitdir:\s*(.*)$' } |
-    ForEach-Object { $Matches[1].Trim() } |
-    Select-Object -First 1)
-$MainRoot = $null
-if ($GitDir) {
-    $MainRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $GitDir))
-}
-if ($MainRoot -and -not (Test-Path -LiteralPath (Join-Path $MainRoot '.git') -PathType Container)) {
-    $MainRoot = $null
-}
+# $null when the worktree's main checkout no longer exists; the steps below
+# then report "nothing to copy" with a remedy instead of exiting quietly.
+$MainRoot = Get-JstMainCheckout $WtRoot
 
 $JstDir     = Join-Path $WtRoot '.jst'
 $IgnoreFile = Join-Path $JstDir '.gitignore'

@@ -90,9 +90,10 @@ reorders a side-effect.
 
 Pick **exactly one**. Never emit two.
 
-The `S-*` and `M-*` blocks are what the **run-level** step-6 report chooses
-from. The `M-SUBTASK-*` blocks are for **per-PR** emissions only (the 3d
-verdict comment and its 3e reuse) — step 6 never selects them, with one
+The `S-*`, `M-*` and `R-*` blocks are what the **run-level** step-6 report
+chooses from. The `M-SUBTASK-*` and `R-MEMBER-*` blocks are for **per-PR**
+emissions only (the 3d verdict comment and its 3e reuse) — step 6 never
+selects them, with one
 exception: on the **sub-task-worktree path** (SKILL.md step 1's `Subtask`
 branch) the run's whole PR set is that one sub-task PR, so step 6 re-renders
 the same `M-SUBTASK-*` block at run level. No `S-*`/`M-*` block fits there —
@@ -113,6 +114,34 @@ deliberately never looked at.
 - **S-MERGED** — single-step PR already merged (detected by the step-1 phase check). Title: `Single-step PR merged — complete`. Next step:
   ```
   Single-step PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
+  ```
+
+### Single-step across member repos (run-level)
+
+When the project holds its repos as submodules (`repo_strategy`), a
+single-step issue's PR set is one PR per member repo, then the workspace's
+landing PR (SKILL.md 5L). Approving a member PR is not the end: nothing is
+done until the set lands, so these blocks never say "final update" before the
+landing PR.
+
+- **R-MEMBERS-APPROVED** — every member PR approved, some still open. Title: `Member PRs approved — merge them in order, then re-run`. Next step:
+  ```
+  Every member PR is approved. Merging is manual — merge them in this order: <ORDER, e.g. server-repo#3 → app-repo#7, with one line on why (what depends on what)>. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree): it lands them in the workspace and reviews the landing PR. A re-run IS required — this is not the final update.
+  ```
+- Some approved, some rejected → **M-SOME-BLOCKED** as is: its wording already fits any set of PRs.
+- **R-LANDING-READY** — the landing PR's gitlinks all check out (`land --check`) and it's approved. Title: `Member PRs landed — landing PR ready`. Next step:
+  ```
+  Landing PR #<n>: ✅ every gitlink points at its member's merged commit. Merging is manual — merge it yourself on GitHub when ready: <PR URL>. The issue is done when this PR merges. No re-run is needed after the merge.
+  ```
+- **R-LANDING-CHANGES-REQUESTED** — `land --check` failed on the landing PR, or its review did. Title: `Landing PR changes requested — see findings`. (The failing `land --check` rows, or the `file:line` findings, live in the report's `### What I reviewed` section.) Next step:
+  ```
+  Fix the landing PR — usually a gitlink that isn't on its member's base: point it at the member PR's merged commit (repos.sh land does this) and push. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
+  ```
+- **R-COMPLETE** — the landing PR is merged (detected by the step-1 phase check). Title: `Fully complete — landing PR merged`. Next step:
+  ```
+  Landing PR #<n>: ✅ merged into <BASE_BRANCH>, so every member's change is in the workspace. No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
   ```
 
 ### Multistep track (run-level)
@@ -137,6 +166,7 @@ deliberately never looked at.
 - **M-FULLY-COMPLETE** — parent PR merged into base (detected by the step-1 phase check or step 5a). Title: `Fully complete — parent PR merged`. Next step:
   ```
   Parent PR #<n>: ✅ merged into <BASE_BRANCH> (Jira auto-transitioned by GitHub-for-Jira). No re-run needed.
+  The issue's worktree can go: jira-sdlc's `repos.sh remove-check`, run in it, says whether that's safe (a squash-merged branch reads safe), then `git worktree remove` it (with `--force` when it holds member repos).
   ```
 
 ### Per-sub-task-PR (3d/3e emissions only)
@@ -149,6 +179,14 @@ pick up the parent PR — so the `S-*` wording ("merge into `<BASE_BRANCH>`",
 - **M-SUBTASK-APPROVED** — a sub-task PR approved. Title: `Sub-task PR approved — awaiting merge into parent`. Next step:
   ```
   Sub-task PR #<n>: ✅ reviewed and approved. It merges into <PARENT-BRANCH>, not <BASE_BRANCH> — merging is manual. Once every sub-task PR is approved and merged into <PARENT-BRANCH>, re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to pick up the parent PR. A re-run IS required — this is not the final update.
+  ```
+- **R-MEMBER-APPROVED** — a member repo's PR approved (single-step across member repos). Title: `Member PR approved — awaiting the rest of the set`. Next step:
+  ```
+  Member PR <slug>#<n>: ✅ reviewed and approved. It merges into that member's own base — merging is manual, and the order matters (the run-level report states it). Once every member PR is merged, re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree) to land them. A re-run IS required — this is not the final update.
+  ```
+- **R-MEMBER-CHANGES-REQUESTED** — a member repo's PR rejected. Title: `Member PR changes requested — see findings`. (The `file:line` findings live in the report's `### What I reviewed` section.) Next step:
+  ```
+  Fix the findings above in that member's branch and push; the executor re-run moves the issue back to <STATUS_IN_REVIEW>. Then re-run /jira-sdlc:jira-task-reviewer (bare, from the parent's worktree).
   ```
 - **M-SUBTASK-CHANGES-REQUESTED** — a sub-task PR rejected. Title: `Sub-task PR changes requested — see findings`. (The `file:line` findings live in the report's `### What I reviewed` section.) Next step:
   ```

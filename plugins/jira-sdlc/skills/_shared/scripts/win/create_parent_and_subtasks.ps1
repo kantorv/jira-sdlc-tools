@@ -47,8 +47,8 @@ if (-not $psExe) { [Console]::Error.WriteLine('create_parent_and_subtasks: no Po
 # Anchored at the git top-level (like jira.ps1) rather than walked up from cwd,
 # so it resolves the same from any subdirectory.
 if (-not $Project) {
-    $cfgRoot = $null
-    try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $cfgRoot = ([string]$t).Trim() } } catch { }
+    . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
+    $cfgRoot = Get-JstRoot
     if (-not $cfgRoot) { $cfgRoot = (Get-Location).Path }
     $envfile = Join-Path $cfgRoot '.jst/jira-sdlc-tools.env'
     if (Test-Path -LiteralPath $envfile) {

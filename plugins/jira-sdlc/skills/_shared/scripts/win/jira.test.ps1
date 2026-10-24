@@ -32,8 +32,8 @@ function Json { param($x) try { (@($x) -join "`n") | ConvertFrom-Json } catch { 
 function NullStr { param($x) if ($null -eq $x) { 'null' } else { [string]$x } }
 
 # --- resolve config the same way jira.ps1 does (local overrides team) ---------
-$cfgDir = $null
-try { $t = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -eq 0 -and $t) { $cfgDir = ([string]$t).Trim() } } catch { }
+. (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the same root jira.ps1 reads its config from
+$cfgDir = Get-JstRoot
 if (-not $cfgDir) { $cfgDir = (Get-Location).Path }
 $cfgDir = Join-Path $cfgDir '.jst'
 function Cfg {

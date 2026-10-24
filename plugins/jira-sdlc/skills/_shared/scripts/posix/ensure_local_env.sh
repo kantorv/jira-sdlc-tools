@@ -46,18 +46,19 @@ set -u
 
 LOCAL_ENV_NAME=jira-sdlc-tools.local.env
 
-WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"
+
+# The project root, not the git toplevel: run from inside a member submodule,
+# the toplevel is the member, whose .git is a file too — read as a worktree, it
+# used to get the credential file copied into it.
+WT_ROOT=$(jst_root || true)
 [ -z "$WT_ROOT" ] && exit 0   # not a git repo — statuscheck.sh's git_repo row FAILs on this
 
-# A linked worktree's .git is a *file* (pointer into the main repo's
-# .git/worktrees/<name>); the main checkout's .git is a directory.
-[ -f "$WT_ROOT/.git" ] || exit 0   # main checkout — nothing to copy
+jst_is_linked_worktree "$WT_ROOT" || exit 0   # main checkout — nothing to copy
 
-# .git points at "gitdir: <main>/.git/worktrees/<name>"; <main> sits three
-# dirnames down (worktrees/<name> -> .git -> repo root).
-GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
-MAIN_ROOT=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
-[ -n "$MAIN_ROOT" ] && [ -d "$MAIN_ROOT/.git" ] || MAIN_ROOT=""
+# Empty when the worktree's main checkout no longer exists; the steps below
+# then report "nothing to copy" with a remedy instead of exiting quietly.
+MAIN_ROOT=$(jst_main_checkout "$WT_ROOT")
 
 JST_DIR="$WT_ROOT/.jst"
 IGNORE_FILE="$JST_DIR/.gitignore"

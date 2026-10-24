@@ -204,6 +204,13 @@ relying on opaque GitHub-for-Jira transition rules:
   whether to close those issues and moves only what you approve. Decline,
   and GitHub-for-Jira automation handles it when the human merges the PRs.
 
+**Member repos (git submodules).** A project whose repos are git submodules
+of a workspace repo can list them in `JST_MEMBERS`: one issue then spans
+them, with one branch name and one PR per member, and the reviewer lands the
+merged result in the workspace. Single-step planned work only, for now.
+[Submodules](https://kantorv.github.io/jira-sdlc-tools/docs/submodules) has
+setup and the full story.
+
 ## Prerequisites
 
 - **Claude Code**, a version with plugin support.

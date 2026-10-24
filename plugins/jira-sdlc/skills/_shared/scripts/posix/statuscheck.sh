@@ -79,6 +79,16 @@ case "$ROLE" in
 esac
 ROLE_UC=$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')
 
+# The project root, resolved before anything reads git state, and cd'd into:
+# run from inside a member submodule, the branch, worktree and PRs that matter
+# are the project's, not the member's (often a detached HEAD). statuscheck takes
+# no path arguments, so moving changes nothing else. Its own folder is resolved
+# first, because BASH_SOURCE may be a path relative to where it was started.
+SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+. "$SC_DIR/_jst_root.sh"
+WT_ROOT=$(jst_root || true)
+[ -n "$WT_ROOT" ] && cd "$WT_ROOT"
+
 # Derive the issue key from the branch up front: branch tail is
 # <KEY>-<slug>, so the leading <PROJ>-<n> is the key.
 BR=$(git branch --show-current 2>/dev/null || true)
@@ -132,11 +142,12 @@ print_report() {
   fi
 }
 
-WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+# WT_ROOT is the project root, resolved at the top.
 IS_WORKTREE=""
-# A linked worktree's .git is a *file* (pointer into the main repo's
-# .git/worktrees/); the main checkout's .git is a directory.
-if [ -n "$WT_ROOT" ] && [ -f "$WT_ROOT/.git" ]; then
+# A linked worktree's .git is a *file* pointing into the main repo's
+# .git/worktrees/; the main checkout's .git is a directory. (A submodule's .git
+# is a file too, which is why the helper checks where it points.)
+if [ -n "$WT_ROOT" ] && jst_is_linked_worktree "$WT_ROOT"; then
   IS_WORKTREE=1
 fi
 
@@ -178,7 +189,7 @@ ENV_LOCAL_COPIED_FROM=""
 if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
   [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
-  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  SCRIPT_DIR=$SC_DIR
   # Relay its stderr as the remedy rather than asserting a cause. It now fails
   # for three different reasons — nothing to copy, the path isn't ignored here,
   # the credential is tracked — and each needs a different fix, so a hardcoded
@@ -193,8 +204,7 @@ if [ -n "$WT_ROOT" ]; then
   fi
   if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ]; then
     ENV_LOCAL_COPIED=1
-    GITDIR=$(sed -n 's/^gitdir: //p' "$WT_ROOT/.git" 2>/dev/null || true)
-    ENV_LOCAL_COPIED_FROM=$(dirname "$(dirname "$(dirname "$GITDIR")")" 2>/dev/null || true)
+    ENV_LOCAL_COPIED_FROM=$(jst_main_checkout "$WT_ROOT")
   fi
 fi
 
@@ -225,7 +235,7 @@ fi
 # scripts/win/*.ps1 with the same args. STATUSCHECK_FORCE_OS overrides
 # detection so the Windows branch can be exercised on Linux/CI (statuscheck.ps1
 # honors the same override and emits an identical row).
-PLAT_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
+PLAT_SCRIPT_DIR=$SC_DIR
 _detect_os() {
   case "$(uname -s 2>/dev/null)" in
     Linux)                OS=linux ;;
@@ -501,6 +511,67 @@ else
       row gh_repo_access FAIL "GET /repos/$GH_SLUG failed: ${ERR:-(no error output from gh)}" \
         "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $RERUN." ;;
   esac
+fi
+
+# --- repo strategy and member repos (repos.sh) --------------------------------
+# Which strategy applies: single, or a parent holding member repos as git
+# submodules (JST_MEMBERS). For submodules, one row per member: checked out,
+# reachable with the PAT, its base branch on GitHub. repos.sh owns the rules
+# (which paths are members, each one's base); these rows only judge its output.
+# The branch probe goes through gh like gh_repo_access, not `git ls-remote`, so
+# it uses the same PAT and can't stall on an SSH prompt.
+if [ -n "$WT_ROOT" ]; then
+  RS_OUT=$(bash "$SC_DIR/repos.sh" strategy 2>/dev/null); RS_RC=$?
+  rs() { printf '%s\n' "$RS_OUT" | sed -n "s/^$1=//p"; }
+  RS_ERR=$(rs error); RS_MEMBERS=$(rs members); RS_PINNED=$(rs pinned)
+  if [ "$RS_RC" -eq 2 ] && [ -n "$RS_ERR" ]; then
+    row repo_strategy FAIL "$RS_ERR" \
+      "fix JST_MEMBERS in .jst/jira-sdlc-tools.env — the submodule paths that take part in issues, space-separated, as 'git submodule status' prints them; leave it empty for a single-repo project (see skills/_shared/project-config.md) — then $RERUN."
+  elif [ "$RS_RC" -ne 0 ]; then
+    row repo_strategy WARN "repos.sh strategy failed (exit $RS_RC) — the repo set is unknown"
+  elif [ "$(rs strategy)" = single ]; then
+    if [ -n "$RS_PINNED" ]; then
+      row repo_strategy INFO "single ($(printf '%s' "$RS_PINNED" | wc -w | tr -d ' ') submodule(s) present, none in JST_MEMBERS: $RS_PINNED)"
+    else
+      row repo_strategy INFO "single"
+    fi
+  else
+    row repo_strategy OK "submodules — members: $RS_MEMBERS${RS_PINNED:+ · pinned: $RS_PINNED}"
+    while IFS=$'\t' read -r M_PATH M_ROLE M_INIT M_SLUG M_BASE M_BRANCH _ _; do
+      [ "$M_ROLE" = member ] || continue
+      M_ROW="member_repo[$M_PATH]"
+      if [ "$M_INIT" != yes ]; then
+        row "$M_ROW" FAIL "not checked out" \
+          "run 'git submodule update --init $M_PATH' in the project root, then $RERUN."
+      elif [ "$M_BASE" = error ]; then
+        row "$M_ROW" FAIL ".gitmodules sets 'branch = .' for $M_PATH — a member's base has to be a real branch name" \
+          "name its base explicitly: git submodule set-branch --branch <base> $M_PATH, commit .gitmodules, then $RERUN."
+      elif [ "$M_SLUG" = - ]; then
+        row "$M_ROW" WARN "origin is not a github.com remote — can't probe it with gh, and 'gh pr create' won't work against it"
+      elif [ -z "$GH_OK" ]; then
+        row "$M_ROW" WARN "skipped (gh_auth failed — the member probe needs a logged-in gh; see rows above)"
+      elif ! M_ERR=$($TMOUT_CMD gh api "repos/$M_SLUG" 2>&1 >/dev/null); then
+        case "$M_ERR" in
+          *404*|*"Not Found"*|*"Could not resolve"*)
+            row "$M_ROW" FAIL "the PAT authenticates but 404s on $M_SLUG — the fine-grained token's 'only selected repositories' list probably doesn't include this member" \
+              "add $M_SLUG to GITHUB_PAT_TOKEN's repository access at https://github.com/settings/personal-access-tokens (Contents: read/write, Pull requests: read/write), or remove $M_PATH from JST_MEMBERS if it isn't a member — then $RERUN." ;;
+          *)
+            M_ERR=$(printf '%s' "$M_ERR" | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
+            row "$M_ROW" FAIL "GET /repos/$M_SLUG failed: ${M_ERR:-(no error output from gh)}" \
+              "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $RERUN." ;;
+        esac
+      elif ! M_BRANCHES=$($TMOUT_CMD gh api --paginate "repos/$M_SLUG/branches" --jq '.[].name' 2>/dev/null); then
+        row "$M_ROW" WARN "$M_SLUG reachable, but listing its branches failed — base '$M_BASE' unchecked"
+      elif ! printf '%s\n' "$M_BRANCHES" | grep -qxF "$M_BASE"; then
+        row "$M_ROW" FAIL "base branch '$M_BASE' isn't on $M_SLUG — issue branches are cut from it and PRs target it" \
+          "push '$M_BASE' to $M_SLUG, or set the member's base in .gitmodules (git submodule set-branch --branch <base> $M_PATH), then $RERUN."
+      elif [ -n "$PRODUCTION_BRANCH" ] && ! printf '%s\n' "$M_BRANCHES" | grep -qxF "$PRODUCTION_BRANCH"; then
+        row "$M_ROW" WARN "$M_SLUG · base $M_BASE · on $M_BRANCH — no '$PRODUCTION_BRANCH' branch there, so a hotfix can't touch this member"
+      else
+        row "$M_ROW" OK "$M_SLUG · base $M_BASE · on $M_BRANCH"
+      fi
+    done < <(bash "$SC_DIR/repos.sh" list 2>/dev/null | tail -n +2)
+  fi
 fi
 
 # --- the current branch's PR(s) ----------------------------------------------
