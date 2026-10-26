@@ -344,6 +344,10 @@
       "slug": "/integrations/pi",
       "sidebar_position": 10
     },
+    "docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/MUSE-CODE.md": {
+      "slug": "/integrations/muse-code",
+      "sidebar_position": 11
+    },
     "docs/github-automations/GITHUB-AUTOMATIONS.md": {
       "slug": "/applications",
       "sidebar_position": 1

@@ -110,7 +110,7 @@ The skills target the Claude skills spec, so `jira-sdlc` also works —
 natively or through the [Agent Skills](https://agentskills.io)
 adaptation — in a growing set of other AI coding assistants: Cursor, Kilo
 Code, Codex, Antigravity, OpenCode, Grok Build, Pi,
-and Kimi Code. See [**Platform Compatibility Matrix**](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
+Kimi Code, and Muse Code. See [**Platform Compatibility Matrix**](https://github.com/kantorv/jira-sdlc-tools/blob/main/INTEGRATIONS.md) for the
 platform-by-platform table — each one's spec, wiring, integration status,
 and a link to its detailed doc.
 
@@ -125,6 +125,7 @@ and a link to its detailed doc.
 | [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) |
 | [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) |
 | [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) |
+| [Muse Code (Meta)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/MUSE-CODE.md) | Native Claude skills | `muse plugins` marketplace install (claude-compatible bundle) | Verified — install, `/jira-sdlc:` invocation, flag honour, healthcheck · TUI only, no headless route | ⚠️ | [`MUSE-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/MUSE-CODE.md) |
 
 **Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not

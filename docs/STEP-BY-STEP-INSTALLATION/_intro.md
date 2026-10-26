@@ -65,7 +65,8 @@ edit the pages, not this list.
 │       ├── [Kimi Code](./coding-assistant/non-claude-clients/KIMI-CODE.md)\
 │       ├── [NVIDIA NIM](./coding-assistant/non-claude-clients/NVIDIA-NIM.md)\
 │       ├── [OpenCode](./coding-assistant/non-claude-clients/OPENCODE.md)\
-│       └── [Pi](./coding-assistant/non-claude-clients/PI.md)\
+│       ├── [Pi](./coding-assistant/non-claude-clients/PI.md)\
+│       └── [Muse Code](./coding-assistant/non-claude-clients/MUSE-CODE.md)\
 ├── [Healthcheck](./healthcheck.md)\
 ├── [First tasks](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/first-tasks)\
 │   ├── [Commit the setup](./first-tasks/commit-the-setup.md)\
