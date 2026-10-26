@@ -1,0 +1,333 @@
+# ----------------------------------------------------------------------------
+# Example workflow distributed with the jira-sdlc plugin
+# (https://github.com/kantorv/jira-sdlc-tools). It ships as an example to
+# copy into your own repo's .github/workflows/ and adapt — it is not
+# installed with the plugin.
+#
+#   Guide:         https://kantorv.github.io/jira-sdlc-tools/docs/applications/ci-review-pr-demo
+#   All examples:  https://kantorv.github.io/jira-sdlc-tools/docs/applications
+#   Source:        https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/github-automations/example-workflows/demo-kimi-openrouter-reviewer.yml
+# ----------------------------------------------------------------------------
+
+name: Reviewer Skill on PR (Kimi Code + OpenRouter demo)
+
+# Wiring smoke test for the jira-task-reviewer skill in CI. Triggered manually
+# (workflow_dispatch only — despite the name, it does NOT fire on PR
+# open/reopen), it boots Kimi Code, writes a correct ~/.kimi-code/config.toml
+# pointing extra_skill_dirs at this plugin's skills/, and confirms the three
+# jira-sdlc skills are discoverable. It never invokes the reviewer skill: the
+# review below comes from a hand-written prompt over `gh pr diff`, and IS
+# posted to the PR (`gh pr review --comment`). Nothing is written to Jira. A
+# real reviewer run needs a linked-worktree checkout plus gh auth and the Jira
+# credentials in .jst/jira-sdlc-tools.local.env, which is out of scope here —
+# see demo-claude-reviewer.yml for that.
+#
+# GATES: owner-only author check on the precheck job (github.triggering_actor ==
+# github.repository_owner). No environment: the reviewer-smoke job reads
+# repository secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'OpenRouter model to use'
+        required: false
+        default: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+        type: choice
+        options:
+          - "nvidia/nemotron-3-ultra-550b-a55b:free"
+          - "nvidia/nemotron-3-super-120b-a12b:free"
+
+jobs:
+  check_pr_exists:
+    runs-on: ubuntu-latest
+    name: Check PR exists
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    if: github.triggering_actor == github.repository_owner
+    outputs:
+      pr_exists: ${{ steps.check_pr.outputs.pr_exists }}
+      pr_number: ${{ steps.check_pr.outputs.pr_number }}
+      issue_key: ${{ steps.check_pr.outputs.issue_key }}
+    steps:
+      - name: Check if PR already exists # skip e2e once a PR is open (CI runs there)
+        id: check_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH_NAME="${{ github.ref_name }}"
+          REPO_NAME="${{ github.repository }}"
+
+          # Validate branch name format: must be feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          # Extract issue key from branch name (PROJ-NNN)
+          ISSUE_KEY=$(echo "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::Could not extract issue key from branch name: $BRANCH_NAME"
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --repo "$REPO_NAME" \
+            --json number --jq '.[0].number // empty' 2>/dev/null || true)
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "pr_exists=1" >> "$GITHUB_OUTPUT"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUMBER for issue $ISSUE_KEY"
+          else
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$ISSUE_KEY" >> "$GITHUB_OUTPUT"
+            echo "No open PR for branch $BRANCH_NAME (issue $ISSUE_KEY)"
+          fi
+
+  reviewer-smoke:
+    needs: check_pr_exists
+    if: needs.check_pr_exists.outputs.pr_exists == '1'
+    # Only allocate a runner for issue branches. release/* (e.g. the cut-release
+    # draft PR into main) and other non-issue head branches carry no Jira key,
+    # so gating here skips them instead of spinning up a runner for a no-op.
+    # Mirrors the job-level guard in jira_issue_transition_on_pr_open.yml.
+    # if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve Kimi Code version
+        id: kimi-version
+        run: |
+          VERSION=$(curl -fsSL  https://code.kimi.com/kimi-code/latest)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Latest Kimi Code version: $VERSION"
+
+      - name: Cache Kimi Code CLI
+        id: cache-kimi
+        uses: actions/cache@v4
+        with:
+          path: ~/.kimi-code
+          key: kimi-code-${{ runner.os }}-${{ runner.arch }}-${{ steps.kimi-version.outputs.version }}
+          restore-keys: |
+            kimi-code-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Kimi Code
+        if: steps.cache-kimi.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
+
+      - name: Add Kimi to PATH
+        run: echo "$HOME/.kimi-code/bin" >> "$GITHUB_PATH"
+
+
+      - name: Write Kimi Code config.toml
+        shell: bash
+        env:
+          # OPENROUTER_API_KEY is an existing repo secret. Map it straight to the
+          # provider api_key (env -> [providers.openrouter].api_key), not via a
+          # placeholder + sed.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ github.event.inputs.model }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is empty or unset — cannot configure the OPENROUTER provider."
+            exit 1
+          fi
+          mkdir -p ~/.kimi-code
+          # Unquoted heredoc is intentional: $(pwd) and ${OPENROUTER_API_KEY}
+          # expand to the runner workspace / secret value as the file is written.
+          # The array element is a properly quoted string "$(pwd)/..." — a missing
+          # *opening* double-quote there is a TOML bug that is easy to reintroduce.
+          cat > ~/.kimi-code/config.toml <<EOF
+          default_model = "openrouter/${OPENROUTER_MODEL}"
+          extra_skill_dirs = [
+            "$(pwd)/plugins/jira-sdlc/skills"
+          ]
+
+          [providers.openrouter]
+          type = "openai"
+          api_key = "${OPENROUTER_API_KEY}"
+          base_url = "https://openrouter.ai/api/v1"
+
+          [models."openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"]
+          provider = "openrouter"
+          model = "nvidia/nemotron-3-ultra-550b-a55b:free"
+          max_context_size = 1000000
+          max_output_size = 65536
+          capabilities = [ "always_thinking", "tool_use" ]
+          display_name = "Nemotron 3 Ultra (free)"
+          support_efforts = [ "medium", "high" ]
+
+          [models."openrouter/nvidia/nemotron-3-super-120b-a12b:free"]
+          provider = "openrouter"
+          model = "nvidia/nemotron-3-super-120b-a12b:free"
+          max_context_size = 262144
+          max_output_size = 262144
+          capabilities = [ "always_thinking", "tool_use" ]
+          display_name = "Nemotron 3 Super (free)"
+          support_efforts = [ "low", "medium" ]
+
+          [thinking]
+          enabled = true
+          EOF
+
+
+
+      - name: Fetch PR diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr diff "$PR_NUMBER" > /tmp/pr.diff
+          echo "Diff size: $(wc -c < /tmp/pr.diff) bytes"
+
+      - name: AI Code Review
+        timeout-minutes: 10
+        env:
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/review-prompt.txt << 'PROMPT_EOF'
+          You are a senior software engineer performing a thorough code review of a pull request.
+
+          ## Instructions
+          1. The complete unified diff of the PR is provided below between the markers.
+          2. Analyze only the changes in the diff. Do not review unrelated files.
+          3. Produce a clear, actionable review and write it to /tmp/report.md.
+          Do NOT attempt to call any external tools or post the review yourself.
+
+          ## Review criteria (priority order)
+          - Correctness & logic bugs
+          - Security issues / data exposure / injection risks
+          - Error handling & edge cases
+          - Performance / resource leaks
+          - Breaking changes or API compatibility
+          - Test coverage gaps for the new code
+          - Code clarity, naming, and maintainability
+          - Style/convention only if it meaningfully hurts readability
+
+          ## Output format for /tmp/report.md
+
+          # Code Review – PR #PR_NUMBER_PLACEHOLDER
+
+          ## Summary
+          2–4 sentence high-level assessment.
+
+          ## Critical Issues
+          - Real bugs / security problems that must be fixed.
+          - For each: file + location + why it matters + suggested fix.
+
+          ## Suggestions
+          - Concrete improvements that are not blockers.
+
+          ## Positive Notes
+          - Brief mention of things done well.
+
+          ## Verdict
+          Approve / Request Changes / Comment only
+          (one-line justification)
+
+          ## Rules
+          - Be specific. Reference actual changed lines.
+          - Do not invent issues that aren't in the diff.
+          - Do not comment on pure formatting/style.
+          - Keep the report concise (under ~300 lines).
+          PROMPT_EOF
+
+          sed -i "s|PR_NUMBER_PLACEHOLDER|${PR_NUMBER}|g" /tmp/review-prompt.txt
+
+          {
+            cat /tmp/review-prompt.txt
+            echo
+            echo "----- BEGIN PR DIFF -----"
+            cat /tmp/pr.diff
+            echo "----- END PR DIFF -----"
+          } > /tmp/full-prompt.txt
+
+          kimi -p @/tmp/full-prompt.txt
+
+          test -s /tmp/report.md || {
+            echo "::error::Kimi did not produce /tmp/report.md"
+            exit 1
+          }
+
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_NUMBER" --comment --body-file /tmp/report.md
+          echo "Review posted on PR #$PR_NUMBER"
+
+      # - name: Verify review was posted
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     PR_NUMBER: ${{ needs.check_pr_exists.outputs.pr_number }}
+      #   run: |
+      #     set -euo pipefail
+      #     COUNT=$(gh pr view "$PR_NUMBER" --json reviews \
+      #       --jq '[.reviews[] | select(.body | contains("Code Review – PR #"))] | length')
+
+      #     if [ "$COUNT" -eq 0 ]; then
+      #       echo "::error::No review comment found on PR #$PR_NUMBER"
+      #       exit 1
+      #     fi
+
+      #     echo "Verified: review comment is present"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-report
+          path: /tmp/report.md
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Locate newest Kimi session directory
+        id: kimi_session
+        if: always()
+        run: |
+          set -euo pipefail
+          SESSIONS_ROOT="${HOME}/.kimi-code/sessions"
+          SESSION_DIR=$(find "$SESSIONS_ROOT" -maxdepth 1 -type d -name '*session_*' 2>/dev/null | sort | tail -1 || true)
+
+          if [ -z "${SESSION_DIR}" ] || [ ! -d "${SESSION_DIR}" ]; then
+            echo "::error::No session directories found under ${SESSIONS_ROOT}"
+            ls -la "$SESSIONS_ROOT" || true
+            exit 1
+          fi
+
+          BASENAME=$(basename "$SESSION_DIR")
+          echo "Newest session: ${SESSION_DIR}"
+          echo "path=${SESSION_DIR}" >> "$GITHUB_OUTPUT"
+          echo "name=${BASENAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Kimi session as artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kimi-session-${{ steps.kimi_session.outputs.name }}
+          path: ${{ steps.kimi_session.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
