@@ -15,6 +15,7 @@
 | [Grok Build (xAI)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Working — flag honour unverified | [`GROK.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/GROK.md) |
 | [Pi (pi.dev)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | [`PI.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/PI.md) |
 | [Kimi Code](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in config.toml | Working — verified in this run | [`KIMI-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/KIMI-CODE.md) |
+| [Muse Code (Meta)](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/MUSE-CODE.md) | Native Claude skills | `muse plugins` marketplace install (claude-compatible bundle) | Verified — install, `/jira-sdlc:` invocation, flag honour, healthcheck · TUI only, no headless route | [`MUSE-CODE.md`](https://github.com/kantorv/jira-sdlc-tools/blob/main/docs/STEP-BY-STEP-INSTALLATION/coding-assistant/non-claude-clients/MUSE-CODE.md) |
 
 **Status legend:**
 
@@ -26,7 +27,7 @@
 
 ## The two wiring mechanisms
 
-**Mechanism A — native Claude skills wiring.** The platform reads `SKILL.md` and plugin configuration from a skills path named in its own config file, or from the `~/.claude/` tree it shares with Claude Code. No copy step, no per-skill adaptation file — the skill frontmatter (`disable-model-invocation: true` included) is read as shipped. Claude Code, Cursor, Kilo Code, OpenCode, Grok Build, Pi, and Kimi Code all live in this family.
+**Mechanism A — native Claude skills wiring.** The platform reads `SKILL.md` and plugin configuration from a skills path named in its own config file, or from the `~/.claude/` tree it shares with Claude Code. No copy step, no per-skill adaptation file — the skill frontmatter (`disable-model-invocation: true` included) is read as shipped. Claude Code, Cursor, Kilo Code, OpenCode, Grok Build, Pi, Kimi Code, and Muse Code all live in this family.
 
 **Mechanism B — Agent Skills (agentskills.io) adaptation.** A platform that follows the agentskills.io spec instead expects a manual **copy** of the skill folders into a platform-specific skills root — `.codex/skills/` for Codex, `.agent/skills/` for Antigravity — plus a per-skill `agents/openai.yml` that reproduces `disable-model-invocation: true`. That flag is a Claude Code frontmatter field and is not part of the agentskills.io spec, so the adaptation file is how the same "explicit-only invocation" intent is re-expressed on a platform that wouldn't otherwise see it. Codex and Antigravity live in this family.
 

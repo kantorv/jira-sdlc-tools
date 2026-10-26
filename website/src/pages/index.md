@@ -80,7 +80,8 @@ The whole step-by-step installation at a glance — every entry is a link.
 │       ├── [Kimi Code](/docs/integrations/kimi-code)\
 │       ├── [NVIDIA NIM](/docs/integrations/nvidia-nim)\
 │       ├── [OpenCode](/docs/integrations/opencode)\
-│       └── [Pi](/docs/integrations/pi)\
+│       ├── [Pi](/docs/integrations/pi)\
+│       └── [Muse Code](/docs/integrations/muse-code)\
 ├── [Healthcheck](/docs/step-by-step-installation/healthcheck)\
 ├── [First tasks](/docs/step-by-step-installation/first-tasks)\
 │   ├── [Commit the setup](/docs/step-by-step-installation/commit-the-setup)\
