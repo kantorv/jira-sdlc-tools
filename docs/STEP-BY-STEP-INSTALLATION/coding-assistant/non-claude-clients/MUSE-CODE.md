@@ -62,9 +62,33 @@ The first run in a directory asks whether to trust the workspace. Trusting only 
 ## Platform-Specific Caveats and Known Gaps
 
 - **`disable-model-invocation: true` — honoured natively (Verified).** The skills register as `user-invocable-only`. When the model tries to load one itself, `read_skill` returns `code: disabled-skill`, and the model stops and asks rather than improvising. Only the user's slash command loads them.
+
 - **No headless route (Verified).** The flip side of the point above: `muse exec` passes `/jira-sdlc:<skill>`, `/plugin:jira-sdlc:<skill>` and `/skill <id>` to the model as plain text, the model's `read_skill` is refused, and the run ends asking for confirmation. These skills therefore run in the TUI only, so there is no Muse equivalent of the `claude -p` CI demos.
+
 - **Script paths resolve with no fallback (Verified).** Muse substitutes `${CLAUDE_PLUGIN_ROOT}` in the skill body with the cached plugin root and passes the skill's own `skill-dir`, so every `_shared/scripts/posix/` call hits the cache copy directly. The skills' "Locating the shared scripts" fallback never runs, and Muse needs no entry in its skills-locations list.
+
 - **Sandbox needs unprivileged user namespaces.** Muse's Linux sandbox is Bubblewrap. On Ubuntu 24.04, AppArmor restricts unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns = 1`) and every sandboxed command fails with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. Muse then offers to rerun the command outside the sandbox, which needs approval. Approved, `ensure_local_env`, `check_assignee`, `statuscheck` (Jira REST, `gh auth`, `gh api`) all ran (**Verified**). Whether git, `gh` and Jira calls work *inside* a working sandbox — whose network mode defaults to `proxy-only` — and whether it allows writes to `WORKTREES_DIR` outside the workspace is **Unverified**. Compare Codex's `writable_roots` caveat.
+
 - **`allowed-tools` is not enforced.** Muse reports that the skills' `allowed-tools` lists can't be represented exactly and runs them under ordinary approval, so you approve each command, as with any other Muse tool call. The `plugin.json` `author`/`keywords`/`license`/`repository` warnings are presentation-only.
-- **The cache is a snapshot.** Like Claude Code, Muse copies the plugin at install time, so edits to your clone don't reach it. `muse plugins marketplace update jira-sdlc-tools` then `muse plugins update jira-sdlc` should refresh it (**Unverified**).
-- **What was run.** Under Muse Code 1.4.13 on this repo: the marketplace install, `/jira-sdlc:jira-task-executor` up to its credential gate (it stopped as designed, outside any project), and the assigner's step 1 healthcheck from the main checkout — every row as expected, and the skill stopped when told to. **Not yet run under Muse:** the assigner's issue creation and a full executor or reviewer pass.
+
+- **The cache is a snapshot — updating it is verified (0.9.0 → 0.9.1).** Like Claude Code, Muse copies the plugin at install time, so edits to your clone don't reach it. The verified refresh is:
+
+  ```bash
+  muse plugins marketplace update jira-sdlc-tools
+  muse plugins update jira-sdlc
+  ```
+
+  Then restart `muse`: a running TUI keeps the cache it started with, so the new version only loads in a fresh session. **The already-configured trap:** re-running `muse plugins marketplace add jira-sdlc-tools <git-url>` while a marketplace of that name already exists is a no-op (`already configured`) — it does not change the source. When the existing source is a local directory (here a JST worktree still at 0.9.0), the snapshot stays on that directory and the update never sees the git remote. Remove and re-add it with the intended source instead, then refresh and update:
+
+  ```bash
+  muse plugins marketplace remove jira-sdlc-tools
+  muse plugins marketplace add jira-sdlc-tools git@github.com:kantorv/jira-sdlc-tools.git
+  muse plugins marketplace update jira-sdlc-tools
+  muse plugins update jira-sdlc
+  ```
+
+  Check the result with `muse plugins marketplace list` (the source should read `git@github.com:kantorv/jira-sdlc-tools.git`) and `muse plugins list` (the version should read `0.9.1`), then restart `muse`. That sequence moved a live install from 0.9.0 to 0.9.1 (**Verified**).
+
+- **Two skill forms inside this plugin's own repo (Verified).** After reinstall, typing a skill name in this repo shows two forms: an unprefixed project skill discovered in the workspace, and the namespaced `/jira-sdlc:` form from the installed plugin cache. They are different copies — the workspace copy tracks your checkout, the namespaced copy tracks the installed cache — so pick the namespaced form when you mean the installed plugin, and expect edits to one not to appear in the other until the cache is refreshed and `muse` is restarted.
+
+- **What was run.** Under Muse Code 1.4.13 on this repo: the marketplace install, `/jira-sdlc:jira-task-executor` up to its credential gate (it stopped as designed, outside any project), the assigner's step 1 healthcheck from the main checkout — every row as expected, and the skill stopped when told to — the verified plugin update from 0.9.0 to 0.9.1 above (including the already-configured trap, the remove-and-re-add recovery, and the restart), and the full assigner → executor → reviewer live flow for JST-325, which created, implemented, and reviewed this docs change end to end.
