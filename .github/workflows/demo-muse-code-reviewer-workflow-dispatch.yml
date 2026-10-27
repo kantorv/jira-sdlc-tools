@@ -1,3 +1,13 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  JIRA-SDLC PLUGIN — the SDLC layer for Jira-tracked, parallel,           │
+# │  AI-assisted software delivery: plan a feature into Jira issues + git    │
+# │  worktrees, implement each piece in parallel, then review the set as     │
+# │  one unit. This workflow runs its jira-task-reviewer skill.              │
+# │                                                                          │
+# │  Repo:  https://github.com/kantorv/jira-sdlc-tools                       │
+# │  Docs:  https://kantorv.github.io/jira-sdlc-tools/docs/applications      │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
 # Demo — Muse Code (muse) jira-task-reviewer on a PR, dispatched manually.
 #
 # What it demos: running the jira-task-reviewer skill headlessly in CI against
