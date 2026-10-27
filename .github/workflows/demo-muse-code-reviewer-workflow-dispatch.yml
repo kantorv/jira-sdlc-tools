@@ -1,0 +1,395 @@
+# Demo — Muse Code (muse) jira-task-reviewer on a PR, dispatched manually.
+#
+# What it demos: running the jira-task-reviewer skill headlessly in CI against
+# a PR that already exists, with Meta's Muse Code CLI (`muse exec`) instead of
+# the `claude` CLI. It is the Muse counterpart of
+# docs/github-automations/example-workflows/demo-claude-reviewer.yml, shaped
+# like .github/workflows/demo-fcc-nvidia-nim-reviewer-workflow-dispatch.yml:
+# you dispatch it *from* the feature/hotfix branch whose open PR you want
+# reviewed. Unlike the Claude demo it has no `/review` comment trigger.
+#
+# This file lives in .github/workflows/ first so it can be live-tested in this
+# repo; moving it to docs/github-automations/example-workflows/ is a later
+# step, not part of the issue that added it.
+#
+# ── The headless route (why the enable step exists) ─────────────────────────
+#
+# The skills set `disable-model-invocation: true`, so they register in Muse as
+# `user-invocable-only` and a headless `muse exec "/jira-sdlc:…"` run gets its
+# `read_skill` refused (`disabled-skill`) — verified under Muse 1.4.13, which
+# is why there was no Muse equivalent of the `claude -p` demos. Muse 1.4.14
+# adds `muse skills enable <skill-id> --scope plugin`, which flips the skill
+# to model-invocable in the runner's own Muse settings
+# ($CONFIG_DIR/settings.json) without touching any SKILL.md in this repo —
+# `disable-model-invocation: true` stays in the frontmatter, where it is
+# load-bearing. The reviewer job below enables
+# plugin:jira-sdlc:jira-task-reviewer on the runner only, then invokes it with
+# `muse exec`. Verified locally under 1.4.14 (read_skill returned the skill,
+# no disabled-skill refusal, and the skill ran its credential and healthcheck
+# steps); the first live CI dispatch is still pending — see the live-test note
+# at the bottom of this header.
+#
+# ── How the review target is found ──────────────────────────────────────────
+#
+# Under `workflow_dispatch`, `github.ref_name` is the branch selected in the
+# dispatch UI — that IS the PR head branch. The gating job resolves the OPEN
+# PR for that branch; the reviewer skill itself still derives its issue key
+# from the worktree's branch and posts its verdict on the PR as a comment.
+#
+# ── Caveats ─────────────────────────────────────────────────────────────────
+#
+#  1. **Do not export GH_TOKEN / GITHUB_TOKEN into the step that runs the
+#     skill.** statuscheck reads GITHUB_PAT_TOKEN out of the env FILE and runs
+#     `gh auth login --with-token`, which gh refuses while either token
+#     variable is set. The skill-running step below therefore carries no
+#     GH_TOKEN/GITHUB_TOKEN; the gating job uses GH_TOKEN in its own job,
+#     where it cannot bleed into the skill step.
+#  2. **Self-review.** The executor opens PRs with the same gh account this
+#     reviewer logs in as, and GitHub blocks approving your own PR — the
+#     reviewer skill posts its verdict as a PR *comment* for exactly this
+#     reason.
+#  3. **The skills come from the marketplace, not from either checkout.** The
+#     job installs the plugin with `muse plugins marketplace add` +
+#     `muse plugins install`, which snapshots the plugin repo's *default*
+#     branch. A PR that changes a skill file is reviewed with the
+#     marketplace's copy, not the PR head's.
+#  4. **Auth secrets are never on a command line or in the workspace.** The
+#     Model API key reaches `muse exec` on stdin (`--api-key-stdin`); the
+#     subscription secret is written only to ~/.config/muse/auth.json
+#     (chmod 600, never echoed), outside the workspace.
+#  5. **What was dropped from the Claude/FCC twins, and why.** The
+#     conversation_metrics.sh table and the transcript GIF read Claude Code's
+#     ~/.claude/projects JSONL, which a Muse run never writes. This workflow
+#     keeps the run log upload, writes a short run summary instead of the
+#     metrics table, and uploads a `muse export` transcript in place of the
+#     GIF.
+#
+# ── Secrets (repository secrets) ────────────────────────────────────────────
+#
+#   MUSE_API_KEY             Model API key — required in api-key mode (the
+#                            default), piped to `muse exec --api-key-stdin`
+#   MUSE_AUTH_JSON           contents of ~/.config/muse/auth.json from a
+#                            logged-in Muse install — required only in
+#                            subscription mode (the auth_mode dispatch input)
+#   JIRA_ACCOUNT_URL         written to .jst/jira-sdlc-tools.local.env
+#   JIRA_REVIEWER_EMAIL      } the reviewer's Jira identity
+#   JIRA_REVIEWER_TOKEN      }
+#   GITHUB_PAT_TOKEN         not a secret to create — always populated from
+#                            the built-in GITHUB_TOKEN
+#
+# The env-file step checks every secret the selected auth mode needs up front
+# and fails loud with `::error::` naming the missing ones.
+#
+# ── Live-test note ──────────────────────────────────────────────────────────
+#
+# workflow_dispatch can only be dispatched once this file exists on the
+# default branch (main). After it lands there, dispatch it with
+# `--ref <issue branch>` (the branch whose PR you want reviewed), e.g.
+# `gh workflow run demo-muse-code-reviewer-workflow-dispatch.yml
+# --ref feature/<KEY>-<slug>`. Until then it cannot be run live from CI at
+# all — that is expected, not a defect in this file.
+
+name: Reviewer Skill — dispatch (Muse Code)
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth_mode:
+        description: 'Muse auth mode'
+        required: true
+        default: 'api-key'
+        type: choice
+        options:
+          - api-key
+          - subscription
+
+env:
+  # AC-pinned for this demo: muse-spark-1.3 with contributor mode on.
+  MUSE_MODEL: muse-spark-1.3
+
+jobs:
+  # ── Gating job — cheap, secret-free, and runs before the reviewer job ──────
+  # Resolves the OPEN PR for the dispatch branch (github.ref_name).
+  check_branch:
+    runs-on: ubuntu-latest
+    name: Check dispatch branch & open PR
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_exists: ${{ steps.check_branch.outputs.pr_exists }}
+      pr_number: ${{ steps.check_branch.outputs.pr_number }}
+      head: ${{ steps.check_branch.outputs.head }}
+      base: ${{ steps.check_branch.outputs.base }}
+      issue_key: ${{ steps.check_branch.outputs.issue_key }}
+    steps:
+      - name: Resolve the open PR for the dispatch branch
+        id: check_branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD: ${{ github.ref_name }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          BRANCH_NAME="$HEAD"
+          bail() {
+            echo "pr_exists=0" >> "$GITHUB_OUTPUT"
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+            echo "head="       >> "$GITHUB_OUTPUT"
+            echo "base="       >> "$GITHUB_OUTPUT"
+            echo "issue_key="  >> "$GITHUB_OUTPUT"
+          }
+
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "::error::workflow_dispatch ran without a branch (github.ref_name empty) — dispatch from a feature/* or hotfix/* branch"
+            bail; exit 1
+          fi
+
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|hotfix)/[A-Z][A-Z0-9_]+-[0-9]+- ]]; then
+            echo "::error::dispatch branch '$BRANCH_NAME' does not match required format: feature/PROJ-NNN-slug or hotfix/PROJ-NNN-slug — the reviewer skill derives its issue key from the branch and hard-stops otherwise. Dispatch from the feature/hotfix branch whose PR you want reviewed."
+            bail; exit 1
+          fi
+
+          ISSUE_KEY=$(printf '%s' "$BRANCH_NAME" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9_]+-[0-9]+)-.*$#\2#p')
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::could not extract issue key from branch name: $BRANCH_NAME"
+            bail; exit 1
+          fi
+
+          PR_JSON=$(gh pr list --repo "$REPO_NAME" --head "$BRANCH_NAME" --state open --json number,baseRefName)
+          PR_NUMBER=$(printf '%s' "$PR_JSON" | jq -r '.[0].number // empty')
+          BASE=$(printf '%s' "$PR_JSON" | jq -r '.[0].baseRefName // empty')
+          if [ -z "$PR_NUMBER" ] || [ -z "$BASE" ]; then
+            echo "::error::no open PR found for branch '$BRANCH_NAME' — the reviewer reviews an open PR. Open a PR from '$BRANCH_NAME' first, or dispatch from a branch that already has one."
+            bail; exit 1
+          fi
+
+          echo "pr_exists=1"          >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head=$BRANCH_NAME"    >> "$GITHUB_OUTPUT"
+          echo "base=$BASE"           >> "$GITHUB_OUTPUT"
+          echo "issue_key=$ISSUE_KEY"  >> "$GITHUB_OUTPUT"
+          echo "Found open PR #$PR_NUMBER on '$BRANCH_NAME' (base '$BASE') for issue $ISSUE_KEY"
+
+  # ── Reviewer job — the Muse headless run ──────────────────────────────────
+  reviewer-muse:
+    name: Reviewer skill (Muse Code)
+    needs: check_branch
+    if: needs.check_branch.outputs.pr_exists == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write # the reviewer skill posts its verdict as a PR comment
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Write .jst/jira-sdlc-tools.local.env (reviewer role only)
+        shell: bash
+        env:
+          KEYS: JIRA_ACCOUNT_URL JIRA_REVIEWER_EMAIL JIRA_REVIEWER_TOKEN GITHUB_PAT_TOKEN
+          JIRA_ACCOUNT_URL: ${{ secrets.JIRA_ACCOUNT_URL }}
+          JIRA_REVIEWER_EMAIL: ${{ secrets.JIRA_REVIEWER_EMAIL }}
+          JIRA_REVIEWER_TOKEN: ${{ secrets.JIRA_REVIEWER_TOKEN }}
+          GITHUB_PAT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Checked here (never written to the file): the auth credential for
+          # the selected mode, so one step names every missing secret.
+          AUTH_MODE: ${{ inputs.auth_mode }}
+          MUSE_API_KEY: ${{ secrets.MUSE_API_KEY }}
+          MUSE_AUTH_JSON: ${{ secrets.MUSE_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for k in $KEYS; do
+            [ -n "${!k:-}" ] || missing+=("$k")
+          done
+          if [ "$AUTH_MODE" = "api-key" ]; then
+            [ -n "${MUSE_API_KEY:-}" ] || missing+=("MUSE_API_KEY (auth_mode=api-key)")
+          elif [ "$AUTH_MODE" = "subscription" ]; then
+            [ -n "${MUSE_AUTH_JSON:-}" ] || missing+=("MUSE_AUTH_JSON (auth_mode=subscription)")
+          else
+            echo "::error::unknown auth_mode '$AUTH_MODE' — expected api-key or subscription"
+            exit 1
+          fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing or empty repo secret(s): ${missing[*]} — this demo cannot run without them. Add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          : > .jst/jira-sdlc-tools.local.env
+          chmod 600 .jst/jira-sdlc-tools.local.env
+          for k in $KEYS; do
+            printf '%s=%s\n' "$k" "${!k}" >> .jst/jira-sdlc-tools.local.env
+          done
+          mkdir -p "$RUNNER_TEMP/worktrees"
+          printf 'WORKTREES_DIR=%s\n' "$RUNNER_TEMP/worktrees" >> .jst/jira-sdlc-tools.local.env
+          echo "Wrote $(grep -c . .jst/jira-sdlc-tools.local.env) config lines (values not echoed)."
+
+      - name: Stand on the base branch
+        shell: bash
+        env:
+          BASE: ${{ needs.check_branch.outputs.base }}
+        run: |
+          set -euo pipefail
+          git switch "$BASE"
+
+      - name: Install Muse Code CLI
+        # The muse launcher is a small shell script that downloads the pinned
+        # channel build on first run; installing it is the whole install.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://api.meta.ai/muse-launcher.sh -o "$HOME/.local/bin/muse"
+          chmod +x "$HOME/.local/bin/muse"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/muse" --version
+
+      - name: Install the jira-sdlc plugin from its marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          muse plugins marketplace add jira-sdlc-tools https://github.com/kantorv/jira-sdlc-tools.git
+          muse plugins install jira-sdlc@jira-sdlc-tools
+
+      - name: Enable the reviewer skill for headless invocation (runner only)
+        # Flips plugin:jira-sdlc:jira-task-reviewer to model-invocable in the
+        # runner's Muse settings — no SKILL.md in this repo is edited, and
+        # the change dies with the runner. Without it, `muse exec` passes the
+        # slash command to the model as plain text and read_skill is refused
+        # (disabled-skill). See the header's headless-route section.
+        shell: bash
+        run: |
+          set -euo pipefail
+          muse skills enable plugin:jira-sdlc:jira-task-reviewer --scope plugin
+          muse skills inspect plugin:jira-sdlc:jira-task-reviewer
+
+      - name: Restore Muse subscription auth (subscription mode only)
+        if: inputs.auth_mode == 'subscription'
+        shell: bash
+        env:
+          MUSE_AUTH_JSON: ${{ secrets.MUSE_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/muse"
+          umask 077
+          printf '%s' "$MUSE_AUTH_JSON" > "$HOME/.config/muse/auth.json"
+          chmod 600 "$HOME/.config/muse/auth.json"
+          echo "Restored ~/.config/muse/auth.json (contents not echoed)."
+
+      - name: Rebuild the issue worktree (linked, from the PR head)
+        id: worktree
+        shell: bash
+        env:
+          HEAD: ${{ needs.check_branch.outputs.head }}
+          BASE: ${{ needs.check_branch.outputs.base }}
+          KEY: ${{ needs.check_branch.outputs.issue_key }}
+          PR_NUMBER: ${{ needs.check_branch.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          WT="$RUNNER_TEMP/worktrees/worktree-$KEY"
+          git fetch origin "+refs/heads/$HEAD:refs/remotes/origin/$HEAD"
+          git worktree add --track -B "$HEAD" "$WT" "origin/$HEAD"
+          git config "branch.$HEAD.parentbranch" "$BASE"
+          echo "path=$WT" >> "$GITHUB_OUTPUT"
+          echo "### Reviewing \`$KEY\` — PR #$PR_NUMBER \`$HEAD\` → \`$BASE\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run jira-task-reviewer
+        # No key: the reviewer derives the issue from the worktree's branch.
+        # --yolo disables approval and the sandbox for this run (a throwaway
+        # runner VM; Ubuntu 24.04's AppArmor also blocks the bwrap sandbox
+        # there), and request_user_input is withheld so the skill's closing
+        # Done offer cannot hang a headless run. ONLY the auth credential the
+        # selected mode needs is in this step's env — see caveat 1: no
+        # GH_TOKEN/GITHUB_TOKEN here, ever.
+        timeout-minutes: 55
+        shell: bash
+        working-directory: ${{ steps.worktree.outputs.path }}
+        env:
+          AUTH_MODE: ${{ inputs.auth_mode }}
+          MUSE_API_KEY: ${{ secrets.MUSE_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ "$AUTH_MODE" = "api-key" ]; then
+            # The key arrives on stdin only — never argv, never a file.
+            printf '%s' "$MUSE_API_KEY" | muse exec \
+              --model "$MUSE_MODEL" \
+              --contributor-mode on \
+              --api-key-stdin \
+              --yolo \
+              --approval-mode never \
+              --trust-workspace \
+              --disable-request-user-input \
+              --json \
+              "/jira-sdlc:jira-task-reviewer" \
+              2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+          else
+            muse exec \
+              --model "$MUSE_MODEL" \
+              --contributor-mode on \
+              --yolo \
+              --approval-mode never \
+              --trust-workspace \
+              --disable-request-user-input \
+              --json \
+              "/jira-sdlc:jira-task-reviewer" \
+              2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+          fi
+
+      - name: Record reviewer run summary
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          KEY: ${{ needs.check_branch.outputs.issue_key }}
+          PR_NUMBER: ${{ needs.check_branch.outputs.pr_number }}
+          AUTH_MODE: ${{ inputs.auth_mode }}
+        run: |
+          set -uo pipefail
+          {
+            printf '### reviewer (Muse Code) — run summary\n\n'
+            printf -- '- Issue: `%s` — PR #%s\n' "$KEY" "$PR_NUMBER"
+            printf -- '- Model: `%s` (contributor mode on)\n' "$MUSE_MODEL"
+            printf -- '- Auth mode: `%s`\n' "$AUTH_MODE"
+            if [ -f "$RUNNER_TEMP/reviewer.log" ]; then
+              printf -- '- Headless log: %s lines (uploaded as the reviewer-log artifact)\n' "$(wc -l < "$RUNNER_TEMP/reviewer.log")"
+            fi
+            printf '\nThe reviewer skill owns the verdict on the PR. Token/turn metrics from conversation_metrics.sh do not apply to a Muse run (it reads Claude Code JSONL), so no metrics table is posted.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reviewer log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reviewer-log
+          path: ${{ runner.temp }}/reviewer.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Export the Muse session transcript
+        # Muse's replacement for the Claude twins' ~/.claude/projects
+        # JSONL: `muse export` writes one self-contained session document.
+        # --redacted keeps credentials out of the artifact.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          muse export --last --redacted --out "$RUNNER_TEMP/muse-session-export.json" \
+            || echo "::warning::muse export failed — transcript artifact will be empty"
+
+      - name: Upload Muse session transcript
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: muse-session-transcript
+          path: ${{ runner.temp }}/muse-session-export.json
+          if-no-files-found: warn
+          retention-days: 7

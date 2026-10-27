@@ -19,7 +19,7 @@ and a link to its detailed doc.
 | [Grok Build (xAI)](non-claude-clients/GROK.md) | Native Claude skills | reads Claude Code skills, plugins, and hooks zero-config | Draft — flag honour unverified; not run in this environment | ❔ | [`GROK.md`](non-claude-clients/GROK.md) |
 | [Pi (pi.dev)](non-claude-clients/PI.md) | Native Claude skills | `settings.json` skills path | Caution — does not respect skill arguments | ⚠️ | [`PI.md`](non-claude-clients/PI.md) |
 | [Kimi Code](non-claude-clients/KIMI-CODE.md) | Native Claude skills | `extra_skill_dirs` in `config.toml` | Working — verified in this run | ✅ | [`KIMI-CODE.md`](non-claude-clients/KIMI-CODE.md) |
-| [Muse Code (Meta)](non-claude-clients/MUSE-CODE.md) | Native Claude skills | `muse plugins` marketplace install (claude-compatible bundle) | Verified — full live flow (assigner, executor, reviewer), plugin update 0.9.0→0.9.1 · TUI only, no headless route | ✅ | [`MUSE-CODE.md`](non-claude-clients/MUSE-CODE.md) |
+| [Muse Code (Meta)](non-claude-clients/MUSE-CODE.md) | Native Claude skills | `muse plugins` marketplace install (claude-compatible bundle) | Verified — full live flow (assigner, executor, reviewer), plugin update 0.9.0→0.9.1 · headless via `muse skills enable` (1.4.14, verified locally; CI demo pending first dispatch) | ✅ | [`MUSE-CODE.md`](non-claude-clients/MUSE-CODE.md) |
 
 **Compatibility:** ✅ works — verified in a live session · ⚠️ caution — works
 with caveats, not run end-to-end here · ❌ not compatible · ❔ not tested — not
