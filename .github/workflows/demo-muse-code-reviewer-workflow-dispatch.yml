@@ -61,8 +61,12 @@
 #     conversation_metrics.sh table and the transcript GIF read Claude Code's
 #     ~/.claude/projects JSONL, which a Muse run never writes. This workflow
 #     keeps the run log upload, writes a short run summary instead of the
-#     metrics table, and uploads a `muse export` transcript in place of the
-#     GIF.
+#     metrics table, and uploads a `muse export` transcript in place of
+#     the GIF. Oversight during the run comes from the skill step itself:
+#     it formats the live `muse exec --json` event stream into readable
+#     tool-call/result lines in the Actions log (plain `muse exec` prints
+#     nothing until it exits), while the raw JSONL still lands in the
+#     uploaded reviewer.log.
 #
 # ── Secrets (repository secrets) ────────────────────────────────────────────
 #
@@ -308,6 +312,17 @@ jobs:
         # Done offer cannot hang a headless run. ONLY the auth credential the
         # selected mode needs is in this step's env — see caveat 1: no
         # GH_TOKEN/GITHUB_TOKEN here, ever.
+        #
+        # Live stream: `muse exec` without --json prints nothing to stdout
+        # until the run ends, so the Actions log would sit silent for the
+        # whole review (verified locally). With --json it emits one JSONL
+        # event per step, live — but raw JSONL is not oversight. The pipeline
+        # below therefore tees the raw events to reviewer.log (the uploaded
+        # artifact, unchanged) and formats them as they arrive, so the
+        # Actions run view shows each tool call/result and the final text
+        # while the review is still running. `python3 -u` plus a flush per
+        # line keeps the formatter from buffering the stream it exists to
+        # show; `pipefail` (set above) keeps muse's exit code as the step's.
         timeout-minutes: 55
         shell: bash
         working-directory: ${{ steps.worktree.outputs.path }}
@@ -316,6 +331,42 @@ jobs:
           MUSE_API_KEY: ${{ secrets.MUSE_API_KEY }}
         run: |
           set -euo pipefail
+          cat > "$RUNNER_TEMP/format_stream.py" <<'PYEOF'
+          import json, sys
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  r = json.loads(line)
+              except Exception:
+                  print(line, flush=True)
+                  continue
+              t = r.get("payload_type") or ""
+              p = r.get("payload") or {}
+              if t == "tool.result":
+                  cf = p.get("correlation_facts") or {}
+                  name = cf.get("tool_name", "tool")
+                  outcome = cf.get("outcome", "")
+                  text = (p.get("text") or "").strip()
+                  preview = ""
+                  try:
+                      inner = json.loads(text)
+                      if isinstance(inner, dict) and inner.get("description"):
+                          preview = "%s (exit %s)" % (inner["description"], inner.get("exit_code", "?"))
+                  except Exception:
+                      pass
+                  if not preview:
+                      preview = " ".join(text.split())[:240]
+                  print("[%s] %s — %s" % (name, outcome, preview), flush=True)
+              elif t == "run.lifecycle.started":
+                  print("=== reviewer run started ===", flush=True)
+              elif t.startswith("run.terminal"):
+                  print("=== run %s: %s ===" % (p.get("terminal", "ended"), p.get("reason", "")), flush=True)
+                  txt = (p.get("text") or "").strip()
+                  if txt:
+                      print(txt, flush=True)
+          PYEOF
           if [ "$AUTH_MODE" = "api-key" ]; then
             # The key arrives on stdin only — never argv, never a file.
             printf '%s' "$MUSE_API_KEY" | muse exec \
@@ -328,7 +379,8 @@ jobs:
               --disable-request-user-input \
               --json \
               "/jira-sdlc:jira-task-reviewer" \
-              2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+              2>&1 | tee "$RUNNER_TEMP/reviewer.log" \
+              | python3 -u "$RUNNER_TEMP/format_stream.py"
           else
             muse exec \
               --model "$MUSE_MODEL" \
@@ -339,7 +391,8 @@ jobs:
               --disable-request-user-input \
               --json \
               "/jira-sdlc:jira-task-reviewer" \
-              2>&1 | tee "$RUNNER_TEMP/reviewer.log"
+              2>&1 | tee "$RUNNER_TEMP/reviewer.log" \
+              | python3 -u "$RUNNER_TEMP/format_stream.py"
           fi
 
       - name: Record reviewer run summary
