@@ -27,7 +27,7 @@ bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>] [--check] [-
 | `list` | TSV `repo role initialized slug base branch dirty ahead`, root first. Local only, no network | 0; 2 + `error=` |
 | `prs` | TSV `repo slug pr state base url`: one row per PR, `none` for a repo without one, `error` for one that couldn't be read. `--state open` keeps only OPEN | 0; 4 if any row is `error` |
 | `gate` | `phase=`, `reason=`, `root=`, `members=`, then the `prs` table | 0 for every phase (a `stop` is a decision) |
-| `land` | `landed=`, `commit=`, `pr=`; or `error=` with nothing changed | 0; 1 on refusal |
+| `land --title <t>` | `landed=`, `commit=`, `pr=`; or `error=` with nothing changed. `--title` (required) titles a new root PR, `<KEY>: <summary>` like its member PRs; a reused one keeps its title | 0; 1 on refusal |
 | `land --check` | TSV `repo gitlink base result` (`ok` or why not), plus a `.gitmodules` row if it changed | 0; 1 on any failure |
 | `provision` | `provisioned=` (members now on the issue branch), `pinned=` | 0; 1 + `error=` |
 | `provision --add <paths>` | Same, after creating and pushing the issue branch in each listed member, from `origin/<base>` (space- or comma-separated; every path must be a member) | 0; 1 + `error=` |

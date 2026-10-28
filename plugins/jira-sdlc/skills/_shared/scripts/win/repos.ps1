@@ -5,12 +5,14 @@
 #
 # Usage: pwsh -File repos.ps1 <verb> [--branch <b>] [--state all|open]
 #                                    [--base <b>] [--check] [--multistep]
+#                                    [--add <p>] [--title <t>] [--body-file <f>]
 #   strategy  key=value lines: strategy, root, members, pinned
 #   list      tab-separated rows, header first:
 #             repo role initialized slug base branch dirty ahead
 #   prs       tab-separated PR rows: repo slug pr state base url
 #   gate      phase, reason, root, members — then the prs table
-#   land      land the merged member PRs; --check verifies the gitlinks
+#   land      land the merged member PRs, opening the root PR as --title;
+#             --check verifies the gitlinks
 #   provision put members whose issue branch is on origin onto it (--add: scope growth)
 #   sync      merge origin/<base> into each member on the issue branch
 #   push      push every repo with work its origin lacks, members first
@@ -359,7 +361,9 @@ function v_land_check {
 
 function v_land {
     if ($OptCheck) { v_land_check }
-    Use-Branch; Assert-ValidSet
+    Use-Branch
+    if (-not $OptTitle) { Stop-Usage 'land needs --title' }
+    Assert-ValidSet
     $set = @(Get-RepoSet)
     if (@($set | Where-Object { $_.Role -eq 'member' }).Count -eq 0) {
         Write-Output 'landed='; Write-Output 'reason=nothing to land — the set has no member gitlinks'; Exit-With 0
@@ -426,7 +430,7 @@ function v_land {
         $jline = if ($jurl) { "`nJira: https://$jurl/browse/$key" } else { '' }
         $bodyFile = "$ErrFile.body"
         [System.IO.File]::WriteAllText($bodyFile, "$body`n`nEvery gitlink here points at a commit on its member's base; the reviewer checks it with ``repos.sh land --check``.`n$jline`n")
-        $url = @(& gh pr create -R $rootSlug --base $RootBase --head $script:OptBranch --title "${key}: land $landedS" --body-file $bodyFile 2> $ErrFile) | Select-Object -Last 1
+        $url = @(& gh pr create -R $rootSlug --base $RootBase --head $script:OptBranch --title $OptTitle --body-file $bodyFile 2> $ErrFile) | Select-Object -Last 1
         Remove-Item -LiteralPath $bodyFile -Force -ErrorAction SilentlyContinue
         if (-not $url) { Stop-Land "landed and pushed, but opening the root PR failed: $(Get-FirstLine $ErrFile)" }
     }
