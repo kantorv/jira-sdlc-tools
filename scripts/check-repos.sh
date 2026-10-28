@@ -10,8 +10,9 @@
 #   2. The single-repo regression: statuscheck's table from this checkout must
 #      match the one from the commit this branch is based on — for a plain repo
 #      and for a repo whose only submodule is vendored, each in the main
-#      checkout and in a linked worktree — except for exactly one added line,
-#      the `repo_strategy | INFO | single` row. Submodules support must not
+#      checkout and in a linked worktree — except for the `repo_strategy |
+#      INFO | single` row, which must appear exactly once: added when the base
+#      predates it (JST-322), unchanged once it has it. Submodules support must not
 #      change anything else for a project that doesn't use it.
 #   3. repos.sh (strategy, list) against golden output, and the statuscheck
 #      rows built from it, on a parent with members, a pinned submodule, an
@@ -123,7 +124,7 @@ mkdir -p "$LAB/norepo"
 expect_root "outside any git repository"       "$LAB/norepo"     ""
 
 # --- 2. single-repo regression ----------------------------------------------------
-echo "statuscheck — single-repo projects see one new INFO row, nothing else"
+echo "statuscheck — single-repo tables match the base, plus repo_strategy if it predates it"
 
 if [ -z "$BASE" ]; then
   BASE=$(git merge-base HEAD origin/development 2>/dev/null || git merge-base HEAD development 2>/dev/null || true)
@@ -168,10 +169,13 @@ else
       if [ "$i" = old ]; then run_sc "$LAB/old" "$3" "$d" "$LAB/sc.old"
       else                    run_sc "$ROOT"    "$3" "$d" "$LAB/sc.new"; fi
     done
-    # Allowed: the new table is the old one plus exactly one repo_strategy row.
+    # Allowed: the new table is the old one, plus exactly one repo_strategy row
+    # when the base predates it (JST-322) — once the base has the row, nothing.
     grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" > "$LAB/sc.new.base"
-    added=$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")
-    if [ "$added" = 1 ] && cmp -s "$LAB/sc.old.out" "$LAB/sc.new.base" \
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" > "$LAB/sc.old.base"
+    added=$(( $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out") - $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.old.out") ))
+    if [ "$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")" = 1 ] && [ "$added" -ge 0 ] \
+       && cmp -s "$LAB/sc.old.base" "$LAB/sc.new.base" \
        && { [ "$3" = ps ] || cmp -s "$LAB/sc.old.err" "$LAB/sc.new.err"; }; then ok "$1 — $(grep '^| repo_strategy' "$LAB/sc.new.out" | cut -d'|' -f4 | sed 's/^ //; s/ $//')"
     else no "$1 (repo_strategy rows added: $added)"; diff "$LAB/sc.old.out" "$LAB/sc.new.out" | sed 's/^/        /'
          [ "$3" = ps ] || diff "$LAB/sc.old.err" "$LAB/sc.new.err" | sed 's/^/        /'; fi
@@ -496,16 +500,24 @@ both4 "single: gate stop when the PR is off --base" "$SO" \
   "$(G stop "acme/solo#5 targets 'development', but its base is 'main'" none n/a)\n$(T ".\tacme/solo\t5\tOPEN\tdevelopment\t$U/solo/pull/5")" gate --branch "$SB" --base main
 setpr solo "$SB" "5\tMERGED\tdevelopment\t$U/solo/pull/5"
 both4 "single: gate merged" "$SO" "$(G merged "PR #5 merged" merged n/a)\n$(T ".\tacme/solo\t5\tMERGED\tdevelopment\t$U/solo/pull/5")" gate --branch "$SB"
-both4 "single: land has nothing to land" "$SO" "landed=\nreason=nothing to land — the set has no member gitlinks\nexit=0" land --branch "$SB"
+both4 "single: land has nothing to land" "$SO" "landed=\nreason=nothing to land — the set has no member gitlinks\nexit=0" land --branch "$SB" --title "XX-7: solo"
 
 # land — a real squash merge, then the landing commit, push and PR
 clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
 HEAD0=$(git -C "$W" rev-parse HEAD)
+LT="XX-5: the issue summary"
+for port in sh ${PORTS:+ps}; do  # a usage error, so stderr is the output — and nothing is looked up
+  sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  if [ "$port" = sh ]; then OUT=$( (cd "$W" && PATH="$LAB/bin4:$PATH" bash "$REPOS_SH" land 2>&1; echo "exit=$?") )
+  else OUT=$( (cd "$W" && PATH="$LAB/bin4:$PATH" pwsh -NoProfile -File "$REPOS_PS" land 2>&1; echo "exit=$?") ); fi
+  is "land needs --title$sfx" "$OUT" "$(printf 'repos: land needs --title\nexit=2')"
+done
+is "  …the root's HEAD didn't move, and no PR was looked up" "$(git -C "$W" rev-parse HEAD) $(cat "$FGH/calls" 2>/dev/null)" "$HEAD0 "
 both4 "land refuses while a member PR is open, and changes nothing" "$W" \
-  "error=acme/app#11 is still open — merge it first; nothing changed\nexit=1" land
+  "error=acme/app#11 is still open — merge it first; nothing changed\nexit=1" land --title "$LT"
 is "  …the root's HEAD didn't move" "$(git -C "$W" rev-parse HEAD)" "$HEAD0"
 both4 "land refuses off the issue branch" "$L" \
-  "error=run land from the issue worktree, on $B (the root is on 'development')\nexit=1" land --branch "$B"
+  "error=run land from the issue worktree, on $B (the root is on 'development')\nexit=1" land --branch "$B" --title "$LT"
 # "Squash-merge" the member PR on its remote and delete the branch, as GitHub would.
 SQ="$LAB/sq"; git clone -q git@github.com:acme/app.git "$SQ"; git -C "$SQ" merge -q --squash "origin/$B" >/dev/null 2>&1
 git -C "$SQ" commit -qm "XX-5 change (#11)"; git -C "$SQ" push -q origin development; git -C "$SQ" push -q origin --delete "$B"
@@ -516,19 +528,19 @@ for port in sh ${PORTS:+ps}; do
   # each port lands from the same starting point
   git -C "$W" reset -q --hard "$HEAD0"; git -C "$W" -c push.recurseSubmodules=no push -q -f origin "$B"
   git -C "$W/app" checkout -q "$B" 2>/dev/null || true
-  rm -f "$FGH/prs/$(K parent "$B")" "$FGH/created"
-  OUT=$(rp "$port" "$W" land)
+  rm -f "$FGH/prs/$(K parent "$B")" "$FGH/created" "$FGH/edited"
+  OUT=$(rp "$port" "$W" land --title "$LT")
   NEWHEAD=$(git -C "$W" rev-parse HEAD)
   is "land: lands the squash commit and opens the root PR$sfx" "$OUT" \
     "$(printf 'landed=app\ncommit=%s\npr=%s\nexit=0' "$NEWHEAD" "$U/parent/pull/99")"
   is "  …the gitlink is the merged commit, not the feature one$sfx" "$(git -C "$W" ls-tree HEAD app | awk '{print $3}')" "$SQUASH"
   is "  …the commit is pushed$sfx" "$(git -C "$W" ls-remote origin "refs/heads/$B" | cut -f1)" "$NEWHEAD"
-  is "  …the PR went to the root's base$sfx" "$(cat "$FGH/created")" "acme/parent development $B XX-5: land app"
+  is "  …the PR went to the root's base$sfx" "$(cat "$FGH/created")" "acme/parent development $B $LT"
   grep -q "^Jira: https://example.atlassian.net/browse/XX-5$" "$FGH/created.body" \
     && ok "  …its body links the issue$sfx" || no "  …its body links the issue$sfx: $(cat "$FGH/created.body")"
-  is "land again: reuses the open PR, no second commit$sfx" "$(rp "$port" "$W" land)" \
+  is "land again: reuses the open PR, no second commit$sfx" "$(rp "$port" "$W" land --title "XX-5: another title")" \
     "$(printf 'landed=app\ncommit=%s\npr=%s\nexit=0' "$NEWHEAD" "$U/parent/pull/99")"
-  is "  …still one root PR$sfx" "$(wc -l < "$FGH/created" | tr -d ' ')" 1
+  is "  …still one root PR, its title untouched$sfx" "$(wc -l < "$FGH/created" | tr -d ' ') $(cat "$FGH/edited" 2>/dev/null)" "1 "
 done
 CH='repo\tgitlink\tbase\tresult'
 both4 "land --check: every gitlink on its base" "$W" \
