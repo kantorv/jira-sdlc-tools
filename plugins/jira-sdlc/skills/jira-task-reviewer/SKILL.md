@@ -633,12 +633,13 @@ fresh aggregate code. Otherwise:
 *(Single-step, on `gate`'s `land` or `review-landing`.)* The member PRs are
 merged; the workspace's gitlinks still point at the old commits. On `land`,
 run `land`: it moves each gitlink to its PR's merged commit, commits, pushes
-and opens the landing PR, checking everything first. `error=` → relay it and
-stop.
+and opens the landing PR, checking everything first. Its title is the issue's
+step-1 summary, like the member PRs'. `error=` → relay it and stop.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
-bash "$S/repos.sh" land --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"           # on `land` only
+bash "$S/repos.sh" land --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>" \
+  --title "<PARENT-KEY>: <summary>"                                                # on `land` only
 bash "$S/repos.sh" land --check --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"
 ```
 

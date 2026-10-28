@@ -37,7 +37,9 @@
 #   land      move each member's gitlink to its merged PR's commit on the
 #             member's base, commit, push and open (or reuse) the root's PR.
 #             Run from the issue worktree, on --branch. Checks everything
-#             before it changes anything. --check instead verifies the
+#             before it changes anything. --title (required) is the new PR's
+#             title — the issue's, like its member PRs'; a reused PR keeps
+#             its own. --check instead verifies the
 #             gitlinks --branch carries: each on its member's base, and
 #             .gitmodules unchanged against --base.
 #   provision put each member whose issue branch (--branch) is on its origin
@@ -390,6 +392,7 @@ v_land() {
   [ -n "$OPT_CHECK" ] && v_land_check
   local set prsout rc repo slug base role eff mc key cur root_eff root_slug plan="" landed="" body url jurl
   need_branch
+  [ -n "$OPT_TITLE" ] || die_usage "land needs --title"
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   printf '%s\n' "$set" | awk -F'\t' '$4 == "member"' | grep -q . \
     || { printf 'landed=\nreason=nothing to land — the set has no member gitlinks\n'; exit 0; }
@@ -452,7 +455,7 @@ EOF
         "$body" "${jurl:+
 Jira: https://$jurl/browse/$key}" > "$ERRF.body"
       url=$($TMOUT_CMD gh pr create -R "$root_slug" --base "$ROOT_BASE" --head "$OPT_BRANCH" \
-            --title "$key: land $landed" --body-file "$ERRF.body" 2>"$ERRF" | tail -1)
+            --title "$OPT_TITLE" --body-file "$ERRF.body" 2>"$ERRF" | tail -1)
       rm -f "$ERRF.body"
       [ -n "$url" ] || land_fail "landed and pushed, but opening the root PR failed: $(awk 'NF{print; exit}' "$ERRF")" ;;
   esac
