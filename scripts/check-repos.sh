@@ -10,8 +10,9 @@
 #   2. The single-repo regression: statuscheck's table from this checkout must
 #      match the one from the commit this branch is based on — for a plain repo
 #      and for a repo whose only submodule is vendored, each in the main
-#      checkout and in a linked worktree — except for exactly one added line,
-#      the `repo_strategy | INFO | single` row. Submodules support must not
+#      checkout and in a linked worktree — except for the `repo_strategy |
+#      INFO | single` row, which must appear exactly once: added when the base
+#      predates it (JST-322), unchanged once it has it. Submodules support must not
 #      change anything else for a project that doesn't use it.
 #   3. repos.sh (strategy, list) against golden output, and the statuscheck
 #      rows built from it, on a parent with members, a pinned submodule, an
@@ -123,7 +124,7 @@ mkdir -p "$LAB/norepo"
 expect_root "outside any git repository"       "$LAB/norepo"     ""
 
 # --- 2. single-repo regression ----------------------------------------------------
-echo "statuscheck — single-repo projects see one new INFO row, nothing else"
+echo "statuscheck — single-repo tables match the base, plus repo_strategy if it predates it"
 
 if [ -z "$BASE" ]; then
   BASE=$(git merge-base HEAD origin/development 2>/dev/null || git merge-base HEAD development 2>/dev/null || true)
@@ -168,10 +169,13 @@ else
       if [ "$i" = old ]; then run_sc "$LAB/old" "$3" "$d" "$LAB/sc.old"
       else                    run_sc "$ROOT"    "$3" "$d" "$LAB/sc.new"; fi
     done
-    # Allowed: the new table is the old one plus exactly one repo_strategy row.
+    # Allowed: the new table is the old one, plus exactly one repo_strategy row
+    # when the base predates it (JST-322) — once the base has the row, nothing.
     grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" > "$LAB/sc.new.base"
-    added=$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")
-    if [ "$added" = 1 ] && cmp -s "$LAB/sc.old.out" "$LAB/sc.new.base" \
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" > "$LAB/sc.old.base"
+    added=$(( $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out") - $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.old.out") ))
+    if [ "$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")" = 1 ] && [ "$added" -ge 0 ] \
+       && cmp -s "$LAB/sc.old.base" "$LAB/sc.new.base" \
        && { [ "$3" = ps ] || cmp -s "$LAB/sc.old.err" "$LAB/sc.new.err"; }; then ok "$1 — $(grep '^| repo_strategy' "$LAB/sc.new.out" | cut -d'|' -f4 | sed 's/^ //; s/ $//')"
     else no "$1 (repo_strategy rows added: $added)"; diff "$LAB/sc.old.out" "$LAB/sc.new.out" | sed 's/^/        /'
          [ "$3" = ps ] || diff "$LAB/sc.old.err" "$LAB/sc.new.err" | sed 's/^/        /'; fi
