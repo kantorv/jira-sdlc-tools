@@ -32,10 +32,25 @@ python3 -m venv "$WORKTREE/venv"
 set +u; . "$WORKTREE/venv/bin/activate"; set -u
 pip install cedit
 
-# actionlint isn't a PyPI package — it's a Go binary, fetched via its own
-# install script straight into venv/bin so `source venv/bin/activate` puts
-# it on PATH next to cedit.
-log "installing actionlint into $WORKTREE/venv/bin"
-bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest "$WORKTREE/venv/bin"
+# actionlint isn't a PyPI package — it's a Go binary. Fetch a pinned release
+# tarball and check it against a hash recorded here, so a changed upstream
+# asset fails the bootstrap instead of running. To bump: change the version
+# and copy the hashes from that release's actionlint_<ver>_checksums.txt.
+ACTIONLINT_VERSION=1.7.12
+case "$(uname -s)_$(uname -m)" in
+    Linux_x86_64)                ACTIONLINT_PLATFORM=linux_amd64  ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 ;;
+    Linux_aarch64|Linux_arm64)   ACTIONLINT_PLATFORM=linux_arm64  ACTIONLINT_SHA256=325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6 ;;
+    Darwin_x86_64)               ACTIONLINT_PLATFORM=darwin_amd64 ACTIONLINT_SHA256=5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644 ;;
+    Darwin_arm64)                ACTIONLINT_PLATFORM=darwin_arm64 ACTIONLINT_SHA256=aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f ;;
+    *) die "no pinned actionlint build for $(uname -s)/$(uname -m) — install it yourself" ;;
+esac
+log "installing actionlint $ACTIONLINT_VERSION into $WORKTREE/venv/bin"
+tarball="$WORKTREE/venv/actionlint.tar.gz"
+curl -fsSL -o "$tarball" \
+    "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_$ACTIONLINT_PLATFORM.tar.gz"
+actual="$( (sha256sum "$tarball" 2>/dev/null || shasum -a 256 "$tarball") | cut -d' ' -f1)"
+[ "$actual" = "$ACTIONLINT_SHA256" ] || die "actionlint checksum mismatch (got $actual)"
+tar -xzf "$tarball" -C "$WORKTREE/venv/bin" actionlint
+rm -f "$tarball"
 
 log "bootstrap complete — activate in your shell with: source $WORKTREE/venv/bin/activate"
