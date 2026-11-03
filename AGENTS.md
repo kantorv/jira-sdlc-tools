@@ -497,8 +497,11 @@ both directories, byte-identical. Edit one, `cp` it over the other, and
 `.github/workflows/` one.
 
 `.jst/bootstrap.sh` installs `actionlint` into `venv/bin` (it's a Go binary,
-not a PyPI package, so it's fetched via its own install script rather than
-`pip install`) — it's on `PATH` once you `source venv/bin/activate`.
+not a PyPI package, so it's fetched as a pinned release tarball and checked
+against a SHA-256 in the script rather than `pip install`ed) — it's on `PATH`
+once you `source venv/bin/activate`. Bumping it means updating the version
+*and* the four hashes, then copying the block into
+`docs/parallel-instances/python.md`, which quotes the script verbatim.
 
 Beyond that, "testing" a skill means tracing through which assignment
 scenario (single-step vs. multistep, parent vs. sub-task), which review
