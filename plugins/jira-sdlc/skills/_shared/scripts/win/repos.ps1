@@ -281,7 +281,7 @@ function v_gate {
         $bad = @($t.Lines | Select-Object -Skip 1 | Where-Object { (([string]$_) -split "`t")[3] -eq 'error' } | ForEach-Object { (([string]$_) -split "`t")[0] }) -join ' '
         Write-Gate 'stop' "PRs unknown for: $bad — gh failed; unknown is not none" 'unknown' 'unknown' $t.Lines
     }
-    $root = 'none'; $rootN = ''; $stop = ''; $openM = @(); $mergedM = @(); $nPart = 0
+    $root = 'none'; $rootN = ''; $stop = ''; $openM = @(); $mergedM = @(); $nPart = 0; $mPart = $false
     foreach ($r in $set) {
         $eff = Get-Effective (Get-RepoPrRows $t.Lines $r.Repo) $r.Base
         $word = ($eff -split ' ', 2)[0]
@@ -294,7 +294,7 @@ function v_gate {
         elseif ($word -eq 'MERGED') { $mergedM += $r.Repo; $nPart++ }
         else {
             $tp = Get-TakesPart $r.Slug $r.Base
-            if ($tp -eq 'pushed') { if (-not $stop) { $stop = "$($r.Repo) has commits on $($script:OptBranch) ahead of $($r.Base), but no PR — pushed, no PR" } }
+            if ($tp -eq 'pushed') { $mPart = $true; if (-not $stop) { $stop = "$($r.Repo) has commits on $($script:OptBranch) ahead of $($r.Base), but no PR — pushed, no PR" } }
             elseif ($tp.StartsWith('error')) { if (-not $stop) { $stop = "could not tell whether $($r.Repo) takes part: $($tp.Substring(6)) — unknown is not none" } }
         }
     }
@@ -306,6 +306,10 @@ function v_gate {
         else { $members = 'none' }
     }
     $o = $openM -join ' '; $m = $mergedM -join ' '
+    # Multistep across members needs per-member parent PRs first (see the bash twin).
+    if ($OptMultistep -and ($nPart -gt 0 -or $mPart)) {
+        Write-Gate 'stop' "multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand" $root $members $t.Lines
+    }
     if ($stop) { Write-Gate 'stop' $stop $root $members $t.Lines }
     if ($nPart -eq 0) {
         if ($root -eq 'none')   { Write-Gate 'none' "no PR on $($script:OptBranch) in any repo" $root $members $t.Lines }
@@ -561,19 +565,24 @@ function v_open_prs {
     $set = @(Get-RepoSet); $mem = Get-Members $set
     $tail = $script:OptBranch -replace '^[^/]*/', ''
     $key = if ($tail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
-    $targets = @()
+    $t = Get-PrsTable
+    if ($t.Rc -ne 0) { Stop-Run "PRs unknown (prs exit $($t.Rc)) — nothing opened" }
+    $targets = @(); $part = $false
     if ($mem.Count -eq 0) { $targets = @($set | Where-Object { $_.Role -eq 'root' }) }
     else {
         foreach ($r in $mem) {
             $d = "$Root/$($r.Repo)"
+            # A member takes part as gate counts it: commits ahead, or any PR on the branch (see the bash twin).
+            if (-not (Test-IsCheckedOut $r.Repo)) { continue }
             & git -C $d fetch -q origin $r.Base 2>$null | Out-Null
             $a = (& git -C $d rev-list --count "origin/$($r.Base)..refs/heads/$($script:OptBranch)" 2>$null)
             $k = 0; [void][int]::TryParse(([string]$a).Trim(), [ref]$k)
-            if ($k -gt 0) { $targets += $r }
+            if ($k -gt 0) { $part = $true; $targets += $r }
+            elseif ((Get-RepoPrRows $t.Lines $r.Repo).Count -gt 0) { $part = $true }
         }
+        # No member takes part: the root gets its own PR (see the bash twin).
+        if (-not $part) { $targets = @($set | Where-Object { $_.Role -eq 'root' }) }
     }
-    $t = Get-PrsTable
-    if ($t.Rc -ne 0) { Stop-Run "PRs unknown (prs exit $($t.Rc)) — nothing opened" }
     $out = @((@('repo', 'slug', 'pr', 'action', 'url') -join "`t"))
     foreach ($r in $targets) {
         $eff = Get-Effective (Get-RepoPrRows $t.Lines $r.Repo) $r.Base
@@ -590,7 +599,7 @@ function v_open_prs {
         }
     }
     $out | ForEach-Object { Write-Output $_ }
-    if ($mem.Count -eq 0) { Exit-With 0 }
+    if ($mem.Count -eq 0 -or -not $part) { Exit-With 0 }   # a set of one has no PR-set section
     $t2 = Get-PrsTable
     if ($t2.Rc -ne 0) { Exit-With 0 }
     $rows = @($t2.Lines | Select-Object -Skip 1 | Where-Object { (([string]$_) -split "`t")[2] -ne '-' })
