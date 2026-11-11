@@ -31,7 +31,7 @@ These are `gate`'s `stop` reasons, and what each one asks of you:
 | `several OPEN PRs in <repo>` | Duplicate PRs | Close the extra one |
 | `the root PR #<n> is open while member PRs are still open` | The landing PR exists too early | Close it; landing reopens it once the members merge |
 | `PRs unknown for: <repos> — gh failed` | A `gh` call failed (network, auth) | Re-run; check `gh_auth` |
-| `multistep issues … across member repos aren't supported yet` | The issue has Jira sub-tasks and members | Restructure as single-step, or review by hand |
+| `multistep issues … across member repos aren't supported yet` | The issue has Jira sub-tasks, and a member takes part (a PR, or commits pushed) | Restructure as single-step, or review by hand |
 
 Other stops: `land` refuses with `error=… — nothing changed`, and `provision`/`sync`/`push` with `error=` or
 `conflict=`. Each names the repo and the cause; nothing is changed or retried behind your back.

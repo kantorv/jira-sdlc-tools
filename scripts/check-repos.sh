@@ -485,8 +485,16 @@ both4 "gate: an empty member branch doesn't take part" "$W" "$(G review "member 
 clearfgh; echo "gh: HTTP 502" > "$FGH/prs/$(K app "$B").error"
 both4 "gate: stop — PRs unknown" "$W" \
   "$(G stop "PRs unknown for: app — gh failed; unknown is not none" unknown unknown)\n$(T "$NP" "app\tacme/app\t-\terror\t-\t-" "$NS")" gate
-both4 "gate: stop — multistep across members" "$W" \
-  "phase=stop\nreason=multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand\nroot=unknown\nmembers=unknown\nexit=0" gate --multistep
+# --multistep stops only once a member takes part; workspace-only multistep reads as one repo (JST-329).
+MS="multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand"
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
+both4 "gate --multistep: stop — a member PR" "$W" "$(G stop "$MS" none open)\n$(T "$NP" "$OA" "$NS")" gate --multistep
+clearfgh; touch "$FGH/branches/$(K server "$B")"; echo 2 > "$FGH/ahead/$(K server "$B")"
+both4 "gate --multistep: stop — a member pushed, no PR" "$W" "$(G stop "$MS" none none)\n$(T "$NP" "$NA" "$NS")" gate --multistep
+clearfgh
+both4 "gate --multistep: workspace-only, no parent PR yet" "$W" "$(G none "no PR on $B in any repo" none none)\n$(T "$NP" "$NA" "$NS")" gate --multistep
+setpr parent "$B" "99\tOPEN\tdevelopment\t$U/parent/pull/99"
+both4 "gate --multistep: workspace-only, the parent PR open" "$W" "$(G review "PR #99 open" open none)\n$(T "$OP" "$NA" "$NS")" gate --multistep
 
 # gate on a single repo: today's single-step phase check
 SO="$LAB/solo"; git clone -q git@github.com:acme/solo.git "$SO"; mkdir -p "$SO/.jst"
@@ -636,6 +644,26 @@ for port in sh ${PORTS:+ps}; do
   is "  …each detached at its recorded gitlink$sfx" \
     "$(for m in app server; do printf '%s:%s ' "$(git -C "$WO/$m" branch --show-current)" "$( [ "$(git -C "$WO/$m" rev-parse HEAD)" = "$(git -C "$WO" rev-parse "HEAD:$m")" ] && echo pinned )"; done)" ":pinned :pinned "
   is "  …and no member branch was created$sfx" "$(for m in app server; do git ls-remote --heads "$LAB/$ns/remotes/$m.git" "$E"; done | wc -l | tr -d ' ')" 0
+  # The work is the root's alone: it gets the PR, straight into --base, with no landing step.
+  echo w > "$WO/w.txt"; git -C "$WO" add w.txt; git -C "$WO" commit -qm "XX-8 root work"
+  is "workspace-only: push pushes the root$sfx" "$(rp $port "$WO" push)" "$(printf 'pushed=.\nexit=0')"
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; echo 5 > "$FGH/next"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  is "workspace-only: open-prs opens the root's PR into --base$sfx" \
+    "$(rp $port "$WO" open-prs --title "XX-8: root" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t5\tcreated\thttps://github.com/%s/parent/pull/5\nexit=0' "$ns" "$ns")"
+  is "  …the gate reviews it as single-step$sfx" "$(rp $port "$WO" gate --base development | sed -n '1,4p')" \
+    "$(printf 'phase=review\nreason=PR #5 open\nroot=open\nmembers=none')"
+  grep -q 'jst:pr-set' "$FGH/body/${ns}_parent#5" && no "  …a PR-set section on a set of one$sfx" || ok "  …no PR-set section on a set of one$sfx"
+  # A workspace-only sub-task: its own worktree, provisioned plain, its PR into the parent branch.
+  ES=feature/XX-9-sub; WS="$LAB/$ns/WS"
+  git -C "$LAB/$ns/main" worktree add -q -b "$ES" "$WS" "$E"
+  is "workspace-only sub-task: provision pins every member$sfx" "$(rp $port "$WS" provision)" "$(printf 'provisioned=\npinned=app server\nexit=0')"
+  echo s > "$WS/s.txt"; git -C "$WS" add s.txt; git -C "$WS" commit -qm "XX-9 sub work"; rp $port "$WS" push >/dev/null
+  echo 6 > "$FGH/next"
+  is "workspace-only sub-task: open-prs opens the root's PR into the parent branch$sfx" \
+    "$(rp $port "$WS" open-prs --title "XX-9: sub" --body-file "$LAB/$ns/body.md" --base "$E")" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t6\tcreated\thttps://github.com/%s/parent/pull/6\nexit=0' "$ns" "$ns")"
+  is "  …based on the parent branch$sfx" "$(tail -1 "$FGH/created")" "$ns/parent $E $ES XX-9: sub"
 done
 # remove-check: is a worktree safe to delete? Squash merges leave commits on no remote.
 for port in sh ${PORTS:+ps}; do

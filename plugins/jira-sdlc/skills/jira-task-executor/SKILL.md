@@ -203,9 +203,10 @@ context.
         the user before continuing — not on a "this one's small" call.
       - **Empty** → `<KEY>` is a leaf: a sub-task, or a single-step top-level
         issue the assigner provisioned for direct implementation. Proceed —
-        except a **sub-task with member repos** (`repo_strategy` lists
-        members): its PRs would have to target the parent branch in each
-        member, which isn't supported yet. Stop and say so.
+        except a **sub-task whose 1a `provisioned=` lists a member**: its
+        member PRs would have to target the parent branch in each member,
+        which isn't supported yet. Stop and say so. A workspace-only sub-task
+        (`provisioned=` empty) proceeds like a single repo's.
 
 02. **Bring the worktree branch current.** Discovery already guaranteed you're
     on `<KEY>`'s own issue branch inside its own linked worktree, so there is
@@ -302,7 +303,8 @@ context.
 06. **Implement** the change. With member repos, each member's files are
     changed in its folder, on the issue branch. A **pinned** member isn't part
     of the issue yet: run `bash "$S/repos.sh" provision --add <path>` before
-    changing it (that creates its issue branch), and say so in the report.
+    changing it (that creates its issue branch), and say so in the report —
+    except on a sub-task, where that is 1b's unsupported case: stop and ask.
 
     - **Record task memory as you go — but only when it's worth preserving.**
       Post a `Task memory (jira-task-executor)` comment (per the Task-memory
@@ -376,7 +378,9 @@ context.
 
 10. **Open the PRs — or update the ones already open.** A single repo has
     one; with member repos, each member you committed in has its own (the
-    root gets none: its commits, if any, ride the landing PR).
+    root gets none: its commits, if any, ride the landing PR) — unless no
+    member is on the issue branch, when the root gets its own PR, as a single
+    repo does. `open-prs` decides which.
 
     - **Check for existing PRs first.** After a reject (step 11) this skill
       re-runs on branches that already have PRs, step 9's push has already

@@ -50,14 +50,16 @@ Usage errors print to stderr only, and exit 2.
 | `stop` | Anything else; `reason=` says what ([Troubleshooting](./troubleshooting.md#when-a-run-stops)) |
 
 `root=` is the root's PR state (`none`, `open`, `merged`), and the multistep track reads it directly. `members=` is
-`n/a` (no members), `none`, `open`, `merged` or `mixed`.
+`n/a` (no members), `none`, `open`, `merged` or `mixed`. `--multistep` (the issue has Jira sub-tasks) gives `stop` as
+soon as a member takes part, with a PR or with commits pushed; a workspace-only multistep issue reads as a single repo.
 
 ## Which repos a verb touches
 
 - **single** (no `JST_MEMBERS`): the root only. `provision` and `sync` do nothing; `push` always pushes; `open-prs`
   opens the root's PR into `--base`, with no PR-set section; `land` has nothing to land.
 - **submodules:** the root plus every member, in `JST_MEMBERS` order. A member takes part in an issue when its issue
-  branch exists on its origin. `open-prs` never opens a root PR (landing does).
+  branch exists on its origin. `open-prs` opens a root PR only when no member is on the issue branch (a
+  workspace-only issue, whose PR goes into `--base` like a single repo's); otherwise landing does.
 
 ## Contributing
 
