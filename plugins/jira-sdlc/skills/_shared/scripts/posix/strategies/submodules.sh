@@ -77,17 +77,7 @@ s_list() {
 
 s_prs() { v_prs; }
 
-s_gate() {
-  # A multistep issue across members needs per-member parent PRs before it can
-  # land — a third level this strategy doesn't build yet. Say so instead of
-  # guessing at a phase.
-  if [ -n "$OPT_MULTISTEP" ]; then
-    need_branch
-    printf 'phase=stop\nreason=multistep issues (Jira sub-tasks) across member repos aren'"'"'t supported yet — review the sub-task PRs by hand\nroot=unknown\nmembers=unknown\n'
-    exit 0
-  fi
-  v_gate
-}
+s_gate() { v_gate; }   # --multistep stops there, once a member takes part
 
 s_land() { v_land; }
 

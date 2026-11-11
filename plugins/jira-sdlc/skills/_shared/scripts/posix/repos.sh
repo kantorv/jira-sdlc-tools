@@ -33,7 +33,8 @@
 #             review, land, review-landing, merged, stop (reason says why).
 #             --base is the root PR's expected base (default
 #             DEFAULT_BASE_BRANCH); a member's is its own base. --multistep:
-#             the issue has Jira sub-tasks.
+#             the issue has Jira sub-tasks — phase=stop once a member takes
+#             part (a PR, or commits pushed); workspace-only reads as one repo.
 #   land      move each member's gitlink to its merged PR's commit on the
 #             member's base, commit, push and open (or reuse) the root's PR.
 #             Run from the issue worktree, on --branch. Checks everything
@@ -57,7 +58,10 @@
 #             members first, the root last, under push.recurseSubmodules=check.
 #   open-prs  open one PR per repo that needs one — a single repo: the root,
 #             into --base; with members: each member with commits ahead of its
-#             base (the root's own commits ride the landing PR). --title and
+#             base (the root's own commits ride the landing PR) — unless no
+#             member takes part (no commits ahead, no PR on the branch), when
+#             the root's work gets its own PR into --base, as a single repo's.
+#             --title and
 #             --body-file are the model's; with members, a PR-set section is
 #             appended and kept current in every open PR of the set.
 #   remove-check  is this worktree safe to delete? One row per repo (the root
@@ -298,7 +302,7 @@ takes_part() {
 }
 
 v_gate() {
-  local prsout rc set repo slug base role eff word root="none" root_n="" stop="" open_m="" merged_m="" n_part=0 tp
+  local prsout rc set repo slug base role eff word root="none" root_n="" stop="" open_m="" merged_m="" n_part=0 tp m_part=""
   need_branch
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   prsout=$(v_prs); rc=$?
@@ -322,7 +326,7 @@ v_gate() {
       none)
         tp=$(takes_part "$slug" "$base")
         case "$tp" in
-          pushed) stop="${stop:-$repo has commits on $OPT_BRANCH ahead of $base, but no PR — pushed, no PR}" ;;
+          pushed) m_part=1; stop="${stop:-$repo has commits on $OPT_BRANCH ahead of $base, but no PR — pushed, no PR}" ;;
           error*) stop="${stop:-could not tell whether $repo takes part: ${tp#error } — unknown is not none}" ;;
         esac ;;
     esac
@@ -335,6 +339,12 @@ EOF
     elif [ -n "$open_m" ];   then members=open
     elif [ -n "$merged_m" ]; then members=merged
     else members=none; fi
+  fi
+  # A multistep issue across members needs per-member parent PRs before it can
+  # land — a third level not built yet. Workspace-only multistep is a single
+  # repo's, so only a member taking part stops it.
+  if [ -n "$OPT_MULTISTEP" ] && { [ "$n_part" -gt 0 ] || [ -n "$m_part" ]; }; then
+    gate_out stop "multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand" "$root" "$members"
   fi
   [ -n "$stop" ] && gate_out stop "$stop" "$root" "$members"
   if [ "$n_part" -eq 0 ]; then   # the root is the only repo with work: today's single-step check
@@ -579,28 +589,39 @@ with_set() {
 }
 
 v_open_prs() {
-  local set mem repo slug base role prsout rc eff ahead url targets="" rows="" key section
+  local set mem repo slug base role prsout rc eff ahead url targets="" rows="" key section part=""
   need_branch
   [ -n "$OPT_TITLE" ] || die_usage "open-prs needs --title"
   [ -f "$OPT_BODY" ] || die_usage "open-prs needs --body-file <an existing file>"
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   mem=$(members_of "$set")
   key=$(printf '%s' "${OPT_BRANCH#*/}" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
+  prsout=$(v_prs); rc=$?
+  [ "$rc" -eq 0 ] || fail "PRs unknown (prs exit $rc) — nothing opened"
   if [ -z "$mem" ]; then
     targets=$(printf '%s\n' "$set" | awk -F'\t' '$4 == "root"')
   else
     while IFS=$'\t' read -r repo slug base role; do
       [ -n "$repo" ] || continue
+      # A member takes part as gate counts it: commits ahead of its base (it
+      # gets a PR), or any PR already on the branch (merged ones land later).
+      [ "$(git -C "$ROOT/$repo" rev-parse --show-toplevel 2>/dev/null)" = "$ROOT/$repo" ] || continue
       git -C "$ROOT/$repo" fetch -q origin "$base" 2>/dev/null
       ahead=$(git -C "$ROOT/$repo" rev-list --count "origin/$base..refs/heads/$OPT_BRANCH" 2>/dev/null || echo 0)
-      [ "${ahead:-0}" -gt 0 ] && targets="$targets$repo	$slug	$base	$role
+      if [ "${ahead:-0}" -gt 0 ]; then
+        part=1; targets="$targets$repo	$slug	$base	$role
 "
+      elif printf '%s\n' "$prsout" | awk -F'\t' -v r="$repo" 'NR > 1 && $1 == r && $4 != "none" { f = 1 } END { exit !f }'; then
+        part=1
+      fi
     done <<EOF
 $mem
 EOF
+    # No member takes part (workspace-only, or members in scope that stayed
+    # empty): the root's work has no landing PR to ride, so it gets its own,
+    # into --base, as a single repo's.
+    [ -n "$part" ] || targets=$(printf '%s\n' "$set" | awk -F'\t' '$4 == "root"')
   fi
-  prsout=$(v_prs); rc=$?
-  [ "$rc" -eq 0 ] || fail "PRs unknown (prs exit $rc) — nothing opened"
   printf 'repo\tslug\tpr\taction\turl\n'
   while IFS=$'\t' read -r repo slug base role; do
     [ -n "$repo" ] || continue
@@ -617,7 +638,7 @@ EOF
   done <<EOF
 $targets
 EOF
-  [ -n "$mem" ] || exit 0
+  [ -n "$mem" ] && [ -n "$part" ] || exit 0   # a set of one has no PR-set section
   # Every open PR of the set lists the whole set, so a reviewer on any one sees the rest.
   prsout=$(v_prs) || exit 0
   section="**PR set** for $key (kept current by jira-sdlc):"$'\n'$(printf '%s\n' "$prsout" \
