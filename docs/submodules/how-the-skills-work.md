@@ -22,8 +22,11 @@ Run from the workspace's main checkout, as always.
    branch costs nothing; a missing one costs the executor a `provision --add` mid-run. Members are supported on
    **single-step planned** work only; with a member in scope, multistep or hotfix stops with a clear message.
 4. **Branches:** the issue branch is created in the workspace, as always, and the worktree added. Then, in that
-   worktree, `repos.sh provision --add "<members>"` cuts each member's issue branch from that member's base, pushes it,
-   and puts the worktree's copy of the member on it. The main checkout's members never move.
+   worktree, `repos.sh provision` always runs, because `git worktree add` leaves every member folder empty and the
+   executor's healthcheck fails on an unchecked-out member. It checks out every member at its recorded commit. With
+   members in scope, `--add "<members>"` also cuts each one's issue branch from that member's base, pushes it, and puts
+   the worktree's copy of the member on it. A workspace-only issue gets plain `provision`, and so does each sub-task
+   worktree. The main checkout's members never move.
 5. **The report** lists each member's branch and the likely merge order.
 
 ## The executor

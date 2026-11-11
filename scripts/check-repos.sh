@@ -624,6 +624,19 @@ for port in sh ${PORTS:+ps}; do
   is "  …the main checkout's members didn't move$sfx" "$(git -C "$LAB/$ns/main/app" branch --show-current)" development
   is "provision --add again: idempotent$sfx" "$(rp $port "$WA" provision --add "app server")" "$(printf 'provisioned=app server\npinned=\nexit=0')"
 done
+# The assigner's workspace-only case (JST-329): no member in scope, so plain provision.
+# `git worktree add` leaves member folders empty, and statuscheck FAILs any member
+# list reports uninitialized — provision must check them all out, pinned.
+inits() { ( cd "$1" && bash "$REPOS_SH" list ) | awk -F'\t' '$2 == "member" { printf "%s=%s ", $1, $3 }'; }
+for port in sh ${PORTS:+ps}; do
+  ns="wo-$port"; mk5 "$ns" none; WO="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  is "workspace-only: a fresh worktree's members aren't checked out$sfx" "$(inits "$WO")" "app=no server=no "
+  is "workspace-only: provision pins every member$sfx" "$(rp $port "$WO" provision)" "$(printf 'provisioned=\npinned=app server\nexit=0')"
+  is "  …all checked out now, so statuscheck passes them$sfx" "$(inits "$WO")" "app=yes server=yes "
+  is "  …each detached at its recorded gitlink$sfx" \
+    "$(for m in app server; do printf '%s:%s ' "$(git -C "$WO/$m" branch --show-current)" "$( [ "$(git -C "$WO/$m" rev-parse HEAD)" = "$(git -C "$WO" rev-parse "HEAD:$m")" ] && echo pinned )"; done)" ":pinned :pinned "
+  is "  …and no member branch was created$sfx" "$(for m in app server; do git ls-remote --heads "$LAB/$ns/remotes/$m.git" "$E"; done | wc -l | tr -d ' ')" 0
+done
 # remove-check: is a worktree safe to delete? Squash merges leave commits on no remote.
 for port in sh ${PORTS:+ps}; do
   ns="rc-$port"; mk5 "$ns"; WR="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"

@@ -101,7 +101,7 @@ long-lived branch — the opposite reading from the executor/reviewer:
 | `worktree` | INFO: *main checkout* (`.git` is a directory) vs. *linked worktree* (`.git` is a file). **The assigner requires the main checkout** — it *creates* worktrees, it doesn't run inside one; on a linked-worktree reading, stop and tell the user to cd into the main checkout |
 | `branch` | INFO: the script only knows the base branch by name, so it reports `<PRODUCTION_BRANCH>` as *neither* — match that yourself against the `production_branch` row. Step 2 judges every reading |
 | `worktrees_dir` | INFO when `<WORKTREES_DIR>` exists, WARN when missing or unset, FAIL when it isn't an absolute path. **The assigner requires it present** — it creates a worktree per leaf issue there and never `mkdir`s it; on WARN, stop and ask rather than creating the directory (the convention may have changed) |
-| `repo_strategy` | `single`, or `submodules` with its member repos — an issue's work can then span them (steps 3, 5D and 6A). Each member's `member_repo[…]` row FAILs when the PAT can't reach it or its base branch is missing, which blocks like any FAIL |
+| `repo_strategy` | `single`, or `submodules` with its member repos — an issue's work can then span them (steps 3, 5D, 6A and 6C). Each member's `member_repo[…]` row FAILs when the PAT can't reach it or its base branch is missing, which blocks like any FAIL |
 
 Three other rows carry an assigner-specific reading: `gh_auth` still blocks
 even though this skill opens no PRs — verifying it now is what stops the
@@ -320,22 +320,26 @@ ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_as
    *(A worktree to check out when inspecting the assembled parent branch, and
    a base for future additions.)*
 
-5. **With in-scope members (5D):** give each one the issue branch, from inside
-   the new worktree:
+5. **With member repos (`repo_strategy` = `submodules`), provision the new
+   worktree — always, in-scope members or not:** `git worktree add` leaves
+   every member folder empty, and the executor's healthcheck FAILs each
+   unchecked-out member before it runs anything. From inside the worktree,
+   adding `--add` only when 5D put members in scope:
 
    ```bash
    ( cd <WORKTREES_DIR>/worktree-<PARENT-KEY> && \
-     bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/repos.sh" provision --add "<in-scope members>" )
+     bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/repos.sh" provision [--add "<in-scope members>"] )
    ```
 
    The subshell matters: the rest of this skill runs from the main checkout,
    where the Jira credentials are — a fresh worktree has none yet.
 
-   It cuts each member's issue branch from that member's base, pushes it, and
-   leaves the worktree's copy of the member on it; the main checkout's
-   members don't move. `provisioned=` must list every in-scope member.
-   `error=` → relay it and stop, reporting what was created (the partial-failure
-   rule below).
+   It checks out every member at its recorded commit; with `--add` it also
+   cuts each listed member's issue branch from that member's base, pushes it,
+   and leaves the worktree's copy of the member on it. The main checkout's
+   members don't move. `provisioned=` must list every in-scope member (empty
+   without `--add`). `error=` → relay it and stop, reporting what was created
+   (the partial-failure rule below).
 
 **B. If Single-step (Cohesive work):**
 The top-level issue is your only issue. You are done creating issues. Proceed
@@ -357,7 +361,10 @@ For each sub-task `→ <SUBTASK-KEY>`:
    branch on the planned path, `<PREFIX>` is `feature/` here)
 2. `git config branch.<PREFIX><SUBTASK-KEY>-<slug>.parentbranch <PREFIX><PARENT-KEY>-<slug>`
    (required for executor)
-3. Leave a PR-target comment on the sub-task (format below).
+3. With member repos, provision it as in 6A.5 — the same subshell, `cd`ing
+   into `worktree-<SUBTASK-KEY>` — without `--add` (5D allows no member scope
+   here).
+4. Leave a PR-target comment on the sub-task (format below).
 
 **PR-target comments** (consumed by the executor, and by the reviewer's
 fallback on a fresh clone):
