@@ -1,0 +1,37 @@
+sequenceDiagram
+    actor User
+    participant Reviewer
+    participant GIT
+    participant JIRA
+
+    Note over User,JIRA: Phase 3 — Review (single-step track)
+    User->>Reviewer: cd worktree-<PARENT-KEY>, invoke /jira-task-reviewer (no key arg)
+    Reviewer->>Reviewer: ensure_local_env.sh · statuscheck.sh --role reviewer<br/>(current_pr lists this branch's PRs — any FAIL → stop)
+    Reviewer->>GIT: git fetch origin --prune
+    Reviewer->>JIRA: fetch issue from branch key
+    JIRA-->>Reviewer: issue (no subtasks → single-step)
+    Reviewer->>Reviewer: resolve branch + base, phase check (reads current_pr)
+    Note over Reviewer: a current_pr WARN or a CLOSED, unmerged PR → stop and ask
+
+    alt No PR yet
+        Reviewer-->>User: "no open PR yet — re-run once it exists"
+    else PR open
+        Reviewer->>GIT: 3a idempotency check
+        GIT-->>Reviewer: prior verdict (none | APPROVED — | CHANGES REQUESTED —)
+        Reviewer->>GIT: fetch PR diff
+        GIT-->>Reviewer: diff
+        Reviewer->>Reviewer: review 6 dimensions (correctness, patterns, scope, regressions, tests, hygiene)
+        alt APPROVE
+            Reviewer->>GIT: gh pr review --comment --body-file
+            Reviewer->>JIRA: canonical report on parent (S-APPROVED)
+            Reviewer-->>User: "approved — merge manually, no re-run needed"
+        else REQUEST_CHANGES
+            Reviewer->>GIT: gh pr review --comment --body-file
+            Reviewer->>JIRA: transition parent → <STATUS_IN_PROGRESS>
+            Reviewer->>JIRA: canonical report on parent (S-CHANGES-REQUESTED)
+            Reviewer-->>User: "changes requested — fix, push & re-run"
+        end
+    else PR merged
+        Reviewer->>JIRA: final report on parent (S-MERGED)
+        Reviewer-->>User: "merged — complete (no re-run needed)"
+    end
