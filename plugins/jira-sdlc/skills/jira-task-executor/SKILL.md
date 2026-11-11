@@ -379,8 +379,8 @@ context.
 10. **Open the PRs — or update the ones already open.** A single repo has
     one; with member repos, each member you committed in has its own (the
     root gets none: its commits, if any, ride the landing PR) — unless no
-    member is on the issue branch, when the root gets its own PR, as a single
-    repo does. `open-prs` decides which.
+    member takes part (no commits ahead of its base, no PR), when the root
+    gets its own PR, as a single repo does. `open-prs` decides which.
 
     - **Check for existing PRs first.** After a reject (step 11) this skill
       re-runs on branches that already have PRs, step 9's push has already

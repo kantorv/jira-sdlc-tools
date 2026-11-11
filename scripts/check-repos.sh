@@ -665,6 +665,34 @@ for port in sh ${PORTS:+ps}; do
     "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t6\tcreated\thttps://github.com/%s/parent/pull/6\nexit=0' "$ns" "$ns")"
   is "  …based on the parent branch$sfx" "$(tail -1 "$FGH/created")" "$ns/parent $E $ES XX-9: sub"
 done
+# A member in scope "when unsure" (assigner 5D) that stayed empty doesn't take part either,
+# as gate counts it — so the root's work still gets its PR (JST-329 review).
+for port in sh ${PORTS:+ps}; do
+  ns="ie-$port"; mk5 "$ns" none; WI="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  rp $port "$WI" provision --add app >/dev/null
+  echo w > "$WI/w.txt"; git -C "$WI" add w.txt; git -C "$WI" commit -qm "XX-8 root only"; rp $port "$WI" push >/dev/null
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; echo 5 > "$FGH/next"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  is "an empty in-scope member: open-prs still opens the root's PR$sfx" \
+    "$(rp $port "$WI" open-prs --title "XX-8: x" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t5\tcreated\thttps://github.com/%s/parent/pull/5\nexit=0' "$ns" "$ns")"
+  is "  …and gate agrees: one PR, under review$sfx" "$(rp $port "$WI" gate --base development | sed -n '1,4p')" \
+    "$(printf 'phase=review\nreason=PR #5 open\nroot=open\nmembers=none')"
+done
+# The other side: a member whose PR already merged (a merge commit, so nothing is ahead)
+# still takes part — the root's work waits for land, and open-prs opens nothing.
+for port in sh ${PORTS:+ps}; do
+  ns="mm-$port"; mk5 "$ns"; WM="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  rp $port "$WM" provision >/dev/null
+  echo a > "$WM/app/a.txt"; git -C "$WM/app" add a.txt; git -C "$WM/app" commit -qm "XX-8 app"; rp $port "$WM" push >/dev/null
+  git -C "$WM/app" push -q origin "HEAD:development"   # merged: the base now holds it
+  echo w > "$WM/w.txt"; git -C "$WM" add w.txt; git -C "$WM" commit -qm "XX-8 root"; git -C "$WM" push -q origin "$E"
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  printf '11\tMERGED\tdevelopment\thttps://github.com/%s/app/pull/11\n' "$ns" > "$FGH/prs/${ns}_app@${E//\//%}"
+  is "a member's merged PR: open-prs leaves the root to land$sfx" \
+    "$(rp $port "$WM" open-prs --title "XX-8: x" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\nexit=0')"
+  [ -f "$FGH/created" ] && no "  …but a PR was created$sfx: $(cat "$FGH/created")" || ok "  …no PR created$sfx"
+done
 # remove-check: is a worktree safe to delete? Squash merges leave commits on no remote.
 for port in sh ${PORTS:+ps}; do
   ns="rc-$port"; mk5 "$ns"; WR="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"

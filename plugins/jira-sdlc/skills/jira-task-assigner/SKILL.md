@@ -328,7 +328,8 @@ ASSIGNEE_EMAIL=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/get_as
 
    ```bash
    ( cd <WORKTREES_DIR>/worktree-<PARENT-KEY> && \
-     bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/repos.sh" provision [--add "<in-scope members>"] )
+     bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix/repos.sh" provision )
+   # with in-scope members, instead: … repos.sh provision --add "<in-scope members>"
    ```
 
    The subshell matters: the rest of this skill runs from the main checkout,

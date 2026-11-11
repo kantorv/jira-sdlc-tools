@@ -82,8 +82,9 @@ _shared/scripts/posix/repos.sh  → strategies/single.sh      today's behaviour
   It never moves a gitlink before landing.
 - **`push.recurseSubmodules=check`** makes git refuse a workspace push that points at a member commit no remote has.
 - **One PR per member with commits; none for the workspace before landing.** Its own commits ride the landing PR. Every
-  PR's body carries a marked **PR set** section, kept current by `open-prs`. With no member on the issue branch (a
-  workspace-only issue) there is nothing to land, so the workspace gets its own PR, as a single repo does.
+  PR's body carries a marked **PR set** section, kept current by `open-prs`. When no member takes part (no
+  commits ahead of its base, no PR on the branch: a workspace-only issue, or members in scope that stayed empty) there
+  is nothing to land, so the workspace gets its own PR, as a single repo does.
 
 ### Landing, and why squash merges matter
 

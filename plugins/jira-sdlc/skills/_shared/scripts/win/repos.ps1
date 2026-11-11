@@ -565,26 +565,24 @@ function v_open_prs {
     $set = @(Get-RepoSet); $mem = Get-Members $set
     $tail = $script:OptBranch -replace '^[^/]*/', ''
     $key = if ($tail -match '^([A-Za-z][A-Za-z0-9]*-[0-9]+)') { $Matches[1] } else { '' }
+    $t = Get-PrsTable
+    if ($t.Rc -ne 0) { Stop-Run "PRs unknown (prs exit $($t.Rc)) — nothing opened" }
     $targets = @(); $part = $false
     if ($mem.Count -eq 0) { $targets = @($set | Where-Object { $_.Role -eq 'root' }) }
     else {
         foreach ($r in $mem) {
             $d = "$Root/$($r.Repo)"
-            # A member takes part when it is checked out here on the issue branch.
+            # A member takes part as gate counts it: commits ahead, or any PR on the branch (see the bash twin).
             if (-not (Test-IsCheckedOut $r.Repo)) { continue }
-            & git -C $d rev-parse -q --verify "refs/heads/$($script:OptBranch)" > $null 2>&1
-            if ($LASTEXITCODE -ne 0) { continue }
-            $part = $true
             & git -C $d fetch -q origin $r.Base 2>$null | Out-Null
             $a = (& git -C $d rev-list --count "origin/$($r.Base)..refs/heads/$($script:OptBranch)" 2>$null)
             $k = 0; [void][int]::TryParse(([string]$a).Trim(), [ref]$k)
-            if ($k -gt 0) { $targets += $r }
+            if ($k -gt 0) { $part = $true; $targets += $r }
+            elseif ((Get-RepoPrRows $t.Lines $r.Repo).Count -gt 0) { $part = $true }
         }
-        # No member takes part (workspace-only): the root gets its own PR (see the bash twin).
+        # No member takes part: the root gets its own PR (see the bash twin).
         if (-not $part) { $targets = @($set | Where-Object { $_.Role -eq 'root' }) }
     }
-    $t = Get-PrsTable
-    if ($t.Rc -ne 0) { Stop-Run "PRs unknown (prs exit $($t.Rc)) — nothing opened" }
     $out = @((@('repo', 'slug', 'pr', 'action', 'url') -join "`t"))
     foreach ($r in $targets) {
         $eff = Get-Effective (Get-RepoPrRows $t.Lines $r.Repo) $r.Base

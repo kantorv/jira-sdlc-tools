@@ -59,8 +59,9 @@
 #   open-prs  open one PR per repo that needs one — a single repo: the root,
 #             into --base; with members: each member with commits ahead of its
 #             base (the root's own commits ride the landing PR) — unless no
-#             member is on the issue branch, when the root's work gets its own
-#             PR into --base, as a single repo's. --title and
+#             member takes part (no commits ahead, no PR on the branch), when
+#             the root's work gets its own PR into --base, as a single repo's.
+#             --title and
 #             --body-file are the model's; with members, a PR-set section is
 #             appended and kept current in every open PR of the set.
 #   remove-check  is this worktree safe to delete? One row per repo (the root
@@ -595,28 +596,32 @@ v_open_prs() {
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   mem=$(members_of "$set")
   key=$(printf '%s' "${OPT_BRANCH#*/}" | grep -oE '^[A-Za-z][A-Za-z0-9]*-[0-9]+' || true)
+  prsout=$(v_prs); rc=$?
+  [ "$rc" -eq 0 ] || fail "PRs unknown (prs exit $rc) — nothing opened"
   if [ -z "$mem" ]; then
     targets=$(printf '%s\n' "$set" | awk -F'\t' '$4 == "root"')
   else
     while IFS=$'\t' read -r repo slug base role; do
       [ -n "$repo" ] || continue
-      # A member takes part when it is checked out here on the issue branch.
+      # A member takes part as gate counts it: commits ahead of its base (it
+      # gets a PR), or any PR already on the branch (merged ones land later).
       [ "$(git -C "$ROOT/$repo" rev-parse --show-toplevel 2>/dev/null)" = "$ROOT/$repo" ] || continue
-      git -C "$ROOT/$repo" rev-parse -q --verify "refs/heads/$OPT_BRANCH" >/dev/null || continue
-      part=1
       git -C "$ROOT/$repo" fetch -q origin "$base" 2>/dev/null
       ahead=$(git -C "$ROOT/$repo" rev-list --count "origin/$base..refs/heads/$OPT_BRANCH" 2>/dev/null || echo 0)
-      [ "${ahead:-0}" -gt 0 ] && targets="$targets$repo	$slug	$base	$role
+      if [ "${ahead:-0}" -gt 0 ]; then
+        part=1; targets="$targets$repo	$slug	$base	$role
 "
+      elif printf '%s\n' "$prsout" | awk -F'\t' -v r="$repo" 'NR > 1 && $1 == r && $4 != "none" { f = 1 } END { exit !f }'; then
+        part=1
+      fi
     done <<EOF
 $mem
 EOF
-    # No member takes part (a workspace-only issue): the root's work has no
-    # landing PR to ride, so it gets its own PR, into --base, as a single repo's.
+    # No member takes part (workspace-only, or members in scope that stayed
+    # empty): the root's work has no landing PR to ride, so it gets its own,
+    # into --base, as a single repo's.
     [ -n "$part" ] || targets=$(printf '%s\n' "$set" | awk -F'\t' '$4 == "root"')
   fi
-  prsout=$(v_prs); rc=$?
-  [ "$rc" -eq 0 ] || fail "PRs unknown (prs exit $rc) — nothing opened"
   printf 'repo\tslug\tpr\taction\turl\n'
   while IFS=$'\t' read -r repo slug base role; do
     [ -n "$repo" ] || continue
