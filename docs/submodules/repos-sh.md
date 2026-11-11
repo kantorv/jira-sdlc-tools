@@ -29,7 +29,7 @@ bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>] [--check] [-
 | `gate` | `phase=`, `reason=`, `root=`, `members=`, then the `prs` table | 0 for every phase (a `stop` is a decision) |
 | `land --title <t>` | `landed=`, `commit=`, `pr=`; or `error=` with nothing changed. `--title` (required) titles a new root PR, `<KEY>: <summary>` like its member PRs; a reused one keeps its title | 0; 1 on refusal |
 | `land --check` | TSV `repo gitlink base result` (`ok` or why not), plus a `.gitmodules` row if it changed | 0; 1 on any failure |
-| `provision` | `provisioned=` (members now on the issue branch), `pinned=` | 0; 1 + `error=` |
+| `provision` | `provisioned=` (members now on the issue branch), `pinned=`. Checks out every member first, so it is what makes a fresh worktree's empty member folders usable, even with nothing in scope | 0; 1 + `error=` |
 | `provision --add <paths>` | Same, after creating and pushing the issue branch in each listed member, from `origin/<base>` (space- or comma-separated; every path must be a member) | 0; 1 + `error=` |
 | `sync` | `synced=`; or `conflict=`, `files=` with the merge left for the user | 0; 1 on conflict |
 | `push` | `pushed=` (members first, `.` = the root, last) | 0; 1 + `error=` |
@@ -50,14 +50,18 @@ Usage errors print to stderr only, and exit 2.
 | `stop` | Anything else; `reason=` says what ([Troubleshooting](./troubleshooting.md#when-a-run-stops)) |
 
 `root=` is the root's PR state (`none`, `open`, `merged`), and the multistep track reads it directly. `members=` is
-`n/a` (no members), `none`, `open`, `merged` or `mixed`.
+`n/a` (no members), `none`, `open`, `merged` or `mixed`. `--multistep` (the issue has Jira sub-tasks) gives `stop` as
+soon as a member takes part, with a PR or with commits pushed; a workspace-only multistep issue reads as a single repo.
 
 ## Which repos a verb touches
 
 - **single** (no `JST_MEMBERS`): the root only. `provision` and `sync` do nothing; `push` always pushes; `open-prs`
   opens the root's PR into `--base`, with no PR-set section; `land` has nothing to land.
-- **submodules:** the root plus every member, in `JST_MEMBERS` order. A member takes part in an issue when its issue
-  branch exists on its origin. `open-prs` never opens a root PR (landing does).
+- **submodules:** the root plus every member, in `JST_MEMBERS` order. `provision` puts a member on the issue branch
+  when that branch exists on its origin. The member **takes part**, for `gate` and `open-prs` alike, only once it has
+  commits ahead of its base or a PR on the branch; an empty issue branch doesn't count. `open-prs` opens a root PR
+  only when no member takes part (a workspace-only issue, whose PR goes into `--base` like a single repo's);
+  otherwise landing does.
 
 ## Contributing
 

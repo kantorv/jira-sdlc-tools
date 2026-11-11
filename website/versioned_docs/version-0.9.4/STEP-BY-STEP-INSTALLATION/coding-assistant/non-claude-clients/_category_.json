@@ -1,0 +1,9 @@
+{
+  "label": "Non Claude clients",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "slug": "/step-by-step-installation/non-claude-clients",
+    "description": "Running these skills on assistants other than Claude Code."
+  }
+}

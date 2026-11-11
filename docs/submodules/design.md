@@ -82,7 +82,9 @@ _shared/scripts/posix/repos.sh  → strategies/single.sh      today's behaviour
   It never moves a gitlink before landing.
 - **`push.recurseSubmodules=check`** makes git refuse a workspace push that points at a member commit no remote has.
 - **One PR per member with commits; none for the workspace before landing.** Its own commits ride the landing PR. Every
-  PR's body carries a marked **PR set** section, kept current by `open-prs`.
+  PR's body carries a marked **PR set** section, kept current by `open-prs`. When no member takes part (no
+  commits ahead of its base, no PR on the branch: a workspace-only issue, or members in scope that stayed empty) there
+  is nothing to land, so the workspace gets its own PR, as a single repo does.
 
 ### Landing, and why squash merges matter
 
@@ -111,7 +113,8 @@ a fresh clone can fetch it only until the server garbage-collects it (*"upload-p
 ## Limits and what's next
 
 - **Multistep issues across members** need per-member parent branches and PRs before landing, a third level. Every
-  skill stops on that combination instead of guessing.
+  skill stops on that combination instead of guessing. Workspace-only multistep works: with no member taking part,
+  the sub-tasks and the parent are single-repo PRs in the workspace.
 - **Hotfixes across members** need each member's production branch as the PR base, which isn't modelled (members
   have a base only).
 - **Other layouts** (git-ignored clones, manifests) would each be one more `strategies/` file

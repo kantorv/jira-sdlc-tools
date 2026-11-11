@@ -485,8 +485,16 @@ both4 "gate: an empty member branch doesn't take part" "$W" "$(G review "member 
 clearfgh; echo "gh: HTTP 502" > "$FGH/prs/$(K app "$B").error"
 both4 "gate: stop — PRs unknown" "$W" \
   "$(G stop "PRs unknown for: app — gh failed; unknown is not none" unknown unknown)\n$(T "$NP" "app\tacme/app\t-\terror\t-\t-" "$NS")" gate
-both4 "gate: stop — multistep across members" "$W" \
-  "phase=stop\nreason=multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand\nroot=unknown\nmembers=unknown\nexit=0" gate --multistep
+# --multistep stops only once a member takes part; workspace-only multistep reads as one repo (JST-329).
+MS="multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand"
+clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
+both4 "gate --multistep: stop — a member PR" "$W" "$(G stop "$MS" none open)\n$(T "$NP" "$OA" "$NS")" gate --multistep
+clearfgh; touch "$FGH/branches/$(K server "$B")"; echo 2 > "$FGH/ahead/$(K server "$B")"
+both4 "gate --multistep: stop — a member pushed, no PR" "$W" "$(G stop "$MS" none none)\n$(T "$NP" "$NA" "$NS")" gate --multistep
+clearfgh
+both4 "gate --multistep: workspace-only, no parent PR yet" "$W" "$(G none "no PR on $B in any repo" none none)\n$(T "$NP" "$NA" "$NS")" gate --multistep
+setpr parent "$B" "99\tOPEN\tdevelopment\t$U/parent/pull/99"
+both4 "gate --multistep: workspace-only, the parent PR open" "$W" "$(G review "PR #99 open" open none)\n$(T "$OP" "$NA" "$NS")" gate --multistep
 
 # gate on a single repo: today's single-step phase check
 SO="$LAB/solo"; git clone -q git@github.com:acme/solo.git "$SO"; mkdir -p "$SO/.jst"
@@ -623,6 +631,67 @@ for port in sh ${PORTS:+ps}; do
   is "  …both on their origins$sfx" "$(for m in app server; do git -C "$WA/$m" ls-remote --heads origin "$E"; done | wc -l | tr -d ' ')" 2
   is "  …the main checkout's members didn't move$sfx" "$(git -C "$LAB/$ns/main/app" branch --show-current)" development
   is "provision --add again: idempotent$sfx" "$(rp $port "$WA" provision --add "app server")" "$(printf 'provisioned=app server\npinned=\nexit=0')"
+done
+# The assigner's workspace-only case (JST-329): no member in scope, so plain provision.
+# `git worktree add` leaves member folders empty, and statuscheck FAILs any member
+# list reports uninitialized — provision must check them all out, pinned.
+inits() { ( cd "$1" && bash "$REPOS_SH" list ) | awk -F'\t' '$2 == "member" { printf "%s=%s ", $1, $3 }'; }
+for port in sh ${PORTS:+ps}; do
+  ns="wo-$port"; mk5 "$ns" none; WO="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  is "workspace-only: a fresh worktree's members aren't checked out$sfx" "$(inits "$WO")" "app=no server=no "
+  is "workspace-only: provision pins every member$sfx" "$(rp $port "$WO" provision)" "$(printf 'provisioned=\npinned=app server\nexit=0')"
+  is "  …all checked out now, so statuscheck passes them$sfx" "$(inits "$WO")" "app=yes server=yes "
+  is "  …each detached at its recorded gitlink$sfx" \
+    "$(for m in app server; do printf '%s:%s ' "$(git -C "$WO/$m" branch --show-current)" "$( [ "$(git -C "$WO/$m" rev-parse HEAD)" = "$(git -C "$WO" rev-parse "HEAD:$m")" ] && echo pinned )"; done)" ":pinned :pinned "
+  is "  …and no member branch was created$sfx" "$(for m in app server; do git ls-remote --heads "$LAB/$ns/remotes/$m.git" "$E"; done | wc -l | tr -d ' ')" 0
+  # The work is the root's alone: it gets the PR, straight into --base, with no landing step.
+  echo w > "$WO/w.txt"; git -C "$WO" add w.txt; git -C "$WO" commit -qm "XX-8 root work"
+  is "workspace-only: push pushes the root$sfx" "$(rp $port "$WO" push)" "$(printf 'pushed=.\nexit=0')"
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; echo 5 > "$FGH/next"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  is "workspace-only: open-prs opens the root's PR into --base$sfx" \
+    "$(rp $port "$WO" open-prs --title "XX-8: root" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t5\tcreated\thttps://github.com/%s/parent/pull/5\nexit=0' "$ns" "$ns")"
+  is "  …the gate reviews it as single-step$sfx" "$(rp $port "$WO" gate --base development | sed -n '1,4p')" \
+    "$(printf 'phase=review\nreason=PR #5 open\nroot=open\nmembers=none')"
+  grep -q 'jst:pr-set' "$FGH/body/${ns}_parent#5" && no "  …a PR-set section on a set of one$sfx" || ok "  …no PR-set section on a set of one$sfx"
+  # A workspace-only sub-task: its own worktree, provisioned plain, its PR into the parent branch.
+  ES=feature/XX-9-sub; WS="$LAB/$ns/WS"
+  git -C "$LAB/$ns/main" worktree add -q -b "$ES" "$WS" "$E"
+  is "workspace-only sub-task: provision pins every member$sfx" "$(rp $port "$WS" provision)" "$(printf 'provisioned=\npinned=app server\nexit=0')"
+  echo s > "$WS/s.txt"; git -C "$WS" add s.txt; git -C "$WS" commit -qm "XX-9 sub work"; rp $port "$WS" push >/dev/null
+  echo 6 > "$FGH/next"
+  is "workspace-only sub-task: open-prs opens the root's PR into the parent branch$sfx" \
+    "$(rp $port "$WS" open-prs --title "XX-9: sub" --body-file "$LAB/$ns/body.md" --base "$E")" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t6\tcreated\thttps://github.com/%s/parent/pull/6\nexit=0' "$ns" "$ns")"
+  is "  …based on the parent branch$sfx" "$(tail -1 "$FGH/created")" "$ns/parent $E $ES XX-9: sub"
+done
+# A member in scope "when unsure" (assigner 5D) that stayed empty doesn't take part either,
+# as gate counts it — so the root's work still gets its PR (JST-329 review).
+for port in sh ${PORTS:+ps}; do
+  ns="ie-$port"; mk5 "$ns" none; WI="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  rp $port "$WI" provision --add app >/dev/null
+  echo w > "$WI/w.txt"; git -C "$WI" add w.txt; git -C "$WI" commit -qm "XX-8 root only"; rp $port "$WI" push >/dev/null
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; echo 5 > "$FGH/next"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  is "an empty in-scope member: open-prs still opens the root's PR$sfx" \
+    "$(rp $port "$WI" open-prs --title "XX-8: x" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\n.\t%s/parent\t5\tcreated\thttps://github.com/%s/parent/pull/5\nexit=0' "$ns" "$ns")"
+  is "  …and gate agrees: one PR, under review$sfx" "$(rp $port "$WI" gate --base development | sed -n '1,4p')" \
+    "$(printf 'phase=review\nreason=PR #5 open\nroot=open\nmembers=none')"
+done
+# The other side: a member whose PR already merged (a merge commit, so nothing is ahead)
+# still takes part — the root's work waits for land, and open-prs opens nothing.
+for port in sh ${PORTS:+ps}; do
+  ns="mm-$port"; mk5 "$ns"; WM="$LAB/$ns/W"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  rp $port "$WM" provision >/dev/null
+  echo a > "$WM/app/a.txt"; git -C "$WM/app" add a.txt; git -C "$WM/app" commit -qm "XX-8 app"; rp $port "$WM" push >/dev/null
+  git -C "$WM/app" push -q origin "HEAD:development"   # merged: the base now holds it
+  echo w > "$WM/w.txt"; git -C "$WM" add w.txt; git -C "$WM" commit -qm "XX-8 root"; git -C "$WM" push -q origin "$E"
+  clearfgh; rm -rf "$FGH/body" "$FGH/created"; printf 'XX-8.\n' > "$LAB/$ns/body.md"
+  printf '11\tMERGED\tdevelopment\thttps://github.com/%s/app/pull/11\n' "$ns" > "$FGH/prs/${ns}_app@${E//\//%}"
+  is "a member's merged PR: open-prs leaves the root to land$sfx" \
+    "$(rp $port "$WM" open-prs --title "XX-8: x" --body-file "$LAB/$ns/body.md" --base development)" \
+    "$(printf 'repo\tslug\tpr\taction\turl\nexit=0')"
+  [ -f "$FGH/created" ] && no "  …but a PR was created$sfx: $(cat "$FGH/created")" || ok "  …no PR created$sfx"
 done
 # remove-check: is a worktree safe to delete? Squash merges leave commits on no remote.
 for port in sh ${PORTS:+ps}; do

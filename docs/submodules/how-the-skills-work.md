@@ -22,8 +22,11 @@ Run from the workspace's main checkout, as always.
    branch costs nothing; a missing one costs the executor a `provision --add` mid-run. Members are supported on
    **single-step planned** work only; with a member in scope, multistep or hotfix stops with a clear message.
 4. **Branches:** the issue branch is created in the workspace, as always, and the worktree added. Then, in that
-   worktree, `repos.sh provision --add "<members>"` cuts each member's issue branch from that member's base, pushes it,
-   and puts the worktree's copy of the member on it. The main checkout's members never move.
+   worktree, `repos.sh provision` always runs, because `git worktree add` leaves every member folder empty and the
+   executor's healthcheck fails on an unchecked-out member. It checks out every member at its recorded commit. With
+   members in scope, `--add "<members>"` also cuts each one's issue branch from that member's base, pushes it, and puts
+   the worktree's copy of the member on it. A workspace-only issue gets plain `provision`, and so does each sub-task
+   worktree. The main checkout's members never move.
 5. **The report** lists each member's branch and the likely merge order.
 
 ## The executor
@@ -32,7 +35,8 @@ Run from the issue's worktree, with no arguments, as always.
 
 1. **`repos.sh provision`**, before the project's hook: every member whose issue branch exists on its origin is put
    on that branch, with its `parentbranch` recorded *inside the worktree's copy of the member*. The rest stay
-   *pinned* at the commit the workspace records. The hook receives the members in `JST_MEMBERS`.
+   *pinned* at the commit the workspace records. The hook receives the members in `JST_MEMBERS`. On a sub-task, a
+   member on the issue branch stops the run (multistep across members); a workspace-only sub-task carries on.
 2. **Bring current:** the workspace's own merge as always, then `repos.sh sync` for the members. A conflict stops the
    run, naming the repo and files.
 3. **Implement:** a member's files change in its folder. A pinned member isn't part of the issue yet:
@@ -43,7 +47,9 @@ Run from the issue's worktree, with no arguments, as always.
 6. **`repos.sh push`:** the members first, the workspace last, under the push-order guard.
 7. **PRs:** `repos.sh prs` finds what's already open in every repo; a fix summary goes to each open PR (`-R <slug>`);
    then `repos.sh open-prs`, every time, opens the missing ones. There's one PR per member with commits; the workspace
-   gets none at this point, since its own commits ride the landing PR. Every PR's body ends with a **PR set** section
+   gets none at this point, since its own commits ride the landing PR. A **workspace-only** issue, where no member
+   takes part (no commits ahead of its base, no PR), is the exception: the workspace gets its own PR, as a single repo does, and there's nothing to
+   land. Every PR's body ends with a **PR set** section
    listing the whole set, refreshed whenever the set changes. The body the executor writes says which repo merges
    first, and why.
 8. **In Review** once every repo it committed in has a PR.
