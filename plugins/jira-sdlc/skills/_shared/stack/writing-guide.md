@@ -109,8 +109,8 @@ exec ./stack start --instance "$JST_INSTANCE"
 - Never `git submodule deinit` or change git config in a checkout.
 - Optional parts are switches in the environment (the contract's *The environment*); name
   them in `stack.d/README.md`.
-- Find the main checkout with `git worktree list --porcelain`, never from the git common dir's
-  parent (the contract says why).
+- Find the main checkout with the contract's `main_worktree` (the git common dir's parent,
+  or its `core.worktree` inside a submodule), never `git worktree list`'s first entry alone.
 
 ## Checking it
 
