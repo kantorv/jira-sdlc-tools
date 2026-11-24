@@ -405,76 +405,52 @@ else
   row issue_key WARN "no issue key derivable from branch '${BR:-none}' (see the branch row)${KEY_ARG_IGNORED:+ (ignored non-key argument '$KEY_ARG_IGNORED' — the role goes in --role, and the key comes from the branch)}"
 fi
 
-# --- gh auth (needed by 'gh pr create') ----------------------------------
-# Log gh in from a persistent PAT session at the very start of the run — logout
-# FIRST, then login — so the whole conversation holds a KNOWN-GOOD session. The
-# logout is load-bearing: a bare `gh auth login` does not reliably replace an
-# already-stored keyring token, so a stale PR-read-only PAT from the developer's
-# own session could otherwise survive and 403 at `gh pr create` mid-run, after
-# the work is done (JST-143). gh uses ONE shared PAT (not a per-role Jira
-# identity), so this
-# role-agnostic healthcheck — which every skill already runs before any work — is
-# the right home for it: no per-skill wiring needed. GITHUB_PAT_TOKEN is a secret,
-# machine-specific value → gitignored .jst/jira-sdlc-tools.local.env only (never
-# the tracked .jst/jira-sdlc-tools.env), same treatment as the Jira role tokens. Missing token →
-# FAIL with a remedy, and the skill stops like any other FAIL row. A login that
-# runs but FAILs (non-zero exit — an expired or revoked PAT, etc.) also FAILs,
-# relaying gh's first stderr line (token redacted) rather than falling through to
-# a generic "no session" — so the actual auth error is named (JST-145 AC#3).
-# Accepted tradeoff: this writes ~/.config/gh/hosts.yml, global to the OS user,
-# so it overwrites the developer's own gh session and is not restored afterward —
-# see docs/github/ (JST-126/145). Because that file is OS-user-global rather than
-# per-repo, the unconditional logout is also what stops a token from a PARALLEL
-# session on another repository being silently reused here — which is the second
-# reason not to make it conditional. Do NOT "improve" this by probing the token
-# first and skipping the logout when the probe fails: that hands the stale
-# cross-repo session exactly the survival path both rules exist to close. A
-# failed login therefore leaves no session at all, by design; the FAIL remedy
-# below says so, since re-running is the recovery (JST-290).
+# --- gh auth (needed by every gh call the skills make) ---------------------
+# Per-request, like jira_auth (JST-331): gh.sh hands GITHUB_PAT_TOKEN to gh as
+# GH_TOKEN for one process, and this row proves the token with GET /user. There
+# is no `gh auth login` or `logout` anywhere: the old session login (JST-143/
+# 145/290) wrote ~/.config/gh and the keyring — global to the OS user — so the
+# developer's own gh ended up holding the last project's PAT, two projects run
+# at once raced for the one session, and a failed login left gh logged out.
+# Every gh call in the skills and in repos.sh goes through gh.sh, so nothing
+# depends on a stored session, and a scheduled statuscheck changes nothing.
+# GITHUB_PAT_TOKEN is a secret, machine-specific value → the gitignored
+# .jst/jira-sdlc-tools.local.env only, same treatment as the Jira role tokens.
+# A missing token or a rejected one FAILs, relaying the wrapper's or gh's first
+# stderr line (token redacted) so the actual error is named (JST-145 AC#3).
+GH_SH="$SC_DIR/gh.sh"
 GH_OK=""
 if ! command -v gh >/dev/null 2>&1; then
   row gh_auth FAIL "gh (GitHub CLI) is not installed" \
     "install it (https://cli.github.com), then $RERUN."
 else
-  GH_PAT=$(cfg GITHUB_PAT_TOKEN || true)
-  # cfg parses rather than sources the env file, so a quoted value keeps its
-  # quotes — strip one surrounding pair before handing the token to gh.
-  GH_PAT=${GH_PAT#\"}; GH_PAT=${GH_PAT%\"}
-  GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
-  if [ -z "$GH_PAT" ]; then
-    row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" \
-      "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $RERUN."
+  GH_ERRF=$(mktemp)
+  if GH_LOGIN=$($TMOUT_CMD bash "$GH_SH" api user --jq .login 2>"$GH_ERRF") && [ -n "$GH_LOGIN" ]; then
+    GH_OK=1
+    row gh_auth OK "GITHUB_PAT_TOKEN authenticates as $GH_LOGIN (GET /user, per request — gh's own login is never read or changed)"
   else
-    # logout FIRST — see header; non-fatal if there's nothing to log out.
-    $TMOUT_CMD gh auth logout --hostname github.com >/dev/null 2>&1 || true
-    # Login: capture gh's stderr separately. gh never echoes the token on error,
-    # but we redact it anyway (issue NOTES) before relaying. A FAILED login now
-    # FAILs the row with gh's own first error line instead of falling through to
-    # the generic "no session" FAIL — so a real auth failure (expired/revoked
-    # PAT, etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
-    # stderr; only then do we run 'gh auth status' for the account line.
-    if LOGIN_ERR=$(printf '%s\n' "$GH_PAT" | $TMOUT_CMD gh auth login --with-token 2>&1 >/dev/null); then
-      GH_LINE=$($TMOUT_CMD gh auth status 2>&1 | grep -m1 'Logged in to' | sed 's/^[^L]*//' || true)
-      if [ -n "$GH_LINE" ]; then
-        GH_OK=1
-        row gh_auth OK "$GH_LINE (PAT session login)"
-      else
-        row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" \
-          "gh reported a successful login but no active session — inspect 'gh auth status' by hand, then $RERUN."
-      fi
+    GH_RC=$?
+    # cfg parses rather than sources the env file, so a quoted value keeps its
+    # quotes — strip one surrounding pair, as gh.sh does, before redacting it.
+    GH_PAT=$(cfg GITHUB_PAT_TOKEN || true)
+    GH_PAT=${GH_PAT#\"}; GH_PAT=${GH_PAT%\"}; GH_PAT=${GH_PAT#\'}; GH_PAT=${GH_PAT%\'}
+    ERR=$(cat "$GH_ERRF")
+    [ -n "$GH_PAT" ] && ERR=${ERR//"$GH_PAT"/[REDACTED]}
+    ERR=$(printf '%s' "$ERR" | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
+    if [ "$GH_RC" -eq 4 ] && [ "${ERR#jst-gh: }" != "$ERR" ]; then
+      row gh_auth FAIL "${ERR#jst-gh: }" \
+        "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $RERUN."
     else
-      ERR=$(printf '%s' "${LOGIN_ERR//"$GH_PAT"/[REDACTED]}" \
-        | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
-      [ "${ERR:-}" ] || ERR='(no stderr from gh)'
-      row gh_auth FAIL "gh auth login --with-token failed: $ERR" \
-        "gh is left logged out — the logout above is deliberate (it stops a token from a parallel session on another repo being reused here), so re-running re-logs it in. A connection or network error is usually transient: $RERUN. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
+      row gh_auth FAIL "GET /user with GITHUB_PAT_TOKEN failed: ${ERR:-(no stderr from gh)}" \
+        "a connection or network error is usually transient: $RERUN. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
     fi
   fi
+  rm -f "$GH_ERRF"
 fi
 
 # --- gh repo access (needed by 'gh pr create', not proved by gh_auth) ------
-# gh_auth proves a LOGIN succeeded and nothing more. A fine-grained PAT scoped
-# to "only selected repositories" logs in happily, reads the org and 20 other
+# gh_auth proves the TOKEN authenticates and nothing more. A fine-grained PAT scoped
+# to "only selected repositories" authenticates happily, reads the org and 20 other
 # repos, and still cannot see this one — GitHub answers 404, not 403, so it
 # looks like a typo rather than a permission (JST-251). With an SSH origin every
 # git operation keeps working, and the first thing to break is `gh pr create`
@@ -496,10 +472,10 @@ elif ! ORIGIN_URL=$(git -C "$WT_ROOT" remote get-url origin 2>/dev/null) || [ -z
   row gh_repo_access FAIL "this repository has no 'origin' remote — the skills push issue branches to it and open PRs against it" \
     "create the GitHub repository (or find the existing one) and attach it: git remote add origin git@github.com:<OWNER>/<REPO>.git — the skills don't create repositories — then $RERUN."
 elif [ -z "$GH_OK" ]; then
-  row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a logged-in gh; see rows above)"
+  row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a working GITHUB_PAT_TOKEN; see rows above)"
 elif ! GH_SLUG=$(gh_slug "$ORIGIN_URL"); then
   row gh_repo_access WARN "origin is not a github.com remote ($ORIGIN_URL) — can't probe it with gh, and 'gh pr create' won't work against it"
-elif GH_API_ERR=$($TMOUT_CMD gh api "repos/$GH_SLUG" 2>&1 >/dev/null); then
+elif GH_API_ERR=$($TMOUT_CMD bash "$GH_SH" api "repos/$GH_SLUG" 2>&1 >/dev/null); then
   row gh_repo_access OK "$GH_SLUG reachable with this PAT (GET /repos/$GH_SLUG)"
 else
   case "$GH_API_ERR" in
@@ -549,8 +525,8 @@ if [ -n "$WT_ROOT" ]; then
       elif [ "$M_SLUG" = - ]; then
         row "$M_ROW" WARN "origin is not a github.com remote — can't probe it with gh, and 'gh pr create' won't work against it"
       elif [ -z "$GH_OK" ]; then
-        row "$M_ROW" WARN "skipped (gh_auth failed — the member probe needs a logged-in gh; see rows above)"
-      elif ! M_ERR=$($TMOUT_CMD gh api "repos/$M_SLUG" 2>&1 >/dev/null); then
+        row "$M_ROW" WARN "skipped (gh_auth failed — the member probe needs a working GITHUB_PAT_TOKEN; see rows above)"
+      elif ! M_ERR=$($TMOUT_CMD bash "$GH_SH" api "repos/$M_SLUG" 2>&1 >/dev/null); then
         case "$M_ERR" in
           *404*|*"Not Found"*|*"Could not resolve"*)
             row "$M_ROW" FAIL "the PAT authenticates but 404s on $M_SLUG — the fine-grained token's 'only selected repositories' list probably doesn't include this member" \
@@ -560,7 +536,7 @@ if [ -n "$WT_ROOT" ]; then
             row "$M_ROW" FAIL "GET /repos/$M_SLUG failed: ${M_ERR:-(no error output from gh)}" \
               "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $RERUN." ;;
         esac
-      elif ! M_BRANCHES=$($TMOUT_CMD gh api --paginate "repos/$M_SLUG/branches" --jq '.[].name' 2>/dev/null); then
+      elif ! M_BRANCHES=$($TMOUT_CMD bash "$GH_SH" api --paginate "repos/$M_SLUG/branches" --jq '.[].name' 2>/dev/null); then
         row "$M_ROW" WARN "$M_SLUG reachable, but listing its branches failed — base '$M_BASE' unchecked"
       elif ! printf '%s\n' "$M_BRANCHES" | grep -qxF "$M_BASE"; then
         row "$M_ROW" FAIL "base branch '$M_BASE' isn't on $M_SLUG — issue branches are cut from it and PRs target it" \
@@ -588,7 +564,7 @@ PARENT=$(git config "branch.$BR.parentbranch" 2>/dev/null || true)
 CP_SLUG=""
 [ -n "${ORIGIN_URL:-}" ] && CP_SLUG=$(gh_slug "$ORIGIN_URL" || true)
 if [ -z "$GH_OK" ]; then
-  row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a logged-in gh; see rows above)"
+  row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a working GITHUB_PAT_TOKEN; see rows above)"
 elif [ -z "${ORIGIN_URL:-}" ]; then
   row current_pr WARN "skipped (no 'origin' remote to look PRs up on — see gh_repo_access)"
 elif [ -z "$CP_SLUG" ]; then
@@ -601,7 +577,7 @@ elif [ -z "$BRANCH_OK" ]; then
   row current_pr WARN "skipped ($BR is not a feature/hotfix issue branch)"
 else
   CP_ERRF=$(mktemp)
-  if CP_OUT=$($TMOUT_CMD gh pr list --repo "$CP_SLUG" --head "$BR" --state all \
+  if CP_OUT=$($TMOUT_CMD bash "$GH_SH" pr list --repo "$CP_SLUG" --head "$BR" --state all \
         --json number,state,baseRefName,url \
         --jq '.[] | "\(.number)\t\(.state)\t\(.baseRefName)\t\(.url)"' 2>"$CP_ERRF"); then
     if [ -z "$CP_OUT" ]; then

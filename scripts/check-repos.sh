@@ -13,14 +13,17 @@
 #      checkout and in a linked worktree — except for the `repo_strategy |
 #      INFO | single` row, which must appear exactly once: added when the base
 #      predates it (JST-322), unchanged once it has it. Submodules support must not
-#      change anything else for a project that doesn't use it.
+#      change anything else for a project that doesn't use it. A base from before
+#      JST-331 (statuscheck still logging gh in) also may differ on the three gh
+#      rows and the gh_auth remedy, which that change rewrote.
 #   3. repos.sh (strategy, list) against golden output, and the statuscheck
 #      rows built from it, on a parent with members, a pinned submodule, an
 #      uninitialized member and invalid JST_MEMBERS values.
 #
 # Builds throwaway repos in $TMPDIR with local bare remotes. No credentials,
 # and no network beyond what statuscheck's own gh/Jira rows do (GITHUB_PAT_TOKEN
-# is blank, as in check-ensure-local-env.sh, so it never touches your gh login).
+# is blank, as in check-ensure-local-env.sh, so gh is never even started; where
+# a fake gh answers instead, the token is a fake one, since gh.sh refuses none).
 #
 # Usage:  bash scripts/check-repos.sh [--ports] [--base <ref>]
 #           --ports   also run the win/ ports (needs pwsh; skipped when absent):
@@ -135,6 +138,14 @@ else
   echo "  (comparing against $(git rev-parse --short "$BASE"))"
   mkdir -p "$LAB/old"
   git archive "$BASE" "$SCRIPTS" | tar -x -C "$LAB/old"
+  # JST-331 replaced statuscheck's gh login with the per-request gh.sh, which
+  # rewords gh_auth (and its remedy) and the two rows skipped behind it. Against
+  # a base that still logs in, those differ by design; drop them from both sides.
+  if grep -q 'gh auth login --with-token' "$LAB/old/$SCRIPTS/posix/statuscheck.sh"; then
+    gh_filt() { grep -vE '^\| (gh_auth|gh_repo_access|current_pr) \||^- `gh_auth`:'; }
+  else
+    gh_filt() { cat; }
+  fi
 
   # Each run gets a freshly built fixture at the same path: statuscheck
   # provisions .jst/ in a worktree, so a second run would start from another state.
@@ -171,8 +182,8 @@ else
     done
     # Allowed: the new table is the old one, plus exactly one repo_strategy row
     # when the base predates it (JST-322) — once the base has the row, nothing.
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" > "$LAB/sc.new.base"
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" > "$LAB/sc.old.base"
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" | gh_filt > "$LAB/sc.new.base"
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" | gh_filt > "$LAB/sc.old.base"
     added=$(( $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out") - $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.old.out") ))
     if [ "$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")" = 1 ] && [ "$added" -ge 0 ] \
        && cmp -s "$LAB/sc.old.base" "$LAB/sc.new.base" \
@@ -269,11 +280,12 @@ echo "statuscheck — repo_strategy and member_repo rows (fake gh)"
 mkdir -p "$LAB/bin" "$LAB/ghcfg"
 cat > "$LAB/bin/gh" <<'GH'
 #!/usr/bin/env bash
+[ "${GH_TOKEN:-}" = fake-token ] || { echo "fake gh: GH_TOKEN is not the project's PAT" >&2; exit 1; }
 case "$1 $2" in
-  "auth logout") exit 0 ;;
-  "auth login")  cat >/dev/null; exit 0 ;;
-  "auth status") echo "  ✓ Logged in to github.com account fake (keyring)"; exit 0 ;;
-  "pr list")     echo "[]"; exit 0 ;;
+  "auth "*)      echo "fake gh: statuscheck must not log gh in or out: $*" >&2; exit 1 ;;
+  "pr list")     case " $* " in *" --json number,state,baseRefName,url "*) ;; *) echo "fake gh: bad --json: $*" >&2; exit 1 ;; esac
+                 echo "[]"; exit 0 ;;
+  "api user")    echo fake; exit 0 ;;
 esac
 [ "$1" = api ] || { echo "fake gh: unexpected: $*" >&2; exit 1; }
 shift; [ "$1" = --paginate ] && shift
@@ -285,9 +297,7 @@ case "$1" in
   *) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
 esac
 GH
-# statuscheck.ps1 shells out to cmd for its gh login's stdin redirect (AGENTS.md).
-printf '#!/usr/bin/env bash\n[ "$1" = "/c" ] && shift; exec bash -c "$*"\n' > "$LAB/bin/cmd"
-chmod +x "$LAB/bin/gh" "$LAB/bin/cmd"
+chmod +x "$LAB/bin/gh"
 sed -i 's/^GITHUB_PAT_TOKEN=.*/GITHUB_PAT_TOKEN=fake-token/' "$M/.jst/jira-sdlc-tools.local.env"
 
 sc_rows() { # sc_rows <dir> <port> — the repo rows of statuscheck's table
@@ -305,7 +315,7 @@ rows() { # rows <label> <expected rows, \n-separated>
     is "$1$sfx" "$(sc_rows "$M" "$port")" "$want"
   done
 }
-GHA='| gh_auth | OK | Logged in to github.com account fake (keyring) (PAT session login) |'
+GHA="| gh_auth | OK | GITHUB_PAT_TOKEN authenticates as fake (GET /user, per request — gh's own login is never read or changed) |"
 RSOK='| repo_strategy | OK | submodules — members: app server · pinned: vendor/lib |'
 APPOK='| member_repo[app] | OK | acme/app · base development · on development |'
 rows "every member usable (server has no main: WARN)" \
@@ -357,7 +367,7 @@ git clone -q git@github.com:acme/parent.git "$L"
 mkdir -p "$L/.jst"
 printf 'PROJECT-KEY=XX\nDEFAULT_BASE_BRANCH=development\nPRODUCTION_BRANCH=main\nJST_MEMBERS = app server\n' > "$L/.jst/jira-sdlc-tools.env"
 printf 'jira-sdlc-tools.local.env\n' > "$L/.jst/.gitignore"
-printf 'JIRA_ACCOUNT_URL=example.atlassian.net\nGITHUB_PAT_TOKEN=\n' > "$L/.jst/jira-sdlc-tools.local.env"
+printf 'JIRA_ACCOUNT_URL=example.atlassian.net\nGITHUB_PAT_TOKEN=fake-token\n' > "$L/.jst/jira-sdlc-tools.local.env"
 git -C "$L" submodule add -q -b development git@github.com:acme/app.git app
 git -C "$L" submodule add -q -b development git@github.com:acme/server.git server
 git -C "$L" add .jst/.gitignore .jst/jira-sdlc-tools.env; git -C "$L" commit -qm "members"; git -C "$L" push -q origin development
@@ -375,11 +385,14 @@ FGH="$LAB/fgh"; mkdir -p "$FGH/prs" "$FGH/merge" "$FGH/branches" "$FGH/ahead" "$
 export FGH
 cat > "$LAB/bin4/gh" <<'GH'
 #!/usr/bin/env bash
+[ "${GH_TOKEN:-}" = fake-token ] || { echo "fake gh: GH_TOKEN is not the project's PAT" >&2; exit 1; }
 D="$FGH"; key() { local b="${2//\//%}"; printf '%s@%s' "${1//\//_}" "$b"; }
 dec() { printf '%s' "$1" | sed 's#%2F#/#g'; }
 opt() { local want="$1"; shift; while [ $# -gt 0 ]; do [ "$1" = "$want" ] && { printf '%s' "$2"; return; }; shift; done; }
 case "$1 $2" in
   "pr list")
+    case "$(opt --json "$@")" in   # an unquoted a,b,c that reached gh split apart (win) lands here
+      headRefOid|number,state,baseRefName,url) ;; *) echo "fake gh: bad --json: $*" >&2; exit 1 ;; esac
     k=$(key "$(opt -R "$@")" "$(opt --head "$@")"); echo "pr list $k" >> "$D/calls"
     if [ "$(opt --json "$@")" = headRefOid ]; then cat "$D/heads/$k" 2>/dev/null; exit 0; fi
     [ -f "$D/prs/$k.error" ] && { cat "$D/prs/$k.error" >&2; exit 1; }
@@ -420,8 +433,17 @@ K() { printf '%s@%s' "acme_$1" "${2//\//%}"; }            # K <repo> <branch> �
 setpr() { printf '%b\n' "$3" > "$FGH/prs/$(K "$1" "$2")"; } # setpr <repo> <branch> <rows, \t \n escapes>
 clearfgh() { rm -f "$FGH"/prs/* "$FGH"/branches/* "$FGH"/ahead/* "$FGH"/merge/* "$FGH/calls"; }
 
+withtok() { # withtok <dir> — the fake PAT gh.sh needs, in the dir's project root,
+  # kept out of git status through info/exclude so no verb sees a dirty tree
+  local r f; r=$(cd "$1" && bash -c ". '$HELPER'; jst_root") || return 0
+  f="$r/.jst/jira-sdlc-tools.local.env"
+  grep -q '^GITHUB_PAT_TOKEN=fake-token' "$f" 2>/dev/null && return 0
+  mkdir -p "$r/.jst"; printf 'GITHUB_PAT_TOKEN=fake-token\n' >> "$f"
+  printf '/.jst/jira-sdlc-tools.local.env\n' >> "$(git -C "$r" rev-parse --path-format=absolute --git-path info/exclude)"
+}
 rp() { # rp <port> <dir> <args…> — run repos with the fake gh; stdout, then exit=<rc>
   local port="$1" dir="$2"; shift 2
+  withtok "$dir"
   if [ "$port" = sh ]; then ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" bash "$REPOS_SH" "$@" 2>/dev/null; echo "exit=$?" )
   else ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" pwsh -NoProfile -File "$REPOS_PS" "$@" 2>/dev/null; echo "exit=$?" ); fi | norm
 }

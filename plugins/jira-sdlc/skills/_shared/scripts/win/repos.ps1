@@ -32,6 +32,7 @@
 # (statuscheck.ps1 does) — unlike jira.ps1, which writes to [Console]::Out.
 
 . (Join-Path $PSScriptRoot '_jst_root.ps1')
+. (Join-Path $PSScriptRoot 'gh.ps1')   # Invoke-JstGh: gh with the project's GITHUB_PAT_TOKEN for one call (JST-331)
 
 function Stop-Usage {
     param([string]$Message)
@@ -192,7 +193,7 @@ function Get-PrRows {   # "pr`tstate`tbase`turl" per PR; $null on a gh error (me
     param([string]$Slug, [string]$Branch)
     $out = @()
     foreach ($n in 1, 2) {
-        $out = @(& gh pr list -R $Slug --head $Branch --state all --json number,state,baseRefName,url `
+        $out = @(Invoke-JstGh pr list -R $Slug --head $Branch --state all --json number,state,baseRefName,url `
                  --jq '.[] | [.number, .state, .baseRefName, .url] | @tsv' 2> $ErrFile)
         if ($LASTEXITCODE -ne 0) { return $null }
         $out = @($out | Where-Object { ([string]$_).Trim() -ne '' })
@@ -256,12 +257,12 @@ function Get-RepoPrRows { param($Lines, [string]$Repo)
 
 function Get-TakesPart {   # no | pushed | error <message>
     param([string]$Slug, [string]$Base)
-    & gh api "repos/$Slug/branches/$(Get-UrlEnc $script:OptBranch)" > $null 2> $ErrFile
+    Invoke-JstGh api "repos/$Slug/branches/$(Get-UrlEnc $script:OptBranch)" > $null 2> $ErrFile
     if ($LASTEXITCODE -ne 0) {
         if ((Get-Content -LiteralPath $ErrFile -Raw -ErrorAction SilentlyContinue) -match '404|Not Found') { return 'no' }
         return "error $(Get-FirstLine $ErrFile)"
     }
-    $ahead = (& gh api "repos/$Slug/compare/$(Get-UrlEnc $Base)...$(Get-UrlEnc $script:OptBranch)" --jq .ahead_by 2> $ErrFile)
+    $ahead = (Invoke-JstGh api "repos/$Slug/compare/$(Get-UrlEnc $Base)...$(Get-UrlEnc $script:OptBranch)" --jq .ahead_by 2> $ErrFile)
     if ($LASTEXITCODE -ne 0) { return "error $(Get-FirstLine $ErrFile)" }
     $n = 0; [void][int]::TryParse(([string]$ahead).Trim(), [ref]$n)
     if ($n -gt 0) { return 'pushed' } else { return 'no' }
@@ -394,7 +395,7 @@ function v_land {
             continue
         }
         $n = $eff.Substring(7)
-        $mc = (& gh pr view $n -R $r.Slug --json mergeCommit --jq .mergeCommit.oid 2> $ErrFile)
+        $mc = (Invoke-JstGh pr view $n -R $r.Slug --json mergeCommit --jq .mergeCommit.oid 2> $ErrFile)
         if ($LASTEXITCODE -ne 0) { Stop-Land "$($r.Slug)#${n}: $(Get-FirstLine $ErrFile) — nothing changed" }
         $mc = ([string]$mc).Trim()
         if (-not (Test-IsCheckedOut $r.Repo)) { Stop-Land "$($r.Repo) isn't checked out here — nothing changed" }
@@ -434,7 +435,7 @@ function v_land {
         $jline = if ($jurl) { "`nJira: https://$jurl/browse/$key" } else { '' }
         $bodyFile = "$ErrFile.body"
         [System.IO.File]::WriteAllText($bodyFile, "$body`n`nEvery gitlink here points at a commit on its member's base; the reviewer checks it with ``repos.sh land --check``.`n$jline`n")
-        $url = @(& gh pr create -R $rootSlug --base $RootBase --head $script:OptBranch --title $OptTitle --body-file $bodyFile 2> $ErrFile) | Select-Object -Last 1
+        $url = @(Invoke-JstGh pr create -R $rootSlug --base $RootBase --head $script:OptBranch --title $OptTitle --body-file $bodyFile 2> $ErrFile) | Select-Object -Last 1
         Remove-Item -LiteralPath $bodyFile -Force -ErrorAction SilentlyContinue
         if (-not $url) { Stop-Land "landed and pushed, but opening the root PR failed: $(Get-FirstLine $ErrFile)" }
     }
@@ -592,7 +593,7 @@ function v_open_prs {
             $url = @($t.Lines | Select-Object -Skip 1 | Where-Object { $f = ([string]$_) -split "`t"; $f[0] -eq $r.Repo -and $f[2] -eq $n } | ForEach-Object { (([string]$_) -split "`t")[5] }) | Select-Object -First 1
             $out += "$($r.Repo)`t$($r.Slug)`t$n`texists`t$url"
         } else {
-            $url = @(& gh pr create -R $r.Slug --base $r.Base --head $script:OptBranch --title $OptTitle --body-file $OptBody 2> $ErrFile) | Select-Object -Last 1
+            $url = @(Invoke-JstGh pr create -R $r.Slug --base $r.Base --head $script:OptBranch --title $OptTitle --body-file $OptBody 2> $ErrFile) | Select-Object -Last 1
             if (-not $url) { Stop-Run "$($r.Slug): gh pr create failed: $(Get-FirstLine $ErrFile)" }
             $url = ([string]$url).Trim()
             $out += "$($r.Repo)`t$($r.Slug)`t$($url.Split('/')[-1])`tcreated`t$url"
@@ -606,13 +607,13 @@ function v_open_prs {
     $section = "**PR set** for $key (kept current by jira-sdlc):`n" + ((@($rows | ForEach-Object { $f = ([string]$_) -split "`t"; "- $($f[1])#$($f[2]) — $($f[3])" })) -join "`n")
     foreach ($row in @($rows | Where-Object { (([string]$_) -split "`t")[3] -eq 'OPEN' })) {
         $f = ([string]$row) -split "`t"
-        $cur = (& gh pr view $f[2] -R $f[1] --json body --jq .body 2>$null | Out-String)
+        $cur = (Invoke-JstGh pr view $f[2] -R $f[1] --json body --jq .body 2>$null | Out-String)
         if ($LASTEXITCODE -ne 0) { continue }
         $cur = $cur -replace "`r?`n$", ''
         $new = Get-WithSet $cur $section
         if ($new -ne ($cur + "`n")) {
             $nf = "$ErrFile.new"; [System.IO.File]::WriteAllText($nf, $new)
-            & gh pr edit $f[2] -R $f[1] --body-file $nf > $null 2>&1
+            Invoke-JstGh pr edit $f[2] -R $f[1] --body-file $nf > $null 2>&1
             Remove-Item -LiteralPath $nf -Force -ErrorAction SilentlyContinue
         }
     }
@@ -635,7 +636,7 @@ function Get-UnpushedVerdict {   # @{Rc; Why}: 0 covered, 1 work at risk, 2 can'
         if ($u.Count -eq 0) { continue }
         if ($Slug -eq '-') { return [pscustomobject]@{ Rc = 2; Why = "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked" } }
         $tip = ([string](& git -C $Dir rev-parse $b 2>$null)).Trim()
-        $heads = @(& gh pr list -R $Slug --head $b --state merged --json headRefOid --jq '.[].headRefOid' 2> $ErrFile)
+        $heads = @(Invoke-JstGh pr list -R $Slug --head $b --state merged --json headRefOid --jq '.[].headRefOid' 2> $ErrFile)
         if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ Rc = 2; Why = "${b}: merged PRs unknown: $(Get-FirstLine $ErrFile)" } }
         $covered = $false
         foreach ($h in @($heads | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })) {

@@ -336,103 +336,56 @@ if ($KeyArg) {
     Add-Row issue_key WARN "no issue key derivable from branch '$brShown' (see the branch row)$note"
 }
 
-# --- gh auth (needed by 'gh pr create') --------------------------------------
-# Log gh in from a persistent PAT session at the very start of the run — logout
-# FIRST, then login (see statuscheck.sh for the full rationale): a bare
-# `gh auth login` does not reliably replace an already-stored keyring token, so
-# without the logout a stale PR-read-only PAT could survive and 403 at
-# `gh pr create` mid-run (JST-143). gh uses ONE shared PAT (not a per-role Jira
-# identity), so this role-agnostic healthcheck — run by every skill
-# before any work — is the right home for it, no per-skill wiring needed.
-# GITHUB_PAT_TOKEN is a secret, machine-specific value → gitignored
-# .jst/jira-sdlc-tools.local.env only. Missing token → FAIL with a remedy, and the
-# skill stops like any other FAIL row. A login that runs but FAILs (non-zero
-# exit — an expired or revoked PAT, etc.) also FAILs, relaying gh's first stderr
-# line (token redacted) rather than falling through to a generic "no session" —
-# so the actual auth error is named (JST-145 AC#3). Accepted tradeoff: this
-# writes the OS-user-global gh config, overwriting the developer's own gh session
-# and not restoring it afterward — see docs/github/ (JST-126/145). Because that
-# config is OS-user-global rather than per-repo, the unconditional logout is also
-# what stops a token from a PARALLEL session on another repository being silently
-# reused here — the second reason not to make it conditional. Do NOT "improve"
-# this by probing the token first and skipping the logout when the probe fails:
-# that hands the stale cross-repo session exactly the survival path both rules
-# exist to close. A failed login therefore leaves no session at all, by design;
-# the FAIL remedy below says so, since re-running is the recovery (JST-290).
+# --- gh auth (needed by every gh call the skills make) -----------------------
+# Per-request, like jira_auth (JST-331; statuscheck.sh has the full rationale):
+# gh.ps1 hands GITHUB_PAT_TOKEN to gh as GH_TOKEN for one command, and this row
+# proves the token with GET /user. No `gh auth login` or `logout` anywhere, so
+# ~/.config/gh, the keyring and the developer's own gh session are never
+# touched — and the JST-171 BOM workaround the login needed (a token piped into
+# a native command on Windows PowerShell 5.1) went with it: GH_TOKEN is an
+# environment variable, never a pipe. Every gh call below runs through
+# Invoke-JstGh, dot-sourced from gh.ps1.
+. (Join-Path $PSScriptRoot 'gh.ps1')
 $GhOk = $false
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Add-Row gh_auth FAIL "gh (GitHub CLI) is not installed" `
         "install it (https://cli.github.com), then $Rerun."
 } else {
-    # Get-Cfg parses rather than sources the env file, so a quoted value keeps
-    # its quotes — strip one surrounding pair before handing the token to gh.
-    $ghPat = Get-Cfg 'GITHUB_PAT_TOKEN'
-    if ($ghPat) { $ghPat = $ghPat.Trim().Trim('"').Trim("'") }
-    if (-not $ghPat) {
-        Add-Row gh_auth FAIL "GITHUB_PAT_TOKEN is unset — gh can't be logged in for this session" `
-            "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $Rerun."
-    } else {
-        # logout FIRST — see header; non-fatal if there's nothing to log out.
-        & gh auth logout --hostname github.com 2>&1 | Out-Null
-        # Login: capture gh's stderr. gh never echoes the token on error, but we
-        # redact it anyway (issue NOTES) before relaying. A FAILED login now FAILs
-        # the row with gh's own first error line instead of falling through to the
-        # generic "no session" FAIL — so a real auth failure (expired/revoked PAT,
-        # etc.) is named, not buried (JST-145 AC#3). Success exits 0 with no
-        # stderr; only then do we run 'gh auth status' for the account line.
-        # Do NOT "simplify" this back to `$ghPat | gh auth login` (JST-171): Windows
-        # PowerShell 5.1 prepends a UTF-8 BOM (EF BB BF) when piping a string into a
-        # native command, so gh sends BOM+token and GitHub returns a genuine 401 for
-        # a perfectly valid PAT — and the remedy line then blames the token, sending
-        # people off to regenerate a working one. Nothing settable fixes the pipe on
-        # 5.1 ($OutputEncoding and [Console]::OutputEncoding are both ignored; .NET
-        # Framework builds StandardInput from [Console]::OutputEncoding and emits its
-        # preamble, and the StandardInputEncoding that would override that is .NET
-        # Core only). Hence: write the token BOM-free and let cmd redirect stdin from
-        # the file — PowerShell has no stdin redirection operator for native commands.
-        # Unchanged on pwsh 7. GH_TOKEN is not a substitute either — it affects only
-        # this process, while the persisted session is what the executor's later
-        # `gh pr create` (a separate process) depends on.
-        $tmpTok = Join-Path $env:TEMP ("ghtok-" + [guid]::NewGuid().ToString('N') + ".txt")
-        $loginErr = ''; $loginCode = 1
-        try {
-            [System.IO.File]::WriteAllText($tmpTok, $ghPat + "`n", (New-Object System.Text.UTF8Encoding $false))
-            $ghExe = (Get-Command gh).Source
-            $loginErr = (& cmd /c "`"$ghExe`" auth login --with-token < `"$tmpTok`" 2>&1") | Out-String
-            $loginCode = $LASTEXITCODE
-        } finally {
-            # The PAT sits on disk in plain text until this runs — clear it even when
-            # the login failed. If the delete is blocked, blank the contents first so
-            # no token-bearing file can survive, then try once more.
-            if (Test-Path -LiteralPath $tmpTok) { Remove-Item -LiteralPath $tmpTok -Force -ErrorAction SilentlyContinue }
-            if (Test-Path -LiteralPath $tmpTok) {
-                [System.IO.File]::WriteAllText($tmpTok, '', (New-Object System.Text.UTF8Encoding $false))
-                Remove-Item -LiteralPath $tmpTok -Force -ErrorAction SilentlyContinue
-            }
-        }
-        if ($loginCode -eq 0) {
-            $ghLine = ((& gh auth status 2>&1) | Where-Object { $_ -match 'Logged in to' } |
-                Select-Object -First 1) -replace '^[^L]*', ''
-            if ($ghLine) {
-                $GhOk = $true
-                Add-Row gh_auth OK "$ghLine (PAT session login)"
-            } else {
-                Add-Row gh_auth FAIL "gh auth login succeeded but 'gh auth status' reports no logged-in account" `
-                    "gh reported a successful login but no active session — inspect 'gh auth status' by hand, then $Rerun."
-            }
+    $ghErrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $ghLogin = (Invoke-JstGh api user --jq .login 2> $ghErrFile)
+        $ghRc = $LASTEXITCODE
+        $ghLogin = if ($ghLogin) { ([string]($ghLogin | Select-Object -First 1)).Trim() } else { '' }
+        if ($ghRc -eq 0 -and $ghLogin) {
+            $GhOk = $true
+            Add-Row gh_auth OK "GITHUB_PAT_TOKEN authenticates as $ghLogin (GET /user, per request — gh's own login is never read or changed)"
         } else {
-            $redacted = if ($ghPat) { $loginErr -replace [regex]::Escape($ghPat), '[REDACTED]' } else { $loginErr }
-            $err = (($redacted -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
-            if (-not $err) { $err = '(no stderr from gh)' }
-            Add-Row gh_auth FAIL "gh auth login --with-token failed: $err" `
-                "gh is left logged out — the logout above is deliberate (it stops a token from a parallel session on another repo being reused here), so re-running re-logs it in. A connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
+            # Get-Cfg parses rather than sources the env file, so a quoted value
+            # keeps its quotes — strip one surrounding pair, as gh.ps1 does.
+            $ghPat = Get-Cfg 'GITHUB_PAT_TOKEN'
+            if ($ghPat) { $ghPat = $ghPat.Trim().Trim('"').Trim("'") }
+            $ghErr = (Get-Content -LiteralPath $ghErrFile -Raw)
+            if (-not $ghErr) { $ghErr = '' }
+            if ($ghPat) { $ghErr = $ghErr -replace [regex]::Escape($ghPat), '[REDACTED]' }
+            $err = (($ghErr -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1)
+            $err = if ($err) { $err.Trim() } else { '' }
+            if ($ghRc -eq 4 -and $err.StartsWith('jst-gh: ')) {
+                Add-Row gh_auth FAIL $err.Substring(8) `
+                    "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $Rerun."
+            } else {
+                if (-not $err) { $err = '(no stderr from gh)' }
+                Add-Row gh_auth FAIL "GET /user with GITHUB_PAT_TOKEN failed: $err" `
+                    "a connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
+            }
         }
+    } finally {
+        Remove-Item -LiteralPath $ghErrFile -Force -ErrorAction SilentlyContinue
     }
 }
 
 # --- gh repo access (needed by 'gh pr create', not proved by gh_auth) --------
-# gh_auth proves a LOGIN succeeded and nothing more. A fine-grained PAT scoped
-# to "only selected repositories" logs in happily, reads the org and 20 other
+# gh_auth proves the TOKEN authenticates and nothing more. A fine-grained PAT scoped
+# to "only selected repositories" authenticates happily, reads the org and 20 other
 # repos, and still cannot see this one — GitHub answers 404, not 403, so it
 # looks like a typo rather than a permission (JST-251). With an SSH origin every
 # git operation keeps working, and the first thing to break is `gh pr create`
@@ -461,11 +414,11 @@ if (-not $WtRoot) {
         Add-Row gh_repo_access FAIL "this repository has no 'origin' remote — the skills push issue branches to it and open PRs against it" `
             "create the GitHub repository (or find the existing one) and attach it: git remote add origin git@github.com:<OWNER>/<REPO>.git — the skills don't create repositories — then $Rerun."
     } elseif (-not $GhOk) {
-        Add-Row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a logged-in gh; see rows above)"
+        Add-Row gh_repo_access WARN "skipped (gh_auth failed — the repo probe needs a working GITHUB_PAT_TOKEN; see rows above)"
     } elseif (-not $ghSlug) {
         Add-Row gh_repo_access WARN "origin is not a github.com remote ($originUrl) — can't probe it with gh, and 'gh pr create' won't work against it"
     } else {
-        $ghApiErr = ((& gh api "repos/$ghSlug" 2>&1) | Out-String)
+        $ghApiErr = ((Invoke-JstGh api "repos/$ghSlug" 2>&1) | Out-String)
         if ($LASTEXITCODE -eq 0) {
             Add-Row gh_repo_access OK "$ghSlug reachable with this PAT (GET /repos/$ghSlug)"
         } elseif ($ghApiErr -match '404|Not Found|Could not resolve') {
@@ -521,9 +474,9 @@ if ($WtRoot) {
             } elseif ($mSlug -eq '-') {
                 Add-Row $mRow WARN "origin is not a github.com remote — can't probe it with gh, and 'gh pr create' won't work against it"
             } elseif (-not $GhOk) {
-                Add-Row $mRow WARN 'skipped (gh_auth failed — the member probe needs a logged-in gh; see rows above)'
+                Add-Row $mRow WARN 'skipped (gh_auth failed — the member probe needs a working GITHUB_PAT_TOKEN; see rows above)'
             } else {
-                $mErr = ((& gh api "repos/$mSlug" 2>&1) | Out-String)
+                $mErr = ((Invoke-JstGh api "repos/$mSlug" 2>&1) | Out-String)
                 if ($LASTEXITCODE -ne 0) {
                     if ($mErr -match '404|Not Found|Could not resolve') {
                         Add-Row $mRow FAIL "the PAT authenticates but 404s on $mSlug — the fine-grained token's 'only selected repositories' list probably doesn't include this member" `
@@ -535,7 +488,7 @@ if ($WtRoot) {
                             "resolve the error above (permissions, SSO authorization, or a transient network/API problem), then $Rerun."
                     }
                 } else {
-                    $mBranches = @(& gh api --paginate "repos/$mSlug/branches" --jq '.[].name' 2>$null)
+                    $mBranches = @(Invoke-JstGh api --paginate "repos/$mSlug/branches" --jq '.[].name' 2>$null)
                     if ($LASTEXITCODE -ne 0) {
                         Add-Row $mRow WARN "$mSlug reachable, but listing its branches failed — base '$mBase' unchecked"
                     } elseif (@($mBranches | ForEach-Object { ([string]$_).Trim() }) -cnotcontains $mBase) {
@@ -565,7 +518,7 @@ if ($WtRoot) {
 $Parent = (& git config "branch.$Br.parentbranch" 2>$null)
 $Parent = if ($Parent) { ([string]$Parent).Trim() } else { '' }
 if (-not $GhOk) {
-    Add-Row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a logged-in gh; see rows above)"
+    Add-Row current_pr WARN "skipped (gh_auth failed — the PR lookup needs a working GITHUB_PAT_TOKEN; see rows above)"
 } elseif (-not $originUrl) {
     Add-Row current_pr WARN "skipped (no 'origin' remote to look PRs up on — see gh_repo_access)"
 } elseif (-not $ghSlug) {
@@ -580,7 +533,7 @@ if (-not $GhOk) {
     # No --jq here, unlike the bash twin: PowerShell 5.1 strips the embedded
     # double quotes a jq string needs when passing args to a native command, so
     # parse gh's JSON instead. 2>&1 then split by type: ErrorRecords are stderr.
-    $cpRaw = @(& gh pr list --repo $ghSlug --head $Br --state all `
+    $cpRaw = @(Invoke-JstGh pr list --repo $ghSlug --head $Br --state all `
         --json number,state,baseRefName,url 2>&1)
     $cpCode = $LASTEXITCODE
     $cpText = (@($cpRaw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } |
