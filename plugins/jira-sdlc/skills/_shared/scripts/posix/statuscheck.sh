@@ -775,6 +775,56 @@ else
   row bootstrap INFO "no .jst/$BOOTSTRAP_FILE (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 fi
 
+# The stack (onboarding: jst-survey writes .jst/STACK.md, jst-stack builds ./stack
+# against stack contract v1; skills/_shared/stack/). Optional, so INFO — WARN only
+# for a contract stack this script can't read, or an instance number another
+# checkout holds. Never runs ./stack: reading files and the owner record only.
+if [ -f "$CFG_ROOT/.jst/STACK.md" ]; then
+  SD_LAYOUT=$(grep -m1 -E '^\| *Repo layout *\|' "$CFG_ROOT/.jst/STACK.md" | grep -oE '`[a-z-]+`' | head -1 | tr -d '`')
+  SD_PATTERN=$(grep -m1 -E '^\| *Run pattern *\|' "$CFG_ROOT/.jst/STACK.md" | grep -oE '`[a-z-]+`' | head -1 | tr -d '`')
+  row stack_doc INFO ".jst/STACK.md (layout ${SD_LAYOUT:-?}, pattern ${SD_PATTERN:-?})"
+else
+  row stack_doc INFO "no .jst/STACK.md (optional — /jira-sdlc:jst-survey writes it, then /jira-sdlc:jst-stack builds the stack from it)"
+fi
+STACK_CONTRACT=""
+if [ -f "$CFG_ROOT/stack" ]; then
+  if [ "$(sed -n 2p "$CFG_ROOT/stack")" = "# controlfreak-stack-contract: 1" ]; then
+    SC_CONF="$CFG_ROOT/stack.d/resources.conf"
+    SC_PREFIX=$(sed -n 's/^NAME_PREFIX=//p' "$SC_CONF" 2>/dev/null | tail -1)
+    SC_MIN=$(sed -n 's/^INSTANCE_MIN=//p' "$SC_CONF" 2>/dev/null | tail -1)
+    SC_MAX=$(sed -n 's/^INSTANCE_MAX=//p' "$SC_CONF" 2>/dev/null | tail -1)
+    if [ -n "$SC_PREFIX" ] && [ -n "$SC_MIN" ] && [ -n "$SC_MAX" ]; then
+      STACK_CONTRACT=1
+      row stack INFO "./stack (stack contract 1) · NAME_PREFIX=$SC_PREFIX · instances $SC_MIN-$SC_MAX"
+    else
+      row stack WARN "./stack has the contract marker, but stack.d/resources.conf lacks NAME_PREFIX, INSTANCE_MIN or INSTANCE_MAX" \
+        "fix stack.d/resources.conf (or rerun /jira-sdlc:jst-stack), then $RERUN."
+    fi
+  else
+    row stack INFO "./stack without the contract marker (the project's own: the executor starts no instance with it)"
+  fi
+else
+  row stack INFO "no ./stack (optional — /jira-sdlc:jst-stack builds one from .jst/STACK.md)"
+fi
+if [ -n "$STACK_CONTRACT" ] && [ -n "$IS_WORKTREE" ] && [ -n "$BR_KEY" ]; then
+  if [ "$OS" = windows ]; then
+    row instance INFO "not on Windows (stack contract v1 is bash: run the stack under WSL)"
+  else
+    IN_N=$(bash "$SC_DIR/instance.sh" number "$BR_KEY" --conf "$SC_CONF" 2>/dev/null | sed -n 's/^instance=//p')
+    IN_OWNER=$(cat "$HOME/.local/state/$SC_PREFIX/i$IN_N/owner" 2>/dev/null || true)
+    if [ -z "$IN_N" ]; then
+      row instance WARN "no instance number for $BR_KEY (instance.sh number failed)" "check stack.d/resources.conf, then $RERUN."
+    elif [ -z "$IN_OWNER" ]; then
+      row instance INFO "N=$IN_N (from $BR_KEY) · not claimed yet (jira-task-executor claims it in step 1)"
+    elif [ "$IN_OWNER" = "$(cd "$CFG_ROOT" && pwd -P)" ]; then
+      row instance INFO "N=$IN_N (from $BR_KEY) · this worktree's · ./stack status --instance $IN_N"
+    else
+      row instance WARN "N=$IN_N (from $BR_KEY) is held by $IN_OWNER" \
+        "two issues share N=$IN_N: tear down the other instance (./stack teardown --instance $IN_N there) or widen INSTANCE_MIN..INSTANCE_MAX, then $RERUN."
+    fi
+  fi
+fi
+
 row parent_branch INFO "${PARENT:-unset} (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
 DIRTY=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
