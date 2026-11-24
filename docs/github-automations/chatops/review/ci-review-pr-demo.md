@@ -198,10 +198,11 @@ has no upstream assigner job to hand them forward.
 
 ## Three caveats worth knowing before copying this
 
-1. **Don't export `GH_TOKEN`/`GITHUB_TOKEN` into the step that runs the
-   skill.** Every skill starts with statuscheck, which reads
-   `GITHUB_PAT_TOKEN` out of the env *file* and runs `gh auth logout && gh auth login --with-token`; `gh` refuses that login while either variable is
-   set in the environment. The skill step exports only the model credential;
+1. **Keep `GH_TOKEN`/`GITHUB_TOKEN` out of the step that runs the skill.** A skill's GitHub identity is
+   `GITHUB_PAT_TOKEN` in the env *file*: every `gh` call goes through the plugin's `gh.sh`, which reads it from there and
+   sets `GH_TOKEN` for that one command (JST-331), so an exported token no longer decides anything. Plugin 0.9.4 and
+   earlier still need the rule (the marketplace installs the default branch): their statuscheck runs
+   `gh auth logout && gh auth login --with-token`, which `gh` refuses while either variable is set in the environment. The skill step exports only the model credential;
    the one step that needs `GH_TOKEN` (resolving head/base) sets it before the
    skill runs, never alongside it.
 2. **The skills come from the marketplace, not from either checkout.** The

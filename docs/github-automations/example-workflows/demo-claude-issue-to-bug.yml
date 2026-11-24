@@ -66,19 +66,22 @@
 #
 # ── Caveats worth knowing before you copy this into another repo ──────────
 #
-#  1. **Do not export GH_TOKEN / GITHUB_TOKEN into the step that runs the
-#     skill.** Every skill starts with statuscheck, which reads
-#     GITHUB_PAT_TOKEN out of the env FILE (not the environment) and runs
-#     `gh auth logout && gh auth login --with-token`; gh refuses that login
-#     while either token variable is set — "first clear the value from the
-#     environment", exit 1 — which FAILs the gh_auth row and aborts the run
-#     before any work happens. CLAUDE_CODE_OAUTH_TOKEN is the ONLY secret
-#     exported into the skill-running step; the rest are written to
-#     .jst/jira-sdlc-tools.local.env and read from there. `git push` is
-#     unaffected: it uses the credentials actions/checkout persisted in
-#     `.git/config`, so the built-in GITHUB_TOKEN (which can push given the
-#     job `permissions:` below) is enough — GITHUB_PAT_TOKEN is not a secret
-#     to create.
+#  1. **Keep GH_TOKEN / GITHUB_TOKEN out of the step that runs the skill.**
+#     A skill's GitHub identity is GITHUB_PAT_TOKEN in the env file: every
+#     gh call goes through the plugin's gh.sh, which reads it from there and
+#     sets GH_TOKEN for that one command (JST-331), so an exported token no
+#     longer decides anything. Plugin 0.9.4 and earlier still need the rule
+#     (the marketplace installs the default branch, so check which one you
+#     get): their statuscheck runs `gh auth logout && gh auth login
+#     --with-token`, which gh refuses while either token variable is
+#     exported ("first clear the value from the environment", exit 1),
+#     failing the gh_auth row before any work. CLAUDE_CODE_OAUTH_TOKEN is
+#     the ONLY secret exported into the skill-running step; the rest are
+#     written to .jst/jira-sdlc-tools.local.env and read from there. `git
+#     push` is unaffected: it uses the credentials actions/checkout
+#     persisted in `.git/config`, so the built-in GITHUB_TOKEN (which can
+#     push given the job `permissions:` below) is enough — GITHUB_PAT_TOKEN
+#     is not a secret to create.
 #  2. **The skills come from the marketplace, not from this checkout.** The
 #     run installs the plugin with `claude plugin marketplace add` +
 #     `claude plugin install`, which clones the plugin repo's *default*
