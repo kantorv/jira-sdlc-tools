@@ -91,7 +91,7 @@ exactly the document's change rows and nothing else.
 
 Rules that bite (the guide says why): names and ports only from `resources.conf` and N; never
 the main checkout's services or data; kill by PID file, never by name; find the main checkout
-with `git worktree list --porcelain`; honor `CF_INSTANCE_HOME` and `CF_MAIN_CHECKOUT`; never
+with the contract's `main_worktree`; honor `CF_INSTANCE_HOME` and `CF_MAIN_CHECKOUT`; never
 print a secret.
 
 Then the checks that need nothing running — you never run `./stack`, the app, Docker or an
