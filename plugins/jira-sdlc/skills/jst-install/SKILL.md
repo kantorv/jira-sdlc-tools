@@ -196,12 +196,11 @@ both install modes.
   separate accounts is what makes the board show who did what.
 
 Then **wait** for them to say it's filled in, and don't run the gate before they
-do. The template ships a *non-empty placeholder* PAT, and statuscheck logs `gh`
-out before logging in with whatever it finds — so gating early doesn't merely
-fail a row, it costs the user the `gh` session they already had, with nothing
-restored afterwards. You can't inspect their work either (this is the file you
-don't open), which is why the `gh_auth` and `jira_auth` rows in the next two
-sections are the real verification.
+do — it would only fail on the template's placeholders. You can't inspect their
+work either (this is the file you don't open), which is why the `gh_auth` and
+`jira_auth` rows in the next two sections are the real verification. The PAT is
+never a `gh` login: the skills pass it per command through `gh.sh`, so the
+user's own `gh` session is left as it was.
 
 **1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local` and
 `env_local_ignored` OK; everything else red for now.
@@ -305,10 +304,10 @@ submodules. Then tell them two things the gate can't check:
   `origin`, since member PRs target the member's own base.
 
 **2f. Gate.** Run the gate. Two rows cover the PAT from 1c and they prove
-different things: `gh_auth` only proves a **login** succeeded, while
-`gh_repo_access` calls `gh api repos/<OWNER>/<REPO>` and is the one that proves
+different things: `gh_auth` only proves the token **authenticates**, while
+`gh_repo_access` calls `gh.sh api repos/<OWNER>/<REPO>` and is the one that proves
 the PAT can do the executor's job. A fine-grained token scoped to *selected
-repositories* logs in green, reads the org, and still 404s on this repo — 404,
+repositories* authenticates green, reads the org, and still 404s on this repo — 404,
 not 403, so it reads like a typo — and with an SSH `origin` nothing breaks until
 `gh pr create` fails mid-task. On a FAIL there, relay the row's remedy: add the
 repo at github.com/settings/personal-access-tokens, keeping Contents and Pull

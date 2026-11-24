@@ -48,11 +48,10 @@ drawn as self-calls because they **neither mutate GIT nor JIRA state** — not
 because they stay local. Only `ensure_local_env` does: the
 healthcheck *probes* both credentials over the network (`GET /myself` for
 Jira, `GET /repos/…` for GitHub), and `pr_base.sh`'s second source is the
-issue's own `PR target branch:` **Jira comment**. Read-only of *those two
-systems*, not of the machine: `statuscheck.sh` also re-logs `gh` in from the
-stored PAT (`gh auth logout`, then `gh auth login --with-token`), a
-deliberate local mutation that exists so a stale read-only token can't 403 at
-`gh pr create` later.
+issue's own `PR target branch:` **Jira comment**. Neither touches `gh`'s own
+login either: every `gh` call goes through `gh.sh`, which hands the project's
+PAT to that one command (JST-331), so `~/.config/gh` is the same after a run as
+before it.
 
 ## Sequence diagram
 

@@ -212,6 +212,14 @@ per-request, different roles can run **concurrently** as different identities
 with no shared, machine-global "active account" to race over — the reason the
 earlier login-based model was replaced.
 
+GitHub works the same way (JST-331): `GITHUB_PAT_TOKEN` is never a `gh` login.
+`scripts/posix/gh.sh` / `scripts/win/gh.ps1` take any `gh` arguments and hand
+the token to gh as `GH_TOKEN` for that one command, which gh ranks above any
+stored credential. Nothing writes `~/.config/gh` or the keyring, so the
+developer's own `gh` session survives every run, and two projects with
+different PATs can't take each other's identity. A missing token is an error
+(exit 4), never a fallback to whatever `gh` happens to be logged in as.
+
 ## Required — per-role Jira accounts (in `.jst/jira-sdlc-tools.local.env`)
 
 Each skill runs as its **own** Jira account, so the board shows who did
