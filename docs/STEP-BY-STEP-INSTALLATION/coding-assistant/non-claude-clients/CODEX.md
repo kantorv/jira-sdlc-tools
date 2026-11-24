@@ -19,12 +19,12 @@ automates it.
 ## Prerequisites
 
 - Jira auth configured — per-request Basic auth from `.jst/jira-sdlc-tools.local.env`, no login step (see [jira-api-reference.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/jira-api-reference.md) §9)
-- `gh` (GitHub CLI) authenticated
+- `gh` (GitHub CLI) installed — no login needed: the skills pass `GITHUB_PAT_TOKEN` to each `gh` command
 - `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` in your **project** root — see [project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md)
 - `.codex/config.toml` at the repo root with network access and writable roots
   enabled (see **Sandboxing** in the caveats section below — without them,
-  `jira.sh` cannot reach `curl`, `gh auth login` cannot write its config, and
-  linked-worktree git operations cannot update the checkout metadata)
+  `jira.sh` and `gh` cannot reach the network, and linked-worktree git
+  operations cannot update the checkout metadata)
 
 ## Install / Wire-up Steps
 
@@ -85,15 +85,16 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
-# Absolute, host-specific paths: allow gh's session config, linked-worktree git metadata, and worktree creation.
-writable_roots = ["<HOME>/.config/gh", "<REPO_ROOT>/.git", "<WORKTREES_DIR>"]
+# Absolute, host-specific paths: allow linked-worktree git metadata and worktree creation.
+writable_roots = ["<REPO_ROOT>/.git", "<WORKTREES_DIR>"]
 ```
 
 `writable_roots` is required alongside `network_access`: the first path lets
-`gh auth login --with-token` update `~/.config/gh/hosts.yml`; the second lets
 git update the main checkout's `.git` metadata when this is a linked worktree;
-the third lets the assigner skill create worktree folders under it. Replace
-all three placeholders with absolute paths for the host running Codex.
+the second lets the assigner skill create worktree folders under it. Replace
+both placeholders with absolute paths for the host running Codex. `~/.config/gh`
+no longer needs to be writable (JST-331): `gh` is never logged in, it gets the
+PAT per command, and it runs fine against a read-only or missing config dir.
 
 > **First run, `WORKTREES_DIR` doesn't exist yet?** Codex's sandbox can only
 > grant write access to a path that already exists when the policy is
@@ -179,30 +180,11 @@ calls `curl`). In Codex's default `workspace-write` sandbox:
   is not a Jira-specific allowlist; it is the sandbox's file-write boundary
   applied to the worktree's own `.git` directory.
 
-- **GitHub CLI config (read-only FS):** `gh auth login --with-token` writes
-  `~/.config/gh/hosts.yml`, which is outside the workspace by default. Without
-  a writable root for that directory, the `gh_auth` healthcheck row reports a
-  read-only filesystem error that can look like a bad or expired PAT; the
-  credential is not necessarily the problem. A failed `gh auth logout` can
-  leave the operator's existing session untouched under the same restriction,
-  but a writable global config lets the login overwrite it.
-
-- **Isolated GitHub CLI config (alternative):** set `GH_CONFIG_DIR` through
-  Codex's shell environment policy to an absolute, writable directory under
-  the worktrees root (for example, `<WORKTREES_DIR>/.ghconfig`). This keeps
-  the skill's login/logout state out of the operator's global `~/.config/gh`.
-  For example:
-
-  ```toml
-  [shell_environment_policy]
-  set = { GH_CONFIG_DIR = "<WORKTREES_DIR>/.ghconfig" }
-  ```
-
-  Landlock enforces the Linux sandbox and Seatbelt enforces the macOS one, so
-  the exact host path and writable-root configuration are platform-specific;
-  use placeholders in shared config examples. This alternative relocates
-  `gh` only — the linked-worktree `.git` writable root remains required for
-  git writes.
+- **GitHub CLI config:** nothing to configure. Before JST-331 the healthcheck
+  ran `gh auth login`, which needed `~/.config/gh` writable (or an isolated
+  `GH_CONFIG_DIR`) and could overwrite the operator's own session. Now every
+  `gh` call goes through `gh.sh` with the PAT as `GH_TOKEN`, so the operator's
+  `~/.config/gh` is only read, never written.
 
 - **Execution timeout:** Codex's Bash tool defaults to a short yield window.
   A `jira.sh`/`jira.ps1` call (or a `statuscheck.sh` run) that runs long

@@ -38,8 +38,9 @@ Other stops: `land` refuses with `error=… — nothing changed`, and `provision
 
 ## Gotchas found while building it
 
-- **`gh`'s login is machine-wide.** Every statuscheck run logs `gh` in with *that project's* PAT. Two skills running at
-  the same time in different projects race for it: one ends up using the other's token. Run them one after another.
+- **Each project's PAT travels with its own `gh` calls.** `gh.sh` passes the project's `GITHUB_PAT_TOKEN` to each
+  command, and nothing logs `gh` in, so skills running at the same time in different projects can't pick up each
+  other's token (JST-331; before it, statuscheck's machine-wide login made them race).
 - **Running a skill from inside a member is fine.** Every script resolves the workspace as the project root, so
   `.jst/` and the credentials are found there, never inside the member.
 - **Don't `git submodule update` by hand in an issue worktree.** It puts every member back on the workspace's gitlink,

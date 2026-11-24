@@ -16,7 +16,7 @@ gh auth login
 ```
 
 This opens a browser-based or device-code flow and grants whatever scopes
-you approve, independent of the PAT session the skills use. Log back in
-with the PAT (see [Verify GitHub authentication](../../verify-github-authentication.md))
-before running the skills again, since only one `gh` identity is active at
-a time.
+you approve. It's independent of the skills: they pass the PAT to each `gh`
+command they run, which takes precedence over any stored login, so this
+session is neither used nor touched by them, and there's nothing to switch
+back before the next run.

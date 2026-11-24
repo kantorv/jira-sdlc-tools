@@ -137,10 +137,12 @@ a copy of in its own `.github/workflows/` ([CI.md](../process/CI.md)).
   `.jst/jira-sdlc-tools.local.env` keys they become — this is what lets a job's
   bootstrap step be a single loop over a `KEYS` list instead of a hand-mapped
   one. See §3.2.
-- **No `GH_TOKEN`/`GITHUB_TOKEN` exported into skill steps** — statuscheck
-  logs `gh` in from `GITHUB_PAT_TOKEN` read out of the env file; exporting
-  either token variable into the environment makes `gh auth login` refuse,
-  since it insists the variable be cleared first.
+- **No `GH_TOKEN`/`GITHUB_TOKEN` exported into skill steps** — the skills'
+  `gh` calls carry `GITHUB_PAT_TOKEN` from the env file through `gh.sh`, so the
+  job's own token would only be a second identity in the environment. (It was
+  required before JST-331, when statuscheck ran `gh auth login`, which refuses
+  while either variable is set. The demo workflows still clear both, which is
+  harmless.)
 - **Headless, no questions** — skills run with `-p --dangerously-skip-permissions`. A run where the assigner would normally
   ask a clarifying question produces no branch and fails loud (the guard
   checks for exactly one new branch).
