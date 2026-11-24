@@ -8,8 +8,8 @@ sidebar_label: repos.sh reference
 
 `plugins/jira-sdlc/skills/_shared/scripts/posix/repos.sh`, and its Windows twin `win/repos.ps1`, with the same
 arguments, output and exit codes. It's the only script the skills call for repo work. Run it from anywhere inside the
-project: it resolves the project root itself, including from inside a member. It takes no credentials of its own; the
-`gh` calls use the session statuscheck logs in.
+project: it resolves the project root itself, including from inside a member. It takes no credentials of its own: its
+`gh` calls go through `gh.sh`, which runs each one with the project's `GITHUB_PAT_TOKEN` and logs nothing in (JST-331).
 
 ```text
 bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>] [--check] [--multistep]

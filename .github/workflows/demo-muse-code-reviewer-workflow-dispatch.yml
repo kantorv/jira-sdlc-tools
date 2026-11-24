@@ -48,14 +48,20 @@
 #
 # ── Caveats ─────────────────────────────────────────────────────────────────
 #
-#  1. **Do not export GH_TOKEN / GITHUB_TOKEN into the step that runs the
-#     skill.** statuscheck reads GITHUB_PAT_TOKEN out of the env FILE and runs
-#     `gh auth login --with-token`, which gh refuses while either token
-#     variable is set. The skill-running step below therefore carries no
+#  1. **Keep GH_TOKEN / GITHUB_TOKEN out of the step that runs the skill.** A
+#     skill's GitHub identity is GITHUB_PAT_TOKEN in the env file: every gh
+#     call goes through the plugin's gh.sh, which reads it from there and sets
+#     GH_TOKEN for that one command (JST-331), so an exported token no longer
+#     decides anything. Plugin 0.9.4 and earlier still need the rule (the
+#     marketplace installs the default branch, so check which one you get):
+#     their statuscheck runs `gh auth logout && gh auth login --with-token`,
+#     which gh refuses while either token variable is exported ("first clear
+#     the value from the environment", exit 1), failing the gh_auth row before
+#     any work. The skill-running step below therefore carries no
 #     GH_TOKEN/GITHUB_TOKEN; the gating job uses GH_TOKEN in its own job,
 #     where it cannot bleed into the skill step.
 #  2. **Self-review.** The executor opens PRs with the same gh account this
-#     reviewer logs in as, and GitHub blocks approving your own PR — the
+#     reviewer runs as, and GitHub blocks approving your own PR — the
 #     reviewer skill posts its verdict as a PR *comment* for exactly this
 #     reason.
 #  3. **The skills come from the marketplace, not from either checkout.** The

@@ -53,13 +53,19 @@
 #     be set on the runner before the skill runs — it is, to the PR base found
 #     by the gating job, ahead of the assigner's durable "PR target branch:"
 #     Jira comment the skill would otherwise fall back to.
-#  3. **Do not export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a skill.**
-#     statuscheck reads GITHUB_PAT_TOKEN *out of the env file* and runs
-#     `gh auth login --with-token`, which gh refuses while either token
-#     variable is set in the environment. That is why the token is written into
-#     .jst/jira-sdlc-tools.local.env and the skill-running step's `env:` stops
-#     at the ANTHROPIC_* vars. The gating job uses `GH_TOKEN` in its *own*
-#     step — `env:` is step-scoped, so it cannot bleed into the skill step.
+#  3. **Keep `GH_TOKEN`/`GITHUB_TOKEN` out of a step that runs a skill.** A
+#     skill's GitHub identity is GITHUB_PAT_TOKEN in the env file: every gh call
+#     goes through the plugin's gh.sh, which reads it from there and sets
+#     GH_TOKEN for that one command (JST-331), so an exported token no longer
+#     decides anything. Plugin 0.9.4 and earlier still need the rule (the
+#     marketplace installs the default branch, so check which one you get):
+#     their statuscheck runs `gh auth logout && gh auth login --with-token`,
+#     which gh refuses while either token variable is exported ("first clear the
+#     value from the environment", exit 1), failing the gh_auth row before any
+#     work. That is why the token is written into .jst/jira-sdlc-tools.local.env
+#     and the skill-running step's `env:` stops at the ANTHROPIC_* vars. The
+#     gating job uses `GH_TOKEN` in its *own* step — `env:` is step-scoped, so
+#     it cannot bleed into the skill step.
 #  4. **Self-review.** The gh identity here is the runner's built-in token; if
 #     the PR was opened by the same account GitHub would block an approval —
 #     which is why the reviewer skill posts its verdict as a PR *comment*, not

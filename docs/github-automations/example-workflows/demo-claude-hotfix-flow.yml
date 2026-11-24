@@ -149,13 +149,16 @@
 #     and the one most likely to be copied over wrongly. The assigner's
 #     `PR target branch: …` Jira comment is the durable fallback the skills
 #     would otherwise use.
-#  3. **Do not export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a
-#     skill.** Every skill starts with statuscheck, which reads
-#     GITHUB_PAT_TOKEN *out of the env file* (not the environment) and runs
-#     `gh auth logout && gh auth login --with-token` with it; gh refuses that
-#     login while either token variable is set — "first clear the value from
-#     the environment", exit 1 — which FAILs the `gh_auth` row and aborts the
-#     run before any work happens. That is why the token is written into
+#  3. **Keep `GH_TOKEN`/`GITHUB_TOKEN` out of a step that runs a skill.** A
+#     skill's GitHub identity is GITHUB_PAT_TOKEN in the env file: every gh
+#     call goes through the plugin's gh.sh, which reads it from there and
+#     sets GH_TOKEN for that one command (JST-331), so an exported token no
+#     longer decides anything. Plugin 0.9.4 and earlier still need the rule
+#     (the marketplace installs the default branch, so check which one you
+#     get): their statuscheck runs `gh auth logout && gh auth login
+#     --with-token`, which gh refuses while either token variable is exported
+#     ("first clear the value from the environment", exit 1), failing the
+#     gh_auth row before any work. That is why the token is written into
 #     `.jst/jira-sdlc-tools.local.env` and the `env:` blocks of the
 #     skill-running steps stop at CLAUDE_CODE_OAUTH_TOKEN. The
 #     comment-posting steps below run *after* the skill and set `GH_TOKEN`
@@ -905,7 +908,7 @@ jobs:
         run: |
           set -euo pipefail
           # GH_TOKEN is set only *here* — after the skill has finished — so it
-          # can't break statuscheck's `gh auth login --with-token` (caveat 3).
+          # never sits in a skill step's environment (caveat 3).
           PRS=$(GH_TOKEN="$GITHUB_PAT_TOKEN" gh pr list --head "$BRANCH" \
             --state open --json number,url)
           NUM=$(printf '%s' "$PRS" | jq -r '.[0].number // empty')

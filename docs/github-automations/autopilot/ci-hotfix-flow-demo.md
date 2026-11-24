@@ -262,13 +262,16 @@ Left unset, a headless run would take whatever the CLI's default happens to be
 that week, and the three roles are not equally model-hungry — the assigner and
 executor write; the reviewer reads a diff.
 
-**Never export `GH_TOKEN`/`GITHUB_TOKEN` into a step that runs a skill.**
-Every skill starts with statuscheck, which logs `gh` in from the
-`GITHUB_PAT_TOKEN` *inside the env file* via
-`gh auth logout && gh auth login --with-token` — and `gh` refuses that login
-while either token variable is exported, which fails the healthcheck before
-any work happens. The demo's skill-running steps therefore export only
-`CLAUDE_CODE_OAUTH_TOKEN`. The steps that do need `GH_TOKEN` (job 2's
+**Keep `GH_TOKEN`/`GITHUB_TOKEN` out of a step that runs a skill.** A
+skill's GitHub identity is `GITHUB_PAT_TOKEN` in the env *file*: every `gh`
+call goes through the plugin's `gh.sh`, which reads it from there and sets
+`GH_TOKEN` for that one command (JST-331), so an exported token no longer
+decides anything. Plugin 0.9.4 and earlier still need the rule (the
+marketplace installs the default branch, so check which one you get): their
+statuscheck runs `gh auth logout && gh auth login --with-token`, which `gh`
+refuses while either token variable is exported, failing the healthcheck
+before any work happens. The demo's skill-running steps therefore export
+only `CLAUDE_CODE_OAUTH_TOKEN`. The steps that do need `GH_TOKEN` (job 2's
 "Confirm a PR was opened" and the three comment-posting steps) run *after*
 the skill and set it inline on the one command.
 
