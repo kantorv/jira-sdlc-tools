@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# controlfreak-stack-contract: 1
+# stack: this app's stack (the instances library's Vite SPA example), in the main checkout or as
+# instance N, a running copy of a checkout (an issue worktree).
+#
+#   ./stack start     [--instance N]   prepare the checkout, start the Vite dev server, wait until it
+#                                      answers; an instance ends with its URLs as JSON on stdout
+#   ./stack stop      [--instance N]   stop the dev server (files stay)
+#   ./stack teardown  --instance N     remove what instance N made (its logs stay); refuses while
+#                                      the dev server runs
+#   ./stack status    [--instance N]   whether it runs and answers
+#   ./stack bootstrap [--instance N]   prepare the checkout (node_modules, ignored files) only
+#
+# The values: stack.d/resources.conf. The helpers: stack.d/lib.sh. Instance N's dev server listens
+# on PORT_BASE + (N - INSTANCE_MIN) x PORTS_PER_INSTANCE; the main checkout's on MAIN_WEB_PORT.
+# Instance N's home (PID files, logs) is CF_INSTANCE_HOME, else ~/.local/state/<NAME_PREFIX>/iN.
+# The main checkout (node_modules, .env.local to copy) is CF_MAIN_CHECKOUT, else the repository's
+# main worktree. Exit 0 done; 1 a step failed; 2 refused before touching anything; 3 teardown
+# while the dev server runs.
+
+set -euo pipefail
+HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+# shellcheck source=stack.d/lib.sh
+. "$HERE/stack.d/lib.sh"
+read_conf "$HERE/stack.d/resources.conf"
+
+usage() { log "usage: ./stack <start|stop|teardown|status|bootstrap> [--instance N]"; exit 2; }
+VERB=${1:-}
+[ -n "$VERB" ] || usage
+shift
+INSTANCE=""
+while [ $# -gt 0 ]; do
+  case $1 in
+    --instance) [ $# -ge 2 ] || usage; INSTANCE=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+
+# Node and Yarn from fnm: a caller may run this with a small PATH (NODE_BIN overrides).
+NODE_BIN=${NODE_BIN:-$HOME/.local/share/fnm/aliases/default/bin}
+export PATH="$NODE_BIN:$PATH"
+# Ignored files the app needs, copied once from the main checkout (mode 0600, never printed).
+COPY_ONCE=(.env.local)
+
+if [ -n "$INSTANCE" ]; then
+  [[ $INSTANCE =~ ^[1-9][0-9]*$ ]] && [ "$INSTANCE" -ge "$INSTANCE_MIN" ] && [ "$INSTANCE" -le "$INSTANCE_MAX" ] \
+    || refuse "--instance must be an integer $INSTANCE_MIN-$INSTANCE_MAX (got '$INSTANCE')"
+  if [ -n "${CF_INSTANCE_HOME+x}" ]; then
+    real_dir "$CF_INSTANCE_HOME" || refuse "CF_INSTANCE_HOME is set but missing, empty or a symlink"
+    HOME_DIR=$CF_INSTANCE_HOME
+  else
+    HOME_DIR=$HOME/.local/state/$NAME_PREFIX/i$INSTANCE
+  fi
+  MAIN=${CF_MAIN_CHECKOUT:-$(main_worktree "$HERE")}
+  real_dir "$MAIN" || refuse "the main checkout $MAIN is missing"
+  [ "$(readlink -f "$MAIN")" != "$HERE" ] || refuse "this is the main checkout: an instance runs from another checkout"
+  WEB_PORT=$((PORT_BASE + (INSTANCE - INSTANCE_MIN) * PORTS_PER_INSTANCE))
+else
+  [ "$VERB" != teardown ] || refuse "teardown is for an instance (--instance N); the main checkout keeps its files"
+  HOME_DIR=$HERE/.stack
+  MAIN=$HERE
+  WEB_PORT=$MAIN_WEB_PORT
+fi
+RUN=$HOME_DIR/run
+LOGS=$HOME_DIR/logs
+
+# --- the steps -----------------------------------------------------------------------------------
+
+check_host() {
+  local missing=""
+  [ -x "$NODE_BIN/node" ] || missing+=" node"
+  [ -x "$NODE_BIN/yarn" ] || missing+=" yarn"
+  for tool in curl ss setsid; do command -v "$tool" >/dev/null || missing+=" $tool"; done
+  [ -z "$missing" ] || { log "NOT DONE:$missing missing (install Node and Yarn through fnm; curl, iproute2, util-linux)"; return 1; }
+}
+
+make_home() { mkdir -p "$RUN" "$LOGS"; chmod 700 "$HOME_DIR"; }
+
+node_modules() {
+  [ ! -f "$HERE/node_modules/.yarn-integrity" ] || return 0
+  if [ "$MAIN" != "$HERE" ] && [ -f "$MAIN/node_modules/.yarn-integrity" ] && cmp -s "$MAIN/yarn.lock" "$HERE/yarn.lock"; then
+    rm -rf "$HERE/node_modules" "$HERE/node_modules.copying"
+    cp -a "$MAIN/node_modules" "$HERE/node_modules.copying" && mv "$HERE/node_modules.copying" "$HERE/node_modules"
+    log "node_modules: copied from the main checkout"
+  else
+    ( cd "$HERE" && yarn install --frozen-lockfile --silent ) >&2
+    log "node_modules: installed"
+  fi
+}
+
+copy_ignored() {
+  local f
+  [ "$MAIN" != "$HERE" ] || return 0
+  for f in "${COPY_ONCE[@]}"; do
+    [ -e "$HERE/$f" ] && continue
+    [ -f "$MAIN/$f" ] || { log "NOT DONE: the main checkout has no $f: create it there, then start again"; return 1; }
+    mkdir -p "$(dirname "$HERE/$f")"
+    install -m 600 "$MAIN/$f" "$HERE/$f"
+    log "$f: copied from the main checkout"
+  done
+}
+
+start_web() {
+  if ! alive web && listening "$WEB_PORT"; then
+    log "port $WEB_PORT is taken by another process: ss -ltnp 'sport = :$WEB_PORT'"
+    return 1
+  fi
+  launch web "$HERE" yarn dev --host 127.0.0.1 --port "$WEB_PORT" --strictPort
+}
+
+wait_web() { wait_http web "http://127.0.0.1:$WEB_PORT/" 200; }
+
+refuse_while_running() {
+  if alive web; then log "refused: web still runs (pid $(pid_of web)): stop it first"; exit 3; fi
+}
+
+remove_home() { rm -rf -- "$RUN"; log "teardown: done (logs kept in $LOGS)"; }
+
+# --- the verbs -----------------------------------------------------------------------------------
+
+case $VERB in
+  bootstrap)
+    step "Check the host" check_host
+    step "Make the home" make_home
+    step "Prepare node_modules" node_modules
+    step "Copy the ignored files" copy_ignored
+    ;;
+  start)
+    step "Check the host" check_host
+    step "Make the home" make_home
+    step "Prepare node_modules" node_modules
+    step "Copy the ignored files" copy_ignored
+    step "Start the dev server" start_web
+    step "Wait for the dev server" wait_web
+    [ -z "$INSTANCE" ] || printf '{"urls": {"web app": "http://127.0.0.1:%s"}}\n' "$WEB_PORT"
+    ;;
+  stop)
+    step "Stop the dev server" stop_svc web
+    ;;
+  teardown)
+    refuse_while_running
+    step "Remove the instance's files" remove_home
+    ;;
+  status)
+    if alive web && curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$WEB_PORT/"; then
+      printf 'web: running, answers on http://127.0.0.1:%s\n' "$WEB_PORT"
+    else
+      printf 'web: not answering\n'
+      exit 1
+    fi
+    ;;
+  *) usage ;;
+esac
