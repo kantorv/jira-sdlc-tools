@@ -101,8 +101,9 @@ purpose, and saying so keeps the user from chasing them:
 | 4 · healthcheck | every row, for all three roles | — |
 
 `worktree`, `branch`, `branch_project`, `issue_key`, `parent_branch`,
-`current_pr` (it WARNs `skipped` off an issue branch), `working_tree` and
-`bootstrap` are about *running an issue*, not installing.
+`current_pr` (it WARNs `skipped` off an issue branch), `working_tree`,
+`bootstrap`, `stack_doc`, `stack` and `instance` are about *running an issue*,
+not installing (4e only offers the last three's skills).
 Ignore them here — a main checkout on the base branch with no issue key is
 exactly right for this skill.
 
@@ -543,33 +544,29 @@ rule inside `.jst/` in the first place: `git add .jst` then stages
 Copy across only the env file and that worktree ends up holding three Jira role
 tokens and a GitHub PAT with nothing ignoring them.
 
-**4e. Offer the optional worktree hook — `.jst/bootstrap.sh` and
-`.jst/teardown.sh`.** **Optional, and most projects don't need one**: raise it,
-don't push it, and never write one here — you'd have to guess the project's
-stack. The gap it closes is one nobody predicts, so name the gap rather than the
-file: the assigner gives each issue its own worktree, but a worktree is a
-*source tree*, not a *running instance*. Anything the app reaches outside its
-own directory — a database, a cache, an uploads tree, a fixed port — is shared
-between all of them by default, and two instances on one migration-driven
-database corrupt each other silently.
+**4e. Offer each issue its own running instance — `/jira-sdlc:jst-survey`, then
+`/jira-sdlc:jst-stack`.** **Optional**: raise it, don't push it, and never write
+a stack or hook here — you'd have to guess the project's stack. Name the gap
+rather than the tools: the assigner gives each issue its own worktree, but a
+worktree is a *source tree*, not a *running instance*. Anything the app reaches
+outside its own directory — a database, a cache, an uploads tree, a fixed port —
+is shared between all of them by default, and two instances on one
+migration-driven database corrupt each other silently.
 
 Ask whether they'll want to run more than one worktree's app at a time. Yes, or
-unsure → point them at https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies:
-the share-vs-isolate decision framework, the `JST_*` contract the executor
-exports, and three worked examples to copy the shape from (a Python toolchain,
-a React/Vite SPA, a multi-service docker-compose stack). `jira-task-executor`
-runs `.jst/bootstrap.sh` (`bootstrap.ps1` on Windows) in its step 1, once per
-worktree, fail-soft; `.jst/teardown.sh` is its by-hand counterpart, run before
-`git worktree remove` — no skill invokes it. With member repos the hook matters
-more, not less: a worktree's members arrive without their venvs,
-`node_modules` or git-ignored env files, and without a hook the executor
-improvises them to run its tests. The hook gets the members in `JST_MEMBERS`,
-already checked out. Before removing such a worktree, `repos.sh remove-check`
-says whether it's safe (a squash-merged branch reads safe), and the removal
-then needs `git worktree remove --force`. Statuscheck's `bootstrap` row
-reports either way and never blocks, so leaving this until they actually hit the
-collision costs nothing. No → say the row will read "no `.jst/bootstrap.sh`" and
-that this is fine, so nobody reads it as an unfinished step.
+unsure → the two skills close it: `jst-survey` reads the project and opens a PR
+with `.jst/STACK.md` (what each worktree shares, what it gets its own copy of);
+once that's merged, `jst-stack` builds `./stack` and the `.jst/bootstrap.sh` /
+`teardown.sh` wrappers, tries them, and opens a PR. From then on
+`jira-task-executor` starts each worktree's instance in its step 1, fail-soft;
+`.jst/teardown.sh` is run by hand before `git worktree remove`. A project that
+needs only a toolchain per worktree gets just the hook. With member repos it
+matters more: a worktree's members arrive without their venvs, `node_modules` or
+git-ignored env files. Background:
+https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies.
+Statuscheck's `bootstrap`, `stack_doc` and `stack` rows report either way and
+never block. No → say those rows will read "no …" and that this is fine, so
+nobody reads them as an unfinished step.
 
 Reference: https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation (the walkthrough this skill
 follows), https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation/full-setup-checklist (the same

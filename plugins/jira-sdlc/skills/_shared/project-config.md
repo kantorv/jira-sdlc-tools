@@ -111,6 +111,7 @@ ports use identical names:
 | `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
 | `JST_PROJECT_KEY` | `<PROJECT-KEY>` from `jira-sdlc-tools.env` |
 | `JST_MEMBERS` | the member repos on the issue branch, space-separated (`repos.sh provision`'s `provisioned=`), already checked out when the hook runs; empty for a single-repo project |
+| `JST_INSTANCE` | this worktree's instance number N, claimed by `instance.sh` (POSIX) when the project's `./stack` follows the stack contract; empty otherwise |
 
 Env vars rather than positional arguments so the set can grow later without
 breaking scripts already written against it — a script that ignores a variable
@@ -118,6 +119,14 @@ it doesn't know about keeps working. A project deriving **per-instance ports
 should derive them deterministically from `JST_ISSUE_KEY`** (hash or parse the
 numeric part into an index), so the same worktree gets the same ports on every
 run and two worktrees can't collide.
+
+**With a stack.** `/jira-sdlc:jst-survey` and `/jira-sdlc:jst-stack` write this
+hook for you: a project `./stack` against the stack contract
+(`stack/contract.md`), and a `bootstrap.sh` that is one line,
+`./stack start --instance "$JST_INSTANCE"`. The executor then claims N first
+(`instance.sh claim`: the number comes from the issue key, and a number another
+worktree still holds is refused rather than shared), and the hook starts that
+worktree's own instance.
 
 The companion section is [Parallel instances](https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies):
 its overview is how to *decide* what each worktree's instance shares versus

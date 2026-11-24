@@ -58,6 +58,8 @@ A fourth skill sits outside that lifecycle and runs before it:
 | Skill | Runs | Does |
 | -- | -- | -- |
 | `jst-install` | Once per project, before the first assigner run | Sets up: walks [Step-by-step installation](https://kantorv.github.io/jira-sdlc-tools/docs/step-by-step-installation) — local tooling, GitHub repo prep, Jira board prep, healthcheck — verifying each with `statuscheck` before advancing. Writes the team-shared `.jst/jira-sdlc-tools.env`; never reads or writes the secrets in `.jst/jira-sdlc-tools.local.env`. |
+| `jst-survey` | Optional, once per project (again when its architecture changes) | Surveys the project and opens a PR with `.jst/STACK.md`: its repo layout and run pattern, components, and what an issue worktree shares with the main checkout versus gets its own copy of. Merging the PR confirms it. |
+| `jst-stack` | After the `jst-survey` PR is merged | Builds `./stack` (stack contract v1) and the `.jst/bootstrap.sh` / `teardown.sh` wrappers from `.jst/STACK.md`, tries them end to end, and opens a PR. From then on the executor starts each issue worktree's own instance. |
 
 ## Quick start
 
@@ -330,9 +332,14 @@ jira-sdlc-tools/                # marketplace root (this repo)
         │   │   └── SKILL.md
         │   ├── jst-install/
         │   │   └── SKILL.md                 # guided first-time setup — run once, before the other three
+        │   ├── jst-survey/
+        │   │   └── SKILL.md                 # writes .jst/STACK.md: what each issue worktree's instance needs
+        │   ├── jst-stack/
+        │   │   └── SKILL.md                 # builds ./stack from it, tries it, opens a PR
         │   └── _shared/
         │       ├── jira-api-reference.md    # direct REST API — verified curl examples
         │       ├── project-config.md        # ← reference: describes each .env variable
+        │       ├── stack/                   # the stack contract, writing guide, patterns, example, survey method
         │       ├── templates/
         │       │   ├── review-report.md     # jira-task-reviewer's report template + outcome catalogue
         │       │   └── jira-sdlc-tools.local.env.example  # placeholder local.env jst-install copies into place

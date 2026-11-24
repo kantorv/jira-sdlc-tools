@@ -43,7 +43,7 @@ the docker-compose case. Take the shape from these, not the values.
 
 ## The contract, in brief
 
-The executor exports five variables before it runs the hook:
+The executor exports seven variables before it runs the hook:
 
 | variable | value |
 | -- | -- |
@@ -52,6 +52,8 @@ The executor exports five variables before it runs the hook:
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
 | `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
 | `JST_PROJECT_KEY` | `PROJECT_KEY` from `.jst/jira-sdlc-tools.env` |
+| `JST_MEMBERS` | the member repos on the issue branch, space-separated, already checked out; empty for a single repo |
+| `JST_INSTANCE` | the worktree's instance number N, claimed by the plugin, when the project's `./stack` follows the stack contract; empty otherwise |
 
 Four rules make a hook that holds up:
 

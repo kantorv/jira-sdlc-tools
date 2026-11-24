@@ -727,6 +727,76 @@ if (Test-Path -LiteralPath $BootstrapPath -PathType Leaf) {
     Add-Row bootstrap INFO "no .jst/$BootstrapFile (optional — a project adds one to turn a fresh worktree into a runnable instance: clone the database, pick per-instance ports, install deps)"
 }
 
+# The stack (onboarding: jst-survey writes .jst/STACK.md, jst-stack builds ./stack
+# against stack contract v1; skills/_shared/stack/). Optional, so INFO — WARN only
+# for a contract stack this script can't read, or an instance number another
+# checkout holds. Never runs ./stack: reading files and the owner record only.
+# Twin of the posix block: same rows, same text.
+$StackDocPath = Join-Path $CfgRoot '.jst/STACK.md'
+if (Test-Path -LiteralPath $StackDocPath -PathType Leaf) {
+    $sdLines = Get-Content -LiteralPath $StackDocPath
+    $sdLayout = ''; $sdPattern = ''
+    $l = $sdLines | Where-Object { $_ -match '^\| *Repo layout *\|' } | Select-Object -First 1
+    if ($l -and $l -match '`([a-z-]+)`') { $sdLayout = $Matches[1] }
+    $l = $sdLines | Where-Object { $_ -match '^\| *Run pattern *\|' } | Select-Object -First 1
+    if ($l -and $l -match '`([a-z-]+)`') { $sdPattern = $Matches[1] }
+    $sdL = if ($sdLayout) { $sdLayout } else { '?' }; $sdP = if ($sdPattern) { $sdPattern } else { '?' }
+    Add-Row stack_doc INFO ".jst/STACK.md (layout $sdL, pattern $sdP)"
+} else {
+    Add-Row stack_doc INFO "no .jst/STACK.md (optional — /jira-sdlc:jst-survey writes it, then /jira-sdlc:jst-stack builds the stack from it)"
+}
+$StackContract = $false
+$StackPath = Join-Path $CfgRoot 'stack'
+if (Test-Path -LiteralPath $StackPath -PathType Leaf) {
+    $stackLine2 = (Get-Content -LiteralPath $StackPath -TotalCount 2 | Select-Object -Skip 1 -First 1)
+    if ($stackLine2 -eq '# controlfreak-stack-contract: 1') {
+        $ScConf = Join-Path $CfgRoot 'stack.d/resources.conf'
+        $scVals = @{}
+        if (Test-Path -LiteralPath $ScConf -PathType Leaf) {
+            foreach ($cl in Get-Content -LiteralPath $ScConf) {
+                if ($cl -match '^(NAME_PREFIX|INSTANCE_MIN|INSTANCE_MAX)=(.*)$') { $scVals[$Matches[1]] = $Matches[2] }
+            }
+        }
+        $ScPrefix = $scVals['NAME_PREFIX']; $ScMin = $scVals['INSTANCE_MIN']; $ScMax = $scVals['INSTANCE_MAX']
+        if ($ScPrefix -and $ScMin -and $ScMax) {
+            $StackContract = $true
+            Add-Row stack INFO "./stack (stack contract 1) · NAME_PREFIX=$ScPrefix · instances $ScMin-$ScMax"
+        } else {
+            Add-Row stack WARN "./stack has the contract marker, but stack.d/resources.conf lacks NAME_PREFIX, INSTANCE_MIN or INSTANCE_MAX" `
+                "fix stack.d/resources.conf (or rerun /jira-sdlc:jst-stack), then $Rerun."
+        }
+    } else {
+        Add-Row stack INFO "./stack without the contract marker (the project's own: the executor starts no instance with it)"
+    }
+} else {
+    Add-Row stack INFO "no ./stack (optional — /jira-sdlc:jst-stack builds one from .jst/STACK.md)"
+}
+if ($StackContract -and $IsWt -and $BrKey) {
+    if ($OS -eq 'windows') {
+        Add-Row instance INFO "not on Windows (stack contract v1 is bash: run the stack under WSL)"
+    } else {
+        # Off Windows, bash is there: the number comes from the posix instance.sh, so
+        # the two ports can never disagree on N.
+        $instSh = Join-Path $PSScriptRoot '../posix/instance.sh'
+        $inN = ''
+        $out = & bash $instSh number $BrKey --conf $ScConf 2>$null
+        foreach ($o in @($out)) { if ($o -match '^instance=(\d+)$') { $inN = $Matches[1] } }
+        $ownerFile = Join-Path $HOME ".local/state/$ScPrefix/i$inN/owner"
+        $inOwner = ''
+        if ($inN -and (Test-Path -LiteralPath $ownerFile -PathType Leaf)) { $inOwner = (Get-Content -LiteralPath $ownerFile -TotalCount 1) }
+        if (-not $inN) {
+            Add-Row instance WARN "no instance number for $BrKey (instance.sh number failed)" "check stack.d/resources.conf, then $Rerun."
+        } elseif (-not $inOwner) {
+            Add-Row instance INFO "N=$inN (from $BrKey) · not claimed yet (jira-task-executor claims it in step 1)"
+        } elseif ($inOwner -eq (Resolve-Path -LiteralPath $CfgRoot).Path) {
+            Add-Row instance INFO "N=$inN (from $BrKey) · this worktree's · ./stack status --instance $inN"
+        } else {
+            Add-Row instance WARN "N=$inN (from $BrKey) is held by $inOwner" `
+                "two issues share N=${inN}: tear down the other instance (./stack teardown --instance $inN there) or widen INSTANCE_MIN..INSTANCE_MAX, then $Rerun."
+        }
+    }
+}
+
 Add-Row parent_branch INFO "$(if ($Parent) { $Parent } else { 'unset' }) (PR base; unset → fall back to Jira 'PR target branch' comment, then DEFAULT_BASE_BRANCH)"
 
 $dirtyOut = (& git status --porcelain 2>$null)

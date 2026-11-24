@@ -112,9 +112,16 @@ relayed as prose. That failed in practice for a predictable reason: a
 skill treats prose as a recommendation to pass along, not a procedure to
 execute, so worktrees still came up unprovisioned. Hence a script.
 
+**Or let the plugin write it.** `/jira-sdlc:jst-survey` surveys the project and
+writes `.jst/STACK.md` (what's shared, what each worktree gets its own copy of),
+and once you've merged it, `/jira-sdlc:jst-stack` builds a `./stack` against the
+stack contract, makes this hook a one-line wrapper around it, and tries it end to
+end before opening its PR. The executor then claims each worktree's instance
+number from its issue key, and the hook starts that instance.
+
 Four properties of the contract are worth knowing before you write one.
 
-**1. The environment contract.** The executor exports five variables
+**1. The environment contract.** The executor exports seven variables
 before invoking, and both ports use identical names:
 
 | variable | value |
@@ -124,6 +131,8 @@ before invoking, and both ports use identical names:
 | `JST_BRANCH` | the current branch, e.g. `feature/PROJ-402-some-slug` |
 | `JST_PARENT_BRANCH` | the PR base from `git config branch.<branch>.parentbranch`; empty when unset |
 | `JST_PROJECT_KEY` | `PROJECT_KEY` from `.jst/jira-sdlc-tools.env` |
+| `JST_MEMBERS` | the member repos on the issue branch, space-separated, already checked out; empty for a single repo |
+| `JST_INSTANCE` | the worktree's instance number N, claimed by the plugin, when the project's `./stack` follows the stack contract; empty otherwise |
 
 They're environment variables rather than positional arguments so the set
 can grow later without breaking scripts already written against it — a
