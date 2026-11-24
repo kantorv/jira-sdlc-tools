@@ -409,6 +409,11 @@ argument, but to a *function* as an array, which splatting then splits into
 three. `Invoke-JstGh` joins arrays back, so call sites keep reading like `& gh`.
 A fake `gh` that ignores its `--json` value can't see this. Check the value.
 
+**POSIX only, on purpose:** `instance.sh`, `stack-resources.sh`, `stack-trial.sh` and
+their sourced `_stack.sh` have no `win/` twins. They serve the stack contract, which is bash
+(`skills/_shared/stack/contract.md`; Windows is deferred, onboarding decision D11).
+statuscheck's `instance` row says so on Windows in both ports, so the parity diff still holds.
+
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on
 a real Windows 11 box, but the port logic and

@@ -13,7 +13,10 @@
 #      checkout and in a linked worktree — except for the `repo_strategy |
 #      INFO | single` row, which must appear exactly once: added when the base
 #      predates it (JST-322), unchanged once it has it. Submodules support must not
-#      change anything else for a project that doesn't use it. A base from before
+#      change anything else for a project that doesn't use it. Likewise the two
+#      stack rows a project without a stack prints (`stack_doc | INFO | no …`,
+#      `stack | INFO | no …`, onboarding slice 3): each exactly once, added when
+#      the base predates them. A base from before
 #      JST-331 (statuscheck still logging gh in) also may differ on the three gh
 #      rows and the gh_auth remedy, which that change rewrote.
 #   3. repos.sh (strategy, list) against golden output, and the statuscheck
@@ -182,10 +185,12 @@ else
     done
     # Allowed: the new table is the old one, plus exactly one repo_strategy row
     # when the base predates it (JST-322) — once the base has the row, nothing.
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" | gh_filt > "$LAB/sc.new.base"
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" | gh_filt > "$LAB/sc.old.base"
+    local stack_none='^\| (stack_doc \| INFO \| no \.jst/STACK\.md|stack \| INFO \| no \./stack) '
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" | grep -Ev "$stack_none" | gh_filt > "$LAB/sc.new.base"
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" | grep -Ev "$stack_none" | gh_filt > "$LAB/sc.old.base"
     added=$(( $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out") - $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.old.out") ))
     if [ "$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")" = 1 ] && [ "$added" -ge 0 ] \
+       && [ "$(grep -cE "$stack_none" "$LAB/sc.new.out")" = 2 ] \
        && cmp -s "$LAB/sc.old.base" "$LAB/sc.new.base" \
        && { [ "$3" = ps ] || cmp -s "$LAB/sc.old.err" "$LAB/sc.new.err"; }; then ok "$1 — $(grep '^| repo_strategy' "$LAB/sc.new.out" | cut -d'|' -f4 | sed 's/^ //; s/ $//')"
     else no "$1 (repo_strategy rows added: $added)"; diff "$LAB/sc.old.out" "$LAB/sc.new.out" | sed 's/^/        /'
