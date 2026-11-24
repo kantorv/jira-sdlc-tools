@@ -225,7 +225,11 @@ setup and the full story.
   `.jst/jira-sdlc-tools.local.env` (see [Configuration](#configuration)) directly —
   there is no interactive login step to run first.
 
-- **GitHub CLI (`gh`)**, authenticated.
+- **GitHub CLI (`gh`)** — installed; it needs no login. The skills run every
+  `gh` command through the bundled `gh.sh` / `gh.ps1`, which passes
+  `GITHUB_PAT_TOKEN` from `.jst/jira-sdlc-tools.local.env` to gh as `GH_TOKEN` for
+  that one command, so your own `gh` session is never read or changed, and
+  projects with different PATs can run side by side.
 
 - **[GitHub-for-Jira](https://github.com/github/github-for-jira)**
   connected between your Jira project and GitHub repo — automatic

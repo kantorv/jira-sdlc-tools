@@ -62,22 +62,24 @@ can't decide how statuscheck itself is run. It takes a required `--role reviewer
   script the steps call live there; see INTEGRATIONS.md → "Locating the shared
   scripts".
 - **Jira access is the `jira.sh` / `jira.ps1` client**
-  (`../_shared/jira-api-reference.md` §9), where
-  `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`; the steps write
-  `jira.sh <cmd>` for brevity. Every Bash call is a fresh shell, so re-set
+  (`../_shared/jira-api-reference.md` §9), **GitHub access is `gh.sh` /
+  `gh.ps1`** — any `gh` arguments, run with this project's PAT for that one
+  command (gh holds no login, so a bare `gh` acts as whoever logged it in
+  last) — where `S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"`; the
+  steps write `jira.sh <cmd>` / `gh.sh <cmd>` for brevity. Every Bash call is a fresh shell, so re-set
   `S` at the top of each block that needs it — an unset `S` silently becomes
   `bash "/jira.sh"`. It authenticates **per-request as `--role reviewer`** —
   no login step and no stored credential; every Jira write below carries
   `--role reviewer` and picks up the reviewer credential on that one call.
-- **Your GitHub identity** = `gh api user --jq .login` — resolve it once
+- **Your GitHub identity** = `gh.sh api user --jq .login` — resolve it once
   before the review loop and substitute the value as `<SELF>` wherever the
   steps show it; 3a's idempotency check and the verdict-comment detection
   both key on it. Both verdicts land as **review comments** rather than review states,
   and the Jira transition is the actual workflow gate — 3d says why.
 - **Body mechanics** (`../_shared/jira-api-reference.md` §11, which owns
   them): every body this skill posts is multi-line and goes to a temp file
-  passed as `--body-file` — Jira comments via `jira.sh --role reviewer issue comment add <KEY> --body-file <file>`, GitHub ones via `gh pr review` /
-  `gh pr create`. Never inline `--body "…"`: `gh` accepts it, and backticks
+  passed as `--body-file` — Jira comments via `jira.sh --role reviewer issue comment add <KEY> --body-file <file>`, GitHub ones via `gh.sh pr review` /
+  `gh.sh pr create`. Never inline `--body "…"`: `gh` accepts it, and backticks
   in it would hit shell substitution. The verdict header those bodies open
   with is a detection contract — see *The canonical review report*.
 - `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
@@ -253,7 +255,7 @@ bash "$S/repos.sh" prs --branch "<other-branch>" [--state open]
 
 `gate` prints `phase=`, `reason=`, `root=` (the PR from `<PARENT-BRANCH>` in the
 root repo) and `members=`, then the PR rows; `prs` prints the rows alone. Every
-row carries `slug`: pass it as `-R <slug>` to **every** `gh pr` command below.
+row carries `slug`: pass it as `-R <slug>` to **every** `gh.sh pr` command below.
 **Statuscheck's `current_pr` row is not a substitute**: it sees the root repo
 only, so on a project with member repos it misses every member PR. Don't
 re-query by hand either — `gh` answers a filter that misses with `[]`, not an
@@ -367,10 +369,11 @@ variable: each Bash call is a fresh shell, and an unexpanded `$SELF` makes the
 jq filter `== ""`, so 3a silently reports "not reviewed yet" forever.
 
 ```bash
-gh api user --jq .login    # -> <SELF>, e.g. task-executor-bot
+S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/gh.ps1 on Windows
+bash "$S/gh.sh" api user --jq .login    # -> <SELF>, e.g. task-executor-bot
 ```
 
-If this errors, gh isn't installed or authenticated: see *Edge cases*.
+If this errors, gh isn't installed or the PAT is missing or rejected: see *Edge cases*.
 
 ### 3a. Check idempotency — already reviewed by me?
 
@@ -379,7 +382,7 @@ Before reviewing a PR, check whether **this skill's GitHub identity**
 comment on it:
 
 ```bash
-gh pr view <prNumber> -R <slug> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | .body'
+gh.sh pr view <prNumber> -R <slug> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | .body'
 ```
 
 Take the **most recent** self-review body (they come back in chronological
@@ -402,11 +405,11 @@ review state to key on.
 ### 3b. Fetch the diff
 
 ```bash
-gh pr diff <prNumber> -R <slug>
+gh.sh pr diff <prNumber> -R <slug>
 ```
 
 Read the full diff. If it's very large (>1000 lines), list changed files via
-`gh pr diff <prNumber> -R <slug> --name-only` and `Read` relevant files for
+`gh.sh pr diff <prNumber> -R <slug> --name-only` and `Read` relevant files for
 context — a member PR's files sit under that member's folder in this
 worktree. Do not skip any file in the diff.
 
@@ -441,7 +444,7 @@ except where a dimension itself carves out an exception (dimension 3 does):
 
 ### 3d. Execute verdict immediately
 
-Record the verdict as a **review comment** — both verdicts go through `gh pr review <prNumber> -R <slug> --comment --body-file`: in this plugin's default
+Record the verdict as a **review comment** — both verdicts go through `gh.sh pr review <prNumber> -R <slug> --comment --body-file`: in this plugin's default
 deployment the executor and reviewer share one `gh` account, and GitHub's
 self-review restriction blocks an author from approving *or* requesting
 changes on their own PR, so neither verdict can use a state-based review. The
@@ -470,13 +473,13 @@ read identically.
   not moved. Verdict-header line `APPROVED — <one-line summary>`:
 
   ```bash
-  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/gh.ps1 + win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
   APPROVED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, scoped to this PR
   EOF
-  gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
+  bash "$S/gh.sh" pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY> --body-file /tmp/<KEY>-report.md   # sub-task PRs only — see above
   ```
 
@@ -496,13 +499,13 @@ read identically.
   transition is the actual gate and fires on both tracks:
 
   ```bash
-  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/jira.ps1 on Windows
+  S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/gh.ps1 + win/jira.ps1 on Windows
   cat > /tmp/<KEY>-report.md <<'EOF'
   CHANGES REQUESTED — <one-line summary>
 
   ## Review Status: ...        # the full canonical report, incl. file:line findings
   EOF
-  gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
+  bash "$S/gh.sh" pr review <prNumber> -R <slug> --comment --body-file /tmp/<KEY>-report.md
   bash "$S/jira.sh" --role reviewer issue comment add <SUBTASK-KEY> --body-file /tmp/<KEY>-report.md   # sub-task PRs only — see above
   bash "$S/jira.sh" --role reviewer issue transition <SUBTASK-KEY-or-PARENT-KEY> --to "<STATUS_IN_PROGRESS>"
   ```
@@ -537,7 +540,7 @@ label.
 
 ### 4a. *(Multistep)* All approved — merge and re-run
 
-1. Check if **all** of those PRs are already merged (`gh pr view <prNumber> -R <slug> --json state` for each).
+1. Check if **all** of those PRs are already merged (`gh.sh pr view <prNumber> -R <slug> --json state` for each).
 2. **If some are still open** → outcome **M-ALL-APPROVED**: tell the user its
    `Next step` wording from the template — merge them manually, then re-run.
    (Step 6 posts the written report to Jira.)
@@ -594,7 +597,7 @@ opened a *second* one (JST-286).
   - <SUBTASK-KEY>: <PR URL>
   - ...
   EOF
-  gh pr create -R <slug> --base <BASE_BRANCH> --head <PARENT-BRANCH> \   # the root row's slug
+  gh.sh pr create -R <slug> --base <BASE_BRANCH> --head <PARENT-BRANCH> \   # the root row's slug
     --title "<PARENT-KEY>: <summary>" \
     --body-file /tmp/<PARENT-KEY>-pr-body.md
   ```
@@ -605,13 +608,13 @@ opened a *second* one (JST-286).
 ### 5b. Review the parent PR (apply the 3a idempotency check first)
 
 Resolve `<SELF>` now if step 3 never ran (the all-sub-tasks-merged path and
-5L land here directly): `gh api user --jq .login`, substituted literally (an
+5L land here directly): `gh.sh api user --jq .login`, substituted literally (an
 error → *Edge cases*). Then apply the **3a body-prefix idempotency check**: a prior self-review whose
 body starts `APPROVED —` → report "Parent PR already reviewed — waiting for
 manual merge" and skip; one starting `CHANGES REQUESTED —` → re-review the
 fresh aggregate code. Otherwise:
 
-1. Check the PR is mergeable — `gh pr view <prNumber> -R <slug> --json mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
+1. Check the PR is mergeable — `gh.sh pr view <prNumber> -R <slug> --json mergeable,mergeStateStatus`. `CONFLICTING` means `<PARENT-BRANCH>` has
    fallen behind `<BASE_BRANCH>`: stop and report, since a diff that can't
    merge gives the user nothing to act on. This is the only detection path
    the *parent branch is behind its base* edge case has.
@@ -621,12 +624,12 @@ fresh aggregate code. Otherwise:
    combine.
 3. **If approved** → outcome **M-PARENT-READY**: post the **full canonical
    review report** (see *The canonical review report* above), scoped to the
-   parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh pr review <prNumber> -R <slug> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
+   parent PR, with verdict-header line `APPROVED — <lighter aggregate summary>` as the literal first line — `gh.sh pr review <prNumber> -R <slug> --comment --body-file /tmp/<PARENT-KEY>-report.md` (the same body/mechanics as 3d,
    just the aggregate PR). Do NOT merge. Tell the user the parent PR is
    approved and awaiting their manual merge; step 6 posts the run-level
    report.
 4. **If changes requested** → outcome **M-PARENT-CHANGES-REQUESTED**: post
-   the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh pr review <prNumber> -R <slug> --comment --body-file`. Then go to step 6.
+   the same canonical report with verdict-header line `CHANGES REQUESTED — <one-line summary>`, the integration `file:line` findings in its `### What I reviewed` section, via `gh.sh pr review <prNumber> -R <slug> --comment --body-file`. Then go to step 6.
 
 ### 5L. Land the member PRs, then review the landing PR
 
@@ -715,7 +718,7 @@ instead.
   own review — an existing review by another account doesn't skip the
   code-review step. The 3a idempotency check only looks at *this skill's
   own* prior comments, keyed on `<SELF>`'s login + body prefix.
-- **`gh` missing or logged out** → step 3's identity resolution fails:
+- **`gh` missing, or its PAT missing or rejected** → step 3's identity resolution fails:
   report the error and hand the user the PR URLs.
 
 Reference: `../_shared/jira-api-reference.md` is the operational + REST

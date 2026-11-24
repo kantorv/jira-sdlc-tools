@@ -29,8 +29,8 @@ of helpers the bundled scripts shell out to.
 - [ ] **`git`** — commit/push. Uses your machine's existing global credentials,
   so there's nothing extra to configure.
   [git-scm.com/downloads](https://git-scm.com/downloads)
-- [ ] **`gh`** (GitHub CLI) — opens and updates PRs. Authenticates with
-  `GITHUB_PAT_TOKEN` from your local env file.
+- [ ] **`gh`** (GitHub CLI) — opens and updates PRs. Needs no login: the skills
+  pass `GITHUB_PAT_TOKEN` from your local env file to each `gh` command.
   [cli.github.com](https://cli.github.com/) ·
   [GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md)
 - [ ] **`curl` / `Invoke-RestMethod`** — issues, comments, transitions (via `jira.sh` / `jira.ps1`).
@@ -87,12 +87,13 @@ git --version; gh --version; $PSVersionTable.PSVersion
   full policy is in [SDLC.md](../process/SDLC.md).
 - [ ] **You have a `GITHUB_PAT_TOKEN`.** A fine-grained PAT with **Contents →
   Read and write** and **Pull requests → Read and write** on the target
-  repo (Metadata → Read-only is added for you). It logs `gh` in at session
-  start; without it the `gh_auth` healthcheck row FAILs and the run halts.
+  repo (Metadata → Read-only is added for you). Every `gh` call the skills
+  make carries it, without logging `gh` in; without it the `gh_auth`
+  healthcheck row FAILs and the run halts.
   Where to click:
   [GH-PAT-SESSION-LOGIN.md](../github/GH-PAT-SESSION-LOGIN.md).
 - [ ] **…and the PAT can actually reach *this* repo.** A fine-grained token
-  scoped to *only selected repositories* logs in green while 404-ing on a
+  scoped to *only selected repositories* authenticates green while 404-ing on a
   repo missing from that list — 404, not 403, so it reads like a typo — and
   with an SSH `origin` nothing breaks until `gh pr create` fails mid-task.
   The `gh_repo_access` row probes it; by hand:
@@ -235,10 +236,10 @@ account is fine; just fill in all six values.)
 
 Rather than re-reading the list, run the healthcheck from your **main
 repository** — it's the same script the skills run before they do anything, and
-it confirms both logins, your settings, and the platform in one pass. The
+it confirms both credentials, your settings, and the platform in one pass. The
 settings it reads are documented in
-[project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md); what it does to log
-`gh` in, and why that session lasts the whole conversation, is in
+[project-config.md](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/project-config.md); how it checks the
+PAT without ever logging `gh` in is in
 [What the healthcheck does](../github/GH-PAT-SESSION-LOGIN.md#what-the-healthcheck-does).
 
 **Linux / macOS** (bash) — read it first:
@@ -275,7 +276,7 @@ onto this checklist:
 | `env_config` | `.jst/jira-sdlc-tools.env` found and parsed |
 | `env_local` | `.jst/jira-sdlc-tools.local.env` found |
 | `env_local_ignored` | the local env file is gitignored |
-| `gh_auth` | `GITHUB_PAT_TOKEN` logs `gh` in — a login, and nothing more |
+| `gh_auth` | `GITHUB_PAT_TOKEN` authenticates (`gh.sh api user`) — and nothing more |
 | `gh_repo_access` | that PAT can actually see the repo `origin` points at (`gh api repos/<OWNER>/<REPO>`) |
 | `jira_auth` | the `--role` you passed authenticates — `jira.sh --role <role> whoami` |
 | `jira_project` | `PROJECT_KEY` resolves to a real Jira project |

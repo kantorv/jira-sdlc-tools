@@ -202,10 +202,12 @@ if [ -n "$MEMBERS_CFG" ]; then STRATEGY=submodules; else STRATEGY=single; fi
 # --- the PR verbs (prs, gate, land) -------------------------------------------
 # They work on the repo set — the root, plus members when the strategy has
 # them — so a single repo is just a set without members, not another branch of
-# code. Network calls go through gh with the same PAT statuscheck logs in.
+# code. Network calls go through gh.sh: gh with the project's GITHUB_PAT_TOKEN
+# for that one call, never a stored gh login (JST-331).
 
 PRS_HEADER=$(printf 'repo\tslug\tpr\tstate\tbase\turl')
 TMOUT_CMD=""; command -v timeout >/dev/null 2>&1 && TMOUT_CMD="timeout 30"
+GH_SH="$SC_DIR/gh.sh"
 ERRF=$(mktemp "${TMPDIR:-/tmp}/repos-err.XXXXXX"); trap 'rm -f "$ERRF"' EXIT
 ROOT_BASE="${OPT_BASE:-$BASE_BRANCH}"
 
@@ -229,7 +231,7 @@ urlenc() { printf '%s' "$1" | sed 's#/#%2F#g'; }   # a branch name inside an API
 pr_rows() {
   local out i
   for i in 1 2; do
-    out=$($TMOUT_CMD gh pr list -R "$1" --head "$2" --state all --json number,state,baseRefName,url \
+    out=$($TMOUT_CMD bash "$GH_SH" pr list -R "$1" --head "$2" --state all --json number,state,baseRefName,url \
           --jq '.[] | [.number, .state, .baseRefName, .url] | @tsv' 2>"$ERRF") || return 1
     [ -n "$out" ] && break
   done
@@ -292,11 +294,11 @@ effective() {
 # "error <message>".
 takes_part() {
   local ahead
-  if ! $TMOUT_CMD gh api "repos/$1/branches/$(urlenc "$OPT_BRANCH")" >/dev/null 2>"$ERRF"; then
+  if ! $TMOUT_CMD bash "$GH_SH" api "repos/$1/branches/$(urlenc "$OPT_BRANCH")" >/dev/null 2>"$ERRF"; then
     grep -qE '404|Not Found' "$ERRF" && { echo no; return; }
     echo "error $(awk 'NF{print; exit}' "$ERRF")"; return
   fi
-  ahead=$($TMOUT_CMD gh api "repos/$1/compare/$(urlenc "$2")...$(urlenc "$OPT_BRANCH")" --jq .ahead_by 2>"$ERRF") \
+  ahead=$($TMOUT_CMD bash "$GH_SH" api "repos/$1/compare/$(urlenc "$2")...$(urlenc "$OPT_BRANCH")" --jq .ahead_by 2>"$ERRF") \
     || { echo "error $(awk 'NF{print; exit}' "$ERRF")"; return; }
   if [ "${ahead:-0}" -gt 0 ]; then echo pushed; else echo no; fi
 }
@@ -422,7 +424,7 @@ v_land() {
       OPEN*) land_fail "$slug#${eff#OPEN } is still open — merge it first; nothing changed" ;;
       none)  [ "$(takes_part "$slug" "$base")" = no ] || land_fail "$repo has work on $OPT_BRANCH but no merged PR — nothing changed"; continue ;;
     esac
-    mc=$($TMOUT_CMD gh pr view "${eff#MERGED }" -R "$slug" --json mergeCommit --jq .mergeCommit.oid 2>"$ERRF") \
+    mc=$($TMOUT_CMD bash "$GH_SH" pr view "${eff#MERGED }" -R "$slug" --json mergeCommit --jq .mergeCommit.oid 2>"$ERRF") \
       || land_fail "$slug#${eff#MERGED }: $(awk 'NF{print; exit}' "$ERRF") — nothing changed"
     [ "$(git -C "$ROOT/$repo" rev-parse --show-toplevel 2>/dev/null)" = "$ROOT/$repo" ] \
       || land_fail "$repo isn't checked out here — nothing changed"
@@ -464,7 +466,7 @@ EOF
       printf '%s\n\nEvery gitlink here points at a commit on its member'"'"'s base; the reviewer checks it with `repos.sh land --check`.\n%s\n' \
         "$body" "${jurl:+
 Jira: https://$jurl/browse/$key}" > "$ERRF.body"
-      url=$($TMOUT_CMD gh pr create -R "$root_slug" --base "$ROOT_BASE" --head "$OPT_BRANCH" \
+      url=$($TMOUT_CMD bash "$GH_SH" pr create -R "$root_slug" --base "$ROOT_BASE" --head "$OPT_BRANCH" \
             --title "$OPT_TITLE" --body-file "$ERRF.body" 2>"$ERRF" | tail -1)
       rm -f "$ERRF.body"
       [ -n "$url" ] || land_fail "landed and pushed, but opening the root PR failed: $(awk 'NF{print; exit}' "$ERRF")" ;;
@@ -630,7 +632,7 @@ EOF
       stop*) fail "${eff#stop }" ;;
       OPEN*) url=$(printf '%s\n' "$prsout" | awk -F'\t' -v r="$repo" -v n="${eff#OPEN }" 'NR > 1 && $1 == r && $3 == n { print $6 }')
              printf '%s\t%s\t%s\texists\t%s\n' "$repo" "$slug" "${eff#OPEN }" "$url" ;;
-      *)     url=$($TMOUT_CMD gh pr create -R "$slug" --base "$base" --head "$OPT_BRANCH" --title "$OPT_TITLE" \
+      *)     url=$($TMOUT_CMD bash "$GH_SH" pr create -R "$slug" --base "$base" --head "$OPT_BRANCH" --title "$OPT_TITLE" \
                    --body-file "$OPT_BODY" 2>"$ERRF" | tail -1)
              [ -n "$url" ] || fail "$slug: gh pr create failed: $(awk 'NF{print; exit}' "$ERRF")"
              printf '%s\t%s\t%s\tcreated\t%s\n' "$repo" "$slug" "${url##*/}" "$url" ;;
@@ -644,9 +646,9 @@ EOF
   section="**PR set** for $key (kept current by jira-sdlc):"$'\n'$(printf '%s\n' "$prsout" \
     | awk -F'\t' 'NR > 1 && $3 != "-" { print "- " $2 "#" $3 " — " $4 }')
   printf '%s\n' "$prsout" | awk -F'\t' 'NR > 1 && $4 == "OPEN" { print $2 "\t" $3 }' | while IFS=$'\t' read -r slug n; do
-    $TMOUT_CMD gh pr view "$n" -R "$slug" --json body --jq .body > "$ERRF.cur" 2>/dev/null || continue
+    $TMOUT_CMD bash "$GH_SH" pr view "$n" -R "$slug" --json body --jq .body > "$ERRF.cur" 2>/dev/null || continue
     with_set "$ERRF.cur" "$section" > "$ERRF.new"
-    cmp -s "$ERRF.cur" "$ERRF.new" || $TMOUT_CMD gh pr edit "$n" -R "$slug" --body-file "$ERRF.new" >/dev/null 2>&1
+    cmp -s "$ERRF.cur" "$ERRF.new" || $TMOUT_CMD bash "$GH_SH" pr edit "$n" -R "$slug" --body-file "$ERRF.new" >/dev/null 2>&1
   done
   rm -f "$ERRF.cur" "$ERRF.new"
   exit 0
@@ -666,7 +668,7 @@ unpushed_ok() {
     [ -n "$(git -C "$dir" log "$b" --not --remotes --format=%h -1 2>/dev/null)" ] || continue
     [ "$slug" != - ] || { echo "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked"; return 2; }
     tip=$(git -C "$dir" rev-parse "$b")
-    heads=$($TMOUT_CMD gh pr list -R "$slug" --head "$b" --state merged --json headRefOid --jq '.[].headRefOid' 2>"$ERRF") \
+    heads=$($TMOUT_CMD bash "$GH_SH" pr list -R "$slug" --head "$b" --state merged --json headRefOid --jq '.[].headRefOid' 2>"$ERRF") \
       || { echo "$b: merged PRs unknown: $(awk 'NF{print; exit}' "$ERRF")"; return 2; }
     covered=""
     for h in $heads; do

@@ -346,8 +346,8 @@ fonts could flag SVGs whose source never changed.
 
 ### Touched a `_shared/scripts/posix/*.sh`? Its `win/*.ps1` twin must stay in sync
 
-The six skill-invoked scripts (`statuscheck`, `ensure_local_env`,
-`get_assignee_email`, `check_assignee`, `jira`, `pr_base`), and `repos` with its
+The seven skill-invoked scripts (`statuscheck`, `ensure_local_env`,
+`get_assignee_email`, `check_assignee`, `jira`, `gh`, `pr_base`), and `repos` with its
 `strategies/` (statuscheck calls it), ship **twice**: the
 bash original in `_shared/scripts/posix/` (the POSIX path) and a PowerShell 5.1+ port in
 `_shared/scripts/win/` (the Windows path). They're a contract pair — same
@@ -367,16 +367,17 @@ diff each port against its bash twin with the OS forced:
 
 ```bash
 export STATUSCHECK_FORCE_OS=windows
-for s in statuscheck ensure_local_env get_assignee_email check_assignee jira pr_base repos; do
+for s in statuscheck ensure_local_env get_assignee_email check_assignee jira gh pr_base repos; do
   diff <(bash "plugins/jira-sdlc/skills/_shared/scripts/posix/$s.sh") \
        <(pwsh -NoProfile -File "plugins/jira-sdlc/skills/_shared/scripts/win/$s.ps1") \
     && echo "✓ $s identical"
 done   # add the args each one needs: --role <role> to statuscheck; --role <role>
        # plus an issue key to check_assignee; --role <role> and a subcommand
        # (e.g. whoami) to jira; --role <role> plus --parent-key <KEY> to
-       # pr_base; a verb (strategy or list) to repos. Those four REQUIRE
-       # --role — auth is role-scoped, with no default credential; repos
-       # touches no credential and takes none.
+       # pr_base; a verb (strategy or list) to repos; any gh arguments to gh
+       # (api user --jq .login, and a failing one such as api repos/x/nope).
+       # Those four REQUIRE --role — auth is role-scoped, with no default
+       # credential; repos and gh take none (gh has one shared PAT).
 ```
 
 `pr_base` is the one whose *result* depends on where you run it — it resolves
@@ -391,26 +392,22 @@ Cover `--branch <name>` too (both the spaced and `--branch=` forms): it swaps
 the branch every source keys on, so a port that ignored it would still look
 right on every other case.
 
-**Two rows of `statuscheck`'s diff are Linux-under-pwsh noise, not drift** —
-knowing this up front saves chasing a port bug that isn't there:
-`$env:TEMP` is unset on Linux, so export `TEMP=/tmp` before the diff, and
-`gh_auth` still FAILs on the PowerShell side afterwards (`gh auth login --with-token` doesn't complete down that path) while the bash side reads OK.
-Filter `gh_auth` out and compare the rest; confirm that one row on Windows.
-Filtering the *row* isn't quite enough — a FAIL also prints a "Remedies for
-FAIL rows" footer under the table, so drop that block too or the diff shows
-three phantom lines. `gh_repo_access` and `current_pr` skip themselves when
-`gh_auth` failed, so they inherit the same noise and need the same filter:
+**`statuscheck`'s table needs no filtering** (JST-331): with the `gh` login gone,
+`gh_auth`, `gh_repo_access` and `current_pr` run the same `gh.sh`/`Invoke-JstGh`
+calls in both ports, so the two print byte-identical tables against a live
+GitHub, and nothing on your machine changes while they do. Only stderr differs:
+under pwsh on Linux, `statuscheck.ps1` can't launch `$PSHOME\pwsh.exe` for its
+`ensure_local_env` child, so compare stdout and the exit code, and confirm that
+one launch on Windows. A fake `gh` on `PATH` (it must expect `GH_TOKEN` set and
+reject any `gh auth …`, as `check-repos.sh`'s does) drives the branches a live
+run can't reach: `gh_repo_access`'s 404 and non-404 errors, a missing or
+non-GitHub `origin`.
 
-```bash
-filt() { grep -vE '^\| (gh_auth|gh_repo_access|current_pr)' | sed '/^Remedies for FAIL rows/,$d'; }
-```
-
-**Or drop the filter entirely and exercise the real path** (JST-251): the only
-thing missing on Linux is `cmd`, which `statuscheck.ps1` shells out to for the
-stdin redirect. A three-line `cmd` stand-in on `PATH` — `[ "$1" = "/c" ] && shift; exec bash -c "$*"` — makes the pwsh login succeed, and both ports then
-print byte-identical tables with nothing filtered. Pair it with a fake `gh` on
-`PATH` to drive the branches a live run can't reach (`gh_repo_access`'s 404 and
-non-404 errors, a missing/non-GitHub `origin`).
+⚠️ **The trap that bites in `win/`: a function isn't a native command.**
+PowerShell passes an unquoted `--json number,state,url` to `& gh` as one
+argument, but to a *function* as an array, which splatting then splits into
+three. `Invoke-JstGh` joins arrays back, so call sites keep reading like `& gh`.
+A fake `gh` that ignores its `--json` value can't see this. Check the value.
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on

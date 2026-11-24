@@ -32,6 +32,11 @@ the issue key is derived from the current branch (see Discovery below).
   re-setting `S` at the top of each shell block that needs it — an unset `S`
   silently becomes `bash "/jira.sh"`. It authenticates **per-request as
   `--role executor`** (`../_shared/jira-api-reference.md` §9).
+- **GitHub access is `gh.sh` / `gh.ps1`, never a bare `gh`.** It takes any `gh`
+  arguments and runs gh with this project's `GITHUB_PAT_TOKEN` for that one
+  command; gh itself holds no login for this project, so a bare `gh` would act
+  as whoever logged it in last. Written `gh.sh <cmd>` below, invoked like
+  `jira.sh`. `repos.sh` already uses it.
 - **Jira comment mechanics**: comments are written to a temp file and posted
   with `jira.sh --role executor issue comment add <KEY> --body-file <file>`.
   There is no inline-body form — the body always comes from a file, so backticks
@@ -87,7 +92,7 @@ healthcheck does.)
 **Discovery and healthcheck — run before step 1.** The rest of this skill
 transitions Jira status, commits, pushes and opens a PR, all of which assume
 the right starting point and working credentials; finding a busted
-environment mid-flow (a logged-out `gh` failing at step 10, *after* the
+environment mid-flow (a rejected GitHub PAT failing at step 10, *after* the
 implementation is written and pushed) wastes the run and can leave commits on
 the wrong branch. One script bundles every check. Send it as the only tool
 call in its message, because its rows decide whether the next step happens at
@@ -128,7 +133,7 @@ note below**:
 | `repo_strategy` | `single`, or `submodules` with its member repos — the issue's work can then span several repos, one PR per member it touches. Steps 1, 2 and 6–12 cover them through `repos.sh`, which does nothing extra for a single repo |
 
 Two of those other rows matter later: `gh_auth` and `gh_repo_access` together
-are what step 10's `gh pr create` depends on (a login *and* a PAT that can see
+are what step 10's PRs depend on (a PAT that authenticates *and* can see
 this repo), so a FAIL there is not a problem to discover at step 10.
 
 Reading the result: **Any FAIL row** → stop, relay the script's remedy
@@ -400,7 +405,7 @@ context.
       - **Each OPEN row** → that PR now carries this run's commits. Write what
         changed in its repo to `/tmp/<KEY>-fix-summary.md`
         (`cat > … <<'EOF'`) and post it with
-        `gh pr comment <pr> -R <slug> --body-file …`, so the reviewer's next
+        `gh.sh pr comment <pr> -R <slug> --body-file …`, so the reviewer's next
         pass sees the fix instead of re-reading the whole diff.
       - **Then run `open-prs` (below) every time**, even when every PR is
         already open: it creates the missing ones, leaves the OPEN ones alone,
@@ -465,7 +470,7 @@ context.
       One row per PR: `created` or `exists`, with its URL — carry them into
       steps 11 and 12.
 
-    - Discovery already confirmed `gh` is installed and authenticated, so an
+    - Discovery already confirmed `gh` is installed and its PAT works, so an
       `error=` here is something else (a repo-permission problem, a transient
       network issue). Don't fail silently — report it and still hand back the
       compare URL per repo, so the user can open the PR by hand:
