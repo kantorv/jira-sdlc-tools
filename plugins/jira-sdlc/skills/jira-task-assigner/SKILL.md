@@ -105,7 +105,7 @@ long-lived branch — the opposite reading from the executor/reviewer:
 
 Three other rows carry an assigner-specific reading: `gh_auth` still blocks
 even though this skill opens no PRs — verifying it now is what stops the
-*executor* discovering a logged-out `gh` after its implementation is already
+*executor* discovering a rejected GitHub PAT after its implementation is already
 written and pushed; `jira_account_url` is where
 step 7's browse links come from, which is why no step opens the
 credential-bearing `.jst/jira-sdlc-tools.local.env`; and `working_tree` WARNs
