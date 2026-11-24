@@ -40,9 +40,16 @@ read_conf() {
 real_dir() { [ -n "$1" ] && [ -d "$1" ] && [ ! -L "$1" ]; }
 
 # the repository's main worktree (where the originals are), from any checkout of it
-# The main worktree: git worktree list's first entry (inside a submodule, the git common dir
-# is <workspace>/.git/modules/<member>, so its dirname is not a checkout).
-main_worktree() { git -C "$1" worktree list --porcelain | sed -n '1s/^worktree //p'; }
+# The main checkout of the repo <dir> belongs to, from any of its worktrees. A plain repo's
+# git common dir is <main>/.git. A submodule's is <superproject>/.git/modules/<member>,
+# whose parent is not a checkout (and `git worktree list` names that gitdir, not the
+# checkout): its checkout is core.worktree, relative to the gitdir.
+main_worktree() {
+  local common wt
+  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  wt=$(git config --file "$common/config" core.worktree 2>/dev/null || true)
+  if [ -n "$wt" ]; then (cd "$common" && cd "$wt" && pwd); else dirname "$common"; fi
+}
 
 # --- services by PID file: each detached in its own process group (setsid), $RUN/<name>.pid,
 # $LOGS/<name>.log, so stopping it reaches every child. ./stack sets RUN and LOGS.

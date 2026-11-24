@@ -146,7 +146,10 @@ lifecycle() {
   expect start start-again 0 || return
   expect teardown teardown-while-running 3 || return
   expect stop stop 0 || return
-  local busy; busy=$(wait_ports_free) && row ports-free OK "nothing listens in ${PORT_FIRST:+ports $PORT_FIRST-$PORT_LAST}${CONF[SUBNET]:+ $(cut -d. -f1-2 <<< "${CONF[SUBNET]}").$N.*}" || { row ports-free FAIL "still listening: $busy"; return; }
+  local busy where="${PORT_FIRST:+ports $PORT_FIRST-$PORT_LAST}"
+  [ -z "${CONF[SUBNET]:-}" ] || where="${where:+$where, }$(cut -d. -f1-2 <<< "${CONF[SUBNET]}").$N.*"
+  if busy=$(wait_ports_free); then row ports-free OK "nothing listens in ${where:-its ports}"
+  else row ports-free FAIL "still listening: $busy"; return; fi
   expect start restart 0 || return
   expect stop stop-again 0 || return
   expect teardown teardown 0 || return

@@ -82,9 +82,19 @@ The jira-sdlc executor sets neither: the defaults are the point, so the stack ru
 from a terminal, the executor, and any caller. The names keep their `CF_` prefix because they
 are the contract's.
 
-**Finding the main worktree** from a checkout: `git worktree list --porcelain`'s first
-`worktree` line. Not `dirname "$(git rev-parse --git-common-dir)"`: inside a submodule the
-common dir is `<workspace>/.git/modules/<member>`, whose parent is not a checkout.
+**Finding the main worktree** from a checkout: the git common dir's parent in a plain repo,
+but inside a submodule the common dir is `<workspace>/.git/modules/<member>`, whose parent is
+not a checkout (and `git worktree list` names that gitdir too). There, the checkout is the
+gitdir's `core.worktree`, relative to the gitdir:
+
+```bash
+main_worktree() {
+  local common wt
+  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  wt=$(git config --file "$common/config" core.worktree 2>/dev/null || true)
+  if [ -n "$wt" ]; then (cd "$common" && cd "$wt" && pwd); else dirname "$common"; fi
+}
+```
 
 **The stack's own switches come from the environment**: a choice an instance may or may not
 want (`WITH_FACEKIT=1`, `TTS_DEVICE=cuda:0`) is a variable the stack reads with a default

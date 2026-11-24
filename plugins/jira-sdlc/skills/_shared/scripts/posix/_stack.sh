@@ -71,10 +71,16 @@ docker_named() {
   done
 }
 
-# main_worktree <dir> — the repository's main worktree (git worktree list's first
-# entry). Not the git common dir's parent: inside a submodule that is
-# <workspace>/.git/modules/<member>, which is not a checkout.
-main_worktree() { git -C "$1" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p'; }
+# main_worktree <dir> — The main checkout of the repo <dir> belongs to, from any of its worktrees. A plain repo's
+# git common dir is <main>/.git. A submodule's is <superproject>/.git/modules/<member>,
+# whose parent is not a checkout (and `git worktree list` names that gitdir, not the
+# checkout): its checkout is core.worktree, relative to the gitdir.
+main_worktree() {
+  local common wt
+  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  wt=$(git config --file "$common/config" core.worktree 2>/dev/null || true)
+  if [ -n "$wt" ]; then (cd "$common" && cd "$wt" && pwd); else dirname "$common"; fi
+}
 
 # subnet_listeners <N> — "addr:port" listeners on instance N's /24 (<a.b>.N.*), when
 # the stack has a SUBNET; nothing otherwise.
