@@ -779,6 +779,10 @@ fi
 # against stack contract v1; skills/_shared/stack/). Optional, so INFO — WARN only
 # for a contract stack this script can't read, or an instance number another
 # checkout holds. Never runs ./stack: reading files and the owner record only.
+# A `toolchain` project (a library, CLI or scripts: nothing listening) gets no
+# ./stack by design, only the bootstrap hook (jst-stack's STACK SKIPPED), so its
+# row says so instead of pointing at jst-stack.
+SD_PATTERN=""
 if [ -f "$CFG_ROOT/.jst/STACK.md" ]; then
   SD_LAYOUT=$(grep -m1 -E '^\| *Repo layout *\|' "$CFG_ROOT/.jst/STACK.md" | grep -oE '`[a-z-]+`' | head -1 | tr -d '`')
   SD_PATTERN=$(grep -m1 -E '^\| *Run pattern *\|' "$CFG_ROOT/.jst/STACK.md" | grep -oE '`[a-z-]+`' | head -1 | tr -d '`')
@@ -803,6 +807,10 @@ if [ -f "$CFG_ROOT/stack" ]; then
   else
     row stack INFO "./stack without the contract marker (the project's own: the executor starts no instance with it)"
   fi
+elif [ "$SD_PATTERN" = toolchain ] && [ -f "$CFG_DIR/$BOOTSTRAP_FILE" ]; then
+  row stack INFO "none needed (pattern toolchain: nothing to run; .jst/$BOOTSTRAP_FILE sets up each worktree)"
+elif [ "$SD_PATTERN" = toolchain ]; then
+  row stack INFO "none needed (pattern toolchain), but no .jst/$BOOTSTRAP_FILE yet — /jira-sdlc:jst-stack writes .jst/bootstrap.sh"
 else
   row stack INFO "no ./stack (optional — /jira-sdlc:jst-stack builds one from .jst/STACK.md)"
 fi

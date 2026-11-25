@@ -731,11 +731,13 @@ if (Test-Path -LiteralPath $BootstrapPath -PathType Leaf) {
 # against stack contract v1; skills/_shared/stack/). Optional, so INFO — WARN only
 # for a contract stack this script can't read, or an instance number another
 # checkout holds. Never runs ./stack: reading files and the owner record only.
+# A `toolchain` project gets no ./stack by design, only the bootstrap hook.
 # Twin of the posix block: same rows, same text.
+$sdPattern = ''
 $StackDocPath = Join-Path $CfgRoot '.jst/STACK.md'
 if (Test-Path -LiteralPath $StackDocPath -PathType Leaf) {
     $sdLines = Get-Content -LiteralPath $StackDocPath
-    $sdLayout = ''; $sdPattern = ''
+    $sdLayout = ''
     $l = $sdLines | Where-Object { $_ -match '^\| *Repo layout *\|' } | Select-Object -First 1
     if ($l -and $l -match '`([a-z-]+)`') { $sdLayout = $Matches[1] }
     $l = $sdLines | Where-Object { $_ -match '^\| *Run pattern *\|' } | Select-Object -First 1
@@ -768,6 +770,10 @@ if (Test-Path -LiteralPath $StackPath -PathType Leaf) {
     } else {
         Add-Row stack INFO "./stack without the contract marker (the project's own: the executor starts no instance with it)"
     }
+} elseif ($sdPattern -eq 'toolchain' -and (Test-Path -LiteralPath $BootstrapPath -PathType Leaf)) {
+    Add-Row stack INFO "none needed (pattern toolchain: nothing to run; .jst/$BootstrapFile sets up each worktree)"
+} elseif ($sdPattern -eq 'toolchain') {
+    Add-Row stack INFO "none needed (pattern toolchain), but no .jst/$BootstrapFile yet — /jira-sdlc:jst-stack writes .jst/bootstrap.sh"
 } else {
     Add-Row stack INFO "no ./stack (optional — /jira-sdlc:jst-stack builds one from .jst/STACK.md)"
 }
