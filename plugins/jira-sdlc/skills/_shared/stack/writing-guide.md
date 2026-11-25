@@ -75,6 +75,7 @@ every other project's `resources.conf` it can find; keep an existing stack's val
 | `INSTANCE_MIN`, `INSTANCE_MAX` | the numbers the stack accepts; the plugin hashes issue keys into this range, so a wider range means fewer collisions |
 | `PORT_BASE`, `PORT_COUNT`, `PORTS_PER_INSTANCE` | instance N's ports: `PORT_BASE + (N - INSTANCE_MIN) × PORTS_PER_INSTANCE` onward |
 | `SUBNET` | a private `/16`: instance N gets `<a.b>.N.0/24` |
+| `SHARED_PORTS` | the main checkout's ports of the services an instance can't start without (the README's *Shared services that must already run*), e.g. `29392,52790`; none → leave it out. The trial checks them before it starts anything |
 | the project's own | the main checkout's ports, anything else the stack reads |
 
 ## The hook

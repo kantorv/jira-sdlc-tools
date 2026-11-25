@@ -28,7 +28,7 @@ With the subnet, the API keeps its usual port at `<a.b>.N.1`.
 | -- | -- | -- |
 | the database | isolated | its own container and named volume, compose project `<NAME_PREFIX>-i<N>` |
 | the database's contents | the human decides (the README records it) | empty + migrate, a dump of the main database, or fixtures (below) |
-| a broker (Kafka, RabbitMQ) | the broker shared, the topics or queues isolated | names prefixed by `<NAME_PREFIX>-i<N>`; the main checkout runs the broker; `start` checks it |
+| a broker (Kafka, RabbitMQ) | the broker shared, the topics or queues isolated | names prefixed by `<NAME_PREFIX>-i<N>`; the main checkout runs the broker; `start` checks it; its port is in `SHARED_PORTS` |
 | a cache (Redis) | isolated if cheap, else shared with a key prefix |  |
 | uploaded or generated files | isolated: a copy (jobs rewrite them) | `cp -a` from the main checkout into the checkout or `CF_INSTANCE_HOME` |
 | large read-only files (weights) | shared | hard links (`cp -al`, `ln`) from the main checkout |

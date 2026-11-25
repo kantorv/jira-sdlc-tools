@@ -18,6 +18,7 @@ their contents are not). The stack contract is bash: on Windows, stop with
 `STACK NOT WRITTEN: Windows is not supported yet (use WSL)`.
 
 **The last line of your final message is the marker**: `STACK WRITTEN <PR url>`,
+`STACK WRITTEN, TRIAL NOT RUN: <reason> <PR url>` (written, untried: step 7),
 `STACK SKIPPED <PR url>` (a `toolchain` project: hook only), or `STACK NOT WRITTEN: <reason>`.
 
 References, in `../_shared/stack/`, read when step 4 says so: `writing-guide.md` (what to
@@ -138,7 +139,10 @@ It prints a table (step | result | detail), the logs' folder, and `TRIAL PASSED`
 stack's `::step-failed::` marker) and `.out`, fix the cause in `W`, commit, and run the trial
 again: **at most two fix rounds**, then stop and report what still fails — a stack that fails
 its trial is not opened as a ready PR. `refused` (exit 2) means it never started: no marker,
-a bad `resources.conf`, no free instance; fix that first.
+a bad `resources.conf`, no free instance; fix that first. Refused because a `SHARED_PORTS`
+service of the main checkout isn't running: don't start it (it is the human's); the trial
+didn't run, and the marker is `STACK WRITTEN, TRIAL NOT RUN: <what isn't running>`. The same
+marker when the human said not to run it.
 
 A `toolchain` project has no trial: instead, run its hook once in a scratch worktree
 (`git worktree add --detach /tmp/jst-hook-try HEAD`, `JST_INSTANCE=1 bash .jst/bootstrap.sh`,
@@ -154,8 +158,9 @@ bash "$S/gh.sh" pr create -R <owner>/<repo> --base <DEFAULT_BASE_BRANCH> --head 
   --title "jst-stack: the project's stack" --body-file /tmp/jst-stack-pr.md
 ```
 
-A failed trial → open it as a draft (`--draft`). The body: what was written or changed (one
-line per file or change row), the values, the trial's table and its last line, assumed
+A failed or unrun trial → open it as a draft (`--draft`). The body: what was written or changed (one
+line per file or change row), the values, the trial's table and its last line (unrun: why, what
+to start, and the command with `$S` expanded to its full path, as the human has no `$S`), assumed
 answers, and "Merging this PR gives every new issue worktree its own instance: the executor
 runs `.jst/bootstrap.sh` in step 1." A pre-push hook that fails: show its output and stop,
 no `--no-verify`.
