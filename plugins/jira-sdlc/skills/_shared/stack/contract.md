@@ -65,6 +65,7 @@ a value. The tool refuses any other line, so it and every caller read the same v
 | `SUBNET` | optional: a private `/16`; instance N gets `<a.b>.N.0/24` |
 | `PORT_BASE`, `PORT_COUNT` | optional: the host port block the stack uses |
 | `PORTS_PER_INSTANCE` | with a port block: instance N uses `PORT_BASE + (N - INSTANCE_MIN) × PORTS_PER_INSTANCE` onward |
+| `SHARED_PORTS` | optional: the main checkout's ports, comma-separated, of the services every instance needs running (a broker, the database a seed copies); the trial refuses to start while nothing listens on one |
 
 The project's own keys (the main checkout's ports, anything else the stack reads) sit beside
 them; callers ignore those.

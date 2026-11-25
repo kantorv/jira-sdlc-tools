@@ -26,7 +26,8 @@
 # (--keep leaves it); the home and its logs stay.
 #
 # Exit 0 passed; 1 failed; 2 refused before starting (no ./stack, no marker, a bad
-# resources.conf, no free N). Ported from ControlFreak's pipeline/trial.py
+# resources.conf, no free N, or a SHARED_PORTS port of the main checkout's that nothing
+# listens on: an instance can't start without those services, so the trial doesn't try). Ported from ControlFreak's pipeline/trial.py
 # (controlfreak@7af306f). Docs: https://kantorv.github.io/jira-sdlc-tools/docs/running-multiple-copies
 
 set -uo pipefail
@@ -55,6 +56,17 @@ stack_conf "$CONF_TMP" || { rm -f "$CONF_TMP"; refuse "no valid stack.d/resource
 rm -f "$CONF_TMP"
 stack_need NAME_PREFIX INSTANCE_MIN INSTANCE_MAX || refuse "resources.conf lacks a required key"
 PREFIX=${CONF[NAME_PREFIX]}
+
+# The main checkout's services every instance needs (SHARED_PORTS: a broker, the database a seed
+# copies). Without them the lifecycle fails partway, and its cleanup can leave things behind.
+if [ -n "${CONF[SHARED_PORTS]:-}" ]; then
+  down=""
+  for p in ${CONF[SHARED_PORTS]//,/ }; do
+    [[ $p =~ ^[1-9][0-9]{0,4}$ ]] || refuse "SHARED_PORTS has '$p', not a port"
+    [ -n "$(ports_busy "$p" "$p")" ] || down+="$p "
+  done
+  [ -z "$down" ] || refuse "nothing listens on the main checkout's shared port(s) ${down% } (SHARED_PORTS): start those services in the main checkout (stack.d/README.md, \"Shared services that must already run\"), then run the trial again"
+fi
 
 n_free() {  # <N> → 0 when nothing holds N
   local n=$1 first last
@@ -160,7 +172,7 @@ leak_check() {
   local problems="" procs busy dock files p
   procs=$(for p in /proc/[0-9]*; do
       [ "${p#/proc/}" = "$$" ] && continue
-      c=$(readlink "$p/cwd" 2>/dev/null); cmd=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null)
+      c=$(readlink "$p/cwd" 2>/dev/null); cmd=$(tr '\0' ' ' 2>/dev/null < "$p/cmdline")
       case "$c/" in "$CHECKOUT"/*) echo "${p#/proc/}"; continue ;; esac
       case "$cmd" in *"$CHECKOUT/"*) echo "${p#/proc/}" ;; esac
     done | tr '\n' ' ')

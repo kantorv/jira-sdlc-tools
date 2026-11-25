@@ -28,7 +28,7 @@ shared Kafka broker with per-instance topics, a shared GPU service, and
   `mv`: no download, no extra disk.
 - **Files jobs rewrite are copied**, not linked (`cp -a` of `media/`).
 - **Shared on purpose**: the broker, the GPU lock, model caches. Checked by
-  `up`, started by the human in the main checkout.
+  `up`, started by the human in the main checkout; their ports are `SHARED_PORTS`.
 - **Per-instance names inside shared services**: topics and consumer
   groups prefixed by the instance (`app.i<N>.…`); `down` deletes exactly
   those, through the app's own management command, before it removes the

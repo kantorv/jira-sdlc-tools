@@ -45,7 +45,8 @@ Written by jst-stack on <date> from `.jst/STACK.md` at <short sha>; the human's 
 
 ## Shared services that must already run
 
-<none | the main checkout's <service>, checked at `<url or command>`, started with `<command>` in the main checkout>
+<none | the main checkout's <service>, checked at `<url or command>`, started with `<command>` in the main checkout>.
+Their ports are `SHARED_PORTS` in `resources.conf`.
 
 ## Host prerequisites
 
