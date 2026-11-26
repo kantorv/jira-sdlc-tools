@@ -66,7 +66,9 @@
 #             appended and kept current in every open PR of the set.
 #   remove-check  is this worktree safe to delete? One row per repo (the root
 #             and every checked-out member): ok, dirty (uncommitted or
-#             untracked work), unpushed (commits on no remote), or unknown;
+#             untracked work), unpushed (commits on no remote, on a branch
+#             the removal would lose: the worktree's own, or every branch of
+#             a member checked out only here), or unknown;
 #             then safe=yes|no (exit 0|1). A commit on no remote is still ok
 #             when it is the head of a merged PR, or an ancestor of it: a
 #             squash merge leaves exactly that behind. It deletes nothing —
@@ -656,6 +658,18 @@ EOF
 
 # --- remove-check ---------------------------------------------------------------
 
+# own_branches <dir> — the branches removing this worktree would lose: every
+# one when no other worktree shares <dir>'s git dir (a member checked out only
+# here), else just the one checked out (the root's branches live on in the main
+# checkout, so an unrelated branch's commits are no reason to keep this one).
+own_branches() {
+  if [ "$(git -C "$1" worktree list --porcelain 2>/dev/null | grep -c '^worktree ')" -gt 1 ]; then
+    git -C "$1" branch --show-current
+  else
+    git -C "$1" for-each-ref --format='%(refname:short)' refs/heads
+  fi
+}
+
 # unpushed_ok <dir> <slug> — print nothing when every commit on no remote is
 # covered by a merged PR's head, else the reason; exit 2 when it can't tell.
 unpushed_ok() {
@@ -664,7 +678,7 @@ unpushed_ok() {
   if [ -z "$(git -C "$dir" branch --show-current)" ] && [ -n "$(git -C "$dir" log HEAD --not --remotes --branches --format=%h -1 2>/dev/null)" ]; then
     echo "a detached HEAD holds commits on no branch and no remote"; return 1
   fi
-  for b in $(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads); do
+  for b in $(own_branches "$dir"); do
     [ -n "$(git -C "$dir" log "$b" --not --remotes --format=%h -1 2>/dev/null)" ] || continue
     [ "$slug" != - ] || { echo "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked"; return 2; }
     tip=$(git -C "$dir" rev-parse "$b")
@@ -696,7 +710,10 @@ v_remove_check() {
     fi
     why=$(unpushed_ok "$dir" "$slug"); rc=$?
     case "$rc" in
-      0) res=ok; [ -n "$(git -C "$dir" log --branches --not --remotes --format=%h -1 2>/dev/null)" ] && why="commits on no remote are the head of a merged PR" || why="clean, everything pushed" ;;
+      0) res=ok; why="clean, everything pushed"
+         for b in $(own_branches "$dir"); do
+           [ -z "$(git -C "$dir" log "$b" --not --remotes --format=%h -1 2>/dev/null)" ] || { why="commits on no remote are the head of a merged PR"; break; }
+         done ;;
       1) res=unpushed; safe=no ;;
       *) res=unknown; safe=no ;;
     esac
