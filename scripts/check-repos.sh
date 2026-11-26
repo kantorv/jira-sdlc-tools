@@ -728,6 +728,15 @@ for port in sh ${PORTS:+ps}; do
   RCH='repo\tresult\tdetail'
   is "remove-check: everything pushed → safe$sfx" "$(rp $port "$WR" remove-check)" \
     "$(printf "$RCH"'\n.\tok\tclean, everything pushed\napp\tok\tclean, everything pushed\nserver\tok\tclean, everything pushed\nsafe=yes\nexit=0')"
+  # The root's git dir is the main checkout's: another branch's unpushed commits outlive this worktree (JSW-14).
+  git -C "$LAB/$ns/main" switch -qc side; echo s > "$LAB/$ns/main/s.txt"; git -C "$LAB/$ns/main" add s.txt
+  git -C "$LAB/$ns/main" commit -qm side; git -C "$LAB/$ns/main" switch -q development
+  is "remove-check: another branch's unpushed commits in the shared root aren't this worktree's$sfx" \
+    "$(rp $port "$WR" remove-check | grep -E '^\.|^safe')" "$(printf '.\tok\tclean, everything pushed\nsafe=yes')"
+  echo r > "$WR/r.txt"; git -C "$WR" add r.txt; git -C "$WR" commit -qm r
+  is "  …but its own branch's are$sfx" "$(rp $port "$WR" remove-check | grep -E '^\.|^safe')" \
+    "$(printf ".\tunpushed\t$E has commits on no remote (1), and no merged PR covers them\nsafe=no")"
+  git -C "$WR" reset -q --hard HEAD~1
   echo stray > "$WR/server/stray.txt"
   is "remove-check: an untracked file in a member is work$sfx" "$(rp $port "$WR" remove-check | grep -E '^server|^safe|^exit')" \
     "$(printf 'server\tdirty\t1 uncommitted or untracked path(s)\nsafe=no\nexit=1')"

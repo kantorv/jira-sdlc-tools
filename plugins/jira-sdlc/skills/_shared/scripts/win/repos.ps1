@@ -622,6 +622,13 @@ function v_open_prs {
 
 # --- remove-check (twin of repos.sh's) -------------------------------------------
 
+function Get-OwnBranches {   # twin of own_branches: every branch, unless another worktree shares the git dir
+    param([string]$Dir)
+    $wts = @(& git -C $Dir worktree list --porcelain 2>$null | Where-Object { $_ -like 'worktree *' })
+    if ($wts.Count -gt 1) { return @(& git -C $Dir branch --show-current 2>$null | Where-Object { $_ }) }
+    return @(& git -C $Dir for-each-ref --format='%(refname:short)' refs/heads 2>$null | Where-Object { $_ })
+}
+
 function Get-UnpushedVerdict {   # @{Rc; Why}: 0 covered, 1 work at risk, 2 can't tell
     param([string]$Dir, [string]$Slug)
     & git -C $Dir rev-parse -q --verify HEAD > $null 2>&1
@@ -631,7 +638,7 @@ function Get-UnpushedVerdict {   # @{Rc; Why}: 0 covered, 1 work at risk, 2 can'
         $d = @(& git -C $Dir log HEAD --not --remotes --branches --format=%h -1 2>$null | Where-Object { $_ })
         if ($d.Count -gt 0) { return [pscustomobject]@{ Rc = 1; Why = 'a detached HEAD holds commits on no branch and no remote' } }
     }
-    foreach ($b in @(& git -C $Dir for-each-ref --format='%(refname:short)' refs/heads 2>$null | Where-Object { $_ })) {
+    foreach ($b in @(Get-OwnBranches $Dir)) {
         $u = @(& git -C $Dir log $b --not --remotes --format=%h 2>$null | Where-Object { $_ })
         if ($u.Count -eq 0) { continue }
         if ($Slug -eq '-') { return [pscustomobject]@{ Rc = 2; Why = "$b has commits on no remote, and origin isn't GitHub, so merged PRs can't be checked" } }
@@ -660,7 +667,7 @@ function v_remove_check {
         if ($st.Count -gt 0) { Write-Output "$($r.Repo)`tdirty`t$($st.Count) uncommitted or untracked path(s)"; $safe = 'no'; continue }
         $v = Get-UnpushedVerdict $dir $r.Slug
         if ($v.Rc -eq 0) {
-            $any = @(& git -C $dir log --branches --not --remotes --format=%h -1 2>$null | Where-Object { $_ })
+            $any = @(foreach ($b in @(Get-OwnBranches $dir)) { & git -C $dir log $b --not --remotes --format=%h -1 2>$null | Where-Object { $_ } })
             $why = if ($any.Count -gt 0) { 'commits on no remote are the head of a merged PR' } else { 'clean, everything pushed' }
             Write-Output "$($r.Repo)`tok`t$why"
         } elseif ($v.Rc -eq 1) { Write-Output "$($r.Repo)`tunpushed`t$($v.Why)"; $safe = 'no' }

@@ -101,6 +101,9 @@ a fresh clone can fetch it only until the server garbage-collects it (*"upload-p
 - **Done is the landing PR's merge**, which is why merge → Done automation must be scoped to the workspace repo.
 - **A squash-merged branch is still safe to remove**: `remove-check` accepts a commit on no remote when it's the head
   of a merged PR, or an ancestor of that head.
+- **Only the branches a removal loses count** (JSW-14): a member checked out only in this worktree loses every
+  branch with it, so all of them are checked; the root shares its git dir with the main checkout, whose branches
+  outlive the worktree, so only the worktree's own branch is.
 
 ### The reviewer and the executor
 
