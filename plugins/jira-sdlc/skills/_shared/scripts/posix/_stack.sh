@@ -57,19 +57,28 @@ ports_busy() {
   listening_ports | awk -v a="$1" -v b="$2" '$1 >= a && $1 <= b' | tr '\n' ' ' | sed 's/ $//'
 }
 
-# docker_named <name> — containers, networks and volumes named <name>, <name>-… or
-# <name>_…, one "<kind> <name>" per line; nothing without Docker.
-docker_named() {
-  local name=$1 kind
+# docker_all — every container, network and volume, one "<kind> <name>" per line;
+# nothing without Docker.
+docker_all() {
+  local kind
   command -v docker >/dev/null 2>&1 || return 0
   for kind in container network volume; do
     case $kind in
       container) docker ps -a --format '{{.Names}}' ;;
       network) docker network ls --format '{{.Name}}' ;;
       volume) docker volume ls --format '{{.Name}}' ;;
-    esac 2>/dev/null | awk -v n="$name" -v k="$kind" '$0 == n || index($0, n "-") == 1 || index($0, n "_") == 1 {print k " " $0}'
+    esac 2>/dev/null | awk -v k="$kind" '{print k " " $0}'
   done
 }
+
+# docker_match <name> — the lines of docker_all (on stdin) named <name>, <name>-… or <name>_….
+docker_match() {
+  awk -v n="$1" '{ s = substr($0, index($0, " ") + 1) } s == n || index(s, n "-") == 1 || index(s, n "_") == 1'
+}
+
+# docker_named <name> — containers, networks and volumes named <name>, <name>-… or
+# <name>_…, one "<kind> <name>" per line; nothing without Docker.
+docker_named() { docker_all | docker_match "$1"; }
 
 # main_worktree <dir> — The main checkout of the repo <dir> belongs to, from any of its worktrees. A plain repo's
 # git common dir is <main>/.git. A submodule's is <superproject>/.git/modules/<member>,

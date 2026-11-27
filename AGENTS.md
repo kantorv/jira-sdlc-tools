@@ -261,6 +261,13 @@ bash scripts/check-ensure-local-env.sh [--ports]
 # repos.sh or its strategies/, or statuscheck. --ports adds the win/ ports.
 bash scripts/check-repos.sh [--ports]
 
+# instance.sh's numbers and claims (JSW-31): colliding keys get different Ns,
+# assign is idempotent and atomic under concurrency, lookup and the writing
+# guide's bootstrap/teardown hooks act only on the checkout's own claim, a full
+# range refuses. Scratch HOME, so real claims are never touched. Run it after
+# touching instance.sh, _stack.sh or the guide's hooks.
+bash scripts/check-instance.sh
+
 # manifests are well-formed JSON (fallback if the claude CLI is unavailable)
 python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
 python3 -m json.tool plugins/jira-sdlc/.claude-plugin/plugin.json > /dev/null
