@@ -148,6 +148,11 @@ N1=$(inst assign JSW-27 --checkout "$W1" | val instance); N2=$(inst assign JSW-2
 JST_ISSUE_KEY=JSW-29 bash "$W2/.jst/teardown.sh" 2>/dev/null
 is "teardown.sh acts on its own claim" "$(cat "$W2/stack.calls" 2>/dev/null | tr '\n' ';')" "stop --instance $N2;teardown --instance $N2;"
 [ ! -e "$W1/stack.calls" ] && ok "and not on the other worktree's" || no "it ran in the other worktree"
+is "teardown.sh releases its claim" "$(inst lookup --checkout "$W2" | val instance)" none
+is "and keeps the other's" "$(inst lookup --checkout "$W1" | val instance)" "$N1"
+JST_INSTANCE=$N1 bash "$W2/.jst/teardown.sh" >/dev/null 2>&1
+is "teardown.sh never releases another worktree's claim" "$(inst lookup --checkout "$W1" | val instance)" "$N1"
+rm -f "$W2/stack.calls"
 JST_ISSUE_KEY=JSW-27 bash "$W1/.jst/bootstrap.sh" 2>/dev/null
 is "bootstrap.sh starts its own claim" "$(cat "$W1/stack.calls" | tr '\n' ';')" "start --instance $N1;"
 JST_ISSUE_KEY=JSW-31 bash "$W3/.jst/teardown.sh" 2>"$LAB/err"; rc=$?

@@ -40,8 +40,8 @@
 # one it doesn't use): which of them is its instance is a human's call.
 #
 # The owner file is <instance home>/owner; the home is the contract's default,
-# ~/.local/state/<NAME_PREFIX>/i<N>. The stack's teardown removes the home (logs
-# kept), which also releases N. claim and assign run under one lock, the directory
+# ~/.local/state/<NAME_PREFIX>/i<N>. A teardown that ends the worktree's instance
+# releases N (the web app's, .jst/teardown.sh). claim and assign run under one lock, the directory
 # ~/.local/state/<NAME_PREFIX>/.lock (mkdir: atomic everywhere, flock isn't on
 # macOS), holding the holder's pid; a lock whose pid is gone is broken. The owner
 # file is written to a temporary file in the state directory and renamed into

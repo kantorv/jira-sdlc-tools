@@ -125,11 +125,15 @@ if [ -z "${JST_INSTANCE:-}" ]; then
   esac
 fi
 ./stack stop --instance "$JST_INSTANCE"
-exec ./stack teardown --instance "$JST_INSTANCE"
+./stack teardown --instance "$JST_INSTANCE"
+# The worktree is about to go: release its claim (instance.sh release), never another's.
+owner="$HOME/.local/state/$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf)/i$JST_INSTANCE/owner"
+[ "$(cat "$owner" 2>/dev/null)" != "$(pwd -P)" ] || rm -f "$owner"
 ```
 
-The stack's `teardown` removes the home, and with it the claim. A `toolchain` project's hook
-makes the venv instead (its pattern page). Keep both executable.
+`teardown.sh` releases the claim itself because a stack's `teardown` may keep the home's
+`owner` file, and a claim left behind becomes a stale one once the worktree is removed. A
+`toolchain` project's hook makes the venv instead (its pattern page). Keep both executable.
 
 ## Rules
 
