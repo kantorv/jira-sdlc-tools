@@ -43,7 +43,9 @@
 # ~/.local/state/<NAME_PREFIX>/i<N>. A teardown that ends the worktree's instance
 # releases N (the web app's, .jst/teardown.sh). claim and assign run under one lock, the directory
 # ~/.local/state/<NAME_PREFIX>/.lock (mkdir: atomic everywhere, flock isn't on
-# macOS), holding the holder's pid; a lock whose pid is gone is broken. The owner
+# macOS), holding the holder's pid. A lock whose pid is gone, or that has had no pid
+# for 10 s, is broken, under a second lock (.lock.break) so only one waiter breaks it;
+# a run removes the lock on exit only while it holds its own pid. The owner
 # file is written to a temporary file in the state directory and renamed into
 # place, so a crash leaves N either claimed or not, never half.
 #
@@ -98,26 +100,59 @@ claims_of() {  # <dir> → every N whose owner is <dir>, ascending, one per line
   done | sort -n
 }
 
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }  # GNU, then BSD
+
+# dead <lock> <pid read from it> — true when the lock's holder is gone: its pid isn't
+# running, or it has no pid and is older than 10 s (its holder was killed between the
+# mkdir and the pid write, which are microseconds apart).
+dead() {
+  if [ -n "$2" ]; then
+    ! kill -0 "$2" 2>/dev/null
+  else
+    local t; t=$(mtime "$1") || return 1
+    [ -n "$t" ] && [ $(($(date +%s) - t)) -ge 10 ]
+  fi
+}
+
+# unlock_dead <lock> <pid> — break a dead holder's lock, under a second mkdir lock:
+# two waiters that saw the same dead pid must not both break, or the second would
+# break the first's fresh, live lock and both would hold it. Under it the pid is read
+# again, and the lock broken only if it is still the same dead one. False when another
+# waiter holds the second lock.
+unlock_dead() {
+  local lk=$1 seen=$2 now
+  mkdir "$lk.break" 2>/dev/null || return 1   # another waiter is breaking it: wait
+  BREAKING="$lk.break"
+  if [ -d "$lk" ]; then
+    now=$(cat "$lk/pid" 2>/dev/null || true)
+    if [ "$now" = "$seen" ] && dead "$lk" "$now"; then
+      mv "$lk" "$lk.dead.$$" 2>/dev/null && rm -rf "$lk.dead.$$"
+    fi
+  fi
+  rmdir "$lk.break"; BREAKING=""
+}
+
 # lock — take the state directory's lock for the rest of this run (claim, assign).
+# Released on exit only while it is still ours (its pid is this run's).
+LOCK_PID="" BREAKING=""
+trap '[ -z "$BREAKING" ] || rmdir "$BREAKING" 2>/dev/null
+  [ -z "$LOCK_PID" ] || [ "$(cat "$BASE/.lock/pid" 2>/dev/null)" != "$LOCK_PID" ] || rm -rf "$BASE/.lock"' EXIT
 lock() {
   local lk="$BASE/.lock" pid tries=0
   mkdir -p "$BASE" && chmod 700 "$BASE" 2>/dev/null
   until mkdir "$lk" 2>/dev/null; do
     pid=$(cat "$lk/pid" 2>/dev/null || true)
-    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-      # Its holder died mid-claim (its claim was all or nothing): rename, so one breaker wins.
-      mv "$lk" "$lk.dead.$$" 2>/dev/null && rm -rf "$lk.dead.$$"
-      continue
-    fi
+    # A holder that died mid-claim left its claim all or nothing: break its lock.
+    if dead "$lk" "$pid" && unlock_dead "$lk" "$pid"; then continue; fi
     tries=$((tries + 1))
     if [ "$tries" -ge 300 ]; then
-      printf 'instance: %s has been held for 30 s (pid %s): if no instance.sh is running, remove it\n' "$lk" "${pid:-unknown}" >&2
+      printf 'instance: %s has been held for 30 s (pid %s): if no instance.sh is running, remove it%s\n' \
+        "$lk" "${pid:-none yet}" "$([ ! -d "$lk.break" ] || printf ' (and %s.break)' "$lk")" >&2
       exit 2
     fi
     sleep 0.1
   done
-  printf '%s\n' "$$" > "$lk/pid"
-  trap 'rm -rf "$BASE/.lock"' EXIT
+  LOCK_PID=$$; printf '%s\n' "$$" > "$lk/pid"
 }
 
 # What runs as N, read once per run: assign tries many Ns.

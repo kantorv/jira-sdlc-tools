@@ -111,28 +111,35 @@ exec ./stack start --instance "$JST_INSTANCE"
 #!/usr/bin/env bash
 # .jst/teardown.sh: stop and remove this issue worktree's instance (written by jst-stack).
 # Run it by hand before removing the worktree: it tears down the instance this worktree
-# claimed (JST_INSTANCE=<N> to name it).
+# claimed (JST_INSTANCE=<N> to name it, when it holds several).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+state="$HOME/.local/state/$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf)"; here=$(pwd -P)
 if [ -z "${JST_INSTANCE:-}" ]; then
   # This worktree's claim (instance.sh lookup), never the issue key's hash.
-  prefix=$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf); here=$(pwd -P)
-  JST_INSTANCE=$(for f in "$HOME/.local/state/$prefix"/i*/owner; do
+  JST_INSTANCE=$(for f in "$state"/i*/owner; do
     [ "$(cat "$f" 2>/dev/null)" != "$here" ] || { f=${f%/owner}; echo "${f##*/i}"; }; done)
   case $JST_INSTANCE in
     '') echo "teardown: $here has no instance claimed: nothing to tear down" >&2; exit 2 ;;
     *[!0-9]*) echo "teardown: $here holds several instances (${JST_INSTANCE//$'\n'/ }): JST_INSTANCE=<N> .jst/teardown.sh" >&2; exit 2 ;;
   esac
 fi
+# Only an N this worktree owns (instance.sh owner <N>), never another's or an unclaimed one.
+owner=$(cat "$state/i$JST_INSTANCE/owner" 2>/dev/null || true)
+if [ "$owner" != "$here" ]; then
+  echo "teardown: N=$JST_INSTANCE is not $here's (owner: ${owner:-none}): nothing torn down" >&2; exit 2
+fi
 ./stack stop --instance "$JST_INSTANCE"
 ./stack teardown --instance "$JST_INSTANCE"
-# The worktree is about to go: release its claim (instance.sh release), never another's.
-owner="$HOME/.local/state/$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf)/i$JST_INSTANCE/owner"
-[ "$(cat "$owner" 2>/dev/null)" != "$(pwd -P)" ] || rm -f "$owner"
+# The worktree is about to go: release its claim (instance.sh release).
+rm -f "$state/i$JST_INSTANCE/owner"
 ```
 
-`teardown.sh` releases the claim itself because a stack's `teardown` may keep the home's
-`owner` file, and a claim left behind becomes a stale one once the worktree is removed. A
+`teardown.sh` acts only on an N the worktree owns, so a mistyped `JST_INSTANCE` can't stop
+another worktree's instance (a leftover nobody owns is torn down by hand,
+`./stack teardown --instance N`). It releases the claim itself because a stack's `teardown`
+may keep the home's `owner` file, and a claim left behind becomes a stale one once the
+worktree is removed. A
 `toolchain` project's hook makes the venv instead (its pattern page). Keep both executable.
 
 ## Rules

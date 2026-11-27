@@ -13,7 +13,11 @@
 #      half-made home (no owner) is claimable.
 #   7. The writing guide's .jst/bootstrap.sh and teardown.sh, with a fake ./stack:
 #      without JST_INSTANCE they act on the worktree's claim only, and refuse
-#      (touching nothing) when it has none.
+#      (touching nothing) when it has none; JST_INSTANCE=<N> teardown.sh refuses an
+#      N the worktree doesn't own.
+#   8. A stale lock: a dead holder's lock, broken by 16 concurrent assigns, still gives
+#      16 distinct Ns, trial after trial (only one waiter breaks it); a lock with no
+#      pid is broken after 10 s, not before; a run never removes a lock not its own.
 #
 # Runs against a scratch HOME (the claims live under ~/.local/state/<NAME_PREFIX>/),
 # so it never touches real claims; a NAME_PREFIX no Docker object or listener uses,
@@ -150,9 +154,12 @@ is "teardown.sh acts on its own claim" "$(cat "$W2/stack.calls" 2>/dev/null | tr
 [ ! -e "$W1/stack.calls" ] && ok "and not on the other worktree's" || no "it ran in the other worktree"
 is "teardown.sh releases its claim" "$(inst lookup --checkout "$W2" | val instance)" none
 is "and keeps the other's" "$(inst lookup --checkout "$W1" | val instance)" "$N1"
-JST_INSTANCE=$N1 bash "$W2/.jst/teardown.sh" >/dev/null 2>&1
-is "teardown.sh never releases another worktree's claim" "$(inst lookup --checkout "$W1" | val instance)" "$N1"
 rm -f "$W2/stack.calls"
+JST_INSTANCE=$N1 bash "$W2/.jst/teardown.sh" 2>"$LAB/err"; rc=$?
+is "JST_INSTANCE=<another worktree's N> teardown.sh refuses" "$rc" 2
+[ ! -e "$W2/stack.calls" ] && ok "touching nothing" || no "it ran ./stack: $(cat "$W2/stack.calls")"
+grep -q "owner: $W1" "$LAB/err" && ok "naming the owner" || no "reason: $(cat "$LAB/err")"
+is "and never releases another worktree's claim" "$(inst lookup --checkout "$W1" | val instance)" "$N1"
 JST_ISSUE_KEY=JSW-27 bash "$W1/.jst/bootstrap.sh" 2>/dev/null
 is "bootstrap.sh starts its own claim" "$(cat "$W1/stack.calls" | tr '\n' ';')" "start --instance $N1;"
 JST_ISSUE_KEY=JSW-31 bash "$W3/.jst/teardown.sh" 2>"$LAB/err"; rc=$?
@@ -161,8 +168,48 @@ is "teardown.sh without a claim refuses" "$rc" 2
 grep -q 'no instance claimed' "$LAB/err" && ok "with a reason" || no "reason: $(cat "$LAB/err")"
 JST_ISSUE_KEY=JSW-31 bash "$W3/.jst/bootstrap.sh" 2>/dev/null; rc=$?
 is "bootstrap.sh without a claim refuses" "$rc" 2
-JST_INSTANCE=5 bash "$W3/.jst/teardown.sh"
-is "JST_INSTANCE still names N" "$(cat "$W3/stack.calls" | tr '\n' ';')" "stop --instance 5;teardown --instance 5;"
+JST_INSTANCE=5 bash "$W3/.jst/teardown.sh" 2>/dev/null; rc=$?
+is "JST_INSTANCE=<an unclaimed N> teardown.sh refuses" "$rc" 2
+[ ! -e "$W3/stack.calls" ] && ok "touching nothing" || no "it ran ./stack: $(cat "$W3/stack.calls")"
+rm -f "$W1/stack.calls"
+JST_INSTANCE=$N1 bash "$W1/.jst/teardown.sh"
+is "JST_INSTANCE=<its own N> tears it down" "$(cat "$W1/stack.calls" | tr '\n' ';')" "stop --instance $N1;teardown --instance $N1;"
+is "and releases it" "$(inst lookup --checkout "$W1" | val instance)" none
+
+echo "== 8. a stale lock: one breaker, never two holders =="
+# A dead holder's lock and 16 concurrent assigns, many times over: two waiters that
+# both see the dead pid must not both break the lock (the second breaking the first's
+# fresh one), or two checkouts get one N. INSTANCE_TRIALS sets the count.
+TRIALS=${INSTANCE_TRIALS:-40}; bad=0; why=""
+for i in $(seq 1 16); do co "s$i" >/dev/null; done
+for t in $(seq 1 "$TRIALS"); do
+  rm -rf "$STATE"; mkdir -p "$STATE/.lock"
+  (exit 0) & dead=$!; wait "$dead"; echo "$dead" > "$STATE/.lock/pid"
+  for i in $(seq 1 16); do (inst assign JSW-27 --checkout "$LAB/co/s$i" 2>/dev/null | val instance > "$LAB/s$i.n") & done
+  wait
+  n=$(cat "$LAB"/s*.n | grep -c .); u=$(cat "$LAB"/s*.n | sort -un | grep -c .)
+  if [ "$n" != 16 ] || [ "$u" != 16 ]; then bad=$((bad + 1)); why="trial $t: $n Ns, $u distinct"; fi
+done
+is "$TRIALS trials of 16 assigns past a dead pid: every N distinct" "$bad${why:+ ($why)}" 0
+[ ! -e "$STATE/.lock" ] && [ ! -e "$STATE/.lock.break" ] && ok "both locks released" || no "a lock was left: $(ls -A "$STATE")"
+
+rm -rf "$STATE"; mkdir -p "$STATE/.lock"; touch -t 202001010000 "$STATE/.lock"
+is "a lock with no pid for 10 s is broken" "$(timeout 20 bash -c "cd '$LAB' && bash '$INST' assign JSW-27 --checkout '$H' --conf '$CONF'" | val instance)" 120
+rm -rf "$STATE"; mkdir -p "$STATE/.lock"
+timeout 2 bash -c "cd '$LAB' && bash '$INST' assign JSW-27 --checkout '$H' --conf '$CONF'" >/dev/null 2>&1
+[ -d "$STATE/.lock" ] && [ "$(inst lookup --checkout "$H" | val instance)" = none ] \
+  && ok "a fresh one with no pid (a holder about to write it) is waited on" || no "a fresh pid-less lock was broken"
+
+# A run whose lock was taken from it must leave the new holder's lock alone on exit:
+# a docker that sleeps holds the run inside the lock while the lock changes hands.
+rm -rf "$STATE"; mkdir -p "$LAB/bin"; printf '#!/bin/sh\nsleep 2\n' > "$LAB/bin/docker"; chmod +x "$LAB/bin/docker"
+(PATH="$LAB/bin:$PATH" inst assign JSW-27 --checkout "$H" >/dev/null 2>&1) & run=$!
+for _ in $(seq 1 50); do [ -s "$STATE/.lock/pid" ] && break; sleep 0.1; done
+sleep 30 & other=$!
+mv "$STATE/.lock" "$STATE/.lock.taken"; mkdir "$STATE/.lock"; echo "$other" > "$STATE/.lock/pid"
+wait "$run"
+is "on exit a run leaves a lock that isn't its own" "$(cat "$STATE/.lock/pid" 2>/dev/null)" "$other"
+kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
