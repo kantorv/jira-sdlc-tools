@@ -781,24 +781,25 @@ if ($StackContract -and $IsWt -and $BrKey) {
     if ($OS -eq 'windows') {
         Add-Row instance INFO "not on Windows (stack contract v1 is bash: run the stack under WSL)"
     } else {
-        # Off Windows, bash is there: the number comes from the posix instance.sh, so
-        # the two ports can never disagree on N.
+        # Off Windows, bash is there: the claim comes from the posix instance.sh lookup, so
+        # the two ports can never disagree on N. Never the key's hash: two keys can share it (JSW-31).
         $instSh = Join-Path $PSScriptRoot '../posix/instance.sh'
-        $inN = ''
-        $out = & bash $instSh number $BrKey --conf $ScConf 2>$null
-        foreach ($o in @($out)) { if ($o -match '^instance=(\d+)$') { $inN = $Matches[1] } }
-        $ownerFile = Join-Path $HOME ".local/state/$ScPrefix/i$inN/owner"
-        $inOwner = ''
-        if ($inN -and (Test-Path -LiteralPath $ownerFile -PathType Leaf)) { $inOwner = (Get-Content -LiteralPath $ownerFile -TotalCount 1) }
-        if (-not $inN) {
-            Add-Row instance WARN "no instance number for $BrKey (instance.sh number failed)" "check stack.d/resources.conf, then $Rerun."
-        } elseif (-not $inOwner) {
-            Add-Row instance INFO "N=$inN (from $BrKey) · not claimed yet (jira-task-executor claims it in step 1)"
-        } elseif ($inOwner -eq (Resolve-Path -LiteralPath $CfgRoot).Path) {
-            Add-Row instance INFO "N=$inN (from $BrKey) · this worktree's · ./stack status --instance $inN"
+        $inN = ''; $inClaims = ''
+        $out = & bash $instSh lookup --checkout $CfgRoot --conf $ScConf 2>$null
+        $inRc = $LASTEXITCODE
+        foreach ($o in @($out)) {
+            if ($o -match '^instance=(.+)$') { $inN = $Matches[1] }
+            if ($o -match '^claims=(.+)$') { $inClaims = $Matches[1] }
+        }
+        if ($inClaims) {
+            Add-Row instance WARN "this worktree holds N=$inClaims (instance.sh lookup)" `
+                "release the one it doesn't use (instance.sh release <N>, after ./stack teardown --instance <N>), then $Rerun."
+        } elseif ($inRc -ne 0 -or -not $inN) {
+            Add-Row instance WARN "no answer from instance.sh lookup (exit $inRc)" "check stack.d/resources.conf, then $Rerun."
+        } elseif ($inN -eq 'none') {
+            Add-Row instance INFO "no instance yet (jira-task-executor assigns one in step 1)"
         } else {
-            Add-Row instance WARN "N=$inN (from $BrKey) is held by $inOwner" `
-                "two issues share N=${inN}: tear down the other instance (./stack teardown --instance $inN there) or widen INSTANCE_MIN..INSTANCE_MAX, then $Rerun."
+            Add-Row instance INFO "N=$inN (this worktree's claim) · ./stack status --instance $inN"
         }
     }
 }

@@ -221,12 +221,18 @@ MAIN=$(git -C "$WORKTREE" worktree list --porcelain | awk '/^worktree /{print $2
 # 0b. already provisioned? exit quietly rather than re-dumping over a live instance
 [ -d "$WORKTREE/backend/venv" ] && exit 0
 
-# derive a stable index from the issue key — see the hook contract. The fallback
-# extracts the key rather than hashing the whole branch name, so a hand-run and
-# an executor run of the same worktree land on the same instance.
-KEY="${JST_ISSUE_KEY:-$(git -C "$WORKTREE" branch --show-current | grep -oE '[A-Z]+-[0-9]+' || true)}"
-: "${KEY:?no issue key in JST_ISSUE_KEY or the branch name; pass JST_ISSUE_KEY=PROJ-402}"
-N=$(( $(printf '%s' "$KEY" | cksum | cut -d' ' -f1) % 250 + 1 ))
+# the instance index: JST_INSTANCE, claimed for this worktree by the executor
+# (instance.sh assign) when the project has a contract stack. Without one, derive
+# it from the key — see the hook contract. The fallback extracts the key rather
+# than hashing the whole branch name, so a hand-run and an executor run of the
+# same worktree land on the same instance.
+if [ -n "${JST_INSTANCE:-}" ]; then
+  N=$JST_INSTANCE
+else
+  KEY="${JST_ISSUE_KEY:-$(git -C "$WORKTREE" branch --show-current | grep -oE '[A-Z]+-[0-9]+' || true)}"
+  : "${KEY:?no issue key in JST_ISSUE_KEY or the branch name; pass JST_ISSUE_KEY=PROJ-402}"
+  N=$(( $(printf '%s' "$KEY" | cksum | cut -d' ' -f1) % 250 + 1 ))
+fi
 
 git -C "$WORKTREE" submodule update --init --recursive   # worktree add leaves them empty
 python3 -m venv "$WORKTREE/backend/venv"
@@ -243,13 +249,16 @@ mv "$DUMP.tmp" "$DUMP"
 exec "$WORKTREE/run/init-instance.sh" -n "$N" --db-dump "$DUMP"
 ```
 
-The hash-derived index is the piece to copy. Two worktrees bootstrapped
-back to back must land on different instances without the caller
-coordinating by hand, and the same issue key must keep mapping to the
-same instance across bootstrap/teardown cycles. A collision on the
-derived index is caught downstream by step 2, which refuses to take over
-a network another worktree already owns — a loud failure instead of two
-instances quietly sharing a subnet.
+The index is the piece to copy. Two worktrees bootstrapped back to back
+must land on different instances without the caller coordinating by hand,
+and the same worktree must keep its instance across bootstrap/teardown
+cycles. A claimed `JST_INSTANCE` gives both. The hash fallback gives only
+the second: two keys can share an index. That collision is caught
+downstream by step 2, which refuses to take over a network another
+worktree already owns — a loud failure instead of two instances quietly
+sharing a subnet, but the second worktree then has no instance until a
+human picks another `N`. Its teardown must use the `N` its bootstrap
+used, never a fresh hash of another key.
 
 `.jst/teardown.sh` is its mirror: run step 10 for this instance, then
 remove what bootstrap added on top (the venv, `node_modules`, the dump

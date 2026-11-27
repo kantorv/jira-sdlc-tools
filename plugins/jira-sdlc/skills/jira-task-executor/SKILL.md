@@ -129,7 +129,7 @@ note below**:
 | `parent_branch` | INFO: `git config branch.<branch>.parentbranch` — consumed by step 2's stale-branch merge (step 10's resolver reads it for itself) |
 | `production_branch` | INFO: `<PRODUCTION_BRANCH>` — this skill's only source for it, consumed by step 10's prefix/base sanity check |
 | `bootstrap` | INFO either way: whether this project ships an optional `.jst/bootstrap.sh` (POSIX) / `.jst/bootstrap.ps1` (Windows). Present → step 1 runs it; absent → nothing to do, and most projects won't have one |
-| `stack`, `instance` | INFO (WARN when held): whether `./stack` follows the stack contract, and this worktree's instance N. `stack contract 1` → step 1a claims N and the hook starts the instance |
+| `stack`, `instance` | INFO (WARN on a double claim): whether `./stack` follows the stack contract, and this worktree's claimed N, or none yet. `stack contract 1` → step 1a assigns N and the hook starts the instance |
 | `jira_account_url` | INFO: `<JIRA_ACCOUNT_URL>` — step 10 builds the PR body's issue link from it, so it never has to open the credential-bearing `.jst/jira-sdlc-tools.local.env` |
 | `repo_strategy` | `single`, or `submodules` with its member repos — the issue's work can then span several repos, one PR per member it touches. Steps 1, 2 and 6–12 cover them through `repos.sh`, which does nothing extra for a single repo |
 
@@ -170,17 +170,17 @@ context.
     variable):
 
     **A contract stack** (Discovery's `stack` row read `stack contract 1`): this
-    worktree gets instance N. Claim it first — the number comes from the key, and
-    claiming refuses an N another checkout still holds:
+    worktree gets instance N. `assign` picks a free N and claims it in one locked
+    step (the one it already holds on a re-run); never compute N from the key:
 
     ```bash
-    N=$(bash "$S/instance.sh" number <KEY> | sed -n 's/^instance=//p')
-    bash "$S/instance.sh" claim "$N"; echo "claim exit: $?"
+    OUT=$(bash "$S/instance.sh" assign <KEY>); echo "assign exit: $?"; echo "$OUT"
+    N=$(printf '%s\n' "$OUT" | sed -n 's/^instance=//p')
     ```
 
-    Exit 0 → pass `JST_INSTANCE="$N"` below. Exit 2 (`held=`, `stale=`, `busy=`,
-    `unowned=`) → **don't run the hook**: relay its stderr line in the final report
-    (two issues share N, or a leftover instance; the human resolves it) and go to 1b.
+    Exit 0 → pass `JST_INSTANCE="$N"` below (a stderr line saying the preferred N
+    was taken goes in the report). Exit 2 (`full=`, `claims=`) → **don't run the
+    hook**: relay its stderr line in the final report (the human resolves it) and go to 1b.
 
     ```bash
     cd "$(git rev-parse --show-toplevel)"

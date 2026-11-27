@@ -88,7 +88,8 @@ in the report and the PR.
 By `writing-guide.md`: `./stack` (marker on line 2), `stack.d/resources.conf`,
 `stack.d/lib.sh`, `stack.d/README.md` (every section of `readme-spec.md`), anything else the
 stack needs, and the two hooks. Start from the closest example; for an existing stack, change
-exactly the document's change rows and nothing else.
+exactly the document's change rows and nothing else, except a hook that computes N from the
+issue key (`cksum`): rewrite it from the guide, since a shared hash acts on another issue's instance.
 
 Rules that bite (the guide says why): names and ports only from `resources.conf` and N; never
 the main checkout's services or data; kill by PID file, never by name; find the main checkout
