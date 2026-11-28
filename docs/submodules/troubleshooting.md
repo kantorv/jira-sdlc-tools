@@ -32,6 +32,19 @@ These are `gate`'s `stop` reasons, and what each one asks of you:
 | `the root PR #<n> is open while member PRs are still open` | The landing PR exists too early | Close it; landing reopens it once the members merge |
 | `PRs unknown for: <repos> — gh failed` | A `gh` call failed (network, auth) | Re-run; check `gh_auth` |
 | `multistep issues … across member repos aren't supported yet` | The issue has Jira sub-tasks, and a member takes part (a PR, or commits pushed) | Restructure as single-step, or review by hand |
+| `conflicts unknown for <repo>: <why> — unknown is not none` | The conflict check couldn't read a repo: a fetch failed, or a member isn't checked out | Re-run; `repos.sh provision` for a member that isn't checked out |
+
+### When an issue is paused: `phase=conflict`
+
+`reason=` names the repo and files: `conflicts with origin/development in app: README.md`. Nothing after it runs (no
+review, no landing, no Merge) until the branch merges clean. To resolve it by hand: in the issue's worktree, merge the
+base in the repo it names (`git -C app merge origin/development`, after a fetch), resolve, commit, and push. The gate
+reads the branch off origin, so the pause lifts at its next read once the push is there.
+
+**Member pointers aren't a pause.** When the only conflicted paths are member pointers that one side fast-forwards
+(two landing PRs both moved `app`, P16), GitHub shows the landing PR as CONFLICTING, but `conflicts` reads `gitlink`
+and the gate doesn't pause: `repos.sh land` merges the base in itself (`base_merged=`). A pointer whose two commits
+diverged (neither contains the other) is a real `conflict`, in the root.
 
 Other stops: `land` refuses with `error=… — nothing changed`, and `provision`/`sync`/`push` with `error=` or
 `conflict=`. Each names the repo and the cause; nothing is changed or retried behind your back.
