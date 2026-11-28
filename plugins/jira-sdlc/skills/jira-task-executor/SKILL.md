@@ -17,6 +17,12 @@ the issue key is derived from the current branch (see Discovery below).
   (constraints, focus areas, context) — never parsed as an issue key.
   Fold it into steps 4–6 alongside the issue description, which it
   supplements rather than replaces.
+- **Resolve mode** — when the notes' first line is exactly
+  `mode=resolve-conflicts`, this run resolves the merge conflict that
+  paused the issue (the gate's `phase=conflict`) instead of implementing it:
+  after Discovery and step 1, read `../_shared/resolve-conflicts.md` and
+  follow it in place of steps 2–12. Only that line asks for it; every other
+  run keeps step 2's rule and never resolves a conflict.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root, and every script path below
   hangs off it. Unset (a non-Claude client) → resolve it from this skill's own
   directory instead, which puts the scripts at `../_shared/scripts/posix/`
@@ -258,7 +264,8 @@ context.
       ```
 
       If the merge conflicts, stop and ask the user to resolve — don't
-      attempt to resolve merge conflicts automatically.
+      attempt to resolve merge conflicts automatically (that is resolve
+      mode's job, and only when a run asks for it).
 
       One abort is **not** a conflict and is safe to clear yourself: git
       refuses to overwrite *untracked* files, so the first merge after this

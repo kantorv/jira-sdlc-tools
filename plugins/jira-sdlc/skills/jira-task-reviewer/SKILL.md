@@ -383,17 +383,22 @@ Before reviewing a PR, check whether **this skill's GitHub identity**
 comment on it:
 
 ```bash
-gh.sh pr view <prNumber> -R <slug> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | .body'
+gh.sh pr view <prNumber> -R <slug> --json reviews --jq '.reviews[] | select(.author.login == "<SELF>") | [.commit.oid, .body] | @tsv'
 ```
 
 Take the **most recent** self-review body (they come back in chronological
 order) — a later verdict supersedes an earlier one, which is what makes an
 approve→regression→reject sequence readable:
 
-- **Most recent starts `APPROVED —`** → already approved. Report the PR as
-  "already approved — waiting for manual merge" and move to the next PR
-  without re-reviewing — **unless `$ARGUMENTS` asks for a re-review**, which
-  is the manual override for exactly this case; then continue to 3b.
+- **Most recent starts `APPROVED —`** → first `repos.sh resolutions --branch <PARENT-BRANCH>`:
+  a row of this PR's repo whose commit the approval's (its first column)
+  doesn't contain (`git -C <repo> merge-base --is-ancestor`) is a
+  conflict-resolving merge no review saw → the **resolution review**, for
+  this PR: read `../_shared/resolution-review.md` and follow it in place of
+  3b–3d. None → already approved: report "already approved — waiting for
+  manual merge" and move on — **unless `$ARGUMENTS` asks for a re-review**,
+  the manual override; then 3b. (`$ARGUMENTS` starting
+  `mode=resolution-review` asks for this same check, never a full re-review.)
 - **Most recent starts `CHANGES REQUESTED —`** → re-review: this is a
   fix-and-re-run scenario, and fresh code may have been pushed since.
   Continue to 3b.
