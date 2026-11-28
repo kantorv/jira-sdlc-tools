@@ -22,9 +22,10 @@ Project-specific values are `<TOKEN>`s resolved from the two config files in
 the project root's **`.jst/` folder** — the only location read
 (see [`project-config.md`](project-config.md)):
 
-**`.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored)**
+- `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped): the project's site, in `.jst/jira-sdlc-tools.env` (`.jst/jira-sdlc-tools.local.env` may override it)
 
-- `<JIRA_ACCOUNT_URL>` — e.g. `your-site.atlassian.net` (a scheme is tolerated; it gets stripped)
+**The credentials — `.jst/jira-sdlc-tools.local.env` (machine-specific, gitignored), or the credential profile the project names** (`project-config.md` § *Credentials*: one source for the whole group, never mixed per key)
+
 - three **required** role pairs `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}` — an account + its API token (classic **or** scoped; see §5) per role, selected by `jira.sh --role` (§9). Each role needs BOTH its own email and its own token; there is no default account and no fallback
 
 `<CLOUD_ID>` is *not* configured — resolve it at runtime (see §1).
@@ -383,7 +384,8 @@ executor, assigner, and reviewer can run at once as different identities).
 
 **`--role assigner|executor|reviewer`** (global; may appear anywhere in the
 args) is **required** and picks which credential the call uses: it reads
-`JIRA_<ROLE>_EMAIL` / `JIRA_<ROLE>_TOKEN` from `jira-sdlc-tools.local.env`.
+`JIRA_<ROLE>_EMAIL` / `JIRA_<ROLE>_TOKEN` from the credentials' one source (the
+project's `jira-sdlc-tools.local.env`, or its profile).
 Both are required for the role you name — there is no default account, so an
 unset pair is an error rather than a silent borrow of another identity, and a
 call with no `--role` is a usage error (exit 2). Every caller therefore names
@@ -470,8 +472,8 @@ jira.sh --role assigner raw PUT /issue/<KEY> --data-file edit.json   # → 204, 
 
 Ships as a contract pair: `bash …/scripts/posix/jira.sh` on Linux/macOS,
 `pwsh`/`powershell …/scripts/win/jira.ps1` on Windows (identical args, output,
-exit codes). It resolves `.jst/jira-sdlc-tools.env` / `.jst/….local.env` from
-the **git top-level**, so **run it from inside the repo/worktree**; from an unrelated
+exit codes). It resolves `.jst/jira-sdlc-tools.env` / `.jst/….local.env` (and
+a credential profile, through `_jst_config`) from the **project root**, so **run it from inside the repo/worktree**; from an unrelated
 directory it can't find config and stops with `JIRA_ACCOUNT_URL is unset`.
 
 ## 10. Issue field lists

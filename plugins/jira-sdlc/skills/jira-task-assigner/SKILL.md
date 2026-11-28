@@ -17,8 +17,8 @@ project. Given a task description from the user ($ARGUMENTS):
 - `<PROJECT-KEY>`, `<WORKTREES_DIR>`, `<DEFAULT_BASE_BRANCH>`,
   `<PRODUCTION_BRANCH>` — read all four off step 1's healthcheck rows
   (`env_config`, `worktrees_dir`, `base_branch`, `production_branch`).
-  **Never dump `.jst/jira-sdlc-tools.local.env`** — it holds three role Jira
-  tokens and the GitHub PAT. A value no row carries is a single-key `grep`,
+  **Never dump `.jst/jira-sdlc-tools.local.env`**, nor open a credential
+  profile — they hold three role Jira tokens and the GitHub PAT. A value no row carries is a single-key `grep`,
   never a whole-file read: `../_shared/project-config.md` § *Reading config
   safely* has the form, and the redaction filter that silently doesn't work.
 - `<slug>` = the issue title slugified per
@@ -65,9 +65,12 @@ can't decide how statuscheck itself is run. It takes a required `--role assigner
 There is no login step: `jira.sh` authenticates **per-request as
 `--role assigner`** (`../_shared/jira-api-reference.md` §9), so every issue
 create below carries `--role assigner` and picks up that credential on the
-one call. A missing `.jst/jira-sdlc-tools.local.env` is a hard FAIL on
-statuscheck's `env_local` row here — the main checkout is where that file has
-to exist, so there is nothing for the healthcheck to copy it from.
+one call. The credentials come from the project's own
+`.jst/jira-sdlc-tools.local.env` or from the credential profile it names: the
+`credentials` row says which, and a FAIL there is a stop. A missing local.env is
+a hard FAIL on `env_local` only when no profile supplies the credentials (then
+it's INFO, optional) — the main checkout is where that file has to exist, so
+there is nothing for the healthcheck to copy it from.
 
 Run the shared pre-flight healthcheck. It gathers every environment fact this
 skill depends on — git repo, the two env files + their gitignore state, Jira

@@ -65,8 +65,8 @@ the issue key is derived from the current branch (see Discovery below).
   committed, secret-free file, and the only one those names live in; it
   carries this project's confirmed status names. Every
   other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
-  `.jst/jira-sdlc-tools.local.env`**: it holds all three role Jira API
-  tokens and the GitHub PAT (`../_shared/project-config.md` § *Reading
+  `.jst/jira-sdlc-tools.local.env`**, nor open a credential profile: they hold
+  all three role Jira API tokens and the GitHub PAT (`../_shared/project-config.md` § *Reading
   config safely*).
 
 **Script dispatch — settle this before running any script below.** Every

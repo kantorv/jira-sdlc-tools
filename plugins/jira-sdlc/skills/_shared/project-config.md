@@ -5,7 +5,9 @@ This file describes every variable used in `jira-sdlc-tools.env` and
 root** — `.jst/jira-sdlc-tools.env` and `.jst/jira-sdlc-tools.local.env` — and
 that is the only location the skills read; a leftover copy at the root itself
 is ignored. All project-specific values live in these two files — nothing else under `skills/`
-should need editing after they're filled in.
+should need editing after they're filled in. The credentials may instead come
+from a machine-level **credential profile** the project names (*Credentials*
+below), and then the second file is optional.
 
 Each skill's "Conventions used below" section names the tokens it needs
 (e.g. `<PROJECT-KEY>`). Resolve them from the **healthcheck table** each
@@ -20,13 +22,15 @@ to get them. The tables below describe what each variable means; read
 | File | Purpose | Committed? |
 | -- | -- | -- |
 | `.jst/jira-sdlc-tools.env` | Team-shared settings (project key, status names, default branch). Same for every developer. | **Yes** — checked into the repo |
-| `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, Jira URL, email, token path). Different per machine. | **No** — ignored by `.jst/.gitignore`, which lists it as `jira-sdlc-tools.local.env` |
+| `.jst/jira-sdlc-tools.local.env` | Developer/machine-specific settings (worktrees path, and the credentials unless a profile supplies them). Different per machine; optional when the project uses a profile. | **No** — ignored by `.jst/.gitignore`, which lists it as `jira-sdlc-tools.local.env` |
 | `.jst/.gitignore` | One line, `jira-sdlc-tools.local.env` — keeps the credential file out of git. It lives here rather than in the root `.gitignore` so it travels with any copy of `.jst/`, into a worktree for instance. | **Yes** — checked into the repo |
 | `.jst/bootstrap.sh` / `.jst/bootstrap.ps1` | **Optional.** A script, not variables: turns a fresh worktree into a *runnable* instance. `jira-task-executor` runs it. Absence is normal — see below. | **Yes** — checked into the repo |
 
-Both env files are sourced by tools that need them. Values in
+Both env files are parsed (never sourced) by one reader, `_jst_config.sh` /
+`_jst_config.ps1`, which every script uses. Values in
 `jira-sdlc-tools.local.env` override those in `jira-sdlc-tools.env` if both
-define the same variable (though they define disjoint sets by convention).
+define the same variable — except the credential group, which comes from one
+source as a whole (*Credentials* below).
 
 ### Reading config safely
 
@@ -35,10 +39,11 @@ is why "just read the config" is the wrong instinct:
 
 | File | Contents | Reading it |
 | -- | -- | -- |
-| `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, the four `STATUS_*` names, and the optional `JST_MEMBERS` | Committed and secret-free — read it whole, freely |
-| `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `CONVERSATIONS_*` — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
+| `jira-sdlc-tools.env` | `PROJECT_KEY`, `DEFAULT_BASE_BRANCH`, `PRODUCTION_BRANCH`, `JIRA_ACCOUNT_URL`, the four `STATUS_*` names, and the optional `JST_MEMBERS` and `JST_CREDENTIALS` | Committed and secret-free — read it whole, freely |
+| `jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `CONVERSATIONS_*`, maybe a `JIRA_ACCOUNT_URL` override — **mixed in with** `JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_TOKEN` and `GITHUB_PAT_TOKEN` when the project carries its own credentials | **Never dump it.** One `cat` puts three live Jira API tokens and a GitHub PAT into the session transcript |
+| a credential profile (`~/.config/jira-sdlc/profiles/<name>.env`) | the three role pairs, `GITHUB_PAT_TOKEN`, `PROFILE_GITHUB_OWNERS` | **Never read it at all**: it is nothing but secrets. statuscheck's `credentials` row names the profile and its owners |
 
-Almost nothing needs the second file: `statuscheck`'s rows already carry
+Almost nothing needs the second file (or a profile): `statuscheck`'s rows already carry
 `PROJECT-KEY`, `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, `DEFAULT_BASE_BRANCH` and
 `PRODUCTION_BRANCH`, so read the value off the row you already printed.
 
@@ -46,7 +51,7 @@ When a value genuinely has no row, read **that one key** — the file never has
 to be opened whole:
 
 ```bash
-grep -E '^[[:space:]]*JIRA_ACCOUNT_URL[[:space:]]*=' .jst/jira-sdlc-tools.local.env
+grep -E '^[[:space:]]*WORKTREES_DIR[[:space:]]*=' .jst/jira-sdlc-tools.local.env
 ```
 
 ⚠️ **Don't reach for a redaction filter instead.** The obvious one is worse
@@ -157,6 +162,7 @@ without it halts rather than running half-configured.
 | `<PROJECT-KEY>` | Your Jira project key. | `PROJ` |
 | `<DEFAULT_BASE_BRANCH>` | The branch new top-level work starts from when there's no parent context yet. | `development` |
 | `<PRODUCTION_BRANCH>` | The production branch that hotfixes branch from and target. | `main` |
+| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). It belongs to the **project**, not to an account: one Atlassian account (all three roles) works on several sites, so a credential profile carries no site. `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it is the only source for issue browse links — see below. `jira-sdlc-tools.local.env` may still set it (overriding this one), which is where projects set up before JSW-37 keep it. | `your-site.atlassian.net` |
 | `<STATUS_TODO>` | Status used for newly created issues. No skill reads or transitions to this value — it exists so it can be documented/offered as the default landing status, and so the optional `jira_issue_transition_on_branch.yml` GitHub Action (see https://kantorv.github.io/jira-sdlc-tools/docs/state-transitions-with-github-actions) has a value to mirror into its hardcoded `SOURCE=` literal, since that workflow can't read this file. | `To Do` |
 | `<STATUS_IN_PROGRESS>` | Status `jira-task-executor` transitions an issue to when it starts work. | `In Progress` |
 | `<STATUS_IN_REVIEW>` | Status used when a PR is opened and under review. | `In Review` |
@@ -166,6 +172,7 @@ without it halts rather than running half-configured.
 
 | Token | What it is | Example |
 | -- | -- | -- |
+| `<JST_CREDENTIALS>` | The name of the machine's **credential profile** this project runs on (*Credentials* below). It names no secret, so it is tracked; `jira-sdlc-tools.local.env` may override it. Unset: the project's own credentials, else the machine default profile. | `sdlctools` |
 | `<JST_MEMBERS>` | For a project that holds its repos as **git submodules** of a parent repo: the submodule paths that take part in issues, space-separated, as `git submodule status` prints them (not the `.gitmodules` section names). Unset or empty means a single-repo project, exactly as before, even when the repo has submodules. Every unlisted submodule (a vendored library, say) stays pinned and never gets an issue branch. Listing members explicitly, rather than taking every submodule, is deliberate: a missing setting can't change how an existing project behaves. `repos.sh` reads it, and statuscheck's `repo_strategy` row shows the result on every run — FAIL when a listed path isn't a top-level submodule — with one `member_repo[<path>]` row per member. An issue is done when its workspace **landing PR** merges, not its first member PR: scope any merge → Done automation (GitHub for Jira, a Jira rule) to the parent repo. Design: https://kantorv.github.io/jira-sdlc-tools/docs/submodules | `threejs-skeleton threejs-skeleton-server` |
 
 ## Required (in `.jst/jira-sdlc-tools.local.env`)
@@ -173,7 +180,6 @@ without it halts rather than running half-configured.
 | Token | What it is | Example |
 | -- | -- | -- |
 | `<WORKTREES_DIR>` | Where per-issue worktrees are created. **Must be an absolute path** — a relative one resolves against a different base depending on where a skill runs (the main checkout for `jira-task-assigner`, a linked worktree for the other two), so statuscheck FAILs on it. A sibling of your repo is still the sensible place; just spell it out in full. Must already exist — `jira-task-assigner` will not create it. On **Windows**, absolute means the drive-letter form (`C:\…` or `C:/…`) or a UNC share, since that is what Windows git and the `win/` PowerShell ports both resolve; the MSYS form Git Bash's `pwd` prints (`/c/…`) is rooted only for Git Bash, so statuscheck WARNs on it. | POSIX `/home/you/src/myapp-worktrees`; Windows `C:\Users\you\projects\myapp-worktrees` |
-| `<JIRA_ACCOUNT_URL>` | Your Jira Cloud site URL (the `*.atlassian.net` domain). `jira.sh` uses it to resolve the cloud id (from `_edge/tenant_info`), and it is the only source for issue browse links — see below. | `your-site.atlassian.net` |
 
 ### Issue browse links — one form, one source
 
@@ -185,8 +191,8 @@ https://<JIRA_ACCOUNT_URL>/browse/<ISSUE-KEY>
 ```
 
 - **Domain**: always `JIRA_ACCOUNT_URL`, read off statuscheck's
-  `jira_account_url` row — never by opening the credential-bearing
-  `jira-sdlc-tools.local.env` (*Reading config safely* above).
+  `jira_account_url` row — never by opening an env file
+  (*Reading config safely* above).
 - **Scheme**: the value is stored **without** one
   (`your-site.atlassian.net`), so prepend exactly one `https://` — never
   zero, never doubled.
@@ -203,15 +209,16 @@ There is no browse-URL subcommand and no browse URL in any response to lift —
 `issue create` prints the bare key — so the link is always *assembled* from
 the template above, never found.
 
-The three **role credential pairs** are required too — they're the whole of the
-auth model, so they get their own section below.
+The three **role credential pairs** and `GITHUB_PAT_TOKEN` are required too —
+from the project's own local env or from a profile. They're the whole of the
+auth model, so they get their own sections below.
 
 ### Auth — per-request, no login step
 
 There is **no login and no keyring**. The `jira.sh` / `jira.ps1` client
 (`skills/_shared/jira-api-reference.md` §9) authenticates **per-request**:
-every call resolves its credential from these env files and sends it as Basic
-auth on that one request. Nothing to set up before first use — fill in the
+every call resolves its credential through the reader (the project's env files,
+or its credential profile) and sends it as Basic auth on that one request. Nothing to set up before first use — fill in the
 variables above plus the three role pairs below and the skills work.
 
 Every token is the raw token value; a file path is not accepted. Create the
@@ -232,7 +239,65 @@ developer's own `gh` session survives every run, and two projects with
 different PATs can't take each other's identity. A missing token is an error
 (exit 4), never a fallback to whatever `gh` happens to be logged in as.
 
-## Required — per-role Jira accounts (in `.jst/jira-sdlc-tools.local.env`)
+### Credentials — the project's own, or a profile
+
+The **credential group** is seven keys: the three role pairs
+(`JIRA_{ASSIGNER,EXECUTOR,REVIEWER}_{EMAIL,TOKEN}`, below) and
+`GITHUB_PAT_TOKEN`. A machine usually runs many projects on the same three
+accounts and one PAT; instead of a copy in each project's local env (and each
+worktree's), it can hold one **credential profile** per organization, outside
+every repo:
+
+- **Where:** `~/.config/jira-sdlc/profiles/<name>.env` (`$XDG_CONFIG_HOME`
+  honored; `%APPDATA%\jira-sdlc\profiles\` on Windows), same `NAME = value`
+  format. `<name>` is letters, digits, `.`, `_`, `-`.
+- **What:** the seven keys and `PROFILE_GITHUB_OWNERS` (the GitHub owners its
+  PAT is for, space-separated). No site: `JIRA_ACCOUNT_URL` stays the project's.
+  Template:
+  [`credential-profile.env.example`](https://github.com/kantorv/jira-sdlc-tools/blob/main/plugins/jira-sdlc/skills/_shared/templates/credential-profile.env.example).
+- **Mode 0600.** A profile group or others can read is refused, with the
+  `chmod` to run (POSIX only: on Windows `%APPDATA%` is the user's own).
+- **Naming one:** `JST_CREDENTIALS = <name>` in `.jst/jira-sdlc-tools.env`
+  (tracked: it names no secret), which the local env can override. A **machine
+  default** lives in `~/.config/jira-sdlc/default` (one line, a profile name),
+  used when the project names none.
+
+**Precedence is per group, never per key.**
+
+1. The project's `.jst/` sets **any** key of the group → the project is the
+   source and must set **all seven**; no profile is read. A partial set is an
+   error naming what's missing, never filled in from a profile.
+2. Otherwise the profile `JST_CREDENTIALS` names (missing → an error, not the
+   default).
+3. Otherwise the machine default.
+4. Otherwise an error: no credentials.
+
+**The match check.** A profile is used only when every GitHub owner of the
+project's remotes — the root's `origin` and, with members, each member's — is in
+its `PROFILE_GITHUB_OWNERS`. Otherwise every script refuses, naming both sides.
+A fine-grained PAT is scoped to an owner, so this is what keeps a project from
+running on another organization's token. There is no Jira-site half: accounts
+legitimately span sites.
+
+**Worktrees get no token.** With a profile, `ensure_local_env` copies the local
+env into a worktree *without* the group, and a main checkout with no local env
+at all is fine. A project with its own credentials is copied whole, as before.
+
+statuscheck's **`credentials`** row shows the source — `project .jst/` or
+`profile <name> (<file>)` with how it was chosen and the owners matched — and
+FAILs with the remedy on an owner mismatch, a partial set, loose permissions, a
+named profile that doesn't exist, or no credentials at all. Its `env_local` row
+is INFO, not FAIL, for a missing local env when a profile supplies the
+credentials. Nothing prints a value.
+
+**Moving projects onto a profile:**
+`bash scripts/posix/jst-credentials.sh migrate --roots <dir>… [--apply]` (a dry
+run by default). For each project under the roots whose local env holds exactly
+one profile's seven values, and whose owners the profile covers, it sets
+`JST_CREDENTIALS` in that local env and removes the group from it and from its
+worktrees' copies. Every other project is reported and left alone.
+
+## Required — per-role Jira accounts (in the local env or a profile)
 
 Each skill runs as its **own** Jira account, so the board shows who did
 what: the assigner filed it, the executor implemented it, the reviewer
@@ -260,9 +325,10 @@ exits without transitioning, branching, committing, or commenting. The gate
 holds against whichever account `JIRA_EXECUTOR_EMAIL` names — including the
 case where all three roles point at one Atlassian account.
 
-**It's in the scripts, not in skill prose.** All of them parse the env files
-with the same `NAME = value` parser and local-overrides-team precedence as
-`statuscheck.sh`, and the gate scripts are driven by their **exit code**. There
+**It's in the scripts, not in skill prose.** All of them read the config through
+the one reader, `_jst_config.sh` / `_jst_config.ps1` (the `NAME = value`
+parser, local over team, the credential group from one source), and the gate
+scripts are driven by their **exit code**. There
 is no login script to run first — each call simply picks its role:
 
 ```bash
@@ -295,6 +361,7 @@ The README's usage walkthrough assumes these filled-in files:
 
 ```
 PROJECT-KEY           = PROJ
+JIRA_ACCOUNT_URL      = your-site.atlassian.net
 DEFAULT_BASE_BRANCH   = development
 PRODUCTION_BRANCH     = main
 STATUS_TODO           = To Do
@@ -308,12 +375,16 @@ STATUS_DONE           = Done
 ```
 WORKTREES_DIR         = /home/you/src/myapp-worktrees
 # on Windows:  WORKTREES_DIR = C:\Users\you\projects\myapp-worktrees
-JIRA_ACCOUNT_URL      = your-site.atlassian.net
-# All three role pairs are required — one email + one token each, no default:
+# The project's own credentials — all seven, or none (then a profile):
 JIRA_ASSIGNER_EMAIL   = assigner@example.com
 JIRA_ASSIGNER_TOKEN   = ATATT3xFfGF0…
 JIRA_EXECUTOR_EMAIL   = executor@example.com
 JIRA_EXECUTOR_TOKEN   = ATATT3xFfGF0…
 JIRA_REVIEWER_EMAIL   = reviewer@example.com
 JIRA_REVIEWER_TOKEN   = ATATT3xFfGF0…
+GITHUB_PAT_TOKEN      = github_pat_…
 ```
+
+**Or, on a profile:** `JST_CREDENTIALS = acme` in the committed file, the local
+env holds only `WORKTREES_DIR`, and `~/.config/jira-sdlc/profiles/acme.env`
+(mode 0600) holds the seven keys plus `PROFILE_GITHUB_OWNERS = acme`.
