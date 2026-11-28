@@ -29,6 +29,7 @@ bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>] [--check] [-
 | `gate` | `phase=`, `reason=`, `root=`, `members=`, then the `prs` table. With `conflict`, a `sensitive=` line after `members=`; with a `stop` that couldn't read the state, `unknown=prs` or `unknown=conflicts` | 0 for every phase (a `stop` is a decision) |
 | `conflicts [--against <branch>…]` | TSV `repo against result files sensitive recipe`: per repo, the branch's dry-run merge with its base, then with each `--against` branch ([below](#conflicts)). Only git runs, no GitHub API | 0; 4 if any row is `error` |
 | `resolutions` | TSV `repo commit by files`: the conflict-resolving merges on `origin/<branch>` that its base lacks, newest first ([below](#resolutions)) | 0; 4 if any row is `error` |
+| `since --repo <repo> --commit <sha>` | `verdict=`, `reason=`, then TSV `commit kind`: does an approval at `<sha>` still cover `origin/<branch>` in `<repo>` ([below](#since)) | 0; 4 with `verdict=error` |
 | `land --title <t>` | `landed=`, `base_merged=` (only when [the gitlink step](#the-landings-gitlink-step) ran), `commit=`, `pr=`; or `error=` with nothing changed. `--title` (required) titles a new root PR, `<KEY>: <summary>` like its member PRs; a reused one keeps its title | 0; 1 on refusal |
 | `land --check` | TSV `repo gitlink base result` (`ok` or why not), plus a `.gitmodules` row if it changed | 0; 1 on any failure |
 | `provision` | `provisioned=` (members now on the issue branch), `pinned=`. Checks out every member first, so it is what makes a fresh worktree's empty member folders usable, even with nothing in scope | 0; 1 + `error=` |
@@ -99,6 +100,16 @@ resolved a conflict. `by` is `agent` when its message carries a `Conflict-Resolv
 mode), else `hand`; `files` is what it resolved; newest first. The reviewer's resolution review keys on it: a merge
 the PR's last approval didn't contain is code no review saw. `git show --remerge-diff <commit>` shows the resolution.
 A repo that can't be read is an `error` row (`by` = `error`, its reason in `files`) and exit 4.
+
+### `since`
+
+The reviewer's step 3a: its latest verdict on a PR is an approval, of the commit `--commit`, and the PR's head may have
+moved since. Each commit on `origin/<branch>` since `<sha>` that the base lacks, oldest first, has a `kind`:
+`resolution` (a merge whose parents, merged again, conflict: a `resolutions` row), `base-merge` (only base commits
+merged in, and its tree is git's clean merge), `merge` (another branch, an octopus, or a clean merge carrying edits of
+its own) or `commit`. `verdict=approved` when nothing or only base merges came since; `resolution-review` when the
+rest are resolutions (the resolution review reads only those); `full` on any `merge` or `commit`, and when the branch
+doesn't contain `<sha>` at all (a rebase, a force push). `--repo` is `.` for the root.
 
 ### The landing's gitlink step
 

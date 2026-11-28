@@ -23,6 +23,7 @@ function s_prs  { v_prs }
 function s_gate { v_gate }
 function s_conflicts { v_conflicts }
 function s_resolutions { v_resolutions }
+function s_since { v_since }
 function s_land { v_land }
 
 function s_provision { v_provision }

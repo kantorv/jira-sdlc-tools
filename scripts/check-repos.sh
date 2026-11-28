@@ -280,7 +280,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, conflicts, resolutions, land, provision, sync, push, open-prs, remove-check\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, conflicts, resolutions, since, land, provision, sync, push, open-prs, remove-check\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -785,6 +785,7 @@ printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = ls-remote ] && { echo "f
 chmod +x "$LAB/nofetch/git"
 CFH='repo\tagainst\tresult\tfiles\tsensitive\trecipe'
 RSH='repo\tcommit\tby\tfiles'
+SNH=$(printf 'commit\tkind')
 setprn() { printf '%b\n' "$4" > "$FGH/prs/${1}_$2@${3//\//%}"; }   # setprn <ns> <repo> <branch> <rows>
 edit() { # edit <dir> <file> <text> <message> — commit one change and push it to the current branch
   printf '%s\n' "$3" > "$1/$2"; git -C "$1" add "$2"; git -C "$1" commit -qm "$4"; git -C "$1" push -q origin HEAD
@@ -846,6 +847,29 @@ for port in sh ${PORTS:+ps}; do
   edit "$SC" other2.txt y "base: a clean change"
   git -C "$W1/app" fetch -q origin; git -C "$W1/app" merge -q --no-edit origin/development >/dev/null 2>&1; git -C "$W1/app" push -q origin "$C1"
   is "  …a merge that merged clean isn't one$sfx" "$(rp $port "$W1" resolutions | sed -n 2p | cut -f3)" "agent"
+  # JSW-33: since — does an approval still cover the branch? Only resolutions and clean base merges keep it.
+  AGENTM=$(git -C "$W1/app" rev-parse HEAD^1); BASEM=$(git -C "$W1/app" rev-parse HEAD)
+  is "since: the approved commit is the head, approved$sfx" "$(rp $port "$W1" since --repo app --commit "$BASEM")" \
+    "$(printf 'verdict=approved\nreason=origin/%s is the approved commit\n%s\nexit=0' "$C1" "$SNH")"
+  is "  …only a clean merge of the base since, approved$sfx" "$(rp $port "$W1" since --repo app --commit "$AGENTM")" \
+    "$(printf 'verdict=approved\nreason=only clean merges of origin/development since the approval\n%s\n%s\tbase-merge\nexit=0' "$SNH" "$BASEM")"
+  is "  …a resolution and a clean base merge since, the resolution review$sfx" "$(rp $port "$W1" since --repo app --commit "$HANDM")" \
+    "$(printf 'verdict=resolution-review\nreason=1 conflict-resolving merge(s) since the approval, the rest clean merges of origin/development\n%s\n%s\tresolution\n%s\tbase-merge\nexit=0' "$SNH" "$AGENTM" "$BASEM")"
+  edit "$W1/app" extra.txt late "XX-11 a commit after the approval"; PLAIN=$(git -C "$W1/app" rev-parse HEAD)
+  is "  …a plain commit since is a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$BASEM")" \
+    "$(printf 'verdict=full\nreason=1 commit(s) since the approval no review read (a commit, or a merge that isn'"'"'t a clean one of origin/development)\n%s\n%s\tcommit\nexit=0' "$SNH" "$PLAIN")"
+  edit "$SC" other3.txt z "base: another clean change"
+  git -C "$W1/app" fetch -q origin; git -C "$W1/app" merge -q --no-commit origin/development >/dev/null 2>&1
+  echo "slipped in" > "$W1/app/README.md"; git -C "$W1/app" add README.md; git -C "$W1/app" commit -qm "XX-11 merge development"
+  git -C "$W1/app" push -q origin "$C1"; EDITM=$(git -C "$W1/app" rev-parse HEAD)
+  is "  …a clean base merge carrying edits of its own is a merge, a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$PLAIN" | sed -n '1p;4p')" \
+    "$(printf 'verdict=full\n%s\tmerge' "$EDITM")"
+  git -C "$W1/app" reset -q --hard "$AGENTM"; echo "rebased" > "$W1/app/extra.txt"; git -C "$W1/app" add extra.txt
+  git -C "$W1/app" commit -qm "XX-11 rewritten"; git -C "$W1/app" push -qf origin "$C1"
+  is "  …a force push that drops the approved commit is a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$EDITM" | sed -n '1,2p')" \
+    "$(printf 'verdict=full\nreason=origin/%s doesn'"'"'t contain the approved %s (a rebase or a force push)' "$C1" "$EDITM")"
+  is "  …--repo names one of the project's repos$sfx" "$(rp $port "$W1" since --repo nope --commit "$EDITM")" "exit=2"
+  is "  …and --commit is a sha$sfx" "$(rp $port "$W1" since --repo app --commit HEAD)" "exit=2"
   # Sensitive files ask, recipes don't (JSW-33): a CI workflow and a numbered migration both sides added.
   C3=feature/XX-16-sens; git -C "$MN" branch "$C3"; git -C "$MN" push -q origin "$C3"
   git -C "$MN/app" fetch -q origin; git -C "$MN/app" switch -qc "$C3" origin/development

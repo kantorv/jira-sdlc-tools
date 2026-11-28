@@ -56,6 +56,14 @@
 #             executor's resolve mode) or hand; files what it resolved.
 #             An `error` in by (and its reason in files) when a repo can't be
 #             read: exit 4. The reviewer's resolution review keys on them.
+#   since     does an approval at --commit still cover origin/--branch in
+#             --repo (. for the root)? verdict= (approved: nothing since, or
+#             only clean merges of the base; resolution-review: the rest are
+#             resolutions rows; full: a commit or another merge, or the branch
+#             doesn't contain --commit — a rebase, a force push; error: exit 4),
+#             reason=, then TSV commit kind: resolution, base-merge (its tree
+#             is the clean merge's), merge (another branch, an octopus, or a
+#             clean merge with edits of its own) or commit, oldest first.
 #   conflicts does --branch merge with its base, and with each --against
 #             branch? A dry run (git merge-tree --write-tree: no worktree or
 #             index touched) of origin/--branch against origin/<base> (after a
@@ -133,8 +141,9 @@
 # Exit 2 — usage error (message on stderr, nothing on stdout), or JST_MEMBERS
 #          is invalid: stdout then ends with an `error=<reason>` line, which
 #          statuscheck's repo_strategy row relays.
-# Exit 4 — prs couldn't look up at least one repo, or conflicts or
-#          resolutions couldn't read at least one row (an `error` row):
+# Exit 4 — prs couldn't look up at least one repo, conflicts or
+#          resolutions couldn't read at least one row (an `error` row), or
+#          since couldn't read the branch (verdict=error):
 #          unknown, never none.
 #
 # win/repos.ps1 is the twin: same arguments, output and exit codes.
@@ -145,14 +154,14 @@ SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die_usage() { printf '%s\n' "repos: $1" >&2; exit 2; }
 
-VERBS="strategy, list, prs, gate, conflicts, resolutions, land, provision, sync, push, open-prs, remove-check"
+VERBS="strategy, list, prs, gate, conflicts, resolutions, since, land, provision, sync, push, open-prs, remove-check"
 VERB="${1:-}"
 case "$VERB" in
-  strategy|list|prs|gate|conflicts|resolutions|land|provision|sync|push|open-prs|remove-check) shift ;;
+  strategy|list|prs|gate|conflicts|resolutions|since|land|provision|sync|push|open-prs|remove-check) shift ;;
   "") die_usage "a verb is required — one of: $VERBS" ;;
   *)  die_usage "unknown verb '$VERB' — one of: $VERBS" ;;
 esac
-OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP="" OPT_ADD="" OPT_TITLE="" OPT_BODY="" OPT_AGAINST=""
+OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP="" OPT_ADD="" OPT_TITLE="" OPT_BODY="" OPT_AGAINST="" OPT_REPO="" OPT_COMMIT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch)    OPT_BRANCH="${2:-}"; shift 2 ;;
@@ -165,6 +174,10 @@ while [ $# -gt 0 ]; do
     --base=*)    OPT_BASE="${1#--base=}"; shift ;;
     --check)     OPT_CHECK=1; shift ;;
     --multistep) OPT_MULTISTEP=1; shift ;;
+    --repo)      OPT_REPO="${2:-}"; shift 2 ;;
+    --repo=*)    OPT_REPO="${1#--repo=}"; shift ;;
+    --commit)    OPT_COMMIT="${2:-}"; shift 2 ;;
+    --commit=*)  OPT_COMMIT="${1#--commit=}"; shift ;;
     --add)       OPT_ADD="${2:-}"; shift 2 ;;
     --add=*)     OPT_ADD="${1#--add=}"; shift ;;
     --title)     OPT_TITLE="${2:-}"; shift 2 ;;
@@ -177,6 +190,7 @@ done
 case "$OPT_STATE" in all|open) ;; *) die_usage "--state must be all or open (got '$OPT_STATE')" ;; esac
 OPT_AGAINST=$(printf '%s' "$OPT_AGAINST" | tr ',' ' ' | xargs 2>/dev/null || true)
 [ -z "$OPT_AGAINST" ] || [ "$VERB" = conflicts ] || die_usage "--against is for conflicts only"
+[ -z "$OPT_REPO$OPT_COMMIT" ] || [ "$VERB" = since ] || die_usage "--repo and --commit are for since only"
 
 ROOT=$(jst_root) || die_usage "not inside a git repository"
 CFG_DIR="$ROOT/.jst"
@@ -572,6 +586,72 @@ v_resolutions() {
 $set
 EOF
   exit "$rc"
+}
+
+SINCE_HEADER=$(printf 'commit\tkind')
+
+since_out() {   # since_out <verdict> <reason> [exit] — the since verb's answer, its rows from SROWS
+  printf 'verdict=%s\nreason=%s\n%s\n' "$1" "$2" "$SINCE_HEADER"
+  [ -z "$SROWS" ] || printf '%s' "$SROWS"
+  exit "${3:-0}"
+}
+
+# v_since — does an approval at --commit still cover origin/--branch in --repo (JSW-33)? Every commit
+# on the branch since --commit that its base lacks, by kind: a resolution (a merge whose parents,
+# merged again, conflict — a resolutions row), a base-merge (only origin/<base> commits merged in, and
+# its tree is the clean merge's: nothing to review), or anything else, a merge or a commit, which no
+# review read. A branch that doesn't contain --commit (a rebase, a force push) is a full re-review too.
+v_since() {
+  local set line slug base role dir head c parents p1 p k res others=0 resol=0 n
+  SROWS=""
+  need_branch
+  [ -n "$OPT_REPO" ] || die_usage "since needs --repo <path> (. for the root)"
+  printf '%s' "$OPT_COMMIT" | grep -Eqx '[0-9a-f]{7,40}' || die_usage "since needs --commit <sha> (got '$OPT_COMMIT')"
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  line=$(printf '%s\n' "$set" | awk -F'\t' -v r="$OPT_REPO" '$1 == r')
+  [ -n "$line" ] || die_usage "--repo '$OPT_REPO' is not one of this project's repos"
+  IFS=$'\t' read -r _ slug base role <<EOF
+$line
+EOF
+  dir="$ROOT"; [ "$OPT_REPO" = . ] || dir="$ROOT/$OPT_REPO"
+  merge_tree_ok || since_out error "git $(git_version) has no merge-tree --write-tree (needs 2.38 or later)" 4
+  if ! $TMOUT_CMD git -C "$dir" fetch -q origin "+refs/heads/$OPT_BRANCH:refs/remotes/origin/$OPT_BRANCH" \
+       "+refs/heads/$base:refs/remotes/origin/$base" 2>"$ERRF"; then
+    since_out error "fetch failed: $(awk 'NF{print; exit}' "$ERRF")" 4
+  fi
+  head=$(git -C "$dir" rev-parse "refs/remotes/origin/$OPT_BRANCH")
+  git -C "$dir" merge-base --is-ancestor "$OPT_COMMIT" "$head" 2>/dev/null \
+    || since_out full "origin/$OPT_BRANCH doesn't contain the approved $OPT_COMMIT (a rebase or a force push)"
+  for c in $(git -C "$dir" rev-list --reverse "$head" "^$OPT_COMMIT" "^refs/remotes/origin/$base"); do
+    parents=$(git -C "$dir" rev-list --parents -n 1 "$c" | cut -d' ' -f2-)
+    if [ "$parents" = "${parents#* }" ]; then SROWS="$SROWS$c	commit
+"; others=$((others + 1)); continue; fi
+    p1=${parents%% *}; k=""
+    for p in ${parents#* }; do
+      res=$(classify "$dir" "$p1" "$p" other)
+      case "${res%%	*}" in
+        conflict|gitlink) k=resolution; break ;;
+        error) since_out error "$c: $(printf '%s' "$res" | cut -f2)" 4 ;;
+      esac
+    done
+    if [ -z "$k" ]; then
+      k=base-merge; n=0
+      for p in ${parents#* }; do
+        n=$((n + 1))
+        git -C "$dir" merge-base --is-ancestor "$p" "refs/remotes/origin/$base" 2>/dev/null || k=merge
+      done
+      [ "$n" -eq 1 ] || k=merge   # an octopus
+      if [ "$k" = base-merge ] && [ "$(git -C "$dir" merge-tree --write-tree "$p1" "${parents#* }" 2>/dev/null | head -1)" \
+                                    != "$(git -C "$dir" rev-parse "$c^{tree}")" ]; then k=merge; fi
+    fi
+    SROWS="$SROWS$c	$k
+"
+    case "$k" in resolution) resol=$((resol + 1)) ;; merge) others=$((others + 1)) ;; esac
+  done
+  [ "$others" -eq 0 ] || since_out full "$others commit(s) since the approval no review read (a commit, or a merge that isn't a clean one of origin/$base)"
+  [ "$resol" -eq 0 ] || since_out resolution-review "$resol conflict-resolving merge(s) since the approval, the rest clean merges of origin/$base"
+  case "$head" in "$OPT_COMMIT"*) since_out approved "origin/$OPT_BRANCH is the approved commit" ;; esac
+  since_out approved "only clean merges of origin/$base since the approval"
 }
 
 # gate_go <phase> <reason> <root> <members> <repos to check> — the gate's answer for a phase that

@@ -1,10 +1,12 @@
 # The resolution review: a conflict-resolving merge, reviewed against both sides
 
 `jira-task-reviewer` loads this file from step 3a. A PR's latest verdict from
-this identity is `APPROVED —`, but `repos.sh resolutions` lists a merge on the
-branch that the approval's commit doesn't contain. That merge resolved a
-conflict with the base after the review. The executor's resolve mode made it
-(`by=agent`, a `Conflict-Resolved:` trailer), or a human did (`by=hand`).
+this identity is `APPROVED —`, but `repos.sh since` reads
+`verdict=resolution-review`: every commit pushed since is a merge that resolved
+a conflict or a clean merge of the base. Anything else pushed since (a plain
+commit, a rebase, a clean merge with edits of its own) is 3a's full re-review,
+never this one. The executor's resolve mode made such a merge (`by=agent`, a
+`Conflict-Resolved:` trailer), or a human did (`by=hand`).
 
 The earlier approval covers the code the reviewer saw, and the merge is code it
 never saw. Rather than review the whole diff again, this review checks **what the
@@ -18,9 +20,9 @@ the canonical report, 3d's mechanics). Only what is read and judged differs.
 
 ## 1. What to review
 
-The `resolutions` rows for this PR's repo whose commit the approval's commit
-doesn't contain. Each row is a merge, the files it resolved, and `by`. More than
-one → review each, oldest first. A row in state `error` is unknown, never
+The `resolution` rows of 3a's `since`, each with its `repos.sh resolutions`
+row for this PR's repo: a merge, the files it resolved, and `by`. More than one
+→ review each, oldest first. A row in state `error` is unknown, never
 "no merge": stop and say which repo.
 
 For each merge `<M>` in `<repo>`:

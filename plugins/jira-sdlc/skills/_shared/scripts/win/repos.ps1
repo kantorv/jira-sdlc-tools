@@ -19,6 +19,9 @@
 #             conflict, gitlink, error)
 #   resolutions  the conflict-resolving merges on origin/--branch its base
 #             lacks: repo commit by files (by agent or hand)
+#   since     does an approval at --commit still cover origin/--branch in
+#             --repo? verdict= (approved, resolution-review, full, error),
+#             reason=, then commit kind (resolution, base-merge, merge, commit)
 #   land      land the merged member PRs, opening the root PR as --title
 #             (and merge the base in when only member pointers conflict:
 #             base_merged=); --check verifies the gitlinks
@@ -30,8 +33,8 @@
 #
 # Exit 0 — ok. Exit 1 — land refused or failed, or --check failed. Exit 2 —
 # usage error (stderr only), or JST_MEMBERS is invalid (stdout ends with an
-# `error=<reason>` line). Exit 4 — prs couldn't look up a repo, or conflicts or
-# resolutions couldn't read a row.
+# `error=<reason>` line). Exit 4 — prs couldn't look up a repo, conflicts or
+# resolutions couldn't read a row, or since couldn't read the branch.
 #
 # Unlike bash's $(...), an in-process PowerShell function that calls `exit`
 # ends the whole script and drops output still being captured. So the verbs
@@ -50,12 +53,12 @@ function Stop-Usage {
     exit 2
 }
 
-$Verbs = 'strategy, list, prs, gate, conflicts, resolutions, land, provision, sync, push, open-prs, remove-check'
+$Verbs = 'strategy, list, prs, gate, conflicts, resolutions, since, land, provision, sync, push, open-prs, remove-check'
 $Verb = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 if (-not $Verb) { Stop-Usage "a verb is required — one of: $Verbs" }
-if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'conflicts', 'resolutions', 'land', 'provision', 'sync', 'push', 'open-prs', 'remove-check')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
+if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'conflicts', 'resolutions', 'since', 'land', 'provision', 'sync', 'push', 'open-prs', 'remove-check')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
 $OptBranch = ''; $OptState = 'all'; $OptBase = ''; $OptCheck = $false; $OptMultistep = $false
-$OptAdd = ''; $OptTitle = ''; $OptBody = ''; $OptAgainst = ''
+$OptAdd = ''; $OptTitle = ''; $OptBody = ''; $OptAgainst = ''; $OptRepo = ''; $OptCommit = ''
 $i = 1
 while ($i -lt $args.Count) {
     $a = [string]$args[$i]
@@ -69,6 +72,10 @@ while ($i -lt $args.Count) {
     elseif ($a -like '--base=*')    { $OptBase = $a.Substring(7); $i += 1 }
     elseif ($a -eq '--check')       { $OptCheck = $true; $i += 1 }
     elseif ($a -eq '--multistep')   { $OptMultistep = $true; $i += 1 }
+    elseif ($a -eq '--repo')        { $OptRepo = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--repo=*')    { $OptRepo = $a.Substring(7); $i += 1 }
+    elseif ($a -eq '--commit')      { $OptCommit = [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--commit=*')  { $OptCommit = $a.Substring(9); $i += 1 }
     elseif ($a -eq '--add')         { $OptAdd = [string]$args[$i + 1]; $i += 2 }
     elseif ($a -like '--add=*')     { $OptAdd = $a.Substring(6); $i += 1 }
     elseif ($a -eq '--title')       { $OptTitle = [string]$args[$i + 1]; $i += 2 }
@@ -80,6 +87,7 @@ while ($i -lt $args.Count) {
 if ($OptState -notin @('all', 'open')) { Stop-Usage "--state must be all or open (got '$OptState')" }
 $Against = @(($OptAgainst -replace ',', ' ') -split '\s+' | Where-Object { $_ })
 if ($Against.Count -gt 0 -and $Verb -ne 'conflicts') { Stop-Usage '--against is for conflicts only' }
+if (($OptRepo -or $OptCommit) -and $Verb -ne 'since') { Stop-Usage '--repo and --commit are for since only' }
 
 $Root = Get-JstRoot
 if (-not $Root) { Stop-Usage 'not inside a git repository' }
@@ -287,6 +295,7 @@ function Get-TakesPart {   # no | pushed | error <message>
 
 $ConflictsHeader = (@('repo', 'against', 'result', 'files', 'sensitive', 'recipe') -join "`t")
 $ResolutionsHeader = (@('repo', 'commit', 'by', 'files') -join "`t")
+$SinceHeader = (@('commit', 'kind') -join "`t")
 $ZeroSha = '0000000000000000000000000000000000000000'
 
 function Get-GitVersion {
@@ -467,6 +476,65 @@ function v_resolutions {   # the conflict-resolving merges on origin/--branch it
     }
     $rows | ForEach-Object { Write-Output $_ }
     Exit-With $rc
+}
+
+function Get-Since {   # @{Verdict; Reason; Rows; Rc} for v_since (see repos.sh's v_since)
+    param([string]$Dir, [string]$Base)
+    $rows = @()
+    $out = { param($v, $r, $c) @{ Verdict = $v; Reason = $r; Rows = $rows; Rc = $c } }
+    if (-not (Test-MergeTreeOk)) { return (& $out 'error' "git $(Get-GitVersion) has no merge-tree --write-tree (needs 2.38 or later)" 4) }
+    & git -C $Dir fetch -q origin "+refs/heads/$($script:OptBranch):refs/remotes/origin/$($script:OptBranch)" `
+        "+refs/heads/$($Base):refs/remotes/origin/$($Base)" 2> $ErrFile
+    if ($LASTEXITCODE -ne 0) { return (& $out 'error' "fetch failed: $(Get-FirstLine $ErrFile)" 4) }
+    $head = ([string](& git -C $Dir rev-parse "refs/remotes/origin/$($script:OptBranch)")).Trim()
+    & git -C $Dir merge-base --is-ancestor $script:OptCommit $head 2>$null
+    if ($LASTEXITCODE -ne 0) { return (& $out 'full' "origin/$($script:OptBranch) doesn't contain the approved $($script:OptCommit) (a rebase or a force push)" 0) }
+    $others = 0; $resol = 0
+    foreach ($c in @(& git -C $Dir rev-list --reverse $head "^$($script:OptCommit)" "^refs/remotes/origin/$Base" 2>$null)) {
+        $c = ([string]$c).Trim(); if (-not $c) { continue }
+        $parents = @(([string](& git -C $Dir rev-list --parents -n 1 $c)).Trim() -split ' ' | Select-Object -Skip 1)
+        if ($parents.Count -lt 2) { $rows += "$c`tcommit"; $others++; continue }
+        $k = ''
+        foreach ($p in @($parents | Select-Object -Skip 1)) {
+            $f = (Get-Classify $Dir $parents[0] $p 'other') -split "`t"
+            if ($f[0] -eq 'conflict' -or $f[0] -eq 'gitlink') { $k = 'resolution'; break }
+            if ($f[0] -eq 'error') { return (& $out 'error' "$($c): $($f[1])" 4) }
+        }
+        if (-not $k) {
+            $k = 'base-merge'
+            foreach ($p in @($parents | Select-Object -Skip 1)) {
+                & git -C $Dir merge-base --is-ancestor $p "refs/remotes/origin/$Base" 2>$null
+                if ($LASTEXITCODE -ne 0) { $k = 'merge' }
+            }
+            if ($parents.Count -ne 2) { $k = 'merge' }   # an octopus
+            if ($k -eq 'base-merge') {
+                $t = @(& git -C $Dir merge-tree --write-tree $parents[0] $parents[1] 2>$null)
+                $mine = ([string](& git -C $Dir rev-parse "$c^{tree}")).Trim()
+                if ($t.Count -eq 0 -or ([string]$t[0]).Trim() -ne $mine) { $k = 'merge' }
+            }
+        }
+        $rows += "$c`t$k"
+        if ($k -eq 'resolution') { $resol++ } elseif ($k -eq 'merge') { $others++ }
+    }
+    if ($others -gt 0) { return (& $out 'full' "$others commit(s) since the approval no review read (a commit, or a merge that isn't a clean one of origin/$Base)" 0) }
+    if ($resol -gt 0) { return (& $out 'resolution-review' "$resol conflict-resolving merge(s) since the approval, the rest clean merges of origin/$Base" 0) }
+    if ($head.StartsWith($script:OptCommit)) { return (& $out 'approved' "origin/$($script:OptBranch) is the approved commit" 0) }
+    return (& $out 'approved' "only clean merges of origin/$Base since the approval" 0)
+}
+
+function v_since {   # does an approval at --commit still cover origin/--branch in --repo (see repos.sh's v_since)
+    Use-Branch; Assert-ValidSet
+    if (-not $script:OptRepo) { Stop-Usage 'since needs --repo <path> (. for the root)' }
+    if ($script:OptCommit -cnotmatch '^[0-9a-f]{7,40}$') { Stop-Usage "since needs --commit <sha> (got '$($script:OptCommit)')" }
+    $r = @(Get-RepoSet) | Where-Object { $_.Repo -eq $script:OptRepo } | Select-Object -First 1
+    if (-not $r) { Stop-Usage "--repo '$($script:OptRepo)' is not one of this project's repos" }
+    $dir = if ($r.Repo -eq '.') { $script:Root } else { "$($script:Root)/$($r.Repo)" }
+    $res = Get-Since $dir $r.Base
+    Write-Output "verdict=$($res.Verdict)"
+    Write-Output "reason=$($res.Reason)"
+    Write-Output $SinceHeader
+    $res.Rows | ForEach-Object { Write-Output $_ }
+    Exit-With $res.Rc
 }
 
 function Write-GateGo {   # a phase that would start a review or a merge: conflict instead when a repo conflicts with its base

@@ -86,9 +86,9 @@ A merge that resolved a conflict is code no review saw. `repos.sh resolutions`
 lists those merges on the branch, newest first: `repo commit by files`, where
 `by` is `agent` (the trailer) or `hand`.
 
-When the reviewer finds its own latest verdict on a PR is `APPROVED —`, but a
-listed merge isn't contained in the commit that approval reviewed, it runs the
-**resolution review** (`plugins/jira-sdlc/skills/_shared/resolution-review.md`).
+When the reviewer finds its own latest verdict on a PR is `APPROVED —`, it reads
+what was pushed since with `repos.sh since`. When the only new commits are such
+merges (and clean merges of the base), it runs the **resolution review** (`plugins/jira-sdlc/skills/_shared/resolution-review.md`).
 It doesn't review the whole diff again. It checks the merge's resolution
 (`git show --remerge-diff`) against both sides:
 
@@ -99,7 +99,10 @@ It doesn't review the whole diff again. It checks the merge's resolution
 - recipes were applied correctly.
 
 Its verdict is the review after the merge commit. A run whose notes start
-`mode=resolution-review` asks for this same check.
+`mode=resolution-review` asks for this same check. Anything else pushed since
+the approval is code no review read, so it gets a full re-review, whatever the
+notes say: a plain commit, a rebase or force push (the head no longer contains
+the approved commit), or a clean merge carrying edits of its own.
 
 ## In the web app
 
