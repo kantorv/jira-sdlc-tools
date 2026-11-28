@@ -352,6 +352,22 @@ function Get-FileMarks { param([string]$Dir, [string]$Mb, [string]$Path)   # 'se
     return ''
 }
 
+function Get-AddedMigrations { param([string]$Dir, [string]$Mb, [string]$Side)   # numbered migrations <Side> added since the merge base
+    return @(& git -C $Dir diff-tree -r --name-only --no-renames --diff-filter=A $Mb $Side 2>$null |
+             Where-Object { ([string]$_) -cmatch '(^|/)migrations/[0-9]{4}_[^/]*\.py$' } | ForEach-Object { [string]$_ })
+}
+
+function Get-MigrationClashes {   # @(ours, theirs) pairs: one number, one folder, two names (JSW-36; see repos.sh's migration_clashes)
+    param([string]$Dir, [string]$Mb, [string]$Ours, [string]$Theirs)   # case-sensitive, as git's paths and the bash port are
+    $t = Get-AddedMigrations $Dir $Mb $Theirs
+    $pairs = @()
+    foreach ($o in (Get-AddedMigrations $Dir $Mb $Ours)) {
+        $k = $o -creplace '_[^/]*$', ''
+        foreach ($j in $t) { if (($j -creplace '_[^/]*$', '') -ceq $k -and $j -cne $o) { $pairs += , @($o, $j) } }
+    }
+    return , $pairs
+}
+
 function Get-Classify {   # "result`tfiles`tsensitive`trecipe" for merging <Theirs> into <Ours> (see repos.sh's classify)
     param([string]$Dir, [string]$Ours, [string]$Theirs, [string]$Kind)
     $mb = (& git -C $Dir merge-base $Ours $Theirs 2>$null)
@@ -376,6 +392,10 @@ function Get-Classify {   # "result`tfiles`tsensitive`trecipe" for merging <Thei
     foreach ($p in $real) {
         $mk = Get-FileMarks $Dir $mb $p
         if ($mk -eq 'sensitive') { $sens += $p } elseif ($mk.StartsWith('recipe ')) { $recipe += "$($mk.Substring(7)):$p" }
+    }
+    foreach ($c in (Get-MigrationClashes $Dir $mb $Ours $Theirs)) {   # the same number under two names: a conflict git doesn't see
+        foreach ($p in $c) { if ($real -cnotcontains $p) { $real += $p } }
+        if ($recipe -cnotcontains "migration-number:$($c[0])") { $recipe += "migration-number:$($c[0])" }
     }
     foreach ($p in $links) { $recipe += "gitlink:$p" }
     $sc = if ($sens.Count -gt 0) { $sens -join ' ' } else { '-' }

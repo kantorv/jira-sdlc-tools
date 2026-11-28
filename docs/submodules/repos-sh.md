@@ -87,7 +87,7 @@ Two more columns mark the conflicted files (`-` when none), the plugin's reading
 | Column | Means |
 | -- | -- |
 | `sensitive` | The files a human resolves, grant or not: `.jst/`, `stack`, `stack.d/`, `.github/workflows/` and migrations |
-| `recipe` | `<recipe>:<path>` for the files a mechanical recipe resolves, never also sensitive: `gitlink` (a member pointer one side's commit contains) and `migration-number` (both sides added a numbered migration at the same path, absent at the merge base: renumber one onto the other's leaf) |
+| `recipe` | `<recipe>:<path>` for the files a mechanical recipe resolves, never also sensitive: `gitlink` (a member pointer one side's commit contains) and `migration-number` (a numbered migration this branch added shares its number with one the other side added in the same folder since the merge base, at the same path or under another name: renumber this branch's onto the other's leaf). Two names merge clean in git, so the row lists both files and reads `conflict` though git saw none |
 
 A member whose origin has no `--branch` takes no part, and gets no rows; likewise a member whose origin lacks an
 `--against` branch (that other issue doesn't touch it). `--against` may be repeated, or list several branches, space-
