@@ -14,9 +14,11 @@ review* checks it next. The run is asked for by a human, or started by a
 standing grant (the web app's). Claude Code's own permission asks inside it
 stay the human's either way.
 
-Discovery, the credential block and step 1 (provision, bootstrap, the issue
-fetch) run as usual. Step 3's status transition does not: the issue keeps its
-status. Then follow R1 to R8 below in place of steps 2 to 12. `$S` is the
+Discovery and the credential block run as usual, and so does step 1, except
+the bootstrap hook. `repos.sh provision` and the issue fetch run. The hook
+doesn't: a resolution needs no running instance, and starting one claims an
+instance number and copies a database for nothing. Step 3's status transition
+doesn't run either: the issue keeps its status. Then follow R1 to R8 below in place of steps 2 to 12. `$S` is the
 scripts directory, as in the skill. Everything below is POSIX. On Windows, use
 the `win/` twins, with the same arguments and output.
 

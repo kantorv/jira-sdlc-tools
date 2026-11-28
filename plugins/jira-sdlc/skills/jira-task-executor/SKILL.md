@@ -20,7 +20,8 @@ the issue key is derived from the current branch (see Discovery below).
 - **Resolve mode** — when the notes' first line is exactly
   `mode=resolve-conflicts`, this run resolves the merge conflict that
   paused the issue (the gate's `phase=conflict`) instead of implementing it:
-  after Discovery and step 1, read `../_shared/resolve-conflicts.md` and
+  after Discovery and step 1 (provision and the fetch; not the bootstrap
+  hook), read `../_shared/resolve-conflicts.md` and
   follow it in place of steps 2–12. Only that line asks for it; every other
   run keeps step 2's rule and never resolves a conflict.
 - **`CLAUDE_PLUGIN_ROOT`** is this plugin's root, and every script path below
