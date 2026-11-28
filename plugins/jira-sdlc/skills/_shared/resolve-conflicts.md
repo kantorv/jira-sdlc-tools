@@ -70,7 +70,10 @@ bash "$S/repos.sh" conflicts --branch "$(git branch --show-current)"
   `git -C <repo> diff <merge-base> origin/<base> -- <files>`.
 
 Several issues landed since the merge base → read each one that touched a
-conflicted file. One whose intent you can't find → stop and ask.
+conflicted file. A change that names no issue, or one Jira doesn't have (a
+commit pushed to the base by hand): its commit messages and its PR, if any,
+are its intent. A change whose intent you can't find in any of them → stop
+and ask.
 
 ## R3. Merge the base
 
