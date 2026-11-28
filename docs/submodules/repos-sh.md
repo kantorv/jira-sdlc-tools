@@ -26,8 +26,10 @@ bash repos.sh <verb> [--branch <b>] [--state all|open] [--base <b>] [--check] [-
 | `strategy` | `strategy=single\|submodules`, `root=`, `members=`, `pinned=` (key=value) | 0; 2 + `error=` if `JST_MEMBERS` is invalid |
 | `list` | TSV `repo role initialized slug base branch dirty ahead`, root first. Local only, no network | 0; 2 + `error=` |
 | `prs` | TSV `repo slug pr state base url`: one row per PR, `none` for a repo without one, `error` for one that couldn't be read. `--state open` keeps only OPEN | 0; 4 if any row is `error` |
-| `gate` | `phase=`, `reason=`, `root=`, `members=`, then the `prs` table | 0 for every phase (a `stop` is a decision) |
-| `conflicts [--against <branch>…]` | TSV `repo against result files`: per repo, the branch's dry-run merge with its base, then with each `--against` branch ([below](#conflicts)). Only git runs, no GitHub API | 0; 4 if any row is `error` |
+| `gate` | `phase=`, `reason=`, `root=`, `members=`, then the `prs` table. With `conflict`, a `sensitive=` line after `members=`; with a `stop` that couldn't read the state, `unknown=prs` or `unknown=conflicts` | 0 for every phase (a `stop` is a decision) |
+| `conflicts [--against <branch>…]` | TSV `repo against result files sensitive recipe`: per repo, the branch's dry-run merge with its base, then with each `--against` branch ([below](#conflicts)). Only git runs, no GitHub API | 0; 4 if any row is `error` |
+| `resolutions` | TSV `repo commit by files`: the conflict-resolving merges on `origin/<branch>` that its base lacks, newest first ([below](#resolutions)) | 0; 4 if any row is `error` |
+| `since --repo <repo> --commit <sha>` | `verdict=`, `reason=`, then TSV `commit kind`: does an approval at `<sha>` still cover `origin/<branch>` in `<repo>` ([below](#since)) | 0; 4 with `verdict=error` |
 | `land --title <t>` | `landed=`, `base_merged=` (only when [the gitlink step](#the-landings-gitlink-step) ran), `commit=`, `pr=`; or `error=` with nothing changed. `--title` (required) titles a new root PR, `<KEY>: <summary>` like its member PRs; a reused one keeps its title | 0; 1 on refusal |
 | `land --check` | TSV `repo gitlink base result` (`ok` or why not), plus a `.gitmodules` row if it changed | 0; 1 on any failure |
 | `provision` | `provisioned=` (members now on the issue branch), `pinned=`. Checks out every member first, so it is what makes a fresh worktree's empty member folders usable, even with nothing in scope | 0; 1 + `error=` |
@@ -58,8 +60,13 @@ soon as a member takes part, with a PR or with commits pushed; a workspace-only 
 `conflict` comes from the same dry run as `conflicts`, against the base only. It never replaces `none`, `merged` or
 `stop`. Two results are not a pause: `gitlink` (the landing fixes it), and a conflict between two open issue branches,
 since neither base has moved yet (the gate takes no `--against`; that warning is the `conflicts` verb's). A check that
-can't be read (a failed fetch, a member not checked out) is `stop`, because unknown is not none. A git older than 2.38
-can't dry-run a merge at all: the phase then stands, and `reason=` ends `(conflicts not checked: …)`.
+can't be read (a failed fetch, a member not checked out) is `stop`, because unknown is not none, and it says so with
+`unknown=conflicts` (`unknown=prs` when `gh` failed), so a caller that last read `conflict` keeps it rather than
+reading the pause as lifted. A git older than 2.38 can't dry-run a merge at all: the phase then stands, and `reason=`
+ends `(conflicts not checked: …)`.
+
+With `conflict`, `sensitive=` lists the base rows' `sensitive` files as `<repo>:<path>` (space-separated, empty when
+none): those always go to a human, whatever a grant says.
 
 ### `conflicts`
 
@@ -75,9 +82,34 @@ branch is read off origin, so unpushed work doesn't count. Needs git 2.38 or lat
 | `gitlink` | The only conflicted paths are member pointers, and in each one side's commit contains the other's: git fast-forwards the submodule, but GitHub, which doesn't look inside submodules, calls it a conflict |
 | `error` | It couldn't be read; `files` is the reason: git too old, a fetch failure, a branch missing from the root's origin, a member not checked out. Never `clean` |
 
+Two more columns mark the conflicted files (`-` when none), the plugin's reading so a caller keeps no list of its own:
+
+| Column | Means |
+| -- | -- |
+| `sensitive` | The files a human resolves, grant or not: `.jst/`, `stack`, `stack.d/`, `.github/workflows/` and migrations |
+| `recipe` | `<recipe>:<path>` for the files a mechanical recipe resolves, never also sensitive: `gitlink` (a member pointer one side's commit contains) and `migration-number` (both sides added a numbered migration at the same path, absent at the merge base: renumber one onto the other's leaf) |
+
 A member whose origin has no `--branch` takes no part, and gets no rows; likewise a member whose origin lacks an
 `--against` branch (that other issue doesn't touch it). `--against` may be repeated, or list several branches, space-
 or comma-separated. The web app runs it for every live issue worktree of a project, each against the others.
+
+### `resolutions`
+
+Each row is a merge on `origin/<branch>` that its base lacks and whose parents, merged again, conflict: a merge that
+resolved a conflict. `by` is `agent` when its message carries a `Conflict-Resolved:` trailer (the executor's resolve
+mode), else `hand`; `files` is what it resolved; newest first. The reviewer's resolution review keys on it: a merge
+the PR's last approval didn't contain is code no review saw. `git show --remerge-diff <commit>` shows the resolution.
+A repo that can't be read is an `error` row (`by` = `error`, its reason in `files`) and exit 4.
+
+### `since`
+
+The reviewer's step 3a: its latest verdict on a PR is an approval, of the commit `--commit`, and the PR's head may have
+moved since. Each commit on `origin/<branch>` since `<sha>` that the base lacks, oldest first, has a `kind`:
+`resolution` (a merge whose parents, merged again, conflict: a `resolutions` row), `base-merge` (only base commits
+merged in, and its tree is git's clean merge), `merge` (another branch, an octopus, or a clean merge carrying edits of
+its own) or `commit`. `verdict=approved` when nothing or only base merges came since; `resolution-review` when the
+rest are resolutions (the resolution review reads only those); `full` on any `merge` or `commit`, and when the branch
+doesn't contain `<sha>` at all (a rebase, a force push). `--repo` is `.` for the root.
 
 ### The landing's gitlink step
 

@@ -280,7 +280,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, conflicts, land, provision, sync, push, open-prs, remove-check\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, conflicts, resolutions, since, land, provision, sync, push, open-prs, remove-check\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -518,7 +518,7 @@ echo 0 > "$FGH/ahead/$(K server "$B")"
 both4 "gate: an empty member branch doesn't take part" "$W" "$(G review "member PRs open: app" none open)\n$(T "$NP" "$OA" "$NS")" gate
 clearfgh; echo "gh: HTTP 502" > "$FGH/prs/$(K app "$B").error"
 both4 "gate: stop — PRs unknown" "$W" \
-  "$(G stop "PRs unknown for: app — gh failed; unknown is not none" unknown unknown)\n$(T "$NP" "app\tacme/app\t-\terror\t-\t-" "$NS")" gate
+  "$(G stop "PRs unknown for: app — gh failed; unknown is not none" unknown unknown)\nunknown=prs\n$(T "$NP" "app\tacme/app\t-\terror\t-\t-" "$NS")" gate
 # --multistep stops only once a member takes part; workspace-only multistep reads as one repo (JST-329).
 MS="multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand"
 clearfgh; setpr app "$B" "11\tOPEN\tdevelopment\t$U/app/pull/11"
@@ -780,7 +780,12 @@ REAL_GIT=$(command -v git)
 mkdir -p "$LAB/oldgit"   # a git too old for merge-tree --write-tree: only `git version` lies
 printf '#!/usr/bin/env bash\n[ "$1" = version ] && { echo "git version 2.30.0"; exit 0; }\nexec "%s" "$@"\n' "$REAL_GIT" > "$LAB/oldgit/git"
 chmod +x "$LAB/oldgit/git"
-CFH='repo\tagainst\tresult\tfiles'
+mkdir -p "$LAB/nofetch"   # a git that can't reach any origin: ls-remote fails, the rest is real
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = ls-remote ] && { echo "fatal: unable to access origin" >&2; exit 128; }; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$LAB/nofetch/git"
+chmod +x "$LAB/nofetch/git"
+CFH='repo\tagainst\tresult\tfiles\tsensitive\trecipe'
+RSH='repo\tcommit\tby\tfiles'
+SNH=$(printf 'commit\tkind')
 setprn() { printf '%b\n' "$4" > "$FGH/prs/${1}_$2@${3//\//%}"; }   # setprn <ns> <repo> <branch> <rows>
 edit() { # edit <dir> <file> <text> <message> — commit one change and push it to the current branch
   printf '%s\n' "$3" > "$1/$2"; git -C "$1" add "$2"; git -C "$1" commit -qm "$4"; git -C "$1" push -q origin HEAD
@@ -796,27 +801,27 @@ for port in sh ${PORTS:+ps}; do
   W1="$LAB/$ns/W1"; git -C "$MN" worktree add -q "$W1" "$C1"; rp $port "$W1" provision >/dev/null
   clearfgh
   is "conflicts: against the base, clean; a member without the branch takes no part$sfx" "$(rp $port "$W1" conflicts)" \
-    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\napp\torigin/development\tclean\t-\nexit=0')"
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\t-\t-\napp\torigin/development\tclean\t-\t-\t-\nexit=0')"
   is "conflicts --against: two open branches conflict (P9), the base doesn't$sfx" "$(rp $port "$W1" conflicts --against "$C2")" \
-    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\n.\t%s\tclean\t-\napp\torigin/development\tclean\t-\napp\t%s\tconflict\tREADME.md\nexit=0' "$C2" "$C2")"
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\t-\t-\n.\t%s\tclean\t-\t-\t-\napp\torigin/development\tclean\t-\t-\t-\napp\t%s\tconflict\tREADME.md\t-\t-\nexit=0' "$C2" "$C2")"
   is "  …the dry run touched nothing$sfx" "$(git -C "$W1/app" status --porcelain; git -C "$W1/app" rev-parse --abbrev-ref HEAD)" "$C1"
   setprn "$ns" app "$C1" "21\tOPEN\tdevelopment\thttps://github.com/$ns/app/pull/21"
   is "gate: two open branches conflicting is no pause$sfx" "$(rp $port "$W1" gate | sed -n 1p)" "phase=review"
   is "conflicts: an --against branch the root's origin lacks is an error (exit 4), the member no row$sfx" \
     "$(rp $port "$W1" conflicts --against feature/XX-99-gone)" \
-    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\n.\tfeature/XX-99-gone\terror\torigin has no feature/XX-99-gone\napp\torigin/development\tclean\t-\nexit=4')"
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\t-\t-\n.\tfeature/XX-99-gone\terror\torigin has no feature/XX-99-gone\t-\t-\napp\torigin/development\tclean\t-\t-\t-\nexit=4')"
   # The base moves: a clean change makes it behind, then a change to the same line conflicts.
   SC="$LAB/$ns/scratch-app"; git clone -q "git@github.com:$ns/app.git" "$SC"
   edit "$SC" other.txt x "base: another file"
-  is "conflicts: behind, when it merges clean but lacks the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tbehind\t-')"
+  is "conflicts: behind, when it merges clean but lacks the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tbehind\t-\t-\t-')"
   edit "$SC" README.md base "base: the same line"
-  is "conflicts: the base changed the same line$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tconflict\tREADME.md')"
+  is "conflicts: the base changed the same line$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tconflict\tREADME.md\t-\t-')"
   is "gate: phase=conflict replaces review, naming the repo and files$sfx" "$(rp $port "$W1" gate | sed -n '1,4p')" \
     "$(printf 'phase=conflict\nreason=conflicts with origin/development in app: README.md\nroot=none\nmembers=open')"
   is "  …and --base is read in the root only$sfx" "$(rp $port "$W1" gate --base development | sed -n 1p)" "phase=conflict"
   RP_PRE="$LAB/oldgit:"
   is "conflicts: a git older than 2.38 is an error per repo, never clean$sfx" "$(rp $port "$W1" conflicts)" \
-    "$(printf "$CFH"'\n.\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\napp\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\nserver\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\nexit=4')"
+    "$(printf "$CFH"'\n.\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\t-\t-\napp\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\t-\t-\nserver\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\t-\t-\nexit=4')"
   is "gate: on that git, the phase stands and says the check didn't run$sfx" "$(rp $port "$W1" gate | sed -n '1,2p')" \
     "$(printf 'phase=review\nreason=member PRs open: app (conflicts not checked: git 2.30.0 has no merge-tree --write-tree, needs 2.38)')"
   RP_PRE=""
@@ -824,10 +829,71 @@ for port in sh ${PORTS:+ps}; do
   git -C "$W1/app" merge -q origin/development >/dev/null 2>&1; echo "one and base" > "$W1/app/README.md"
   git -C "$W1/app" add README.md; git -C "$W1/app" commit -qm "XX-11 merge development"; git -C "$W1/app" push -q origin "$C1"
   is "gate: resolved and pushed, the pause lifts$sfx" "$(rp $port "$W1" gate | sed -n '1,2p')" "$(printf 'phase=review\nreason=member PRs open: app')"
-  is "  …conflicts reads it clean against the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-')"
+  is "  …conflicts reads it clean against the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-\t-\t-')"
   echo "unpushed" > "$W1/app/README.md"; git -C "$W1/app" commit -qam "XX-11 local only"
-  is "  …it reads origin's branch, not the local one$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-')"
+  is "  …it reads origin's branch, not the local one$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-\t-\t-')"
   git -C "$W1/app" reset -q --hard "origin/$C1"
+  # JSW-33: the resolutions verb lists the merges that resolved a conflict, newest first.
+  is "resolutions: the hand merge, by=hand, with the file it resolved$sfx" "$(rp $port "$W1" resolutions)" \
+    "$(printf "$RSH"'\napp\t%s\thand\tREADME.md\nexit=0' "$(git -C "$W1/app" rev-parse "origin/$C1")")"
+  HANDM=$(git -C "$W1/app" rev-parse "origin/$C1")
+  edit "$SC" README.md "base again" "base: the same line again"
+  git -C "$W1/app" fetch -q origin; git -C "$W1/app" merge -q origin/development >/dev/null 2>&1; echo "one, base again" > "$W1/app/README.md"
+  git -C "$W1/app" add README.md
+  git -C "$W1/app" commit -qm "XX-11 merge development: resolve 1 conflicted file" -m "Conflict-Resolved: README.md"
+  git -C "$W1/app" push -q origin "$C1"
+  is "  …the resolve mode's merge (its trailer) is by=agent, listed first$sfx" "$(rp $port "$W1" resolutions)" \
+    "$(printf "$RSH"'\napp\t%s\tagent\tREADME.md\napp\t%s\thand\tREADME.md\nexit=0' "$(git -C "$W1/app" rev-parse HEAD)" "$HANDM")"
+  edit "$SC" other2.txt y "base: a clean change"
+  git -C "$W1/app" fetch -q origin; git -C "$W1/app" merge -q --no-edit origin/development >/dev/null 2>&1; git -C "$W1/app" push -q origin "$C1"
+  is "  …a merge that merged clean isn't one$sfx" "$(rp $port "$W1" resolutions | sed -n 2p | cut -f3)" "agent"
+  # JSW-33: since — does an approval still cover the branch? Only resolutions and clean base merges keep it.
+  AGENTM=$(git -C "$W1/app" rev-parse HEAD^1); BASEM=$(git -C "$W1/app" rev-parse HEAD)
+  is "since: the approved commit is the head, approved$sfx" "$(rp $port "$W1" since --repo app --commit "$BASEM")" \
+    "$(printf 'verdict=approved\nreason=origin/%s is the approved commit\n%s\nexit=0' "$C1" "$SNH")"
+  is "  …only a clean merge of the base since, approved$sfx" "$(rp $port "$W1" since --repo app --commit "$AGENTM")" \
+    "$(printf 'verdict=approved\nreason=only clean merges of origin/development since the approval\n%s\n%s\tbase-merge\nexit=0' "$SNH" "$BASEM")"
+  is "  …a resolution and a clean base merge since, the resolution review$sfx" "$(rp $port "$W1" since --repo app --commit "$HANDM")" \
+    "$(printf 'verdict=resolution-review\nreason=1 conflict-resolving merge(s) since the approval, the rest clean merges of origin/development\n%s\n%s\tresolution\n%s\tbase-merge\nexit=0' "$SNH" "$AGENTM" "$BASEM")"
+  edit "$W1/app" extra.txt late "XX-11 a commit after the approval"; PLAIN=$(git -C "$W1/app" rev-parse HEAD)
+  is "  …a plain commit since is a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$BASEM")" \
+    "$(printf 'verdict=full\nreason=1 commit(s) since the approval no review read (a commit, or a merge that isn'"'"'t a clean one of origin/development)\n%s\n%s\tcommit\nexit=0' "$SNH" "$PLAIN")"
+  edit "$SC" other3.txt z "base: another clean change"
+  git -C "$W1/app" fetch -q origin; git -C "$W1/app" merge -q --no-commit origin/development >/dev/null 2>&1
+  echo "slipped in" > "$W1/app/README.md"; git -C "$W1/app" add README.md; git -C "$W1/app" commit -qm "XX-11 merge development"
+  git -C "$W1/app" push -q origin "$C1"; EDITM=$(git -C "$W1/app" rev-parse HEAD)
+  is "  …a clean base merge carrying edits of its own is a merge, a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$PLAIN" | sed -n '1p;4p')" \
+    "$(printf 'verdict=full\n%s\tmerge' "$EDITM")"
+  git -C "$W1/app" reset -q --hard "$AGENTM"; echo "rebased" > "$W1/app/extra.txt"; git -C "$W1/app" add extra.txt
+  git -C "$W1/app" commit -qm "XX-11 rewritten"; git -C "$W1/app" push -qf origin "$C1"
+  is "  …a force push that drops the approved commit is a full re-review$sfx" "$(rp $port "$W1" since --repo app --commit "$EDITM" | sed -n '1,2p')" \
+    "$(printf 'verdict=full\nreason=origin/%s doesn'"'"'t contain the approved %s (a rebase or a force push)' "$C1" "$EDITM")"
+  is "  …--repo names one of the project's repos$sfx" "$(rp $port "$W1" since --repo nope --commit "$EDITM")" "exit=2"
+  is "  …and --commit is a sha$sfx" "$(rp $port "$W1" since --repo app --commit HEAD)" "exit=2"
+  # Sensitive files ask, recipes don't (JSW-33): a CI workflow and a numbered migration both sides added.
+  C3=feature/XX-16-sens; git -C "$MN" branch "$C3"; git -C "$MN" push -q origin "$C3"
+  git -C "$MN/app" fetch -q origin; git -C "$MN/app" switch -qc "$C3" origin/development
+  mkdir -p "$MN/app/.github/workflows" "$MN/app/core/migrations"
+  printf 'ours\n' > "$MN/app/.github/workflows/ci.yml"; printf 'ours\n' > "$MN/app/core/migrations/0002_ours.py"
+  git -C "$MN/app" add .github core; git -C "$MN/app" commit -qm "XX-16 ci and a migration"
+  git -C "$MN/app" push -q origin "$C3"; git -C "$MN/app" switch -q development
+  git -C "$SC" pull -q origin development
+  mkdir -p "$SC/.github/workflows" "$SC/core/migrations"
+  printf 'theirs\n' > "$SC/.github/workflows/ci.yml"; printf 'theirs\n' > "$SC/core/migrations/0002_ours.py"
+  git -C "$SC" add .github core; git -C "$SC" commit -qm "base: ci and a migration"; git -C "$SC" push -q origin HEAD
+  W3="$LAB/$ns/W3"; git -C "$MN" worktree add -q "$W3" "$C3"; rp $port "$W3" provision >/dev/null
+  setprn "$ns" app "$C3" "26\tOPEN\tdevelopment\thttps://github.com/$ns/app/pull/26"
+  is "conflicts: a CI workflow is sensitive, a migration both sides added is the migration-number recipe$sfx" \
+    "$(rp $port "$W3" conflicts | grep '^app')" \
+    "$(printf 'app\torigin/development\tconflict\t.github/workflows/ci.yml core/migrations/0002_ours.py\t.github/workflows/ci.yml\tmigration-number:core/migrations/0002_ours.py')"
+  is "gate: phase=conflict says which files are sensitive$sfx" "$(rp $port "$W3" gate | sed -n '1p;5p')" \
+    "$(printf 'phase=conflict\nsensitive=app:.github/workflows/ci.yml')"
+  # Origin unreachable (a git whose ls-remote fails, as a network outage does): the check can't be read.
+  RP_PRE="$LAB/nofetch:"
+  is "gate: a check it can't read is stop, and says unknown=conflicts$sfx" "$(rp $port "$W3" gate | sed -n '1p;5p')" \
+    "$(printf 'phase=stop\nunknown=conflicts')"
+  RP_PRE=""
+  is "  …and a stop that is a decision says nothing of the kind$sfx" "$(rp $port "$W3" gate --multistep | grep -c '^unknown=')" "0"
 
   # Member pointers (P16). Another issue's landing moved app's pointer on the root's base to A1;
   # this issue's app PR merged after it, so its merge commit MC contains A1.
@@ -852,10 +918,10 @@ for port in sh ${PORTS:+ps}; do
   setprn "$ns" parent feature/XX-15-diverged "42\tOPEN\tdevelopment\thttps://github.com/$ns/parent/pull/42"
   setprn "$ns" app feature/XX-15-diverged "31\tMERGED\tdevelopment\thttps://github.com/$ns/app/pull/31"
   is "conflicts: a pointer that contains the other side's is gitlink$sfx" "$(rp $port "$WL" conflicts --branch feature/XX-14-ff | grep '^\.')" \
-    "$(printf '.\torigin/development\tgitlink\tapp')"
+    "$(printf '.\torigin/development\tgitlink\tapp\t-\tgitlink:app')"
   is "gate: gitlink is no pause (land fixes it)$sfx" "$(rp $port "$WL" gate --branch feature/XX-14-ff | sed -n 1p)" "phase=review-landing"
   is "conflicts: pointers that diverged are a real conflict$sfx" "$(rp $port "$WL" conflicts --branch feature/XX-15-diverged | grep '^\.')" \
-    "$(printf '.\torigin/development\tconflict\tapp')"
+    "$(printf '.\torigin/development\tconflict\tapp\t-\t-')"
   is "gate: …and pause the landing$sfx" "$(rp $port "$WL" gate --branch feature/XX-15-diverged | sed -n '1,2p')" \
     "$(printf 'phase=conflict\nreason=conflicts with origin/development in the root: app')"
   # land: the landing commit moves app to MC, then the gitlink step merges the base in, no human.
@@ -867,7 +933,7 @@ for port in sh ${PORTS:+ps}; do
   is "  …a merge of origin/development$sfx" "$(git -C "$WL" rev-parse HEAD^2)" "$(git -C "$WL" rev-parse origin/development)"
   is "  …app keeps the commit that contains both sides$sfx" "$(git -C "$WL" ls-tree HEAD app | awk '{print $3}') $(git -C "$WL/app" rev-parse HEAD)" "$MC $MC"
   is "  …pushed$sfx" "$(git -C "$WL" ls-remote origin "refs/heads/$LB" | cut -f1)" "$NEWHEAD"
-  is "  …and the root now merges clean$sfx" "$(rp $port "$WL" conflicts | grep '^\.')" "$(printf '.\torigin/development\tclean\t-')"
+  is "  …and the root now merges clean$sfx" "$(rp $port "$WL" conflicts | grep '^\.')" "$(printf '.\torigin/development\tclean\t-\t-\t-')"
   is "  …land --check still passes$sfx" "$(rp $port "$WL" land --check | tail -1)" "exit=0"
   if [ "$port" = sh ]; then OUT=$(cd "$WL" && bash "$REPOS_SH" gate --against x 2>&1; echo "exit=$?")
   else OUT=$(cd "$WL" && pwsh -NoProfile -File "$REPOS_PS" gate --against x 2>&1; echo "exit=$?"); fi

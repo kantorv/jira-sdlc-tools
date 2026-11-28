@@ -254,6 +254,10 @@
       "slug": "/task-lifecycle-phase-3",
       "sidebar_position": 4
     },
+    "docs/task-lifecycle/MERGE-CONFLICTS.md": {
+      "slug": "/task-lifecycle-merge-conflicts",
+      "sidebar_position": 5
+    },
     "docs/process/SDLC.md": {
       "slug": "/sdlc",
       "sidebar_position": 1
