@@ -29,6 +29,7 @@ PORTS=""
 [ "${1:-}" = "--ports" ] && PORTS=1
 
 LAB=$(mktemp -d)
+export XDG_CONFIG_HOME="$LAB/xdg-config"   # no machine default profile (JSW-37) reaches the fixtures
 # chmod back anything we locked, or the cleanup can't remove it
 cleanup() { find "$LAB" -type d ! -perm -u+w -exec chmod u+w {} + 2>/dev/null; rm -rf "$LAB"; }
 trap cleanup EXIT

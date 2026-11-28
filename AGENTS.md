@@ -257,6 +257,16 @@ bash scripts/check-skill-size.sh
 # needs pwsh.
 bash scripts/check-ensure-local-env.sh [--ports]
 
+# credential profiles (JSW-37): where the credential group comes from (the
+# project's own .jst/, a named profile, the machine default), that a partial
+# set, an owner mismatch or an open (0644) profile is refused with no fallback,
+# that a worktree gets no token with a profile, and the migration (dry run
+# writes nothing; --apply changes only a matching project). Scratch
+# XDG_CONFIG_HOME, dummy values, a fake gh. Run it after touching
+# _jst_config, gh, jira, ensure_local_env, statuscheck's env_* / credentials
+# rows, or jst-credentials.sh. --ports adds the win/ ports (needs pwsh).
+bash scripts/check-credentials.sh [--ports]
+
 # how every script finds the project root (_jst_root), from submodules and
 # worktrees; the single-repo regression (statuscheck's table must match the
 # base commit's for a project without members, plus exactly one INFO
@@ -371,7 +381,11 @@ it. Edit one port and
 you must edit the other, or Windows silently drifts. They share one sourced
 helper, `posix/_jst_root.sh` / `win/_jst_root.ps1`, which finds the project
 root (the outermost repo in the submodule chain that has `.jst/`). It has no
-output of its own to diff: `check-repos.sh --ports` compares the two directly. `statuscheck`'s `platform`
+output of its own to diff: `check-repos.sh --ports` compares the two directly.
+A second shared pair, `posix/_jst_config.sh` / `win/_jst_config.ps1`, is the one
+config reader (JSW-37): plain keys local over team, and the credential group from
+one source, the project's own `.jst/` or a credential profile. No script parses
+an env file itself; `check-credentials.sh --ports` covers the pair. `statuscheck`'s `platform`
 row then *confirms* the OS and the Windows runtime/ports, and honors
 `STATUSCHECK_FORCE_OS` so the Windows branch is testable on Linux. Re-verify parity after any change — pwsh 7 runs on Linux, so
 diff each port against its bash twin with the OS forced:
@@ -424,6 +438,7 @@ A fake `gh` that ignores its `--json` value can't see this. Check the value.
 their sourced `_stack.sh` have no `win/` twins. They serve the stack contract, which is bash
 (`skills/_shared/stack/contract.md`; Windows is deferred, onboarding decision D11).
 statuscheck's `instance` row says so on Windows in both ports, so the parity diff still holds.
+Nor does `jst-credentials.sh` (JSW-37): a one-time migration run by hand, never by a skill.
 
 Residual Windows-only surface Linux+pwsh can't reproduce (small, and out of the
 diff's reach): real backslash paths / drive letters and CRLF — confirm those on

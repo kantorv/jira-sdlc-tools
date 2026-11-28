@@ -126,22 +126,9 @@ if ($ParentKey) {
 
 # --- 4. the env default — top-level issues only ------------------------------
 . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
-$CfgDir = Get-JstRoot
-if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
-$CfgDir = Join-Path $CfgDir '.jst'
-function Get-Cfg {
-    param([string]$Name)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $CfgDir $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*($Name)\s*=(.*)$") { $val = $Matches[2].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
-}
+. (Join-Path $PSScriptRoot '_jst_config.ps1')   # Get-JstCfg: the one config reader
+Initialize-JstConfig
+function Get-Cfg { param([string]$Name) Get-JstCfg $Name }
 $PrBase = Get-Cfg 'DEFAULT_BASE_BRANCH'
 if ($PrBase) { Emit $PrBase 'env-default'; exit 0 }
 

@@ -195,18 +195,11 @@ OPT_AGAINST=$(printf '%s' "$OPT_AGAINST" | tr ',' ' ' | xargs 2>/dev/null || tru
 ROOT=$(jst_root) || die_usage "not inside a git repository"
 CFG_DIR="$ROOT/.jst"
 
-# Same `NAME = value` parser as the other scripts: local.env overrides .env,
-# the last match in a file wins, values are parsed, never sourced.
-cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$CFG_DIR/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
+# Config through _jst_config.sh, the one reader (local overrides team, parsed,
+# never sourced).
+. "$SC_DIR/_jst_config.sh"
+jst_config_init "$ROOT"
+cfg() { jst_cfg "$@"; }
 
 # --- helpers the strategies share ---------------------------------------------
 
