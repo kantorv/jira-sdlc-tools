@@ -20,6 +20,7 @@ s_list() {
 # shared implementations in repos.sh need nothing from this strategy.
 s_prs()  { v_prs; }
 s_gate() { v_gate; }
+s_conflicts() { v_conflicts; }
 s_land() { v_land; }
 
 s_provision() { v_provision; }
