@@ -27,6 +27,7 @@
 
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_config.sh" # jst_cfg / jst_cred: the one config + credentials reader
 
 EX_OK=0; EX_ERR=1; EX_USAGE=2; EX_AUTH=3; EX_NOTFOUND=4
 EX_VALIDATION=5; EX_FORBIDDEN=6; EX_UNEXPECTED=7; EX_NOTRANSITION=8
@@ -64,19 +65,9 @@ EOF
 
 # ─── Layer 1: config resolution ─────────────────────────────────────────────
 
-# Same `NAME = value` parser + local-overrides-team precedence as
-# statuscheck.sh. Keep in sync; don't invent a second one.
-_cfg_dir=""
-_cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$_cfg_dir/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$_cfg_dir/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
+# Config and credentials come from _jst_config.sh, the one reader: plain keys
+# local-over-team, the credential group from one source (the project's own
+# .jst/, or a credential profile), never mixed per key.
 
 _urlenc() { jq -rn --arg v "$1" '$v|@uri'; }
 
@@ -91,10 +82,11 @@ _resolve_cred() {
     "")  die "$EX_USAGE" "--role is required — one of assigner|executor|reviewer" ;;
     *) die "$EX_USAGE" "role must be executor|assigner|reviewer (got '$_ROLE')" ;;
   esac
-  email=$(_cfg "${prefix}_EMAIL" || true)
-  token=$(_cfg "${prefix}_TOKEN" || true)
-  [ -n "$email" ] || die "$EX_ERR" "no email for role '$_ROLE' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env."
-  [ -n "$token" ] || die "$EX_ERR" "no token for role '$_ROLE' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)."
+  jst_cred_resolve || die "$EX_ERR" "$JST_CRED_ERR — $JST_CRED_FIX."
+  email=$(jst_cred "${prefix}_EMAIL" || true)
+  token=$(jst_cred "${prefix}_TOKEN" || true)
+  [ -n "$email" ] || die "$EX_ERR" "no email for role '$_ROLE' — set ${prefix}_EMAIL in $JST_CRED_WHERE."
+  [ -n "$token" ] || die "$EX_ERR" "no token for role '$_ROLE' — set ${prefix}_TOKEN in $JST_CRED_WHERE (raw API token value, not a path)."
   _CRED="$email:$token"
 }
 
@@ -113,9 +105,9 @@ _resolve_cloud_id() {
 _ready() {
   command -v curl >/dev/null 2>&1 || die "$EX_ERR" "curl is required but not installed."
   command -v jq   >/dev/null 2>&1 || die "$EX_ERR" "jq is required but not installed."
-  _cfg_dir=$(jst_root || true); _cfg_dir="${_cfg_dir:-$PWD}/.jst"
-  _SITE=$(_cfg JIRA_ACCOUNT_URL || true); _SITE="${_SITE#*://}"
-  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env."
+  jst_config_init
+  _SITE=$(jst_cfg JIRA_ACCOUNT_URL || true); _SITE="${_SITE#*://}"
+  [ -n "$_SITE" ] || die "$EX_ERR" "JIRA_ACCOUNT_URL is unset — set it in .jst/$JST_TEAM_ENV_NAME (the project's site; .jst/$JST_LOCAL_ENV_NAME may override it)."
   _resolve_cred
   _resolve_cloud_id
   _BASE="https://api.atlassian.com/ex/jira/$_CLOUD_ID/rest/api/3"

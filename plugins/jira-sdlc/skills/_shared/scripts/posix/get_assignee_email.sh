@@ -12,30 +12,23 @@
 # (Authenticating as a role is per-request in jira.sh --role <role>; the
 # executor's ownership gate is check_assignee.sh.)
 #
-# The env-file parser (`cfg`) is copied VERBATIM from statuscheck.sh — same
-# `NAME = value` grep, same local-overrides-team precedence. Keep them in sync.
+# Config through _jst_config.sh, the one reader: JIRA_EXECUTOR_EMAIL is a key
+# of the credential group, so it comes from the project's .jst/ or its profile.
 
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"   # jst_root: the project root, even from inside a member submodule
 
-CFG_DIR=$(jst_root || true)
-CFG_DIR="${CFG_DIR:-$PWD}/.jst"
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_config.sh"
+jst_config_init
 
-cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$CFG_DIR/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
-
-EMAIL=$(cfg JIRA_EXECUTOR_EMAIL || true)
+if ! jst_cred_resolve; then
+  printf '%s\n' "get_assignee_email: $JST_CRED_ERR — $JST_CRED_FIX, then rerun." >&2
+  exit 1
+fi
+EMAIL=$(jst_cred JIRA_EXECUTOR_EMAIL || true)
 
 if [ -z "$EMAIL" ]; then
-  printf '%s\n' "get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL in $CFG_DIR/jira-sdlc-tools.local.env, then rerun." >&2
+  printf '%s\n' "get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL in $JST_CRED_WHERE, then rerun." >&2
   exit 1
 fi
 

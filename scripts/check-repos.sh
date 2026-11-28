@@ -62,6 +62,7 @@ if [ -n "$PORTS" ] && ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 LAB=$(cd "$(mktemp -d)" && pwd -P)   # -P: git reports physical paths
+export XDG_CONFIG_HOME="$LAB/xdg-config"   # no machine default profile (JSW-37) reaches the fixtures
 cleanup() { rm -rf "$LAB"; }
 trap cleanup EXIT
 
@@ -156,6 +157,15 @@ else
   else
     gh_filt() { cat; }
   fi
+  # JSW-37 added the credentials row. The fixtures hold no credential at all, so
+  # against a base without it the row FAILs, and gh_auth and jira_auth say "fix
+  # the credentials row first" — by design; drop those from both sides. (The
+  # behaviour with credentials is check-credentials.sh's.)
+  if ! grep -q 'row credentials' "$LAB/old/$SCRIPTS/posix/statuscheck.sh"; then
+    cred_filt() { grep -vE '^\| (credentials|gh_auth) \||^- `(credentials|gh_auth|jira_auth)`:'; }
+  else
+    cred_filt() { cat; }
+  fi
 
   # Each run gets a freshly built fixture at the same path: statuscheck
   # provisions .jst/ in a worktree, so a second run would start from another state.
@@ -193,8 +203,8 @@ else
     # Allowed: the new table is the old one, plus exactly one repo_strategy row
     # when the base predates it (JST-322) — once the base has the row, nothing.
     local stack_none='^\| (stack_doc \| INFO \| no \.jst/STACK\.md|stack \| INFO \| no \./stack) '
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" | grep -Ev "$stack_none" | gh_filt > "$LAB/sc.new.base"
-    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" | grep -Ev "$stack_none" | gh_filt > "$LAB/sc.old.base"
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.new.out" | grep -Ev "$stack_none" | gh_filt | cred_filt > "$LAB/sc.new.base"
+    grep -v '^| repo_strategy | INFO | single' "$LAB/sc.old.out" | grep -Ev "$stack_none" | gh_filt | cred_filt > "$LAB/sc.old.base"
     added=$(( $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out") - $(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.old.out") ))
     if [ "$(grep -c '^| repo_strategy | INFO | single' "$LAB/sc.new.out")" = 1 ] && [ "$added" -ge 0 ] \
        && [ "$(grep -cE "$stack_none" "$LAB/sc.new.out")" = 2 ] \
@@ -310,7 +320,10 @@ case "$1" in
 esac
 GH
 chmod +x "$LAB/bin/gh"
+# The whole credential group (JSW-37: a partial set is refused), dummy values.
+FAKE_JIRA='JIRA_ASSIGNER_EMAIL=a@example.invalid\nJIRA_ASSIGNER_TOKEN=fake\nJIRA_EXECUTOR_EMAIL=e@example.invalid\nJIRA_EXECUTOR_TOKEN=fake\nJIRA_REVIEWER_EMAIL=r@example.invalid\nJIRA_REVIEWER_TOKEN=fake\n'
 sed -i 's/^GITHUB_PAT_TOKEN=.*/GITHUB_PAT_TOKEN=fake-token/' "$M/.jst/jira-sdlc-tools.local.env"
+printf '%b' "$FAKE_JIRA" >> "$M/.jst/jira-sdlc-tools.local.env"
 
 sc_rows() { # sc_rows <dir> <port> — the repo rows of statuscheck's table
   if [ "$2" = sh ]; then
@@ -379,7 +392,7 @@ git clone -q git@github.com:acme/parent.git "$L"
 mkdir -p "$L/.jst"
 printf 'PROJECT-KEY=XX\nDEFAULT_BASE_BRANCH=development\nPRODUCTION_BRANCH=main\nJST_MEMBERS = app server\n' > "$L/.jst/jira-sdlc-tools.env"
 printf 'jira-sdlc-tools.local.env\n' > "$L/.jst/.gitignore"
-printf 'JIRA_ACCOUNT_URL=example.atlassian.net\nGITHUB_PAT_TOKEN=fake-token\n' > "$L/.jst/jira-sdlc-tools.local.env"
+printf 'JIRA_ACCOUNT_URL=example.atlassian.net\nGITHUB_PAT_TOKEN=fake-token\n%b' "$FAKE_JIRA" > "$L/.jst/jira-sdlc-tools.local.env"
 git -C "$L" submodule add -q -b development git@github.com:acme/app.git app
 git -C "$L" submodule add -q -b development git@github.com:acme/server.git server
 git -C "$L" add .jst/.gitignore .jst/jira-sdlc-tools.env; git -C "$L" commit -qm "members"; git -C "$L" push -q origin development
@@ -450,7 +463,7 @@ withtok() { # withtok <dir> — the fake PAT gh.sh needs, in the dir's project r
   local r f; r=$(cd "$1" && bash -c ". '$HELPER'; jst_root") || return 0
   f="$r/.jst/jira-sdlc-tools.local.env"
   grep -q '^GITHUB_PAT_TOKEN=fake-token' "$f" 2>/dev/null && return 0
-  mkdir -p "$r/.jst"; printf 'GITHUB_PAT_TOKEN=fake-token\n' >> "$f"
+  mkdir -p "$r/.jst"; printf 'GITHUB_PAT_TOKEN=fake-token\n%b' "$FAKE_JIRA" >> "$f"
   printf '/.jst/jira-sdlc-tools.local.env\n' >> "$(git -C "$r" rev-parse --path-format=absolute --git-path info/exclude)"
 }
 rp() { # rp <port> <dir> <args…> — run repos with the fake gh; stdout, then exit=<rc>

@@ -7,7 +7,7 @@
 #
 # This is an INTEGRATION test: it hits a real Jira instance and creates/deletes
 # real issues, so it is NOT a CI test — it needs live credentials in
-# .jst/jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
+# the project's own .jst/ local env, or its credential profile. It runs as the `assigner` role (which can create);
 # override with $env:JIRA_TEST_ROLE.
 #
 # Usage:  pwsh -File jira.test.ps1
@@ -33,22 +33,9 @@ function NullStr { param($x) if ($null -eq $x) { 'null' } else { [string]$x } }
 
 # --- resolve config the same way jira.ps1 does (local overrides team) ---------
 . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the same root jira.ps1 reads its config from
-$cfgDir = Get-JstRoot
-if (-not $cfgDir) { $cfgDir = (Get-Location).Path }
-$cfgDir = Join-Path $cfgDir '.jst'
-function Cfg {
-    param([string]$Name)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $cfgDir $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*$Name\s*=(.*)$") { $val = $Matches[1].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
-}
+. (Join-Path $PSScriptRoot '_jst_config.ps1')   # Get-JstCfg: the one reader jira.ps1 uses too
+Initialize-JstConfig
+function Cfg { param([string]$Name) Get-JstCfg $Name }
 $PROJECT_KEY  = Cfg 'PROJECT_KEY'
 $IN_PROGRESS  = Cfg 'STATUS_IN_PROGRESS'; if (-not $IN_PROGRESS) { $IN_PROGRESS = 'In Progress' }
 $ASSIGN_EMAIL = Cfg 'JIRA_EXECUTOR_EMAIL'

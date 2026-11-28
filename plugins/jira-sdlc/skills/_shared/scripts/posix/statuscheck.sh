@@ -27,10 +27,11 @@
 #   nor jira-task-reviewer pass a key — both take no issue-key argument,
 #   so the branch is their sole source of truth for the key.
 #
-# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from
-# .jst/jira-sdlc-tools.env + .jst/jira-sdlc-tools.local.env under the repo root
-# (local overrides team; see ../project-config.md). The files use
-# `NAME = value` lines, so they are parsed, not sourced.
+# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH itself from the project's
+# .jst/ env files (local overrides team; see ../project-config.md) through
+# _jst_config.sh, the one reader, which also decides where the credentials come
+# from: the project's own .jst/, or a credential profile (the `credentials` row).
+# The files use `NAME = value` lines, so they are parsed, not sourced.
 #
 # Exit code: 0 = all required checks OK; 1 = at least one FAIL row;
 #            2 = usage error (bad/missing --role) — printed on stderr, no table.
@@ -86,6 +87,7 @@ ROLE_UC=$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')
 # first, because BASH_SOURCE may be a path relative to where it was started.
 SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || printf '%s' "$PWD")
 . "$SC_DIR/_jst_root.sh"
+. "$SC_DIR/_jst_config.sh"
 WT_ROOT=$(jst_root || true)
 [ -n "$WT_ROOT" ] && cd "$WT_ROOT"
 
@@ -167,16 +169,18 @@ else
     row jst_dir OK "$WT_ROOT/.jst"
   else
     row jst_dir FAIL "settings folder $WT_ROOT/.jst not found — the skills read their config only from there" \
-      "create .jst/ in the project root holding jira-sdlc-tools.env (team-shared, tracked) and jira-sdlc-tools.local.env (machine-specific, gitignored) — see skills/_shared/project-config.md — then $RERUN."
+      "create .jst/ in the project root holding $JST_TEAM_ENV_NAME (team-shared, tracked) and, unless a credential profile supplies the credentials, $JST_LOCAL_ENV_NAME (machine-specific, gitignored) — see skills/_shared/project-config.md — then $RERUN."
     print_report
     exit 1
   fi
 fi
 
-# --- mandatory .jst/jira-sdlc-tools.local.env gate (before any other check) -
-# .jst/jira-sdlc-tools.local.env is mandatory in every checkout — it holds the
-# Jira account URL/email + token the skills depend on. It's gitignored, so
-# a linked worktree (which shares tracked files only) is born without it.
+# --- the local env gate (before any other check) ----------------------------
+# The local env file (.jst/$JST_LOCAL_ENV_NAME) holds the project's own
+# credentials, when it has any, and machine-specific keys. It's gitignored, so
+# a linked worktree (which shares tracked files only) is born without it. With
+# a credential profile it is optional (JSW-37), and a worktree's copy carries
+# no credential.
 # The copy logic itself lives in exactly one place, ensure_local_env.sh —
 # every skill already calls it before its first jira.sh call, so by the time
 # statuscheck.sh runs here it's normally a no-op; delegate to it (rather
@@ -188,7 +192,7 @@ ENV_LOCAL_COPIED=""
 ENV_LOCAL_COPIED_FROM=""
 if [ -n "$WT_ROOT" ]; then
   PRE_EXISTED=""
-  [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ] && PRE_EXISTED=1
+  [ -f "$WT_ROOT/.jst/$JST_LOCAL_ENV_NAME" ] && PRE_EXISTED=1
   SCRIPT_DIR=$SC_DIR
   # Relay its stderr as the remedy rather than asserting a cause. It now fails
   # for three different reasons — nothing to copy, the path isn't ignored here,
@@ -197,12 +201,12 @@ if [ -n "$WT_ROOT" ]; then
   ELE_ERR=$(bash "$SCRIPT_DIR/ensure_local_env.sh" 2>&1 >/dev/null); ELE_RC=$?
   if [ "$ELE_RC" -ne 0 ]; then
     ELE_ERR=$(printf '%s' "$ELE_ERR" | tr '\n' ' ')
-    row env_local FAIL "ensure_local_env could not provision .jst/jira-sdlc-tools.local.env here" \
-      "${ELE_ERR:-create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $RERUN.}"
+    row env_local FAIL "ensure_local_env could not provision .jst/$JST_LOCAL_ENV_NAME here" \
+      "${ELE_ERR:-create .jst/$JST_LOCAL_ENV_NAME in the main checkout first (the credentials, or a credential profile named by JST_CREDENTIALS — see skills/_shared/project-config.md), then $RERUN.}"
     print_report
     exit 1
   fi
-  if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/.jst/jira-sdlc-tools.local.env" ]; then
+  if [ -z "$PRE_EXISTED" ] && [ -n "$IS_WORKTREE" ] && [ -f "$WT_ROOT/.jst/$JST_LOCAL_ENV_NAME" ]; then
     ENV_LOCAL_COPIED=1
     ENV_LOCAL_COPIED_FROM=$(jst_main_checkout "$WT_ROOT")
   fi
@@ -288,23 +292,15 @@ fi
 # Both settings files live in <repo-root>/.jst/ — the only location read.
 CFG_ROOT="${WT_ROOT:-$PWD}"
 CFG_DIR="$CFG_ROOT/.jst"
-cfg() { # cfg <NAME-PATTERN> -> value; jira-sdlc-tools.local.env overrides .env
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$CFG_DIR/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
+jst_config_init "$CFG_ROOT"
+cfg() { jst_cfg "$@"; }   # cfg <NAME-PATTERN> -> value (the local env overrides the team's)
 
 # both spellings occur in the wild: PROJECT_KEY (shell-sourceable env
 # files) and PROJECT-KEY (the token name in project-config.md's tables)
 PROJECT_KEY=$(cfg 'PROJECT[-_]KEY' || true)
 BASE_BRANCH=$(cfg DEFAULT_BASE_BRANCH || true)
 PRODUCTION_BRANCH=$(cfg PRODUCTION_BRANCH || true)
-if [ ! -f "$CFG_DIR/jira-sdlc-tools.env" ]; then
+if [ ! -f "$CFG_DIR/$JST_TEAM_ENV_NAME" ]; then
   # In a worktree the obvious remedy is the wrong one: hand-authoring a copy
   # here clears the row while leaving a second file that drifts from the main
   # checkout's (JST-301). ensure_local_env.sh already syncs this file across,
@@ -324,35 +320,51 @@ else
   row env_config OK "PROJECT-KEY=$PROJECT_KEY"
 fi
 
-# .jst/jira-sdlc-tools.local.env — machine-specific, holds the Jira account
-# URL/email + token the skills depend on. It is mandatory in every
-# checkout and gitignored (it points at secrets). Gitignored files aren't
-# shared with linked worktrees, so the gate above auto-copies it into a
-# worktree from the main checkout when missing — by the time we reach here
-# the file is present (or the gate has already halted on a worktree that
-# can't recover it). The main-checkout-missing path below still FAILs and
-# continues to the rest of the checks, unchanged from before the gate.
-if [ -f "$CFG_DIR/jira-sdlc-tools.local.env" ]; then
+# The local env — machine-specific, gitignored: the project's own credentials
+# when it has them, and keys such as WORKTREES_DIR. Gitignored files aren't
+# shared with linked worktrees, so the gate above copies it into a worktree from
+# the main checkout when missing (without the credential group when the project
+# uses a profile). Absent, it FAILs unless a credential profile supplies the
+# credentials (JSW-37): then it is optional. Whenever it exists, git must ignore it.
+LE=".jst/$JST_LOCAL_ENV_NAME"
+CRED_KIND=$(jst_cred_kind)
+if [ -f "$CFG_DIR/$JST_LOCAL_ENV_NAME" ]; then
   if [ -n "$ENV_LOCAL_COPIED" ]; then
     row env_local OK "auto-copied from main repo ($ENV_LOCAL_COPIED_FROM)"
   else
-    row env_local OK ".jst/jira-sdlc-tools.local.env present"
+    row env_local OK "$LE present"
   fi
   # Run git from the repo root and name the path under .jst/ — git resolves a
   # relative pathspec against its working directory, so the two must agree.
-  if git -C "$CFG_ROOT" ls-files --error-unmatch .jst/jira-sdlc-tools.local.env >/dev/null 2>&1; then
-    row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" \
-      "git rm --cached .jst/jira-sdlc-tools.local.env, add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
-  elif git -C "$CFG_ROOT" check-ignore -q .jst/jira-sdlc-tools.local.env 2>/dev/null; then
+  if git -C "$CFG_ROOT" ls-files --error-unmatch "$LE" >/dev/null 2>&1; then
+    row env_local_ignored FAIL "$LE is TRACKED by git — the account email and credential path are in shared history" \
+      "git rm --cached $LE, add a line '$JST_LOCAL_ENV_NAME' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
+  elif git -C "$CFG_ROOT" check-ignore -q "$LE" 2>/dev/null; then
     row env_local_ignored OK "gitignored (never committed)"
   else
-    row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" \
-      "add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $RERUN."
+    row env_local_ignored FAIL "$LE is NOT gitignored — committing it would leak the account email and credential path" \
+      "add a line '$JST_LOCAL_ENV_NAME' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $RERUN."
   fi
-else
-  row env_local FAIL "jira-sdlc-tools.local.env not found in $CFG_DIR" \
-    "create it in the project's .jst/ folder (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
+elif [ "$CRED_KIND" = profile ]; then
+  row env_local INFO "$JST_LOCAL_ENV_NAME absent — optional: the credentials come from a profile (see credentials)"
   row env_local_ignored INFO "skipped (file absent)"
+else
+  row env_local FAIL "$JST_LOCAL_ENV_NAME not found in $CFG_DIR" \
+    "create it in the project's .jst/ folder with the credentials (see skills/_shared/project-config.md) — don't copy a teammate's, it holds their token and account — or name a credential profile with JST_CREDENTIALS in .jst/$JST_TEAM_ENV_NAME."
+  row env_local_ignored INFO "skipped (file absent)"
+fi
+
+# Where the credential group comes from (_jst_config.sh): the project's own
+# .jst/, or a profile — named by JST_CREDENTIALS, or the machine default — that
+# passed the match check. The source only, never a value. FAIL on a partial
+# set, a missing or open profile, an owner mismatch, or no credentials at all:
+# every script refuses those too, so nothing would work past this row.
+CRED_OK=""
+if jst_cred_resolve; then
+  CRED_OK=1
+  row credentials OK "$(jst_cred_describe)"
+else
+  row credentials FAIL "$JST_CRED_ERR" "$JST_CRED_FIX, then $RERUN."
 fi
 
 # --- current branch (BR/BR_TAIL/BR_KEY parsed at the top) ------------------
@@ -414,8 +426,8 @@ fi
 # at once raced for the one session, and a failed login left gh logged out.
 # Every gh call in the skills and in repos.sh goes through gh.sh, so nothing
 # depends on a stored session, and a scheduled statuscheck changes nothing.
-# GITHUB_PAT_TOKEN is a secret, machine-specific value → the gitignored
-# .jst/jira-sdlc-tools.local.env only, same treatment as the Jira role tokens.
+# GITHUB_PAT_TOKEN is a secret, machine-specific value → a key of the credential
+# group, read through _jst_config.sh like the Jira role tokens.
 # A missing token or a rejected one FAILs, relaying the wrapper's or gh's first
 # stderr line (token redacted) so the actual error is named (JST-145 AC#3).
 GH_SH="$SC_DIR/gh.sh"
@@ -438,11 +450,15 @@ else
     [ -n "$GH_PAT" ] && ERR=${ERR//"$GH_PAT"/[REDACTED]}
     ERR=$(printf '%s' "$ERR" | awk 'NF{sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print; exit}')
     if [ "$GH_RC" -eq 4 ] && [ "${ERR#jst-gh: }" != "$ERR" ]; then
-      row gh_auth FAIL "${ERR#jst-gh: }" \
-        "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $RERUN."
+      if [ -n "$CRED_OK" ]; then
+        row gh_auth FAIL "${ERR#jst-gh: }" \
+          "add GITHUB_PAT_TOKEN to $JST_CRED_WHERE (a fine-grained GitHub PAT; see .jst/$JST_LOCAL_ENV_NAME.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $RERUN."
+      else
+        row gh_auth FAIL "${ERR#jst-gh: }" "fix the credentials row first, then $RERUN."
+      fi
     else
       row gh_auth FAIL "GET /user with GITHUB_PAT_TOKEN failed: ${ERR:-(no stderr from gh)}" \
-        "a connection or network error is usually transient: $RERUN. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
+        "a connection or network error is usually transient: $RERUN. Otherwise check that GITHUB_PAT_TOKEN in ${JST_CRED_WHERE:-the credentials} is a valid, non-expired GitHub PAT."
     fi
   fi
   rm -f "$GH_ERRF"
@@ -627,7 +643,7 @@ elif WHOAMI_JSON=$($TMOUT_CMD bash "$JIRA_SH" --role "$ROLE" whoami 2>/dev/null)
   row jira_auth OK "$ROLE authenticated as ${WHO:-unknown} (GET /myself)"
 else
   row jira_auth FAIL "the $ROLE Jira credential doesn't authenticate — 'jira --role $ROLE whoami' failed (unset/stale/invalid pair, or unreachable site)" \
-    "set a working JIRA_${ROLE_UC}_EMAIL + JIRA_${ROLE_UC}_TOKEN pair in .jst/jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $RERUN."
+    "$(if [ -n "$CRED_OK" ]; then printf 'set a working JIRA_%s_EMAIL + JIRA_%s_TOKEN pair in %s — see skills/_shared/jira-api-reference.md — then %s.' "$ROLE_UC" "$ROLE_UC" "$JST_CRED_WHERE" "$RERUN"; else printf 'fix the credentials row first, then %s.' "$RERUN"; fi)"
 fi
 
 # --- Jira project reachable ('jira.sh project exists' → GET /project/search) -
@@ -664,8 +680,9 @@ else
 fi
 
 # The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
-# It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
-# as the three role tokens and the GitHub PAT — so a skill that needed it had no
+# It belongs to the project (JSW-37: the tracked team env, which the local env
+# may override), but it long lived only beside the role tokens and the GitHub
+# PAT in the local env — so a skill that needed it had no
 # row to read and reached for the file instead, putting live credentials in the
 # transcript (JST-224). Printing the one non-secret value here removes the
 # reason to open that file at all. Value only: cfg() returns a single key, never
@@ -723,12 +740,12 @@ fi
 if [ -z "$WORKTREES_DIR" ]; then
   row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
 elif [ "$WD_MSYS" = yes ]; then
-  row worktrees_dir WARN "$WORKTREES_DIR is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(msys_to_drive "$WORKTREES_DIR")) in .jst/jira-sdlc-tools.local.env so both dispatch paths agree"
+  row worktrees_dir WARN "$WORKTREES_DIR is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(msys_to_drive "$WORKTREES_DIR")) in .jst/$JST_LOCAL_ENV_NAME so both dispatch paths agree"
 elif [ "$WD_ABSOLUTE" = yes ]; then
   if [ -d "$WORKTREES_DIR" ]; then
     row worktrees_dir INFO "$WORKTREES_DIR (present)"
   else
-    row worktrees_dir WARN "$WORKTREES_DIR missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
+    row worktrees_dir WARN "$WORKTREES_DIR missing — the assigner won't create it; check WORKTREES_DIR in .jst/$JST_LOCAL_ENV_NAME if the convention changed"
   fi
 else
   WD_ABS=$(CDPATH= cd -- "$WORKTREES_DIR" 2>/dev/null && pwd)
@@ -754,7 +771,7 @@ else
     fi
   fi
   row worktrees_dir FAIL "WORKTREES_DIR=$WORKTREES_DIR is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" \
-    "$(if [ -n "$WD_ABS" ]; then printf 'set WORKTREES_DIR=%s in .jst/jira-sdlc-tools.local.env' "$WD_ABS"; else printf 'set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. %s)' "$WD_EXAMPLE"; fi), then $RERUN."
+    "$(if [ -n "$WD_ABS" ]; then printf 'set WORKTREES_DIR=%s in .jst/$JST_LOCAL_ENV_NAME' "$WD_ABS"; else printf 'set WORKTREES_DIR in .jst/$JST_LOCAL_ENV_NAME to the absolute path of that directory (e.g. %s)' "$WD_EXAMPLE"; fi), then $RERUN."
 fi
 
 # .jst/bootstrap.sh (POSIX) / .jst/bootstrap.ps1 (Windows) is the optional,

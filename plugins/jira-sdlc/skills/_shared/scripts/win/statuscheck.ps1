@@ -15,9 +15,10 @@
 #   e.g. a role name passed positionally instead of via --role — is
 #   ignored, not compared.
 #
-# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from .jst/jira-sdlc-tools.env
-# + .jst/jira-sdlc-tools.local.env (local overrides team; `NAME = value` lines, parsed
-# not sourced), exactly as statuscheck.sh does.
+# Config: resolves PROJECT-KEY / DEFAULT_BASE_BRANCH from the project's .jst/ env
+# files through _jst_config.ps1, the one reader (local overrides team; `NAME = value`
+# lines, parsed not sourced), which also decides where the credentials come from
+# (the `credentials` row) — exactly as statuscheck.sh does.
 #
 # Exit code: 0 = all required checks OK; 1 = at least one FAIL row;
 #            2 = usage error (bad/missing --role) — printed on stderr, no table.
@@ -88,6 +89,9 @@ function Write-Report {
 # PRs that matter are the project's, not the member's (often a detached HEAD).
 # statuscheck takes no path arguments, so moving changes nothing else.
 . (Join-Path $PSScriptRoot '_jst_root.ps1')
+. (Join-Path $PSScriptRoot '_jst_config.ps1')
+$LeName = $script:JstLocalEnvName
+$TeName = $script:JstTeamEnvName
 $WtRoot = Get-JstRoot
 if ($WtRoot) { Set-Location -LiteralPath $WtRoot }
 
@@ -128,20 +132,21 @@ if (-not $WtRoot) {
         Add-Row jst_dir OK "$JstDir"
     } else {
         Add-Row jst_dir FAIL "settings folder $JstDir not found — the skills read their config only from there" `
-            "create .jst/ in the project root holding jira-sdlc-tools.env (team-shared, tracked) and jira-sdlc-tools.local.env (machine-specific, gitignored) — see skills/_shared/project-config.md — then $Rerun."
+            "create .jst/ in the project root holding $TeName (team-shared, tracked) and, unless a credential profile supplies the credentials, $LeName (machine-specific, gitignored) — see skills/_shared/project-config.md — then $Rerun."
         Write-Report
         exit 1
     }
 }
 
-# --- mandatory .jst/jira-sdlc-tools.local.env gate (before any other check) --
-# A linked worktree is born without the gitignored local.env; the copy logic
+# --- the local env gate (before any other check) ------------------------------
+# A linked worktree is born without the gitignored local env (optional with a
+# credential profile, JSW-37); the copy logic
 # lives only in ensure_local_env.ps1, so delegate to it (run as a child PowerShell so
 # its `exit` can't terminate us) rather than duplicating the copy.
 $EnvLocalCopied     = $false
 $EnvLocalCopiedFrom = ''
 if ($WtRoot) {
-    $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env')
+    $preExisted = Test-Path -LiteralPath (Join-Path $WtRoot ".jst/$LeName")
     $selfExe = if (Test-Path "$PSHOME\pwsh.exe" -PathType Leaf) { "$PSHOME\pwsh.exe" } else { "$PSHOME\powershell.exe" }
     # Relay its stderr as the remedy rather than asserting a cause. It now fails
     # for three different reasons — nothing to copy, the path isn't ignored here,
@@ -156,14 +161,14 @@ if ($WtRoot) {
     Remove-Item -LiteralPath $eleErrFile -Force -ErrorAction SilentlyContinue
     if ($eleRc -ne 0) {
         if (-not $eleErr) {
-            $eleErr = "create .jst/jira-sdlc-tools.local.env in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then $Rerun."
+            $eleErr = "create .jst/$LeName in the main checkout first (the credentials, or a credential profile named by JST_CREDENTIALS — see skills/_shared/project-config.md), then $Rerun."
         }
-        Add-Row env_local FAIL "ensure_local_env could not provision .jst/jira-sdlc-tools.local.env here" `
+        Add-Row env_local FAIL "ensure_local_env could not provision .jst/$LeName here" `
             $eleErr
         Write-Report
         exit 1
     }
-    if ((-not $preExisted) -and $IsWt -and (Test-Path -LiteralPath (Join-Path $WtRoot '.jst/jira-sdlc-tools.local.env'))) {
+    if ((-not $preExisted) -and $IsWt -and (Test-Path -LiteralPath (Join-Path $WtRoot ".jst/$LeName"))) {
         $EnvLocalCopied = $true
         $EnvLocalCopiedFrom = [string](Get-JstMainCheckout $WtRoot)
     }
@@ -229,24 +234,13 @@ if ($OS -eq 'windows') {
 # Both settings files live in <repo-root>/.jst/ — the only location read.
 $CfgRoot = if ($WtRoot) { $WtRoot } else { (Get-Location).Path }
 $CfgDir  = Join-Path $CfgRoot '.jst'
-function Get-Cfg {  # Get-Cfg <NAME-PATTERN> -> value; local.env overrides .env
-    param([string]$Pattern)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $CfgDir $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*($Pattern)\s*=(.*)$") { $val = $Matches[2].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
-}
+Initialize-JstConfig $CfgRoot
+function Get-Cfg { param([string]$Pattern) Get-JstCfg $Pattern }  # Get-Cfg <NAME-PATTERN> -> value (the local env overrides the team's)
 
 $ProjectKey       = Get-Cfg 'PROJECT[-_]KEY'
 $BaseBranch       = Get-Cfg 'DEFAULT_BASE_BRANCH'
 $ProductionBranch = Get-Cfg 'PRODUCTION_BRANCH'
-if (-not (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.env'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $CfgDir $TeName))) {
     # In a worktree the obvious remedy is the wrong one: hand-authoring a copy
     # here clears the row while leaving a second file that drifts from the main
     # checkout's (JST-301). ensure_local_env already syncs this file across, so
@@ -266,32 +260,48 @@ if (-not (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.env'))) {
     Add-Row env_config OK "PROJECT-KEY=$ProjectKey"
 }
 
-# --- .jst/jira-sdlc-tools.local.env ------------------------------------------
-if (Test-Path -LiteralPath (Join-Path $CfgDir 'jira-sdlc-tools.local.env')) {
+# --- the local env, and where the credentials come from ---------------------
+# As statuscheck.sh: absent, it FAILs unless a credential profile supplies the
+# credentials (then optional); whenever it exists, git must ignore it.
+$Le = ".jst/$LeName"
+$CredKind = Get-JstCredKind
+if (Test-Path -LiteralPath (Join-Path $CfgDir $LeName)) {
     if ($EnvLocalCopied) {
         Add-Row env_local OK "auto-copied from main repo ($EnvLocalCopiedFrom)"
     } else {
-        Add-Row env_local OK ".jst/jira-sdlc-tools.local.env present"
+        Add-Row env_local OK "$Le present"
     }
     # Run git from the repo root and name the path under .jst/ — git resolves a
     # relative pathspec against its working directory, so the two must agree.
-    & git -C $CfgRoot ls-files --error-unmatch .jst/jira-sdlc-tools.local.env *> $null
+    & git -C $CfgRoot ls-files --error-unmatch $Le *> $null
     $tracked = ($LASTEXITCODE -eq 0)
-    & git -C $CfgRoot check-ignore -q .jst/jira-sdlc-tools.local.env *> $null
+    & git -C $CfgRoot check-ignore -q $Le *> $null
     $ignored = ($LASTEXITCODE -eq 0)
     if ($tracked) {
-        Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is TRACKED by git — the account email and credential path are in shared history" `
-            "git rm --cached .jst/jira-sdlc-tools.local.env, add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
+        Add-Row env_local_ignored FAIL "$Le is TRACKED by git — the account email and credential path are in shared history" `
+            "git rm --cached $Le, add a line '$LeName' to .jst/.gitignore, and rotate the leaked Jira token before anything else."
     } elseif ($ignored) {
         Add-Row env_local_ignored OK "gitignored (never committed)"
     } else {
-        Add-Row env_local_ignored FAIL ".jst/jira-sdlc-tools.local.env is NOT gitignored — committing it would leak the account email and credential path" `
-            "add a line 'jira-sdlc-tools.local.env' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $Rerun."
+        Add-Row env_local_ignored FAIL "$Le is NOT gitignored — committing it would leak the account email and credential path" `
+            "add a line '$LeName' to .jst/.gitignore — the rule belongs inside .jst/, where jst-install puts it, so that copying the folder carries the protection with it — then $Rerun."
     }
-} else {
-    Add-Row env_local FAIL "jira-sdlc-tools.local.env not found in $CfgDir" `
-        "create it in the project's .jst/ folder (Jira URL/email/token — see skills/_shared/project-config.md); don't copy a teammate's, it holds their token and account."
+} elseif ($CredKind -eq 'profile') {
+    Add-Row env_local INFO "$LeName absent — optional: the credentials come from a profile (see credentials)"
     Add-Row env_local_ignored INFO "skipped (file absent)"
+} else {
+    Add-Row env_local FAIL "$LeName not found in $CfgDir" `
+        "create it in the project's .jst/ folder with the credentials (see skills/_shared/project-config.md) — don't copy a teammate's, it holds their token and account — or name a credential profile with JST_CREDENTIALS in .jst/$TeName."
+    Add-Row env_local_ignored INFO "skipped (file absent)"
+}
+
+# The credential group's one source (_jst_config.ps1), never a value.
+$CredOk = $false
+if (Resolve-JstCred) {
+    $CredOk = $true
+    Add-Row credentials OK (Get-JstCredDescribe)
+} else {
+    Add-Row credentials FAIL $script:JstCred.Err "$($script:JstCred.Fix), then $Rerun."
 }
 
 # --- current branch ----------------------------------------------------------
@@ -370,12 +380,17 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
             $err = (($ghErr -split "`r?`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1)
             $err = if ($err) { $err.Trim() } else { '' }
             if ($ghRc -eq 4 -and $err.StartsWith('jst-gh: ')) {
-                Add-Row gh_auth FAIL $err.Substring(8) `
-                    "add GITHUB_PAT_TOKEN to .jst/jira-sdlc-tools.local.env (a fine-grained GitHub PAT; see .jst/jira-sdlc-tools.local.env.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $Rerun."
+                if ($CredOk) {
+                    Add-Row gh_auth FAIL $err.Substring(8) `
+                        "add GITHUB_PAT_TOKEN to $($script:JstCred.Where) (a fine-grained GitHub PAT; see .jst/$LeName.example and https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login), then $Rerun."
+                } else {
+                    Add-Row gh_auth FAIL $err.Substring(8) "fix the credentials row first, then $Rerun."
+                }
             } else {
                 if (-not $err) { $err = '(no stderr from gh)' }
+                $credWhere = if ($script:JstCred.Where) { $script:JstCred.Where } else { 'the credentials' }
                 Add-Row gh_auth FAIL "GET /user with GITHUB_PAT_TOKEN failed: $err" `
-                    "a connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in .jst/jira-sdlc-tools.local.env is a valid, non-expired GitHub PAT."
+                    "a connection or network error is usually transient: $Rerun. Otherwise check that GITHUB_PAT_TOKEN in $credWhere is a valid, non-expired GitHub PAT."
             }
         }
     } finally {
@@ -598,7 +613,7 @@ if (-not $psExe) {
         Add-Row jira_auth OK "$Role authenticated as $(if ($who) { $who } else { 'unknown' }) (GET /myself)"
     } else {
         Add-Row jira_auth FAIL "the $Role Jira credential doesn't authenticate — 'jira --role $Role whoami' failed (unset/stale/invalid pair, or unreachable site)" `
-            "set a working JIRA_${RoleUc}_EMAIL + JIRA_${RoleUc}_TOKEN pair in .jst/jira-sdlc-tools.local.env — see skills/_shared/jira-api-reference.md — then $Rerun."
+            $(if ($CredOk) { "set a working JIRA_${RoleUc}_EMAIL + JIRA_${RoleUc}_TOKEN pair in $($script:JstCred.Where) — see skills/_shared/jira-api-reference.md — then $Rerun." } else { "fix the credentials row first, then $Rerun." })
     }
 }
 
@@ -637,8 +652,9 @@ if ((-not $BaseBranch) -or (-not $ProductionBranch)) {
 }
 
 # The Jira site domain, used to build browse links (https://<URL>/browse/<KEY>).
-# It lives only in the gitignored .jst/jira-sdlc-tools.local.env — the same file
-# as the three role tokens and the GitHub PAT — so a skill that needed it had no
+# It belongs to the project (JSW-37: the tracked team env, which the local env
+# may override), but long lived only beside the role tokens and the GitHub PAT
+# in the local env — so a skill that needed it had no
 # row to read and reached for the file instead, putting live credentials in the
 # transcript (JST-224). Printing the one non-secret value here removes the
 # reason to open that file at all. Value only: Get-Cfg returns a single key,
@@ -674,12 +690,12 @@ if ($OS -eq 'windows') {
 if (-not $WorktreesDir) {
     Add-Row worktrees_dir WARN "WORKTREES_DIR unset in .jst/jira-sdlc-tools(.local).env"
 } elseif ($wdMsys) {
-    Add-Row worktrees_dir WARN "$WorktreesDir is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(ConvertTo-DriveLetterPath $WorktreesDir)) in .jst/jira-sdlc-tools.local.env so both dispatch paths agree"
+    Add-Row worktrees_dir WARN "$WorktreesDir is MSYS-style — Git Bash resolves it, but Windows git and the PowerShell port don't; set the drive-letter form ($(ConvertTo-DriveLetterPath $WorktreesDir)) in .jst/$LeName so both dispatch paths agree"
 } elseif ($wdAbsolute) {
     if (Test-Path -LiteralPath $WorktreesDir -PathType Container) {
         Add-Row worktrees_dir INFO "$WorktreesDir (present)"
     } else {
-        Add-Row worktrees_dir WARN "$WorktreesDir missing — the assigner won't create it; check WORKTREES_DIR in .jst/jira-sdlc-tools.local.env if the convention changed"
+        Add-Row worktrees_dir WARN "$WorktreesDir missing — the assigner won't create it; check WORKTREES_DIR in .jst/$LeName if the convention changed"
     }
 } else {
     # Resolved from *here* for the remedy only, and only when it really names
@@ -700,9 +716,9 @@ if (-not $WorktreesDir) {
         }
     }
     $wdFix = if ($wdAbs) {
-        "set WORKTREES_DIR=$wdAbs in .jst/jira-sdlc-tools.local.env"
+        "set WORKTREES_DIR=$wdAbs in .jst/$LeName"
     } else {
-        "set WORKTREES_DIR in .jst/jira-sdlc-tools.local.env to the absolute path of that directory (e.g. $wdExample)"
+        "set WORKTREES_DIR in .jst/$LeName to the absolute path of that directory (e.g. $wdExample)"
     }
     Add-Row worktrees_dir FAIL "WORKTREES_DIR=$WorktreesDir is a relative path — it must be absolute (it resolves differently from a linked worktree than from the main checkout)" `
         "$wdFix, then $Rerun."

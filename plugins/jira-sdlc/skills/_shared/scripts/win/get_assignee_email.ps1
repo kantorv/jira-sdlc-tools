@@ -12,28 +12,18 @@
 
 . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
 
-$CfgDir = Get-JstRoot
-if (-not $CfgDir) { $CfgDir = (Get-Location).Path }
-$CfgDir = Join-Path $CfgDir '.jst'
+. (Join-Path $PSScriptRoot '_jst_config.ps1')   # the one reader: JIRA_EXECUTOR_EMAIL is a credential key
+Initialize-JstConfig
 
-function Get-Cfg {
-    param([string]$Pattern)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $CfgDir $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*($Pattern)\s*=(.*)$") { $val = $Matches[2].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
+
+if (-not (Resolve-JstCred)) {
+    [Console]::Error.WriteLine("get_assignee_email: $($script:JstCred.Err) — $($script:JstCred.Fix), then rerun.")
+    exit 1
 }
-
-$Email = Get-Cfg 'JIRA_EXECUTOR_EMAIL'
+$Email = Get-JstCred 'JIRA_EXECUTOR_EMAIL'
 
 if (-not $Email) {
-    [Console]::Error.WriteLine("get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL in $CfgDir/jira-sdlc-tools.local.env, then rerun.")
+    [Console]::Error.WriteLine("get_assignee_email: no assignee email — set JIRA_EXECUTOR_EMAIL in $($script:JstCred.Where), then rerun.")
     exit 1
 }
 

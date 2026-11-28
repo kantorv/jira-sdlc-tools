@@ -44,17 +44,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JIRA_SH="$SCRIPT_DIR/jira.sh"
 
 # --- config (site for the fixup URL) -----------------------------------------
-CFG_DIR=$(jst_root || printf '%s' "$PWD")/.jst
-cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$CFG_DIR/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
+. "$SCRIPT_DIR/_jst_config.sh"   # jst_cfg: the one config reader
+jst_config_init
+cfg() { jst_cfg "$@"; }
 SITE=$(cfg JIRA_ACCOUNT_URL || true); SITE="${SITE#*://}"
 
 # --- who is this role? (GET /myself via jira.sh) -----------------------------
@@ -63,7 +55,7 @@ SITE=$(cfg JIRA_ACCOUNT_URL || true); SITE="${SITE#*://}"
 # match but never distinguish "assigned to someone else" from "unassigned".
 # Every assignee object carries accountId, so compare on that.
 WHOAMI=$(bash "$JIRA_SH" --role "$ROLE" whoami 2>/dev/null) \
-  || die "check_assignee: could not authenticate as role '$ROLE' — check JIRA_$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')_EMAIL + _TOKEN in .jst/jira-sdlc-tools.local.env."
+  || die "check_assignee: could not authenticate as role '$ROLE' — check JIRA_$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')_EMAIL + _TOKEN in $(jst_cred_resolve && printf '%s' "$JST_CRED_WHERE" || printf 'the credentials (%s)' "$JST_CRED_ERR")."
 MY_ID=$(printf '%s' "$WHOAMI" | jq -r '.accountId // empty')
 ME=$(printf '%s' "$WHOAMI"   | jq -r '.emailAddress // .displayName // empty')
 [ -n "$MY_ID" ] || die "check_assignee: jira whoami returned no accountId for role '$ROLE'."

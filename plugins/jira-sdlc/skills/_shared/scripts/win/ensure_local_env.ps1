@@ -6,7 +6,8 @@
 # jira-sdlc-tools.env, jira-sdlc-tools.local.env — and refuses to write the
 # credential file unless git ignores that path here, so the three Jira role
 # tokens and the GitHub PAT it holds are never one `git add` from a commit
-# (JST-301).
+# (JST-301). With a credential profile (JSW-37) the copy leaves the credential
+# group out, and a main checkout with no local.env is no error.
 #
 # Usage: powershell -File ensure_local_env.ps1
 # Exit 0 — a linked worktree now has the .jst/ contract and an ignored
@@ -16,9 +17,9 @@
 #          not ignored here. Actionable remedy on stderr; no unignored
 #          credential file left behind.
 
-$LocalEnvName = 'jira-sdlc-tools.local.env'
-
 . (Join-Path $PSScriptRoot '_jst_root.ps1')
+. (Join-Path $PSScriptRoot '_jst_config.ps1')   # the credential group, and which source it has
+$LocalEnvName = $script:JstLocalEnvName
 
 # The project root, not the git toplevel: run from inside a member submodule,
 # the toplevel is the member, whose .git is a file too — read as a worktree, it
@@ -112,16 +113,38 @@ if ($LASTEXITCODE -ne 0) {
 
 if (Test-Path -LiteralPath $LocalEnv) { exit 0 }   # already present — don't overwrite
 
+# Which source the main checkout's credentials have: with a profile, the copy
+# leaves every key of the group out (an empty one included).
+$Kind = 'none'
+if ($MainRoot) { Initialize-JstConfig $MainRoot; $Kind = Get-JstCredKind }
+
 if ($MainRoot) {
     $src = Join-Path $MainRoot (Join-Path '.jst' $LocalEnvName)
     if (Test-Path -LiteralPath $src) {
-        try { Copy-Item -LiteralPath $src -Destination $LocalEnv -ErrorAction Stop } catch { }
-        if (Test-Path -LiteralPath $LocalEnv) {
-            Write-Output "ensure_local_env: copied .jst/$LocalEnvName from the main checkout ($MainRoot)."
-            exit 0
+        if ($Kind -eq 'profile') {
+            $credRe = '^\s*(' + ($script:JstCredKeys -join '|') + ')\s*='
+            try {
+                $keep = @(Get-Content -LiteralPath $src | Where-Object { $_ -notmatch $credRe })
+                Set-Content -LiteralPath $LocalEnv -Value $keep -ErrorAction Stop
+            } catch { }
+            if (Test-Path -LiteralPath $LocalEnv) {
+                Write-Output "ensure_local_env: copied .jst/$LocalEnvName from the main checkout ($MainRoot), without the credential group (the credentials come from a profile)."
+                exit 0
+            }
+        } else {
+            try { Copy-Item -LiteralPath $src -Destination $LocalEnv -ErrorAction Stop } catch { }
+            if (Test-Path -LiteralPath $LocalEnv) {
+                Write-Output "ensure_local_env: copied .jst/$LocalEnvName from the main checkout ($MainRoot)."
+                exit 0
+            }
         }
     }
 }
 
-[Console]::Error.WriteLine("ensure_local_env: .jst/$LocalEnvName missing here and not found in the main checkout either — create it in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then rerun.")
+if ($Kind -eq 'profile') {
+    Write-Output "ensure_local_env: no .jst/$LocalEnvName in the main checkout — none needed: the credentials come from a profile."
+    exit 0
+}
+
+[Console]::Error.WriteLine("ensure_local_env: .jst/$LocalEnvName missing here and not found in the main checkout either — create it in the main checkout first (the credentials, or name a credential profile with JST_CREDENTIALS — see skills/_shared/project-config.md), then rerun.")
 exit 1

@@ -93,20 +93,10 @@ $Root = Get-JstRoot
 if (-not $Root) { Stop-Usage 'not inside a git repository' }
 $CfgDir = Join-Path $Root '.jst'
 
-# Same `NAME = value` parser as the other scripts: local.env overrides .env.
-function Get-Cfg {
-    param([string]$Name)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $CfgDir $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*($Name)\s*=(.*)$") { $val = $Matches[2].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
-}
+# Config through _jst_config.ps1, the one reader (local overrides team).
+. (Join-Path $PSScriptRoot '_jst_config.ps1')
+Initialize-JstConfig $Root
+function Get-Cfg { param([string]$Name) Get-JstCfg $Name }
 
 # --- helpers the strategies share ---------------------------------------------
 
