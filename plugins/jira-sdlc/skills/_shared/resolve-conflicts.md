@@ -106,14 +106,22 @@ The recipes, applied first and named in the report:
   (`git -C <repo> update-index --cacheinfo 160000,<sha>,<path>`, and
   `git -C <repo>/<path> checkout --detach <sha>`), as `repos.sh land`'s
   gitlink step does.
-- **`migration-number:<path>`**: both sides added a numbered migration at the
-  same path. Renumber this branch's migration onto the base's latest leaf:
+- **`migration-number:<path>`**: this branch's numbered migration `<path>`
+  shares its number with one the other side added in the same folder: at the
+  same path (git conflicts on it), or under another name (`files` lists both,
+  and git merges them clean, leaving two leaves `migrate` refuses). Either
+  way, renumber this branch's migration onto the base's latest leaf:
   rename it to the next free number, point its `dependencies` at that leaf,
   and update any later migration of this branch that depends on it. If its
   number has already been applied somewhere shared (another instance's
   database, a deployed one), add a merge migration instead (the framework's
   own: Django's `makemigrations --merge`). Then check the merged tree for two
-  leaves with the same number in one app: a clean merge can leave that too.
+  leaves with the same number in one app. Once the base is merged, the gate
+  reads the second shape as clean whether you renumbered or not, so R7's
+  lifted gate doesn't prove this recipe. When the shape is a member's only
+  conflict, `sync` has already committed its merge: renumber, then
+  `git commit --amend` it with R6's message, so the repo keeps one merge
+  commit carrying the trailer.
 
 ## R5. Test the overlap, run the gates
 
