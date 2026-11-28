@@ -894,6 +894,37 @@ for port in sh ${PORTS:+ps}; do
     "$(printf 'phase=stop\nunknown=conflicts')"
   RP_PRE=""
   is "  …and a stop that is a decision says nothing of the kind$sfx" "$(rp $port "$W3" gate --multistep | grep -c '^unknown=')" "0"
+  # JSW-36: one migration number under two names, one per side. Git merges it clean; Django's migrate doesn't.
+  mig() { # mig <branch> <file…> — a root branch, and app's branch off origin/development adding to each file, pushed
+    local b="$1" f; shift; git -C "$MN" branch "$b"; git -C "$MN" push -q origin "$b"
+    git -C "$MN/app" fetch -q origin; git -C "$MN/app" switch -qc "$b" origin/development
+    for f; do mkdir -p "$MN/app/${f%/*}"; printf '%s\n' "$b" >> "$MN/app/$f"; git -C "$MN/app" add "$f"; done
+    git -C "$MN/app" commit -qm "$b migrations"; git -C "$MN/app" push -q origin "$b"; git -C "$MN/app" switch -q development
+  }
+  onbase() { # onbase <file…> — the base adds to each file
+    local f; git -C "$SC" pull -q origin development
+    for f; do mkdir -p "$SC/${f%/*}"; printf 'base\n' >> "$SC/$f"; git -C "$SC" add "$f"; done
+    git -C "$SC" commit -qm "base: migrations"; git -C "$SC" push -q origin HEAD
+  }
+  C4=feature/XX-17-mig-a; C5=feature/XX-18-mig-c
+  mig "$C4" shop/migrations/0002_a.py; mig "$C5" shop/migrations/0002_c.py; onbase shop/migrations/0002_b.py
+  W4="$LAB/$ns/W4"; git -C "$MN" worktree add -q "$W4" "$C4"; rp $port "$W4" provision >/dev/null
+  setprn "$ns" app "$C4" "27\tOPEN\tdevelopment\thttps://github.com/$ns/app/pull/27"
+  is "conflicts: 0002_a and the base's 0002_b in one folder are the migration-number recipe, ours named$sfx" \
+    "$(rp $port "$W4" conflicts --against "$C5" | grep '^app')" \
+    "$(printf 'app\torigin/development\tconflict\tshop/migrations/0002_a.py shop/migrations/0002_b.py\t-\tmigration-number:shop/migrations/0002_a.py\napp\t%s\tconflict\tshop/migrations/0002_a.py shop/migrations/0002_c.py\t-\tmigration-number:shop/migrations/0002_a.py' "$C5")"
+  is "gate: …a pause, naming both files, none sensitive$sfx" "$(rp $port "$W4" gate | sed -n '1,2p;5p')" \
+    "$(printf 'phase=conflict\nreason=conflicts with origin/development in app: shop/migrations/0002_a.py shop/migrations/0002_b.py\nsensitive=')"
+  C6=feature/XX-19-mig-apps; mig "$C6" blog/migrations/0003_x.py; onbase news/migrations/0003_z.py
+  is "conflicts: one number in two apps' folders is no conflict$sfx" "$(rp $port "$W4" conflicts --branch "$C6" | grep '^app')" \
+    "$(printf 'app\torigin/development\tbehind\t-\t-\t-')"
+  C7=feature/XX-20-mig-numbers; mig "$C7" shop/migrations/0005_y.py; onbase shop/migrations/0006_w.py
+  is "conflicts: two numbers in one folder are no conflict$sfx" "$(rp $port "$W4" conflicts --branch "$C7" | grep '^app')" \
+    "$(printf 'app\torigin/development\tbehind\t-\t-\t-')"
+  C8=feature/XX-21-mig-edit; mig "$C8" core/migrations/0002_ours.py; onbase core/migrations/0002_ours.py core/migrations/0002_other.py
+  is "conflicts: a migration the merge base has, only edited, is sensitive, never the recipe$sfx" \
+    "$(rp $port "$W4" conflicts --branch "$C8" | grep '^app')" \
+    "$(printf 'app\torigin/development\tconflict\tcore/migrations/0002_ours.py\tcore/migrations/0002_ours.py\t-')"
 
   # Member pointers (P16). Another issue's landing moved app's pointer on the root's base to A1;
   # this issue's app PR merged after it, so its merge commit MC contains A1.

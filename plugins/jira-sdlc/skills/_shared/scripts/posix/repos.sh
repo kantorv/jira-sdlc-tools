@@ -417,7 +417,7 @@ sensitive_path() {
 # file_marks <dir> <merge-base> <path> — "sensitive", "recipe <name>" or nothing, for a conflicted
 # file. The migration-number recipe: both sides added a numbered migration at the same path
 # (absent at the merge base), so renumbering one onto the other's leaf resolves it; any other
-# migration conflict is sensitive.
+# migration conflict is sensitive. The same number under two names merges clean: migration_clashes.
 file_marks() {
   case "$3" in
     migrations/[0-9][0-9][0-9][0-9]_*.py|*/migrations/[0-9][0-9][0-9][0-9]_*.py)
@@ -426,11 +426,28 @@ file_marks() {
   sensitive_path "$3" && echo sensitive
 }
 
+# added_migrations <dir> <merge-base> <side> — the numbered migrations <side> added since the merge base.
+added_migrations() {
+  git -C "$1" diff-tree -r --name-only --no-renames --diff-filter=A "$2" "$3" 2>/dev/null \
+    | grep -E '(^|/)migrations/[0-9]{4}_[^/]*\.py$'
+}
+
+# migration_clashes <dir> <merge-base> <ours> <theirs> — "ours\ttheirs" per pair of numbered migrations,
+# one added by each side since the merge base, in one folder under one number with two names (JSW-36).
+# Git merges them clean; Django's migrate then finds two leaves. The recipe renumbers ours, never theirs.
+migration_clashes() {
+  awk 'FILENAME == ARGV[1] { t[++n] = $0; next }
+       { k = $0; sub(/_[^\/]*$/, "", k)
+         for (i = 1; i <= n; i++) { j = t[i]; sub(/_[^\/]*$/, "", j); if (j == k && t[i] != $0) print $0 "\t" t[i] } }' \
+    <(added_migrations "$1" "$2" "$4") <(added_migrations "$1" "$2" "$3")
+}
+
 # classify <dir> <ours> <theirs> <base|other> — "result\tfiles\tsensitive\trecipe" for merging <theirs>
 # into <ours> (`-` for an empty column). GitHub doesn't look inside submodules: a pointer both sides
 # moved to different commits is a conflict there even when git fast-forwards it, so those are judged
 # here, not by merge-tree. sensitive: the conflicted files a human resolves; recipe: <recipe>:<path>
-# for the ones a mechanical recipe resolves (gitlink, migration-number).
+# for the ones a mechanical recipe resolves (gitlink, migration-number). One migration number
+# under two names, one per side, is a conflict too (both in files, ours the recipe's), though git merges it.
 classify() {
   local d="$1" ours="$2" theirs="$3" mb out mrc names moved p a b real="" links="" sens="" recipe="" m
   mb=$(git -C "$d" merge-base "$ours" "$theirs" 2>/dev/null) \
@@ -463,6 +480,13 @@ EOF
       recipe*)   recipe="${recipe:+$recipe }${m#recipe }:$p" ;;
     esac
   done
+  while IFS=$'\t' read -r a b; do   # the same number under two names: a conflict git doesn't see
+    [ -n "$a" ] || continue
+    for p in "$a" "$b"; do case " $real " in *" $p "*) ;; *) real="${real:+$real }$p" ;; esac; done
+    case " $recipe " in *" migration-number:$a "*) ;; *) recipe="${recipe:+$recipe }migration-number:$a" ;; esac
+  done <<EOF
+$(migration_clashes "$d" "$mb" "$ours" "$theirs")
+EOF
   for p in $links; do recipe="${recipe:+$recipe }gitlink:$p"; done
   if [ -n "$real" ]; then printf 'conflict\t%s\t%s\t%s\n' "$real${links:+ $links}" "${sens:--}" "${recipe:--}"
   elif [ -n "$links" ]; then printf 'gitlink\t%s\t-\t%s\n' "$links" "$recipe"
