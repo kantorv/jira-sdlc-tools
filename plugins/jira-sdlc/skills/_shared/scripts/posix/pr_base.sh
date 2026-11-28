@@ -116,17 +116,9 @@ if [ -n "$PARENT_KEY" ]; then
 fi
 
 # --- 4. the env default — top-level issues only ------------------------------
-CFG_DIR=$(jst_root || printf '%s' "$PWD")/.jst
-cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$CFG_DIR/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*($1)[[:space:]]*=" "$CFG_DIR/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-  done
-  return 1
-}
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_config.sh"   # jst_cfg: the one config reader
+jst_config_init
+cfg() { jst_cfg "$@"; }
 PR_BASE=$(cfg DEFAULT_BASE_BRANCH || true)
 if [ -n "$PR_BASE" ]; then emit "$PR_BASE" env-default; exit 0; fi
 

@@ -67,22 +67,10 @@ usage: jira.sh --role assigner|executor|reviewer <command>
 # ─── Layer 1: config resolution ─────────────────────────────────────────────
 
 . (Join-Path $PSScriptRoot '_jst_root.ps1')   # Get-JstRoot: the project root, even from inside a member submodule
+. (Join-Path $PSScriptRoot '_jst_config.ps1') # Get-JstCfg / Get-JstCred: the one config + credentials reader
 
-# Same `NAME = value` parser + local-overrides-team precedence as jira.sh's _cfg
-# (and statuscheck.ps1). Last match in a file wins.
-function Get-Cfg {
-    param([string]$Name)
-    foreach ($f in @('jira-sdlc-tools.local.env', 'jira-sdlc-tools.env')) {
-        $path = Join-Path $script:CFGDIR $f
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $val = $null
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ($line -match "^\s*($Name)\s*=(.*)$") { $val = $Matches[2].Trim() }
-        }
-        if ($val) { return $val }
-    }
-    return $null
-}
+# Config and credentials come from _jst_config.ps1, the one reader (as jira.sh).
+function Get-Cfg { param([string]$Name) Get-JstCfg $Name }
 
 function UrlEnc { param([string]$V) [uri]::EscapeDataString($V) }
 function JsonStr { param([string]$V) ConvertTo-Json -InputObject ([string]$V) -Compress }
@@ -101,9 +89,10 @@ function Resolve-Cred {
         'reviewer' { $prefix = 'JIRA_REVIEWER' }
         default    { Die $EX_USAGE "role must be executor|assigner|reviewer (got '$($script:ROLE)')" }
     }
-    $email = Get-Cfg "${prefix}_EMAIL"; $token = Get-Cfg "${prefix}_TOKEN"
-    if (-not $email) { Die $EX_ERR "no email for role '$($script:ROLE)' — set ${prefix}_EMAIL in .jst/jira-sdlc-tools.local.env." }
-    if (-not $token) { Die $EX_ERR "no token for role '$($script:ROLE)' — set ${prefix}_TOKEN in .jst/jira-sdlc-tools.local.env (raw API token value, not a path)." }
+    if (-not (Resolve-JstCred)) { Die $EX_ERR "$($script:JstCred.Err) — $($script:JstCred.Fix)." }
+    $email = Get-JstCred "${prefix}_EMAIL"; $token = Get-JstCred "${prefix}_TOKEN"
+    if (-not $email) { Die $EX_ERR "no email for role '$($script:ROLE)' — set ${prefix}_EMAIL in $($script:JstCred.Where)." }
+    if (-not $token) { Die $EX_ERR "no token for role '$($script:ROLE)' — set ${prefix}_TOKEN in $($script:JstCred.Where) (raw API token value, not a path)." }
     $script:CRED = "${email}:${token}"
 }
 
@@ -131,12 +120,10 @@ function Resolve-CloudId {
 }
 
 function Invoke-Ready {
-    $script:CFGDIR = Get-JstRoot
-    if (-not $script:CFGDIR) { $script:CFGDIR = (Get-Location).Path }
-    $script:CFGDIR = Join-Path $script:CFGDIR '.jst'
+    Initialize-JstConfig
     $u = Get-Cfg 'JIRA_ACCOUNT_URL'
     if ($u) { $script:SITE = $u -replace '^[^/]*//', '' } else { $script:SITE = '' }
-    if (-not $script:SITE) { Die $EX_ERR 'JIRA_ACCOUNT_URL is unset in .jst/jira-sdlc-tools.local.env.' }
+    if (-not $script:SITE) { Die $EX_ERR "JIRA_ACCOUNT_URL is unset — set it in .jst/$($script:JstTeamEnvName) (the project's site; .jst/$($script:JstLocalEnvName) may override it)." }
     Resolve-Cred
     Resolve-CloudId
     $script:BASE = "https://api.atlassian.com/ex/jira/$($script:CLOUD)/rest/api/3"

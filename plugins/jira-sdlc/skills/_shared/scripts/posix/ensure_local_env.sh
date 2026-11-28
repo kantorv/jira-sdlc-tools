@@ -29,6 +29,12 @@
 # ONLY place the copy logic lives; statuscheck.sh delegates here too for its
 # env_config / env_local / env_local_ignored rows rather than duplicating it.
 #
+# With a credential profile (JSW-37: the main checkout's .jst/ sets no key of
+# the credential group, and names a profile or the machine has a default), the
+# copy leaves the group out — a worktree never holds a token then — and a main
+# checkout with no local.env at all is no error: there is nothing it must hold.
+# A project with its own credentials is copied whole, as before.
+#
 # Usage: bash ensure_local_env.sh
 #
 # Exit 0 — a linked worktree now has the .jst/ contract and an ignored
@@ -37,16 +43,17 @@
 #          (nothing to copy; a main checkout genuinely missing the file is
 #          not this script's job — see statuscheck.sh's env_local row).
 # Exit 1 — a linked worktree has no local.env and the main checkout doesn't
-#          either, so there's nothing to copy; or git does not ignore the
+#          either, while no profile supplies the credentials, so there's
+#          nothing to copy; or git does not ignore the
 #          credential path here and the rule couldn't be established. Either
 #          way an actionable remedy goes to stderr, and no unignored
 #          credential file is left behind.
 
 set -u
 
-LOCAL_ENV_NAME=jira-sdlc-tools.local.env
-
 . "$(dirname "${BASH_SOURCE[0]}")/_jst_root.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/_jst_config.sh"   # the credential group, and which source it has
+LOCAL_ENV_NAME=$JST_LOCAL_ENV_NAME
 
 # The project root, not the git toplevel: run from inside a member submodule,
 # the toplevel is the member, whose .git is a file too — read as a worktree, it
@@ -125,12 +132,31 @@ fi
 
 [ -f "$JST_DIR/$LOCAL_ENV_NAME" ] && exit 0   # already present — don't overwrite
 
-if [ -n "$MAIN_ROOT" ] && [ -f "$MAIN_ROOT/.jst/$LOCAL_ENV_NAME" ] \
-   && cp "$MAIN_ROOT/.jst/$LOCAL_ENV_NAME" "$JST_DIR/$LOCAL_ENV_NAME" 2>/dev/null \
-   && [ -f "$JST_DIR/$LOCAL_ENV_NAME" ]; then
-  echo "ensure_local_env: copied .jst/$LOCAL_ENV_NAME from the main checkout ($MAIN_ROOT)."
+# 5. Which source the main checkout's credentials have. Only `project` puts the
+#    group in the file; with a profile the copy leaves every key of it out (an
+#    empty one included), so no token reaches the worktree even by mistake.
+KIND=none
+if [ -n "$MAIN_ROOT" ]; then jst_config_init "$MAIN_ROOT"; KIND=$(jst_cred_kind); fi
+
+if [ -n "$MAIN_ROOT" ] && [ -f "$MAIN_ROOT/.jst/$LOCAL_ENV_NAME" ]; then
+  if [ "$KIND" = profile ]; then
+    CRED_RE=$(printf '%s' "$JST_CRED_KEYS" | tr ' ' '|')
+    if ( umask 077; grep -vE "^[[:space:]]*($CRED_RE)[[:space:]]*=" "$MAIN_ROOT/.jst/$LOCAL_ENV_NAME" \
+           > "$JST_DIR/$LOCAL_ENV_NAME" 2>/dev/null; [ -f "$JST_DIR/$LOCAL_ENV_NAME" ] ); then
+      echo "ensure_local_env: copied .jst/$LOCAL_ENV_NAME from the main checkout ($MAIN_ROOT), without the credential group (the credentials come from a profile)."
+      exit 0
+    fi
+  elif cp "$MAIN_ROOT/.jst/$LOCAL_ENV_NAME" "$JST_DIR/$LOCAL_ENV_NAME" 2>/dev/null \
+       && [ -f "$JST_DIR/$LOCAL_ENV_NAME" ]; then
+    echo "ensure_local_env: copied .jst/$LOCAL_ENV_NAME from the main checkout ($MAIN_ROOT)."
+    exit 0
+  fi
+fi
+
+if [ "$KIND" = profile ]; then
+  echo "ensure_local_env: no .jst/$LOCAL_ENV_NAME in the main checkout — none needed: the credentials come from a profile."
   exit 0
 fi
 
-printf '%s\n' "ensure_local_env: .jst/$LOCAL_ENV_NAME missing here and not found in the main checkout either — create it in the main checkout first (Jira URL/email/token — see skills/_shared/project-config.md), then rerun." >&2
+printf '%s\n' "ensure_local_env: .jst/$LOCAL_ENV_NAME missing here and not found in the main checkout either — create it in the main checkout first (the credentials, or name a credential profile with JST_CREDENTIALS — see skills/_shared/project-config.md), then rerun." >&2
 exit 1

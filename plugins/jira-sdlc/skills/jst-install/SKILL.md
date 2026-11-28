@@ -56,8 +56,9 @@ create-if-missing or an overwrite of a value the user just confirmed, and
 
 | file | what's in it | what you may do |
 | -- | -- | -- |
-| `.jst/jira-sdlc-tools.env` | project key, branch names, the four status names — **committed, secret-free** | **Write it directly.** Create it, edit it, read it back freely |
-| `.jst/jira-sdlc-tools.local.env` | `WORKTREES_DIR`, `JIRA_ACCOUNT_URL`, **plus three Jira role tokens and a GitHub PAT** | **Never open it and never edit it.** Copy the `.example` into place when it's absent, then hand the user the key list and wait |
+| `.jst/jira-sdlc-tools.env` | project key, Jira site, branch names, the four status names, `JST_CREDENTIALS` — **committed, secret-free** | **Write it directly.** Create it, edit it, read it back freely |
+| `.jst/jira-sdlc-tools.local.env` | `WORKTREES_DIR`, **plus three Jira role tokens and a GitHub PAT** unless a profile supplies them | **Never open it and never edit it.** Copy the `.example` into place when it's absent, then hand the user the key list and wait |
+| a credential profile, `~/.config/jira-sdlc/profiles/<name>.env` | the same seven keys, shared by this machine's projects of one GitHub owner | **Never open it.** List the folder's file names, nothing more |
 
 One `cat` of the second file writes four live credentials into the transcript,
 and a redaction filter doesn't save you — `sed 's/=.*TOKEN.*/…/'` matches
@@ -95,7 +96,7 @@ purpose, and saying so keeps the user from chasing them:
 
 | section | rows this section settles (OK, or INFO where the row has no OK form) | rows still expected to fail |
 | -- | -- | -- |
-| 1 · tooling & scaffold | `jst_dir`, `env_local`, `env_local_ignored`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
+| 1 · tooling & scaffold | `jst_dir`, `env_local` (INFO when a profile replaces it), `env_local_ignored`, `credentials`, `platform` (OK on Windows, INFO on POSIX) | `env_config`, `gh_auth`, `gh_repo_access`, `jira_*` |
 | 2 · GitHub | `gh_auth`, `gh_repo_access`, `git_repo`, `base_branch`, `branch_pair`, `worktrees_dir`, `repo_strategy` (INFO for a single repo), `member_repo[…]` (one per `JST_MEMBERS` path; none for a single repo) | `jira_auth`, `jira_project` |
 | 3 · Jira | `env_config`, `jira_auth`, `jira_project` | — |
 | 4 · healthcheck | every row, for all three roles | — |
@@ -174,7 +175,20 @@ this the one safe write into that file; it ships inside `_shared/` rather than
 being read from the toolkit repo's own `.jst/` precisely so the path survives
 both install modes.
 
-**1c. Hand the file over.** Tell the user to open
+**Credentials: a profile, or the project's own.** List the machine's profiles
+by name (`ls ~/.config/jira-sdlc/profiles/`: names only, never contents). If
+one is for this repo's GitHub owner, offer it (AskUserQuestion); chosen, write
+`JST_CREDENTIALS=<name>` to `.jst/jira-sdlc-tools.env`, and in the copied
+local.env the user deletes the seven credential keys (any one left makes the
+project its own source). No profile yet: offer to start one, the user copying
+`${CLAUDE_PLUGIN_ROOT}/skills/_shared/templates/credential-profile.env.example`
+to `~/.config/jira-sdlc/profiles/<name>.env`, `chmod 600`, filled in by hand;
+the owner's next projects then need no tokens. The gate's `credentials` row
+names the source it reads, or why it refused one.
+
+**1c. Hand the file over.** Ask for their Cloud site (`your-site.atlassian.net`,
+no scheme) and write it to `.jst/jira-sdlc-tools.env` as `JIRA_ACCOUNT_URL`:
+the site is the project's, not a credential. Then tell the user to open
 `.jst/jira-sdlc-tools.local.env` in their editor and fill in, by hand:
 
 - `WORKTREES_DIR` — an **absolute** path, e.g. `/home/you/src/myapp-worktrees`,
@@ -184,7 +198,6 @@ both install modes.
   skill runs from, so the gate FAILs on one. On Windows, don't paste what Git
   Bash's `pwd` prints (`/c/Users/…`) — Windows git and the `win/` PowerShell
   ports can't resolve that form, and the gate WARNs on it
-- `JIRA_ACCOUNT_URL` — their Cloud site, `your-site.atlassian.net`, no scheme
 - `GITHUB_PAT_TOKEN` — a fine-grained PAT with **Contents: read/write** and
   **Pull requests: read/write** on this repo. Where to click:
   https://kantorv.github.io/jira-sdlc-tools/docs/gh-pat-session-login
@@ -195,6 +208,7 @@ both install modes.
   are required and there is no default account behind them; pointing all three
   roles at one Atlassian account is fine, just say so in all three pairs. Three
   separate accounts is what makes the board show who did what.
+- on a profile, none of those last seven: they are the profile's
 
 Then **wait** for them to say it's filled in, and don't run the gate before they
 do — it would only fail on the template's placeholders. You can't inspect their
@@ -203,8 +217,8 @@ work either (this is the file you don't open), which is why the `gh_auth` and
 never a `gh` login: the skills pass it per command through `gh.sh`, so the
 user's own `gh` session is left as it was.
 
-**1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local` and
-`env_local_ignored` OK; everything else red for now.
+**1d. Gate.** Run the gate. Expect `jst_dir`, `platform`, `env_local`,
+`env_local_ignored` and `credentials` OK; everything else red for now.
 
 ______________________________________________________________________
 
@@ -260,8 +274,8 @@ directory must exist before the assigner runs — it refuses to create one, so a
 missing directory is a first-run failure rather than a self-repair.
 
 **2d. Record both branches** in the team-shared file — this one you write
-yourself, so create `.jst/jira-sdlc-tools.env` now with the two confirmed
-names (section 3 adds the Jira half):
+yourself, so add the two confirmed names to `.jst/jira-sdlc-tools.env` (1c
+created it; section 3 adds the rest of the Jira half):
 
 ```
 DEFAULT_BASE_BRANCH=development

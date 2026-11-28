@@ -85,7 +85,7 @@ can't decide how statuscheck itself is run. It takes a required `--role reviewer
 - `<STATUS_*>` resolve from `.jst/jira-sdlc-tools.env` — the team-shared,
   committed, secret-free file, and the only one those names live in. Every
   other `<TOKEN>` comes off the Discovery healthcheck's rows. **Never dump
-  `.jst/jira-sdlc-tools.local.env`**: it holds all three role Jira API tokens
+  `.jst/jira-sdlc-tools.local.env`** or a profile: they hold the three Jira tokens
   and the GitHub PAT (`../_shared/project-config.md` § *Reading config
   safely*).
 

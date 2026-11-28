@@ -6,8 +6,8 @@
 # An EXIT trap deletes anything created even if an assertion aborts midway.
 #
 # This is an INTEGRATION test: it hits a real Jira instance and creates/deletes
-# real issues, so it is NOT a CI test — it needs live credentials in
-# .jst/jira-sdlc-tools.local.env. It runs as the `assigner` role (which can create);
+# real issues, so it is NOT a CI test — it needs live credentials (the
+# project's own .jst/ local env, or its credential profile). It runs as the `assigner` role (which can create);
 # override with JIRA_TEST_ROLE.
 #
 # Usage:  bash jira.test.sh
@@ -22,16 +22,9 @@ ROLE="${JIRA_TEST_ROLE:-assigner}"
 J() { bash "$JIRA_SH" --role "$ROLE" "$@"; }
 
 # --- resolve config the same way jira.sh does (local overrides team) ---------
-cfg_dir=$(jst_root || pwd)/.jst
-cfg() {
-  local f v
-  for f in jira-sdlc-tools.local.env jira-sdlc-tools.env; do
-    [ -f "$cfg_dir/$f" ] || continue
-    v=$(grep -E "^[[:space:]]*$1[[:space:]]*=" "$cfg_dir/$f" 2>/dev/null \
-        | tail -1 | sed -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//')
-    [ -n "$v" ] && { printf '%s' "$v"; return; }
-  done
-}
+. "$(dirname "$0")/_jst_config.sh"   # jst_cfg: the one reader jira.sh uses too
+jst_config_init
+cfg() { jst_cfg "$@"; }
 PROJECT_KEY=$(cfg PROJECT_KEY)
 IN_PROGRESS=$(cfg STATUS_IN_PROGRESS); IN_PROGRESS="${IN_PROGRESS:-In Progress}"
 ASSIGN_EMAIL=$(cfg JIRA_EXECUTOR_EMAIL)
