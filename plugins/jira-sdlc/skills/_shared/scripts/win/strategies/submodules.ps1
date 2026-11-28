@@ -69,6 +69,8 @@ function s_prs { v_prs }
 
 function s_gate { v_gate }   # --multistep stops there, once a member takes part
 
+function s_conflicts { v_conflicts }
+
 function s_land { v_land }
 
 function s_provision { v_provision }

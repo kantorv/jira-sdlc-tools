@@ -30,17 +30,47 @@
 #             empty answer is asked twice before it counts as none.
 #   gate      the phase of --branch's PR set — key=value lines (phase, reason,
 #             root, members), then the prs table. phase is one of: none,
-#             review, land, review-landing, merged, stop (reason says why).
-#             --base is the root PR's expected base (default
+#             review, land, review-landing, conflict, merged, stop (reason
+#             says why). --base is the root PR's expected base (default
 #             DEFAULT_BASE_BRANCH); a member's is its own base. --multistep:
 #             the issue has Jira sub-tasks — phase=stop once a member takes
 #             part (a PR, or commits pushed); workspace-only reads as one repo.
+#             conflict replaces review, land and review-landing (each would
+#             start a review or a merge) when --branch conflicts with its base
+#             in the root or in a member whose PR is open — the conflicts
+#             verb's `conflict` against the base; reason names the repo and
+#             files. A `gitlink` result isn't a pause (land fixes it), and the
+#             gate takes no --against: two open branches conflicting is a
+#             warning, read with conflicts. merged and stop keep theirs; an
+#             unreadable conflict check is stop (unknown is not none), except a
+#             git older than 2.38, which leaves the phase as it is and says so.
+#   conflicts does --branch merge with its base, and with each --against
+#             branch? A dry run (git merge-tree --write-tree: no worktree or
+#             index touched) of origin/--branch against origin/<base> (after a
+#             fetch) and against each origin/--against, in each repo of the
+#             set — tab-separated, with a header: repo against result files.
+#             against is origin/<base> or the other branch; files are
+#             space-separated, `-` when none, an error's reason for `error`.
+#             result: clean (merges clean; against the base, it also contains
+#             it), behind (against the base only: merges clean, lacks it),
+#             conflict (the files named), gitlink (the only conflicted paths
+#             are member pointers, one side's commit containing the other's:
+#             git fast-forwards them, GitHub calls it a conflict), error (git
+#             older than 2.38, a fetch failure, a branch missing from the root's
+#             origin, a member not checked out — never clean). A member whose
+#             origin lacks --branch takes no part (no rows), and an --against
+#             branch a member's origin lacks is no row either. --against may be
+#             repeated, or list several (space- or comma-separated).
 #   land      move each member's gitlink to its merged PR's commit on the
 #             member's base, commit, push and open (or reuse) the root's PR.
 #             Run from the issue worktree, on --branch. Checks everything
 #             before it changes anything. --title (required) is the new PR's
 #             title — the issue's, like its member PRs'; a reused PR keeps
-#             its own. --check instead verifies the
+#             its own. Before the push, when the root's merge with --base
+#             conflicts only by gitlink (two landings moved the same member
+#             pointer: P16), it merges --base in, keeps per pointer the commit
+#             that contains both sides, commits, and prints base_merged=<paths>.
+#             --check instead verifies the
 #             gitlinks --branch carries: each on its member's base, and
 #             .gitmodules unchanged against --base.
 #   provision put each member whose issue branch (--branch) is on its origin
@@ -85,7 +115,8 @@
 # Exit 2 — usage error (message on stderr, nothing on stdout), or JST_MEMBERS
 #          is invalid: stdout then ends with an `error=<reason>` line, which
 #          statuscheck's repo_strategy row relays.
-# Exit 4 — prs couldn't look up at least one repo: unknown, never none.
+# Exit 4 — prs couldn't look up at least one repo, or conflicts couldn't read
+#          at least one row (an `error` row): unknown, never none.
 #
 # win/repos.ps1 is the twin: same arguments, output and exit codes.
 
@@ -95,18 +126,20 @@ SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die_usage() { printf '%s\n' "repos: $1" >&2; exit 2; }
 
-VERBS="strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check"
+VERBS="strategy, list, prs, gate, conflicts, land, provision, sync, push, open-prs, remove-check"
 VERB="${1:-}"
 case "$VERB" in
-  strategy|list|prs|gate|land|provision|sync|push|open-prs|remove-check) shift ;;
+  strategy|list|prs|gate|conflicts|land|provision|sync|push|open-prs|remove-check) shift ;;
   "") die_usage "a verb is required — one of: $VERBS" ;;
   *)  die_usage "unknown verb '$VERB' — one of: $VERBS" ;;
 esac
-OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP="" OPT_ADD="" OPT_TITLE="" OPT_BODY=""
+OPT_BRANCH="" OPT_STATE=all OPT_BASE="" OPT_CHECK="" OPT_MULTISTEP="" OPT_ADD="" OPT_TITLE="" OPT_BODY="" OPT_AGAINST=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch)    OPT_BRANCH="${2:-}"; shift 2 ;;
     --branch=*)  OPT_BRANCH="${1#--branch=}"; shift ;;
+    --against)   OPT_AGAINST="$OPT_AGAINST ${2:-}"; shift 2 ;;
+    --against=*) OPT_AGAINST="$OPT_AGAINST ${1#--against=}"; shift ;;
     --state)     OPT_STATE="${2:-}"; shift 2 ;;
     --state=*)   OPT_STATE="${1#--state=}"; shift ;;
     --base)      OPT_BASE="${2:-}"; shift 2 ;;
@@ -123,6 +156,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$OPT_STATE" in all|open) ;; *) die_usage "--state must be all or open (got '$OPT_STATE')" ;; esac
+OPT_AGAINST=$(printf '%s' "$OPT_AGAINST" | tr ',' ' ' | xargs 2>/dev/null || true)
+[ -z "$OPT_AGAINST" ] || [ "$VERB" = conflicts ] || die_usage "--against is for conflicts only"
 
 ROOT=$(jst_root) || die_usage "not inside a git repository"
 CFG_DIR="$ROOT/.jst"
@@ -305,6 +340,157 @@ takes_part() {
   if [ "${ahead:-0}" -gt 0 ]; then echo pushed; else echo no; fi
 }
 
+# --- conflicts (and the gate's pause) ---------------------------------------------
+# Dry-run merges with git merge-tree --write-tree (git ≥ 2.38): nothing in a
+# worktree or an index moves. Only git runs here, no GitHub API.
+
+CONFLICTS_HEADER=$(printf 'repo\tagainst\tresult\tfiles')
+ZERO_SHA=0000000000000000000000000000000000000000
+
+git_version() { git version 2>/dev/null | awk '{ print $3 }'; }
+merge_tree_ok() {   # git has merge-tree --write-tree (2.38)
+  local v maj min
+  v=$(git_version); maj=${v%%.*}; min=${v#*.}; min=${min%%.*}
+  case "$maj" in ''|*[!0-9]*) return 1 ;; esac
+  case "$min" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$maj" -gt 2 ] || { [ "$maj" -eq 2 ] && [ "$min" -ge 38 ]; }
+}
+
+# gitlinks_moved <dir> <from> <to> — "path\tsha" per member pointer <to> changed since <from>.
+gitlinks_moved() {
+  git -C "$1" diff --raw --no-abbrev --no-renames "$2" "$3" 2>/dev/null \
+    | awk -F'\t' '{ split($1, m, " "); if (m[1] == ":160000" || m[2] == "160000") print $2 "\t" m[4] }'
+}
+
+# contains_other <member-dir> <a> <b> — one commit contains the other (a fast-forward), read in the member.
+contains_other() {
+  [ "$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" = "$1" ] || return 1
+  [ "$2" != "$ZERO_SHA" ] && [ "$3" != "$ZERO_SHA" ] || return 1   # a pointer removed is a real conflict
+  if ! git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null || ! git -C "$1" cat-file -e "$3^{commit}" 2>/dev/null; then
+    git -C "$1" fetch -q origin 2>/dev/null
+  fi
+  git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || git -C "$1" merge-base --is-ancestor "$3" "$2" 2>/dev/null
+}
+
+# classify <dir> <ours> <theirs> <base|other> — "result\tfiles" for merging <theirs> into <ours>.
+# GitHub doesn't look inside submodules: a pointer both sides moved to different commits is a
+# conflict there even when git fast-forwards it, so those are judged here, not by merge-tree.
+classify() {
+  local d="$1" ours="$2" theirs="$3" mb out mrc names moved p a b real="" links=""
+  mb=$(git -C "$d" merge-base "$ours" "$theirs" 2>/dev/null) \
+    || { printf 'error\t%s and %s have no common history\n' "${ours#refs/remotes/}" "${theirs#refs/remotes/}"; return; }
+  out=$(git -C "$d" merge-tree --write-tree --name-only --no-messages "$ours" "$theirs" 2>"$ERRF"); mrc=$?
+  case "$mrc" in
+    0) names="" ;;
+    1) names=$(printf '%s\n' "$out" | tail -n +2 | awk 'NF') ;;
+    *) printf 'error\tgit merge-tree failed: %s\n' "$(awk 'NF{print; exit}' "$ERRF")"; return ;;
+  esac
+  moved=$(awk -F'\t' 'NR == FNR { if (NF) o[$1] = $2; next } NF && ($1 in o) && o[$1] != $2 { print $1 "\t" o[$1] "\t" $2 }' \
+            <(gitlinks_moved "$d" "$mb" "$ours") <(gitlinks_moved "$d" "$mb" "$theirs"))
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    printf '%s\n' "$moved" | cut -f1 | grep -qxF -- "$p" && continue   # a pointer: judged below
+    real="${real:+$real }$p"
+  done <<EOF
+$names
+EOF
+  while IFS=$'\t' read -r p a b; do
+    [ -n "$p" ] || continue
+    if contains_other "$d/$p" "$a" "$b"; then links="${links:+$links }$p"; else real="${real:+$real }$p"; fi
+  done <<EOF
+$moved
+EOF
+  if [ -n "$real" ]; then printf 'conflict\t%s\n' "$real"
+  elif [ -n "$links" ]; then printf 'gitlink\t%s\n' "$links"
+  elif [ "$4" = base ] && ! git -C "$d" merge-base --is-ancestor "$theirs" "$ours" 2>/dev/null; then printf 'behind\t-\n'
+  else printf 'clean\t-\n'; fi
+}
+
+# conflict_rows <repos, space-separated; empty = every repo> <against…> — the conflicts
+# table's rows (no header) into CROWS; returns 4 when a row is an `error`. CF_OLD_GIT is set
+# when git can't dry-run a merge at all.
+CROWS="" CF_OLD_GIT=""
+conflict_rows() {
+  local only="$1" against="$2" set repo slug base role dir heads a res rc=0 lsr
+  CROWS="" CF_OLD_GIT=""
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  merge_tree_ok || CF_OLD_GIT=$(git_version)
+  row() { CROWS="$CROWS$1	$2	$3	$4
+"; }
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    if [ -n "$only" ]; then case " $only " in *" $repo "*) ;; *) continue ;; esac; fi
+    dir="$ROOT"; [ "$repo" = . ] || dir="$ROOT/$repo"
+    if [ -n "$CF_OLD_GIT" ]; then
+      row "$repo" "origin/$base" error "git ${CF_OLD_GIT:-unknown} has no merge-tree --write-tree (needs 2.38 or later)"; rc=4; continue
+    fi
+    if [ "$repo" != . ] && [ "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" != "$dir" ]; then
+      row "$repo" "origin/$base" error "not checked out here, so it can't be read"; rc=4; continue
+    fi
+    # One look at origin's branches, then one fetch of those that exist.
+    if ! lsr=$($TMOUT_CMD git -C "$dir" ls-remote --heads origin 2>"$ERRF"); then
+      row "$repo" "origin/$base" error "can't read origin's branches: $(awk 'NF{print; exit}' "$ERRF")"; rc=4; continue
+    fi
+    heads=" $(printf '%s\n' "$lsr" | awk -F'\t' '{ sub("^refs/heads/", "", $2); print $2 }' | paste -sd' ' -) "
+    has() { case "$heads" in *" $1 "*) return 0 ;; esac; return 1; }
+    if ! has "$OPT_BRANCH"; then
+      [ "$repo" = . ] || continue   # a member without the issue branch takes no part
+      row "$repo" "origin/$base" error "origin has no $OPT_BRANCH"; rc=4; continue
+    fi
+    local refspecs="+refs/heads/$OPT_BRANCH:refs/remotes/origin/$OPT_BRANCH"
+    has "$base" && refspecs="$refspecs +refs/heads/$base:refs/remotes/origin/$base"
+    for a in $against; do has "$a" && refspecs="$refspecs +refs/heads/$a:refs/remotes/origin/$a"; done
+    # shellcheck disable=SC2086  # a deliberate list of refspecs
+    if ! $TMOUT_CMD git -C "$dir" fetch -q origin $refspecs 2>"$ERRF"; then
+      row "$repo" "origin/$base" error "fetch failed: $(awk 'NF{print; exit}' "$ERRF")"; rc=4; continue
+    fi
+    if has "$base"; then
+      res=$(classify "$dir" "refs/remotes/origin/$OPT_BRANCH" "refs/remotes/origin/$base" base)
+      row "$repo" "origin/$base" "${res%%	*}" "${res#*	}"; [ "${res%%	*}" = error ] && rc=4
+    else
+      row "$repo" "origin/$base" error "origin has no $base"; rc=4
+    fi
+    for a in $against; do
+      [ "$a" != "$OPT_BRANCH" ] || continue
+      if ! has "$a"; then
+        [ "$repo" = . ] || continue   # the other issue doesn't touch this member
+        row "$repo" "$a" error "origin has no $a"; rc=4; continue
+      fi
+      res=$(classify "$dir" "refs/remotes/origin/$OPT_BRANCH" "refs/remotes/origin/$a" other)
+      row "$repo" "$a" "${res%%	*}" "${res#*	}"; [ "${res%%	*}" = error ] && rc=4
+    done
+  done <<EOF
+$set
+EOF
+  return "$rc"
+}
+
+v_conflicts() {
+  local rc
+  need_branch
+  conflict_rows "" "$OPT_AGAINST"; rc=$?
+  printf '%s\n%s' "$CONFLICTS_HEADER" "$CROWS"
+  exit "$rc"
+}
+
+# gate_go <phase> <reason> <root> <members> <repos to check> — the gate's answer for a phase that
+# would start a review or a merge: phase=conflict instead when a repo conflicts with its base.
+gate_go() {
+  local crc said
+  conflict_rows "$5" ""; crc=$?
+  if [ -n "$CF_OLD_GIT" ]; then
+    gate_out "$1" "$2 (conflicts not checked: git $CF_OLD_GIT has no merge-tree --write-tree, needs 2.38)" "$3" "$4"
+  fi
+  if [ "$crc" -ne 0 ]; then
+    said=$(printf '%s' "$CROWS" | awk -F'\t' '$3 == "error" { print $1 ": " $4; exit }')
+    gate_out stop "conflicts unknown for $said — unknown is not none" "$3" "$4"
+  fi
+  said=$(printf '%s' "$CROWS" | awk -F'\t' '$3 == "conflict" {
+           printf "%sconflicts with %s in %s: %s", sep, $2, ($1 == "." ? "the root" : $1), $4; sep = "; " }')
+  [ -n "$said" ] && gate_out conflict "$said" "$3" "$4"
+  gate_out "$1" "$2" "$3" "$4"
+}
+
 v_gate() {
   local prsout rc set repo slug base role eff word root="none" root_n="" stop="" open_m="" merged_m="" n_part=0 tp m_part=""
   need_branch
@@ -354,19 +540,21 @@ EOF
   if [ "$n_part" -eq 0 ]; then   # the root is the only repo with work: today's single-step check
     case "$root" in
       none)   gate_out none "no PR on $OPT_BRANCH in any repo" "$root" "$members" ;;
-      open)   gate_out review "PR #$root_n open" "$root" "$members" ;;
+      open)   gate_go review "PR #$root_n open" "$root" "$members" . ;;
       merged) gate_out merged "PR #$root_n merged" "$root" "$members" ;;
     esac
   fi
+  # The pause checks the repos whose merge is still ahead: the root, and each member whose PR is
+  # open (a merged member's branch is in its base already, squashed or not).
   if [ -n "$open_m" ]; then
     case "$root" in
-      none) gate_out review "member PRs open: $open_m${merged_m:+ (merged: $merged_m)}" "$root" "$members" ;;
+      none) gate_go review "member PRs open: $open_m${merged_m:+ (merged: $merged_m)}" "$root" "$members" ". $open_m" ;;
       *)    gate_out stop "the root PR #$root_n is $root while member PRs are still open ($open_m) — it lands only after they merge" "$root" "$members" ;;
     esac
   fi
   case "$root" in
-    none)   gate_out land "every member PR is merged ($merged_m); no root PR yet — land it" "$root" "$members" ;;
-    open)   gate_out review-landing "root PR #$root_n open; every member PR is merged ($merged_m)" "$root" "$members" ;;
+    none)   gate_go land "every member PR is merged ($merged_m); no root PR yet — land it" "$root" "$members" . ;;
+    open)   gate_go review-landing "root PR #$root_n open; every member PR is merged ($merged_m)" "$root" "$members" . ;;
     merged) gate_out merged "root PR #$root_n merged" "$root" "$members" ;;
   esac
 }
@@ -459,6 +647,7 @@ EOF
   if ! git -C "$ROOT" diff --cached --quiet; then
     git -C "$ROOT" commit -q -m "$key: land $landed" -m "$body" || land_fail "the landing commit failed"
   fi
+  gitlink_step
   git -C "$ROOT" -c push.recurseSubmodules=check push -q -u origin "$OPT_BRANCH" 2>"$ERRF" \
     || land_fail "committed locally, but the push failed: $(awk 'NF{print; exit}' "$ERRF")"
   case "$root_eff" in
@@ -473,8 +662,42 @@ Jira: https://$jurl/browse/$key}" > "$ERRF.body"
       rm -f "$ERRF.body"
       [ -n "$url" ] || land_fail "landed and pushed, but opening the root PR failed: $(awk 'NF{print; exit}' "$ERRF")" ;;
   esac
-  printf 'landed=%s\ncommit=%s\npr=%s\n' "$landed" "$(git -C "$ROOT" rev-parse HEAD)" "$url"
+  printf 'landed=%s\n' "$landed"
+  [ -z "$BASE_MERGED" ] || printf 'base_merged=%s\n' "$BASE_MERGED"
+  printf 'commit=%s\npr=%s\n' "$(git -C "$ROOT" rev-parse HEAD)" "$url"
   exit 0
+}
+
+# gitlink_step — the landing's own fix for P16: two landings moved the same member pointer, so
+# GitHub calls the root's merge with its base a conflict, though git fast-forwards it. When that
+# is the root's only conflict, merge the base in and keep, per pointer, the commit that contains
+# both sides (BASE_MERGED: the paths). Anything else is left as it is: a real conflict is the
+# gate's pause, and an unreadable one changes nothing here.
+BASE_MERGED=""
+gitlink_step() {
+  local res paths p ours theirs keep base_ref="refs/remotes/origin/$ROOT_BASE"
+  merge_tree_ok || return 0
+  git -C "$ROOT" fetch -q origin "+refs/heads/$ROOT_BASE:$base_ref" 2>/dev/null || return 0
+  res=$(classify "$ROOT" HEAD "$base_ref" base)
+  [ "${res%%	*}" = gitlink ] || return 0
+  paths=${res#*	}
+  git -C "$ROOT" merge -q --no-commit --no-ff "$base_ref" >/dev/null 2>&1   # it may stop at the pointers
+  for p in $paths; do
+    ours=$(git -C "$ROOT" rev-parse "HEAD:$p" 2>/dev/null); theirs=$(git -C "$ROOT" rev-parse "$base_ref:$p" 2>/dev/null)
+    if git -C "$ROOT/$p" merge-base --is-ancestor "$theirs" "$ours" 2>/dev/null; then keep=$ours
+    elif git -C "$ROOT/$p" merge-base --is-ancestor "$ours" "$theirs" 2>/dev/null; then keep=$theirs
+    else git -C "$ROOT" merge --abort 2>/dev/null; land_fail "$p: neither pointer contains the other after all — nothing pushed; merge $ROOT_BASE in by hand"
+    fi
+    git -C "$ROOT" update-index --cacheinfo "160000,$keep,$p" && git -C "$ROOT/$p" checkout -q --detach "$keep" 2>/dev/null \
+      || { git -C "$ROOT" merge --abort 2>/dev/null; land_fail "$p: couldn't take $keep — nothing pushed"; }
+  done
+  if [ -n "$(git -C "$ROOT" diff --name-only --diff-filter=U)" ]; then
+    git -C "$ROOT" merge --abort 2>/dev/null
+    land_fail "merging $ROOT_BASE in conflicts beyond the member pointers — nothing pushed"
+  fi
+  git -C "$ROOT" commit -q --no-edit -m "$key: merge $ROOT_BASE: each member pointer keeps the commit that contains both sides" \
+    || { git -C "$ROOT" merge --abort 2>/dev/null; land_fail "merging $ROOT_BASE in: the commit failed — nothing pushed"; }
+  BASE_MERGED=$paths
 }
 
 # --- the executor's verbs (provision, sync, push, open-prs) --------------------

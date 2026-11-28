@@ -66,7 +66,7 @@ reasoning, caveats, and how we plan to test them live in
   `jira-task-reviewer` 415 → 714 lines while its word count moved by
   *five*, and the long lines it replaced had hidden a real overage for
   years. ~5,000 words is roughly the old ~500 lines at this repo's wrap
-  width. `jira-task-reviewer` is a recorded exception at 6,400 — it is
+  width. `jira-task-reviewer` is a recorded exception at 6,500 — it is
   the only skill carrying two tracks plus a phase machine, and no
   realistic trim clears the target — so it reports `WARN (accepted)`.
   JST-310 raised it from 6,100 to 6,350 for the *Reading PRs* rule (read
@@ -79,7 +79,11 @@ reasoning, caveats, and how we plan to test them live in
   runs then added two rules the reviewer was getting wrong (never source a
   project's secrets to run tests; no Done offer before the set lands), so the
   owner raised it to 6,400: a rule the model misses is worth more than the
-  words. Prefer `skills/_shared/` for anything that isn't a rule.
+  words. JSW-32 added the gate's `conflict` phase (the reviewer stops on a paused
+  issue) and the landing's gitlink step (`land` on `review-landing` too), which
+  took it to 6,396, so the allowance went to 6,500: the pause has to be in the
+  phase table, or a run reviews an issue that can't merge. Prefer
+  `skills/_shared/` for anything that isn't a rule.
   `jst-install` is the second exception, at 5,200 (JST-322): it walks four
   setup sections, and the member-repos step (2e) took it 21 words past the
   target.
