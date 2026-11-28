@@ -61,7 +61,7 @@ a value. The tool refuses any other line, so it and every caller read the same v
 | Key | Meaning |
 | -- | -- |
 | `NAME_PREFIX` | every name an instance makes: `<prefix>-i<N>` (containers, networks, compose projects) |
-| `INSTANCE_MIN`, `INSTANCE_MAX` | the instance numbers the stack accepts; the plugin hashes an issue key into this range |
+| `INSTANCE_MIN`, `INSTANCE_MAX` | the instance numbers the stack accepts; the plugin assigns each issue worktree a free one in this range, and claims it |
 | `SUBNET` | optional: a private `/16`; instance N gets `<a.b>.N.0/24` |
 | `PORT_BASE`, `PORT_COUNT` | optional: the host port block the stack uses |
 | `PORTS_PER_INSTANCE` | with a port block: instance N uses `PORT_BASE + (N - INSTANCE_MIN) × PORTS_PER_INSTANCE` onward |

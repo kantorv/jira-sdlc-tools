@@ -160,13 +160,21 @@ database is not re-seeded. The two scripts in
 [the Python example](python.md) open by exiting quietly when the worktree
 is already provisioned, which is the cheapest form of this.
 
-**4. Derive the instance index deterministically from the issue key.**
+**4. Take the instance index from a claim, not from the key alone.**
 Anything per-instance — ports, subnets, container names, data
 directories — should be a function of a single **instance index `N`**,
-and `N` should come from `JST_ISSUE_KEY`, never from "the next free
-slot". Two worktrees bootstrapping at once would race for a free slot,
-and the same worktree would drift to a different index between runs.
-Either parse the numeric part of the key or hash the whole key:
+and the same worktree must keep its `N` on every run. With a stack that
+follows the stack contract, the executor hands the hook `JST_INSTANCE`:
+an `N` that `instance.sh assign` picked and claimed for this worktree,
+under a lock, so two worktrees bootstrapping at once can't take the same
+one. It prefers the key's hash, so an issue nothing collides with keeps
+the number it would always have had, and it moves to the next free `N`
+when another worktree holds that one. Anything that later needs the
+worktree's `N` (a teardown, a status check) reads the claim back
+(`instance.sh lookup`), never the formula.
+
+Without a contract stack, a hook can still derive `N` from the key, by
+parsing its numeric part or hashing the whole key:
 
 ```bash
 # parse: PROJ-402 -> 402 -> index 25
@@ -180,10 +188,14 @@ INSTANCE=$(( $(printf '%s' "$JST_ISSUE_KEY" | cksum | cut -d' ' -f1) % 250 + 1 )
 ports and names it already had, so existing habits and docs that say
 `localhost:5173` go on working, and the worktrees take 1, 2, 3, … Both
 schemes above are modular, so two keys can collide (`PROJ-226` and
-`PROJ-289` both give 38 in the first one) — nothing detects that, and it
-only bites when both are checked out at once. Widen the range or add a
-collision check if your team runs enough parallel worktrees for it to be
-real.
+`PROJ-289` both give 38 in the first one). With 250 numbers, two of 7 live
+issues share one about 8 % of the time, and two of 19 about half the time.
+A derived `N` is why the contract stack stopped using one (JSW-31): the
+plugin used to hash the key and refuse the second claim (onboarding
+decision D2), and that left the second issue with no instance, while every
+tool that recomputed the hash (a teardown, the web app's Instances tab)
+acted on the first issue's instance instead. If you derive, check that
+nothing else holds the `N` before using it.
 
 There's a full example pair to start from at
 [`docs/examples/bootstrap.example.sh`](../examples/bootstrap.example.sh) /
