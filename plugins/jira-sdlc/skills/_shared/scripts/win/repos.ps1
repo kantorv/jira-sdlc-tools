@@ -10,9 +10,13 @@
 #   list      tab-separated rows, header first:
 #             repo role initialized slug base branch dirty ahead
 #   prs       tab-separated PR rows: repo slug pr state base url
-#   gate      phase, reason, root, members — then the prs table
-#   land      land the merged member PRs, opening the root PR as --title;
-#             --check verifies the gitlinks
+#   gate      phase, reason, root, members — then the prs table (phase
+#             conflict pauses review, land and review-landing)
+#   conflicts dry-run merges of --branch with its base and each --against:
+#             repo against result files (clean, behind, conflict, gitlink, error)
+#   land      land the merged member PRs, opening the root PR as --title
+#             (and merge the base in when only member pointers conflict:
+#             base_merged=); --check verifies the gitlinks
 #   provision put members whose issue branch is on origin onto it (--add: scope growth)
 #   sync      merge origin/<base> into each member on the issue branch
 #   push      push every repo with work its origin lacks, members first
@@ -21,7 +25,8 @@
 #
 # Exit 0 — ok. Exit 1 — land refused or failed, or --check failed. Exit 2 —
 # usage error (stderr only), or JST_MEMBERS is invalid (stdout ends with an
-# `error=<reason>` line). Exit 4 — prs couldn't look up a repo.
+# `error=<reason>` line). Exit 4 — prs couldn't look up a repo, or conflicts
+# couldn't read a row.
 #
 # Unlike bash's $(...), an in-process PowerShell function that calls `exit`
 # ends the whole script and drops output still being captured. So the verbs
@@ -40,17 +45,19 @@ function Stop-Usage {
     exit 2
 }
 
-$Verbs = 'strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check'
+$Verbs = 'strategy, list, prs, gate, conflicts, land, provision, sync, push, open-prs, remove-check'
 $Verb = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 if (-not $Verb) { Stop-Usage "a verb is required — one of: $Verbs" }
-if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'land', 'provision', 'sync', 'push', 'open-prs', 'remove-check')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
+if ($Verb -notin @('strategy', 'list', 'prs', 'gate', 'conflicts', 'land', 'provision', 'sync', 'push', 'open-prs', 'remove-check')) { Stop-Usage "unknown verb '$Verb' — one of: $Verbs" }
 $OptBranch = ''; $OptState = 'all'; $OptBase = ''; $OptCheck = $false; $OptMultistep = $false
-$OptAdd = ''; $OptTitle = ''; $OptBody = ''
+$OptAdd = ''; $OptTitle = ''; $OptBody = ''; $OptAgainst = ''
 $i = 1
 while ($i -lt $args.Count) {
     $a = [string]$args[$i]
     if     ($a -eq '--branch')      { $OptBranch = [string]$args[$i + 1]; $i += 2 }
     elseif ($a -like '--branch=*')  { $OptBranch = $a.Substring(9); $i += 1 }
+    elseif ($a -eq '--against')     { $OptAgainst += ' ' + [string]$args[$i + 1]; $i += 2 }
+    elseif ($a -like '--against=*') { $OptAgainst += ' ' + $a.Substring(10); $i += 1 }
     elseif ($a -eq '--state')       { $OptState = [string]$args[$i + 1]; $i += 2 }
     elseif ($a -like '--state=*')   { $OptState = $a.Substring(8); $i += 1 }
     elseif ($a -eq '--base')        { $OptBase = [string]$args[$i + 1]; $i += 2 }
@@ -66,6 +73,8 @@ while ($i -lt $args.Count) {
     else { Stop-Usage "unknown argument '$a'" }
 }
 if ($OptState -notin @('all', 'open')) { Stop-Usage "--state must be all or open (got '$OptState')" }
+$Against = @(($OptAgainst -replace ',', ' ') -split '\s+' | Where-Object { $_ })
+if ($Against.Count -gt 0 -and $Verb -ne 'conflicts') { Stop-Usage '--against is for conflicts only' }
 
 $Root = Get-JstRoot
 if (-not $Root) { Stop-Usage 'not inside a git repository' }
@@ -268,6 +277,147 @@ function Get-TakesPart {   # no | pushed | error <message>
     if ($n -gt 0) { return 'pushed' } else { return 'no' }
 }
 
+# --- conflicts (and the gate's pause): twins of repos.sh's --------------------------
+# Dry-run merges with git merge-tree --write-tree (git 2.38+); only git runs, no GitHub API.
+
+$ConflictsHeader = (@('repo', 'against', 'result', 'files') -join "`t")
+$ZeroSha = '0000000000000000000000000000000000000000'
+
+function Get-GitVersion {
+    $v = (& git version 2>$null)
+    if (-not $v) { return '' }
+    $f = ([string]$v).Trim() -split '\s+'
+    if ($f.Count -ge 3) { return $f[2] } else { return '' }
+}
+
+function Test-MergeTreeOk {   # git has merge-tree --write-tree (2.38)
+    $v = Get-GitVersion
+    if ($v -notmatch '^(\d+)\.(\d+)') { return $false }
+    $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+    return ($maj -gt 2 -or ($maj -eq 2 -and $min -ge 38))
+}
+
+function Get-GitlinksMoved {   # @{path = sha} per member pointer <To> changed since <From>
+    param([string]$Dir, [string]$From, [string]$To)
+    $moved = [ordered]@{}
+    foreach ($l in @(& git -C $Dir diff --raw --no-abbrev --no-renames $From $To 2>$null)) {
+        $parts = ([string]$l) -split "`t", 2
+        if ($parts.Count -lt 2) { continue }
+        $m = $parts[0] -split ' '
+        if ($m[0] -eq ':160000' -or $m[1] -eq '160000') { $moved[$parts[1]] = $m[3] }
+    }
+    return $moved
+}
+
+function Test-ContainsOther {   # one commit contains the other (a fast-forward), read in the member
+    param([string]$Member, [string]$A, [string]$B)
+    $top = (& git -C $Member rev-parse --show-toplevel 2>$null)
+    if (-not $top -or ([string]$top).Trim() -ne $Member) { return $false }
+    if ($A -eq $ZeroSha -or $B -eq $ZeroSha) { return $false }   # a pointer removed is a real conflict
+    & git -C $Member cat-file -e "$A^{commit}" 2>$null; $okA = ($LASTEXITCODE -eq 0)
+    & git -C $Member cat-file -e "$B^{commit}" 2>$null; $okB = ($LASTEXITCODE -eq 0)
+    if (-not ($okA -and $okB)) { & git -C $Member fetch -q origin 2>$null | Out-Null }
+    & git -C $Member merge-base --is-ancestor $A $B 2>$null
+    if ($LASTEXITCODE -eq 0) { return $true }
+    & git -C $Member merge-base --is-ancestor $B $A 2>$null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Get-Classify {   # "result`tfiles" for merging <Theirs> into <Ours> (see repos.sh's classify)
+    param([string]$Dir, [string]$Ours, [string]$Theirs, [string]$Kind)
+    $mb = (& git -C $Dir merge-base $Ours $Theirs 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $mb) {
+        return "error`t$($Ours -replace '^refs/remotes/', '') and $($Theirs -replace '^refs/remotes/', '') have no common history"
+    }
+    $mb = ([string]$mb).Trim()
+    $out = @(& git -C $Dir merge-tree --write-tree --name-only --no-messages $Ours $Theirs 2> $ErrFile)
+    $mrc = $LASTEXITCODE
+    if ($mrc -eq 0) { $names = @() }
+    elseif ($mrc -eq 1) { $names = @($out | Select-Object -Skip 1 | Where-Object { ([string]$_).Trim() -ne '' }) }
+    else { return "error`tgit merge-tree failed: $(Get-FirstLine $ErrFile)" }
+    $o = Get-GitlinksMoved $Dir $mb $Ours; $t = Get-GitlinksMoved $Dir $mb $Theirs
+    $moved = @(foreach ($p in $t.Keys) { if ($o.Contains($p) -and $o[$p] -ne $t[$p]) { [pscustomobject]@{ Path = $p; A = $o[$p]; B = $t[$p] } } })
+    $movedPaths = @($moved | ForEach-Object { $_.Path })
+    $real = @(); $links = @()
+    foreach ($p in $names) { if ($movedPaths -notcontains [string]$p) { $real += [string]$p } }
+    foreach ($m in $moved) {
+        if (Test-ContainsOther "$Dir/$($m.Path)" $m.A $m.B) { $links += $m.Path } else { $real += $m.Path }
+    }
+    if ($real.Count -gt 0) { return "conflict`t$($real -join ' ')" }
+    if ($links.Count -gt 0) { return "gitlink`t$($links -join ' ')" }
+    if ($Kind -eq 'base') {
+        & git -C $Dir merge-base --is-ancestor $Theirs $Ours 2>$null
+        if ($LASTEXITCODE -ne 0) { return "behind`t-" }
+    }
+    return "clean`t-"
+}
+
+function Get-ConflictRows {   # @{Rows; Rc; OldGit} — the conflicts table's rows (no header)
+    param($Set, [string[]]$Only, [string[]]$AgainstList)   # $Set from the caller: v_gate's $root shadows $Root
+    $rows = @(); $rc = 0
+    $oldGit = if (Test-MergeTreeOk) { '' } else { $g = Get-GitVersion; if ($g) { $g } else { 'unknown' } }
+    foreach ($r in @($Set)) {
+        if ($Only.Count -gt 0 -and $Only -notcontains $r.Repo) { continue }
+        $dir = if ($r.Repo -eq '.') { $script:Root } else { "$($script:Root)/$($r.Repo)" }
+        $ob = "origin/$($r.Base)"
+        if ($oldGit) { $rows += "$($r.Repo)`t$ob`terror`tgit $oldGit has no merge-tree --write-tree (needs 2.38 or later)"; $rc = 4; continue }
+        $top = (& git -C $dir rev-parse --show-toplevel 2>$null)
+        if ($r.Repo -ne '.' -and -not ($top -and ([string]$top).Trim() -eq $dir)) { $rows += "$($r.Repo)`t$ob`terror`tnot checked out here, so it can't be read"; $rc = 4; continue }
+        # One look at origin's branches, then one fetch of those that exist.
+        $lsr = @(& git -C $dir ls-remote --heads origin 2> $ErrFile)
+        if ($LASTEXITCODE -ne 0) { $rows += "$($r.Repo)`t$ob`terror`tcan't read origin's branches: $(Get-FirstLine $ErrFile)"; $rc = 4; continue }
+        $heads = @($lsr | ForEach-Object { $f = ([string]$_) -split "`t"; if ($f.Count -ge 2) { $f[1] -replace '^refs/heads/', '' } })
+        if ($heads -notcontains $script:OptBranch) {
+            if ($r.Repo -ne '.') { continue }   # a member without the issue branch takes no part
+            $rows += "$($r.Repo)`t$ob`terror`torigin has no $($script:OptBranch)"; $rc = 4; continue
+        }
+        $specs = @("+refs/heads/$($script:OptBranch):refs/remotes/origin/$($script:OptBranch)")
+        if ($heads -contains $r.Base) { $specs += "+refs/heads/$($r.Base):refs/remotes/origin/$($r.Base)" }
+        foreach ($a in $AgainstList) { if ($heads -contains $a) { $specs += "+refs/heads/${a}:refs/remotes/origin/$a" } }
+        & git -C $dir fetch -q origin @specs 2> $ErrFile
+        if ($LASTEXITCODE -ne 0) { $rows += "$($r.Repo)`t$ob`terror`tfetch failed: $(Get-FirstLine $ErrFile)"; $rc = 4; continue }
+        if ($heads -contains $r.Base) {
+            $res = Get-Classify $dir "refs/remotes/origin/$($script:OptBranch)" "refs/remotes/origin/$($r.Base)" 'base'
+            $rows += "$($r.Repo)`t$ob`t$res"; if ($res.StartsWith("error`t")) { $rc = 4 }
+        } else { $rows += "$($r.Repo)`t$ob`terror`torigin has no $($r.Base)"; $rc = 4 }
+        foreach ($a in $AgainstList) {
+            if ($a -eq $script:OptBranch) { continue }
+            if ($heads -notcontains $a) {
+                if ($r.Repo -ne '.') { continue }   # the other issue doesn't touch this member
+                $rows += "$($r.Repo)`t$a`terror`torigin has no $a"; $rc = 4; continue
+            }
+            $res = Get-Classify $dir "refs/remotes/origin/$($script:OptBranch)" "refs/remotes/origin/$a" 'other'
+            $rows += "$($r.Repo)`t$a`t$res"; if ($res.StartsWith("error`t")) { $rc = 4 }
+        }
+    }
+    return [pscustomobject]@{ Rows = $rows; Rc = $rc; OldGit = $oldGit }
+}
+
+function v_conflicts {
+    Use-Branch; Assert-ValidSet
+    $c = Get-ConflictRows @(Get-RepoSet) @() $Against
+    Write-Output $ConflictsHeader
+    $c.Rows | ForEach-Object { Write-Output $_ }
+    Exit-With $c.Rc
+}
+
+function Write-GateGo {   # a phase that would start a review or a merge: conflict instead when a repo conflicts with its base
+    param([string]$Phase, [string]$Reason, [string]$RootState, [string]$Members, $Lines, [string[]]$Check, $Set)
+    $c = Get-ConflictRows $Set $Check @()
+    if ($c.OldGit) { Write-Gate $Phase "$Reason (conflicts not checked: git $($c.OldGit) has no merge-tree --write-tree, needs 2.38)" $RootState $Members $Lines }
+    if ($c.Rc -ne 0) {
+        $e = @($c.Rows | Where-Object { (([string]$_) -split "`t")[2] -eq 'error' }) | Select-Object -First 1
+        $f = ([string]$e) -split "`t", 4
+        Write-Gate 'stop' "conflicts unknown for $($f[0]): $($f[3]) — unknown is not none" $RootState $Members $Lines
+    }
+    $said = @(foreach ($row in $c.Rows) {
+        $f = ([string]$row) -split "`t", 4
+        if ($f[2] -eq 'conflict') { $repo = if ($f[0] -eq '.') { 'the root' } else { $f[0] }; "conflicts with $($f[1]) in ${repo}: $($f[3])" }
+    }) -join '; '
+    if ($said) { Write-Gate 'conflict' $said $RootState $Members $Lines }
+    Write-Gate $Phase $Reason $RootState $Members $Lines
+}
+
 function Write-Gate { param([string]$Phase, [string]$Reason, [string]$RootState, [string]$Members, $Lines)
     Write-Output "phase=$Phase"; Write-Output "reason=$Reason"; Write-Output "root=$RootState"; Write-Output "members=$Members"
     $Lines | ForEach-Object { Write-Output $_ }
@@ -314,18 +464,19 @@ function v_gate {
     if ($stop) { Write-Gate 'stop' $stop $root $members $t.Lines }
     if ($nPart -eq 0) {
         if ($root -eq 'none')   { Write-Gate 'none' "no PR on $($script:OptBranch) in any repo" $root $members $t.Lines }
-        if ($root -eq 'open')   { Write-Gate 'review' "PR #$rootN open" $root $members $t.Lines }
+        if ($root -eq 'open')   { Write-GateGo 'review' "PR #$rootN open" $root $members $t.Lines @('.') $set }
         if ($root -eq 'merged') { Write-Gate 'merged' "PR #$rootN merged" $root $members $t.Lines }
     }
+    # The pause checks the repos whose merge is still ahead: the root, and each member whose PR is open.
     if ($openM.Count -gt 0) {
         if ($root -eq 'none') {
             $mm = if ($m) { " (merged: $m)" } else { '' }
-            Write-Gate 'review' "member PRs open: $o$mm" $root $members $t.Lines
+            Write-GateGo 'review' "member PRs open: $o$mm" $root $members $t.Lines (@('.') + $openM) $set
         }
         Write-Gate 'stop' "the root PR #$rootN is $root while member PRs are still open ($o) — it lands only after they merge" $root $members $t.Lines
     }
-    if ($root -eq 'none')   { Write-Gate 'land' "every member PR is merged ($m); no root PR yet — land it" $root $members $t.Lines }
-    if ($root -eq 'open')   { Write-Gate 'review-landing' "root PR #$rootN open; every member PR is merged ($m)" $root $members $t.Lines }
+    if ($root -eq 'none')   { Write-GateGo 'land' "every member PR is merged ($m); no root PR yet — land it" $root $members $t.Lines @('.') $set }
+    if ($root -eq 'open')   { Write-GateGo 'review-landing' "root PR #$rootN open; every member PR is merged ($m)" $root $members $t.Lines @('.') $set }
     Write-Gate 'merged' "root PR #$rootN merged" $root $members $t.Lines
 }
 
@@ -424,6 +575,8 @@ function v_land {
         & git -C $Root commit -q -m "${key}: land $landedS" -m $body 2>$null
         if ($LASTEXITCODE -ne 0) { Stop-Land 'the landing commit failed' }
     }
+    $script:BaseMerged = ''
+    Invoke-GitlinkStep $key
     & git -C $Root -c push.recurseSubmodules=check push -q -u origin $script:OptBranch 2> $ErrFile
     if ($LASTEXITCODE -ne 0) { Stop-Land "committed locally, but the push failed: $(Get-FirstLine $ErrFile)" }
     if ($rootEff.StartsWith('OPEN')) {
@@ -440,8 +593,46 @@ function v_land {
         if (-not $url) { Stop-Land "landed and pushed, but opening the root PR failed: $(Get-FirstLine $ErrFile)" }
     }
     $head = ([string](& git -C $Root rev-parse HEAD 2>$null)).Trim()
-    Write-Output "landed=$landedS"; Write-Output "commit=$head"; Write-Output "pr=$url"
+    Write-Output "landed=$landedS"
+    if ($script:BaseMerged) { Write-Output "base_merged=$($script:BaseMerged)" }
+    Write-Output "commit=$head"; Write-Output "pr=$url"
     Exit-With 0
+}
+
+# The landing's own fix for P16 (see repos.sh's gitlink_step): when the root's only conflict with its
+# base is member pointers git fast-forwards, merge the base in and keep, per pointer, the commit that
+# contains both sides ($script:BaseMerged: the paths). Called uncaptured: a Stop-Land in it must reach stdout.
+function Invoke-GitlinkStep { param([string]$Key)
+    if (-not (Test-MergeTreeOk)) { return }
+    $baseRef = "refs/remotes/origin/$RootBase"
+    & git -C $script:Root fetch -q origin "+refs/heads/${RootBase}:$baseRef" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { return }
+    $res = Get-Classify $script:Root 'HEAD' $baseRef 'base'
+    if (-not $res.StartsWith("gitlink`t")) { return }
+    $paths = $res.Substring(8)
+    & git -C $script:Root merge -q --no-commit --no-ff $baseRef > $null 2>&1   # it may stop at the pointers
+    foreach ($p in ($paths -split ' ')) {
+        $ours = ([string](& git -C $script:Root rev-parse "HEAD:$p" 2>$null)).Trim()
+        $theirs = ([string](& git -C $script:Root rev-parse "${baseRef}:$p" 2>$null)).Trim()
+        & git -C "$($script:Root)/$p" merge-base --is-ancestor $theirs $ours 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $keep = $ours }
+        else {
+            & git -C "$($script:Root)/$p" merge-base --is-ancestor $ours $theirs 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { $keep = $theirs }
+            else { & git -C $script:Root merge --abort 2>$null | Out-Null; Stop-Land "${p}: neither pointer contains the other after all — nothing pushed; merge $RootBase in by hand" }
+        }
+        & git -C $script:Root update-index --cacheinfo "160000,$keep,$p" 2>$null | Out-Null
+        $ok = ($LASTEXITCODE -eq 0)
+        if ($ok) { & git -C "$($script:Root)/$p" checkout -q --detach $keep 2>$null | Out-Null; $ok = ($LASTEXITCODE -eq 0) }
+        if (-not $ok) { & git -C $script:Root merge --abort 2>$null | Out-Null; Stop-Land "${p}: couldn't take $keep — nothing pushed" }
+    }
+    if (@(& git -C $script:Root diff --name-only --diff-filter=U 2>$null | Where-Object { $_ }).Count -gt 0) {
+        & git -C $script:Root merge --abort 2>$null | Out-Null
+        Stop-Land "merging $RootBase in conflicts beyond the member pointers — nothing pushed"
+    }
+    & git -C $script:Root commit -q --no-edit -m "${Key}: merge ${RootBase}: each member pointer keeps the commit that contains both sides" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { & git -C $script:Root merge --abort 2>$null | Out-Null; Stop-Land "merging $RootBase in: the commit failed — nothing pushed" }
+    $script:BaseMerged = $paths
 }
 
 # --- the executor's verbs (provision, sync, push, open-prs) --------------------

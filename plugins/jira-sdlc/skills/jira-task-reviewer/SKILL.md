@@ -278,6 +278,7 @@ bash "$S/repos.sh" gate --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"
 | `none` | no PR in any repo yet | report "`<PARENT-KEY>` has no PR yet — the reviewer runs once the executor opens one" and exit |
 | `review` | the issue's PR is open — or, with member repos, member PRs are | step 3 on the OPEN rows (skip step 2) |
 | `land` / `review-landing` | every member PR merged; the workspace's landing PR is missing / open | step 5L |
+| `conflict` | the branch conflicts with its base (`reason=` names the repo and files): the issue is paused | report `reason=` as the finding and exit: no review, no landing. Resolving is a human's or an executor run's, never this run's |
 | `merged` | the issue's PR (or the landing PR) is merged | the step-6 report with S-MERGED (R-COMPLETE for a landing PR), then exit |
 | `stop` | anything else — a CLOSED PR, an off-base one, a branch pushed with no PR, a `gh` error | relay `reason=` and ask; never read it as "no PR", never open a second one |
 
@@ -634,15 +635,18 @@ fresh aggregate code. Otherwise:
 ### 5L. Land the member PRs, then review the landing PR
 
 *(Single-step, on `gate`'s `land` or `review-landing`.)* The member PRs are
-merged; the workspace's gitlinks still point at the old commits. On `land`,
-run `land`: it moves each gitlink to its PR's merged commit, commits, pushes
-and opens the landing PR, checking everything first. Its title is the issue's
-step-1 summary, like the member PRs'. `error=` → relay it and stop.
+merged; the workspace's gitlinks still point at the old commits. Run `land`
+(on `review-landing` too: it reuses the open PR): it moves each gitlink to its
+PR's merged commit, commits, pushes and opens the landing PR, checking
+everything first. When the only conflict with the base is member pointers
+another landing also moved, it merges the base in itself (`base_merged=`):
+that is no finding. Its title is the issue's step-1 summary, like the member
+PRs'. `error=` → relay it and stop.
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/posix"   # win/repos.ps1 on Windows
 bash "$S/repos.sh" land --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>" \
-  --title "<PARENT-KEY>: <summary>"                                                # on `land` only
+  --title "<PARENT-KEY>: <summary>"
 bash "$S/repos.sh" land --check --branch "<PARENT-BRANCH>" --base "<BASE_BRANCH>"
 ```
 

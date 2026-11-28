@@ -22,6 +22,13 @@
 #   3. repos.sh (strategy, list) against golden output, and the statuscheck
 #      rows built from it, on a parent with members, a pinned submodule, an
 #      uninitialized member and invalid JST_MEMBERS values.
+#   4–5. prs, gate and land; provision, sync, push, open-prs and remove-check,
+#      with a fake gh and real git.
+#   6. conflicts (JSW-32): dry-run merges against the base and between two
+#      issue branches, the gate's phase=conflict and how a hand resolution
+#      lifts it, a git too old for merge-tree, and the gitlink case: a pointer
+#      both sides moved, a pause only when neither contains the other, and
+#      land's own fix (base_merged=).
 #
 # Builds throwaway repos in $TMPDIR with local bare remotes. No credentials,
 # and no network beyond what statuscheck's own gh/Jira rows do (GITHUB_PAT_TOKEN
@@ -273,7 +280,7 @@ setmembers "$LAB/single" "app"
 golden "invalid: no .gitmodules" "$LAB/single" strategy \
   "strategy=submodules\nroot=<LAB>/single\nmembers=\npinned=\nerror=JST_MEMBERS is set, but the project has no .gitmodules — list the submodule paths that take part in issues, or leave it empty for a single-repo project\nexit=2"
 setmembers "$LAB/single" ""
-golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, land, provision, sync, push, open-prs, remove-check\nexit=2"
+golden "usage: no verb" "$M" "" "repos: a verb is required — one of: strategy, list, prs, gate, conflicts, land, provision, sync, push, open-prs, remove-check\nexit=2"
 golden "usage: outside a repo" "$LAB/norepo" strategy "repos: not inside a git repository\nexit=2"
 setmembers "$M" "app server"
 
@@ -449,8 +456,8 @@ withtok() { # withtok <dir> — the fake PAT gh.sh needs, in the dir's project r
 rp() { # rp <port> <dir> <args…> — run repos with the fake gh; stdout, then exit=<rc>
   local port="$1" dir="$2"; shift 2
   withtok "$dir"
-  if [ "$port" = sh ]; then ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" bash "$REPOS_SH" "$@" 2>/dev/null; echo "exit=$?" )
-  else ( cd "$dir" && PATH="$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" pwsh -NoProfile -File "$REPOS_PS" "$@" 2>/dev/null; echo "exit=$?" ); fi | norm
+  if [ "$port" = sh ]; then ( cd "$dir" && PATH="${RP_PRE:-}$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" bash "$REPOS_SH" "$@" 2>/dev/null; echo "exit=$?" )
+  else ( cd "$dir" && PATH="${RP_PRE:-}$LAB/bin4:$PATH" GH_CONFIG_DIR="$LAB/ghcfg" pwsh -NoProfile -File "$REPOS_PS" "$@" 2>/dev/null; echo "exit=$?" ); fi | norm
 }
 both4() { # both4 <label> <dir> <expected> <args…> — the same expected output from both ports
   local label="$1" dir="$2" want port; want=$(printf '%b' "$3"); shift 3
@@ -527,6 +534,7 @@ both4 "gate --multistep: workspace-only, the parent PR open" "$W" "$(G review "P
 SO="$LAB/solo"; git clone -q git@github.com:acme/solo.git "$SO"; mkdir -p "$SO/.jst"
 printf 'DEFAULT_BASE_BRANCH=development\n' > "$SO/.jst/jira-sdlc-tools.env"
 SB=feature/XX-7-solo; NSO=".\tacme/solo\t-\tnone\t-\t-"
+git -C "$SO" push -q origin "HEAD:refs/heads/$SB"   # the gate's conflict check reads the branch off origin
 clearfgh
 both4 "single: gate none" "$SO" "$(G none "no PR on $SB in any repo" none n/a)\n$(T "$NSO")" gate --branch "$SB"
 setpr solo "$SB" "5\tOPEN\tdevelopment\t$U/solo/pull/5"
@@ -763,6 +771,108 @@ for port in sh ${PORTS:+ps}; do
   is "single: open-prs opens the root's PR into --base$sfx" "$(rp $port "$S5" open-prs --title "XX-9: x" --body-file "$LAB/b9.md" --base development)" \
     "$(printf 'repo\tslug\tpr\taction\turl\n.\tacme/solo\t3\tcreated\thttps://github.com/acme/solo/pull/3\nexit=0')"
   grep -q 'jst:pr-set' "$FGH/body/acme_solo#3" && no "single: a PR-set section was added$sfx" || ok "  …no PR-set section on a single repo$sfx"
+done
+
+# --- 6. conflicts, the gate's pause, the landing's gitlink step (JSW-32) -------------
+echo "repos.sh — conflicts, gate's phase=conflict and land's gitlink step (fake gh, real git)"
+
+REAL_GIT=$(command -v git)
+mkdir -p "$LAB/oldgit"   # a git too old for merge-tree --write-tree: only `git version` lies
+printf '#!/usr/bin/env bash\n[ "$1" = version ] && { echo "git version 2.30.0"; exit 0; }\nexec "%s" "$@"\n' "$REAL_GIT" > "$LAB/oldgit/git"
+chmod +x "$LAB/oldgit/git"
+CFH='repo\tagainst\tresult\tfiles'
+setprn() { printf '%b\n' "$4" > "$FGH/prs/${1}_$2@${3//\//%}"; }   # setprn <ns> <repo> <branch> <rows>
+edit() { # edit <dir> <file> <text> <message> — commit one change and push it to the current branch
+  printf '%s\n' "$3" > "$1/$2"; git -C "$1" add "$2"; git -C "$1" commit -qm "$4"; git -C "$1" push -q origin HEAD
+}
+for port in sh ${PORTS:+ps}; do
+  ns="cf-$port"; mk5 "$ns" none; MN="$LAB/$ns/main"; sfx=""; [ "$port" = ps ] && sfx=" (win)"
+  C1=feature/XX-11-one; C2=feature/XX-12-two
+  for b in "$C1" "$C2"; do git -C "$MN" branch "$b"; git -C "$MN" push -q origin "$b"; done
+  # Two issues editing the same line of app's README, each on its own branch.
+  git -C "$MN/app" switch -qc "$C1"; edit "$MN/app" README.md one "XX-11 one"
+  git -C "$MN/app" switch -q development; git -C "$MN/app" switch -qc "$C2"; edit "$MN/app" README.md two "XX-12 two"
+  git -C "$MN/app" switch -q development
+  W1="$LAB/$ns/W1"; git -C "$MN" worktree add -q "$W1" "$C1"; rp $port "$W1" provision >/dev/null
+  clearfgh
+  is "conflicts: against the base, clean; a member without the branch takes no part$sfx" "$(rp $port "$W1" conflicts)" \
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\napp\torigin/development\tclean\t-\nexit=0')"
+  is "conflicts --against: two open branches conflict (P9), the base doesn't$sfx" "$(rp $port "$W1" conflicts --against "$C2")" \
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\n.\t%s\tclean\t-\napp\torigin/development\tclean\t-\napp\t%s\tconflict\tREADME.md\nexit=0' "$C2" "$C2")"
+  is "  …the dry run touched nothing$sfx" "$(git -C "$W1/app" status --porcelain; git -C "$W1/app" rev-parse --abbrev-ref HEAD)" "$C1"
+  setprn "$ns" app "$C1" "21\tOPEN\tdevelopment\thttps://github.com/$ns/app/pull/21"
+  is "gate: two open branches conflicting is no pause$sfx" "$(rp $port "$W1" gate | sed -n 1p)" "phase=review"
+  is "conflicts: an --against branch the root's origin lacks is an error (exit 4), the member no row$sfx" \
+    "$(rp $port "$W1" conflicts --against feature/XX-99-gone)" \
+    "$(printf "$CFH"'\n.\torigin/development\tclean\t-\n.\tfeature/XX-99-gone\terror\torigin has no feature/XX-99-gone\napp\torigin/development\tclean\t-\nexit=4')"
+  # The base moves: a clean change makes it behind, then a change to the same line conflicts.
+  SC="$LAB/$ns/scratch-app"; git clone -q "git@github.com:$ns/app.git" "$SC"
+  edit "$SC" other.txt x "base: another file"
+  is "conflicts: behind, when it merges clean but lacks the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tbehind\t-')"
+  edit "$SC" README.md base "base: the same line"
+  is "conflicts: the base changed the same line$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tconflict\tREADME.md')"
+  is "gate: phase=conflict replaces review, naming the repo and files$sfx" "$(rp $port "$W1" gate | sed -n '1,4p')" \
+    "$(printf 'phase=conflict\nreason=conflicts with origin/development in app: README.md\nroot=none\nmembers=open')"
+  is "  …and --base is read in the root only$sfx" "$(rp $port "$W1" gate --base development | sed -n 1p)" "phase=conflict"
+  RP_PRE="$LAB/oldgit:"
+  is "conflicts: a git older than 2.38 is an error per repo, never clean$sfx" "$(rp $port "$W1" conflicts)" \
+    "$(printf "$CFH"'\n.\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\napp\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\nserver\torigin/development\terror\tgit 2.30.0 has no merge-tree --write-tree (needs 2.38 or later)\nexit=4')"
+  is "gate: on that git, the phase stands and says the check didn't run$sfx" "$(rp $port "$W1" gate | sed -n '1,2p')" \
+    "$(printf 'phase=review\nreason=member PRs open: app (conflicts not checked: git 2.30.0 has no merge-tree --write-tree, needs 2.38)')"
+  RP_PRE=""
+  # The hand resolution: merge the base, resolve, push. The pause lifts.
+  git -C "$W1/app" merge -q origin/development >/dev/null 2>&1; echo "one and base" > "$W1/app/README.md"
+  git -C "$W1/app" add README.md; git -C "$W1/app" commit -qm "XX-11 merge development"; git -C "$W1/app" push -q origin "$C1"
+  is "gate: resolved and pushed, the pause lifts$sfx" "$(rp $port "$W1" gate | sed -n '1,2p')" "$(printf 'phase=review\nreason=member PRs open: app')"
+  is "  …conflicts reads it clean against the base$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-')"
+  echo "unpushed" > "$W1/app/README.md"; git -C "$W1/app" commit -qam "XX-11 local only"
+  is "  …it reads origin's branch, not the local one$sfx" "$(rp $port "$W1" conflicts | grep '^app')" "$(printf 'app\torigin/development\tclean\t-')"
+  git -C "$W1/app" reset -q --hard "origin/$C1"
+
+  # Member pointers (P16). Another issue's landing moved app's pointer on the root's base to A1;
+  # this issue's app PR merged after it, so its merge commit MC contains A1.
+  LB=feature/XX-13-land; git -C "$MN" branch "$LB"; git -C "$MN" push -q origin "$LB"
+  git -C "$MN/app" switch -qc "$LB"; edit "$MN/app" f.txt feature "XX-13 change"; FEAT=$(git -C "$MN/app" rev-parse HEAD)
+  git -C "$MN/app" switch -q development; git -C "$MN/app" pull -q origin development
+  edit "$MN/app" g.txt a1 "XX-10 landed"; A1=$(git -C "$MN/app" rev-parse HEAD)
+  git -C "$MN" add app; git -C "$MN" commit -qm "XX-10: land app"; git -C "$MN" push -q origin development
+  git -C "$MN/app" merge -q --no-ff "$LB" -m "Merge pull request #31 (XX-13)"; git -C "$MN/app" push -q origin development
+  MC=$(git -C "$MN/app" rev-parse HEAD)
+  WL="$LAB/$ns/WL"; git -C "$MN" worktree add -q "$WL" "$LB"; rp $port "$WL" provision >/dev/null
+  setprn "$ns" app "$LB" "31\tMERGED\tdevelopment\thttps://github.com/$ns/app/pull/31"
+  printf '%s\n' "$MC" > "$FGH/merge/${ns}_app#31"
+  # A branch whose pointer contains the base's: git fast-forwards it, GitHub calls it a conflict.
+  ptr() { # ptr <branch> <sha> — a scratch root branch off $LB with app's pointer at <sha>, pushed
+    git -C "$WL" switch -qc "$1" "$LB" 2>/dev/null; git -C "$WL" update-index --cacheinfo "160000,$2,app"
+    git -C "$WL" commit -qm "pointer"; git -C "$WL" push -q origin "$1"; git -C "$WL" switch -q "$LB"
+  }
+  ptr feature/XX-14-ff "$MC"; ptr feature/XX-15-diverged "$FEAT"
+  setprn "$ns" parent feature/XX-14-ff "41\tOPEN\tdevelopment\thttps://github.com/$ns/parent/pull/41"
+  setprn "$ns" app feature/XX-14-ff "31\tMERGED\tdevelopment\thttps://github.com/$ns/app/pull/31"
+  setprn "$ns" parent feature/XX-15-diverged "42\tOPEN\tdevelopment\thttps://github.com/$ns/parent/pull/42"
+  setprn "$ns" app feature/XX-15-diverged "31\tMERGED\tdevelopment\thttps://github.com/$ns/app/pull/31"
+  is "conflicts: a pointer that contains the other side's is gitlink$sfx" "$(rp $port "$WL" conflicts --branch feature/XX-14-ff | grep '^\.')" \
+    "$(printf '.\torigin/development\tgitlink\tapp')"
+  is "gate: gitlink is no pause (land fixes it)$sfx" "$(rp $port "$WL" gate --branch feature/XX-14-ff | sed -n 1p)" "phase=review-landing"
+  is "conflicts: pointers that diverged are a real conflict$sfx" "$(rp $port "$WL" conflicts --branch feature/XX-15-diverged | grep '^\.')" \
+    "$(printf '.\torigin/development\tconflict\tapp')"
+  is "gate: …and pause the landing$sfx" "$(rp $port "$WL" gate --branch feature/XX-15-diverged | sed -n '1,2p')" \
+    "$(printf 'phase=conflict\nreason=conflicts with origin/development in the root: app')"
+  # land: the landing commit moves app to MC, then the gitlink step merges the base in, no human.
+  rm -f "$FGH/created"; echo 43 > "$FGH/next"
+  OUT=$(rp $port "$WL" land --title "XX-13: land")
+  NEWHEAD=$(git -C "$WL" rev-parse HEAD)
+  is "land: the gitlink step merges the base in and says so$sfx" "$OUT" \
+    "$(printf 'landed=app\nbase_merged=app\ncommit=%s\npr=https://github.com/%s/parent/pull/43\nexit=0' "$NEWHEAD" "$ns")"
+  is "  …a merge of origin/development$sfx" "$(git -C "$WL" rev-parse HEAD^2)" "$(git -C "$WL" rev-parse origin/development)"
+  is "  …app keeps the commit that contains both sides$sfx" "$(git -C "$WL" ls-tree HEAD app | awk '{print $3}') $(git -C "$WL/app" rev-parse HEAD)" "$MC $MC"
+  is "  …pushed$sfx" "$(git -C "$WL" ls-remote origin "refs/heads/$LB" | cut -f1)" "$NEWHEAD"
+  is "  …and the root now merges clean$sfx" "$(rp $port "$WL" conflicts | grep '^\.')" "$(printf '.\torigin/development\tclean\t-')"
+  is "  …land --check still passes$sfx" "$(rp $port "$WL" land --check | tail -1)" "exit=0"
+  if [ "$port" = sh ]; then OUT=$(cd "$WL" && bash "$REPOS_SH" gate --against x 2>&1; echo "exit=$?")
+  else OUT=$(cd "$WL" && pwsh -NoProfile -File "$REPOS_PS" gate --against x 2>&1; echo "exit=$?"); fi
+  is "usage: --against belongs to conflicts$sfx" "$OUT" \
+    "$(printf 'repos: --against is for conflicts only\nexit=2')"
 done
 
 unset GIT_CONFIG_GLOBAL
