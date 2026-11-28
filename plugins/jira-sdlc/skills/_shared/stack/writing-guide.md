@@ -72,7 +72,7 @@ every other project's `resources.conf` it can find; keep an existing stack's val
 | Key | What |
 | -- | -- |
 | `NAME_PREFIX` | every name an instance makes: `<NAME_PREFIX>-i<N>` |
-| `INSTANCE_MIN`, `INSTANCE_MAX` | the numbers the stack accepts; the plugin hashes issue keys into this range, so a wider range means fewer collisions |
+| `INSTANCE_MIN`, `INSTANCE_MAX` | the numbers the stack accepts; `instance.sh assign` gives each issue worktree a free one (the key's hash when free, else the next), so the range bounds how many instances can exist at once |
 | `PORT_BASE`, `PORT_COUNT`, `PORTS_PER_INSTANCE` | instance N's ports: `PORT_BASE + (N - INSTANCE_MIN) × PORTS_PER_INSTANCE` onward |
 | `SUBNET` | a private `/16`: instance N gets `<a.b>.N.0/24` |
 | `SHARED_PORTS` | the main checkout's ports of the services an instance can't start without (the README's *Shared services that must already run*), e.g. `29392,52790`; none → leave it out. The trial checks them before it starts anything |
@@ -81,25 +81,65 @@ every other project's `resources.conf` it can find; keep an existing stack's val
 ## The hook
 
 The executor runs `.jst/bootstrap.sh` in every new issue worktree, fail-soft, with `JST_INSTANCE`
-(N, already claimed by `instance.sh`) among its `JST_*` variables. Write it as:
+(N, already assigned and claimed by `instance.sh assign`) among its `JST_*` variables. Run by
+hand, without it, a hook takes N from the worktree's claim, the owner files `instance.sh lookup`
+reads (a hook can't know where the plugin is installed). It never computes N from the issue key:
+two keys can share that number, and the hook would then act on the other issue's instance. Write
+both hooks as:
 
 ```bash
 #!/usr/bin/env bash
 # .jst/bootstrap.sh: start this issue worktree's instance (written by jst-stack).
-# The executor runs it with JST_INSTANCE set; by hand: JST_INSTANCE=<N> .jst/bootstrap.sh
+# The executor runs it with JST_INSTANCE set; by hand it starts the instance this worktree
+# claimed (JST_INSTANCE=<N> to name it).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -z "${JST_INSTANCE:-}" ]; then
-  # An executor older than JST_INSTANCE: the plugin's formula (instance.sh number), unclaimed.
-  : "${JST_ISSUE_KEY:?neither JST_INSTANCE nor JST_ISSUE_KEY is set}"
-  min=$(sed -n 's/^INSTANCE_MIN=//p' stack.d/resources.conf); max=$(sed -n 's/^INSTANCE_MAX=//p' stack.d/resources.conf)
-  JST_INSTANCE=$(( $(printf '%s' "$JST_ISSUE_KEY" | cksum | cut -d' ' -f1) % (max - min + 1) + min ))
+  # This worktree's claim (instance.sh lookup), never the issue key's hash.
+  prefix=$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf); here=$(pwd -P)
+  JST_INSTANCE=$(for f in "$HOME/.local/state/$prefix"/i*/owner; do
+    [ "$(cat "$f" 2>/dev/null)" != "$here" ] || { f=${f%/owner}; echo "${f##*/i}"; }; done)
+  case $JST_INSTANCE in
+    '') echo "bootstrap: $here has no instance claimed: the executor assigns one (instance.sh assign <KEY>)" >&2; exit 2 ;;
+    *[!0-9]*) echo "bootstrap: $here holds several instances (${JST_INSTANCE//$'\n'/ }): JST_INSTANCE=<N> .jst/bootstrap.sh" >&2; exit 2 ;;
+  esac
 fi
 exec ./stack start --instance "$JST_INSTANCE"
 ```
 
-`.jst/teardown.sh` is the same with `./stack stop --instance "$JST_INSTANCE"` then
-`./stack teardown --instance "$JST_INSTANCE"`, run by hand before the worktree is removed. A
+```bash
+#!/usr/bin/env bash
+# .jst/teardown.sh: stop and remove this issue worktree's instance (written by jst-stack).
+# Run it by hand before removing the worktree: it tears down the instance this worktree
+# claimed (JST_INSTANCE=<N> to name it, when it holds several).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+state="$HOME/.local/state/$(sed -n 's/^NAME_PREFIX=//p' stack.d/resources.conf)"; here=$(pwd -P)
+if [ -z "${JST_INSTANCE:-}" ]; then
+  # This worktree's claim (instance.sh lookup), never the issue key's hash.
+  JST_INSTANCE=$(for f in "$state"/i*/owner; do
+    [ "$(cat "$f" 2>/dev/null)" != "$here" ] || { f=${f%/owner}; echo "${f##*/i}"; }; done)
+  case $JST_INSTANCE in
+    '') echo "teardown: $here has no instance claimed: nothing to tear down" >&2; exit 2 ;;
+    *[!0-9]*) echo "teardown: $here holds several instances (${JST_INSTANCE//$'\n'/ }): JST_INSTANCE=<N> .jst/teardown.sh" >&2; exit 2 ;;
+  esac
+fi
+# Only an N this worktree owns (instance.sh owner <N>), never another's or an unclaimed one.
+owner=$(cat "$state/i$JST_INSTANCE/owner" 2>/dev/null || true)
+if [ "$owner" != "$here" ]; then
+  echo "teardown: N=$JST_INSTANCE is not $here's (owner: ${owner:-none}): nothing torn down" >&2; exit 2
+fi
+./stack stop --instance "$JST_INSTANCE"
+./stack teardown --instance "$JST_INSTANCE"
+# The worktree is about to go: release its claim (instance.sh release).
+rm -f "$state/i$JST_INSTANCE/owner"
+```
+
+`teardown.sh` acts only on an N the worktree owns, so a mistyped `JST_INSTANCE` can't stop
+another worktree's instance (a leftover nobody owns is torn down by hand,
+`./stack teardown --instance N`). It releases the claim itself because a stack's `teardown`
+may keep the home's `owner` file, and a claim left behind becomes a stale one once the
+worktree is removed. A
 `toolchain` project's hook makes the venv instead (its pattern page). Keep both executable.
 
 ## Rules

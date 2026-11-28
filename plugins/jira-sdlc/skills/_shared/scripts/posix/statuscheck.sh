@@ -818,17 +818,19 @@ if [ -n "$STACK_CONTRACT" ] && [ -n "$IS_WORKTREE" ] && [ -n "$BR_KEY" ]; then
   if [ "$OS" = windows ]; then
     row instance INFO "not on Windows (stack contract v1 is bash: run the stack under WSL)"
   else
-    IN_N=$(bash "$SC_DIR/instance.sh" number "$BR_KEY" --conf "$SC_CONF" 2>/dev/null | sed -n 's/^instance=//p')
-    IN_OWNER=$(cat "$HOME/.local/state/$SC_PREFIX/i$IN_N/owner" 2>/dev/null || true)
-    if [ -z "$IN_N" ]; then
-      row instance WARN "no instance number for $BR_KEY (instance.sh number failed)" "check stack.d/resources.conf, then $RERUN."
-    elif [ -z "$IN_OWNER" ]; then
-      row instance INFO "N=$IN_N (from $BR_KEY) · not claimed yet (jira-task-executor claims it in step 1)"
-    elif [ "$IN_OWNER" = "$(cd "$CFG_ROOT" && pwd -P)" ]; then
-      row instance INFO "N=$IN_N (from $BR_KEY) · this worktree's · ./stack status --instance $IN_N"
+    # This worktree's claim (instance.sh lookup), never the key's hash: two keys can share it (JSW-31).
+    IN_OUT=$(bash "$SC_DIR/instance.sh" lookup --checkout "$CFG_ROOT" --conf "$SC_CONF" 2>/dev/null); IN_RC=$?
+    IN_N=$(printf '%s\n' "$IN_OUT" | sed -n 's/^instance=//p')
+    IN_CLAIMS=$(printf '%s\n' "$IN_OUT" | sed -n 's/^claims=//p')
+    if [ -n "$IN_CLAIMS" ]; then
+      row instance WARN "this worktree holds N=$IN_CLAIMS (instance.sh lookup)" \
+        "release the one it doesn't use (instance.sh release <N>, after ./stack teardown --instance <N>), then $RERUN."
+    elif [ "$IN_RC" -ne 0 ] || [ -z "$IN_N" ]; then
+      row instance WARN "no answer from instance.sh lookup (exit $IN_RC)" "check stack.d/resources.conf, then $RERUN."
+    elif [ "$IN_N" = none ]; then
+      row instance INFO "no instance yet (jira-task-executor assigns one in step 1)"
     else
-      row instance WARN "N=$IN_N (from $BR_KEY) is held by $IN_OWNER" \
-        "two issues share N=$IN_N: tear down the other instance (./stack teardown --instance $IN_N there) or widen INSTANCE_MIN..INSTANCE_MAX, then $RERUN."
+      row instance INFO "N=$IN_N (this worktree's claim) · ./stack status --instance $IN_N"
     fi
   fi
 fi

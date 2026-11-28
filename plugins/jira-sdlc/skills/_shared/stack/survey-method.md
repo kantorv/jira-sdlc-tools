@@ -90,9 +90,9 @@ Every resource is decided for each place a copy of the code runs:
 | **Main checkout** | the human's checkout of the base branch; `./stack` with no `--instance` | the human, every day |
 | **Issue worktree (instance N)** | `<WORKTREES_DIR>/worktree-<KEY>`: the executor writes code *and* runs instance N here | the executor while it works, then the human testing the issue |
 
-**N is not the survey's to decide.** The plugin derives it from the issue key (a hash of
-the key into the stack's `INSTANCE_MIN..MAX` range, a collision refused), so it never
-depends on the issue's number and never needs a lookup. Record what the stack needs from
+**N is not the survey's to decide.** The plugin assigns it (`instance.sh assign`: the
+key's hash into the stack's `INSTANCE_MIN..MAX` range when free, else the next free N,
+claimed), and everything after reads that claim back. Record what the stack needs from
 it: how many instances may run at once, and how many ports each takes. An existing hook
 with its own formula (`issue number mod 100`) is a row under *Changes to the existing
 stack*.
