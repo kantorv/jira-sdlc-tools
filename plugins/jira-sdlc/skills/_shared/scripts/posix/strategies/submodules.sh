@@ -80,6 +80,7 @@ s_prs() { v_prs; }
 s_gate() { v_gate; }   # --multistep stops there, once a member takes part
 
 s_conflicts() { v_conflicts; }
+s_resolutions() { v_resolutions; }
 
 s_land() { v_land; }
 

@@ -44,13 +44,31 @@
 #             warning, read with conflicts. merged and stop keep theirs; an
 #             unreadable conflict check is stop (unknown is not none), except a
 #             git older than 2.38, which leaves the phase as it is and says so.
+#             With conflict, a sensitive= line follows members= (the base
+#             rows' sensitive files as <repo>:<path>, space-separated); with a
+#             stop that couldn't read the state, unknown=prs (gh failed) or
+#             unknown=conflicts (a fetch or merge-tree failed): unknown, so an
+#             app that last read conflict keeps it.
+#   resolutions  the conflict-resolving merges on origin/--branch its base
+#             lacks, per repo, newest first — tab-separated, with a header:
+#             repo commit by files. A merge whose parents, merged again,
+#             conflict; by is agent (a Conflict-Resolved: trailer, the
+#             executor's resolve mode) or hand; files what it resolved.
+#             An `error` in by (and its reason in files) when a repo can't be
+#             read: exit 4. The reviewer's resolution review keys on them.
 #   conflicts does --branch merge with its base, and with each --against
 #             branch? A dry run (git merge-tree --write-tree: no worktree or
 #             index touched) of origin/--branch against origin/<base> (after a
 #             fetch) and against each origin/--against, in each repo of the
-#             set — tab-separated, with a header: repo against result files.
-#             against is origin/<base> or the other branch; files are
-#             space-separated, `-` when none, an error's reason for `error`.
+#             set — tab-separated, with a header: repo against result files
+#             sensitive recipe. against is origin/<base> or the other branch;
+#             files are space-separated, `-` when none, an error's reason for
+#             `error`. sensitive: the conflicted files a human resolves, grant
+#             or not (.jst/, stack, stack.d/, .github/workflows/, migrations);
+#             recipe: <recipe>:<path> for the ones a mechanical recipe resolves
+#             (gitlink: a member pointer one side's commit contains;
+#             migration-number: both sides added a numbered migration at one
+#             path) — never also sensitive.
 #             result: clean (merges clean; against the base, it also contains
 #             it), behind (against the base only: merges clean, lacks it),
 #             conflict (the files named), gitlink (the only conflicted paths
@@ -115,8 +133,9 @@
 # Exit 2 — usage error (message on stderr, nothing on stdout), or JST_MEMBERS
 #          is invalid: stdout then ends with an `error=<reason>` line, which
 #          statuscheck's repo_strategy row relays.
-# Exit 4 — prs couldn't look up at least one repo, or conflicts couldn't read
-#          at least one row (an `error` row): unknown, never none.
+# Exit 4 — prs couldn't look up at least one repo, or conflicts or
+#          resolutions couldn't read at least one row (an `error` row):
+#          unknown, never none.
 #
 # win/repos.ps1 is the twin: same arguments, output and exit codes.
 
@@ -126,10 +145,10 @@ SC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die_usage() { printf '%s\n' "repos: $1" >&2; exit 2; }
 
-VERBS="strategy, list, prs, gate, conflicts, land, provision, sync, push, open-prs, remove-check"
+VERBS="strategy, list, prs, gate, conflicts, resolutions, land, provision, sync, push, open-prs, remove-check"
 VERB="${1:-}"
 case "$VERB" in
-  strategy|list|prs|gate|conflicts|land|provision|sync|push|open-prs|remove-check) shift ;;
+  strategy|list|prs|gate|conflicts|resolutions|land|provision|sync|push|open-prs|remove-check) shift ;;
   "") die_usage "a verb is required — one of: $VERBS" ;;
   *)  die_usage "unknown verb '$VERB' — one of: $VERBS" ;;
 esac
@@ -344,7 +363,7 @@ takes_part() {
 # Dry-run merges with git merge-tree --write-tree (git ≥ 2.38): nothing in a
 # worktree or an index moves. Only git runs here, no GitHub API.
 
-CONFLICTS_HEADER=$(printf 'repo\tagainst\tresult\tfiles')
+CONFLICTS_HEADER=$(printf 'repo\tagainst\tresult\tfiles\tsensitive\trecipe')
 ZERO_SHA=0000000000000000000000000000000000000000
 
 git_version() { git version 2>/dev/null | awk '{ print $3 }'; }
@@ -372,18 +391,41 @@ contains_other() {
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || git -C "$1" merge-base --is-ancestor "$3" "$2" 2>/dev/null
 }
 
-# classify <dir> <ours> <theirs> <base|other> — "result\tfiles" for merging <theirs> into <ours>.
-# GitHub doesn't look inside submodules: a pointer both sides moved to different commits is a
-# conflict there even when git fast-forwards it, so those are judged here, not by merge-tree.
+# sensitive_path <path> — a path a human resolves, grant or not (JSW-33): the project's own
+# machinery (.jst/, stack, stack.d/, CI workflows) and database migrations.
+sensitive_path() {
+  case "$1" in
+    stack|.jst/*|stack.d/*|.github/workflows/*|migrations/*|*/migrations/*) return 0 ;;
+  esac
+  return 1
+}
+
+# file_marks <dir> <merge-base> <path> — "sensitive", "recipe <name>" or nothing, for a conflicted
+# file. The migration-number recipe: both sides added a numbered migration at the same path
+# (absent at the merge base), so renumbering one onto the other's leaf resolves it; any other
+# migration conflict is sensitive.
+file_marks() {
+  case "$3" in
+    migrations/[0-9][0-9][0-9][0-9]_*.py|*/migrations/[0-9][0-9][0-9][0-9]_*.py)
+      git -C "$1" cat-file -e "$2:$3" 2>/dev/null || { echo "recipe migration-number"; return; } ;;
+  esac
+  sensitive_path "$3" && echo sensitive
+}
+
+# classify <dir> <ours> <theirs> <base|other> — "result\tfiles\tsensitive\trecipe" for merging <theirs>
+# into <ours> (`-` for an empty column). GitHub doesn't look inside submodules: a pointer both sides
+# moved to different commits is a conflict there even when git fast-forwards it, so those are judged
+# here, not by merge-tree. sensitive: the conflicted files a human resolves; recipe: <recipe>:<path>
+# for the ones a mechanical recipe resolves (gitlink, migration-number).
 classify() {
-  local d="$1" ours="$2" theirs="$3" mb out mrc names moved p a b real="" links=""
+  local d="$1" ours="$2" theirs="$3" mb out mrc names moved p a b real="" links="" sens="" recipe="" m
   mb=$(git -C "$d" merge-base "$ours" "$theirs" 2>/dev/null) \
-    || { printf 'error\t%s and %s have no common history\n' "${ours#refs/remotes/}" "${theirs#refs/remotes/}"; return; }
+    || { printf 'error\t%s and %s have no common history\t-\t-\n' "${ours#refs/remotes/}" "${theirs#refs/remotes/}"; return; }
   out=$(git -C "$d" merge-tree --write-tree --name-only --no-messages "$ours" "$theirs" 2>"$ERRF"); mrc=$?
   case "$mrc" in
     0) names="" ;;
     1) names=$(printf '%s\n' "$out" | tail -n +2 | awk 'NF') ;;
-    *) printf 'error\tgit merge-tree failed: %s\n' "$(awk 'NF{print; exit}' "$ERRF")"; return ;;
+    *) printf 'error\tgit merge-tree failed: %s\t-\t-\n' "$(awk 'NF{print; exit}' "$ERRF")"; return ;;
   esac
   moved=$(awk -F'\t' 'NR == FNR { if (NF) o[$1] = $2; next } NF && ($1 in o) && o[$1] != $2 { print $1 "\t" o[$1] "\t" $2 }' \
             <(gitlinks_moved "$d" "$mb" "$ours") <(gitlinks_moved "$d" "$mb" "$theirs"))
@@ -400,10 +442,18 @@ EOF
   done <<EOF
 $moved
 EOF
-  if [ -n "$real" ]; then printf 'conflict\t%s\n' "$real"
-  elif [ -n "$links" ]; then printf 'gitlink\t%s\n' "$links"
-  elif [ "$4" = base ] && ! git -C "$d" merge-base --is-ancestor "$theirs" "$ours" 2>/dev/null; then printf 'behind\t-\n'
-  else printf 'clean\t-\n'; fi
+  for p in $real; do
+    m=$(file_marks "$d" "$mb" "$p")
+    case "$m" in
+      sensitive) sens="${sens:+$sens }$p" ;;
+      recipe*)   recipe="${recipe:+$recipe }${m#recipe }:$p" ;;
+    esac
+  done
+  for p in $links; do recipe="${recipe:+$recipe }gitlink:$p"; done
+  if [ -n "$real" ]; then printf 'conflict\t%s\t%s\t%s\n' "$real${links:+ $links}" "${sens:--}" "${recipe:--}"
+  elif [ -n "$links" ]; then printf 'gitlink\t%s\t-\t%s\n' "$links" "$recipe"
+  elif [ "$4" = base ] && ! git -C "$d" merge-base --is-ancestor "$theirs" "$ours" 2>/dev/null; then printf 'behind\t-\t-\t-\n'
+  else printf 'clean\t-\t-\t-\n'; fi
 }
 
 # conflict_rows <repos, space-separated; empty = every repo> <against…> — the conflicts
@@ -415,8 +465,10 @@ conflict_rows() {
   CROWS="" CF_OLD_GIT=""
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   merge_tree_ok || CF_OLD_GIT=$(git_version)
-  row() { CROWS="$CROWS$1	$2	$3	$4
-"; }
+  # row <repo> <against> <result> <files…> — <files…> is classify's three columns, or an error's reason.
+  row() { case "$4" in *"	"*) CROWS="$CROWS$1	$2	$3	$4
+" ;; *) CROWS="$CROWS$1	$2	$3	$4	-	-
+" ;; esac; }
   while IFS=$'\t' read -r repo slug base role; do
     [ -n "$repo" ] || continue
     if [ -n "$only" ]; then case " $only " in *" $repo "*) ;; *) continue ;; esac; fi
@@ -473,6 +525,55 @@ v_conflicts() {
   exit "$rc"
 }
 
+RESOLUTIONS_HEADER=$(printf 'repo\tcommit\tby\tfiles')
+
+# v_resolutions — the conflict-resolving merges on origin/--branch that its base lacks, per repo of the
+# set, newest first (JSW-33): a merge whose parents, merged again, conflict — the resolve mode's
+# (its Conflict-Resolved: trailer, by=agent) or one made by hand (by=hand). files: what it resolved.
+# The reviewer's resolution review keys on them; `git show --remerge-diff <commit>` shows each.
+v_resolutions() {
+  local set repo slug base role dir lsr m p1 p res by rc=0 parents
+  need_branch
+  set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
+  printf '%s\n' "$RESOLUTIONS_HEADER"
+  if ! merge_tree_ok; then
+    printf '.\t-\terror\tgit %s has no merge-tree --write-tree (needs 2.38 or later)\n' "$(git_version)"; exit 4
+  fi
+  while IFS=$'\t' read -r repo slug base role; do
+    [ -n "$repo" ] || continue
+    dir="$ROOT"; [ "$repo" = . ] || dir="$ROOT/$repo"
+    [ "$repo" = . ] || [ "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" = "$dir" ] || continue  # pinned
+    if ! lsr=$($TMOUT_CMD git -C "$dir" ls-remote --heads origin 2>"$ERRF"); then
+      printf '%s\t-\terror\tcannot read the branches of origin: %s\n' "$repo" "$(awk 'NF{print; exit}' "$ERRF")"; rc=4; continue
+    fi
+    printf '%s\n' "$lsr" | awk -F'\t' -v r="refs/heads/$OPT_BRANCH" '$2 == r { f = 1 } END { exit !f }' || continue  # no part
+    if ! printf '%s\n' "$lsr" | awk -F'\t' -v r="refs/heads/$base" '$2 == r { f = 1 } END { exit !f }'; then
+      printf '%s\t-\terror\torigin has no %s\n' "$repo" "$base"; rc=4; continue
+    fi
+    if ! $TMOUT_CMD git -C "$dir" fetch -q origin "+refs/heads/$OPT_BRANCH:refs/remotes/origin/$OPT_BRANCH" \
+         "+refs/heads/$base:refs/remotes/origin/$base" 2>"$ERRF"; then
+      printf '%s\t-\terror\tfetch failed: %s\n' "$repo" "$(awk 'NF{print; exit}' "$ERRF")"; rc=4; continue
+    fi
+    for m in $(git -C "$dir" rev-list --merges "refs/remotes/origin/$OPT_BRANCH" "^refs/remotes/origin/$base"); do
+      parents=$(git -C "$dir" rev-list --parents -n 1 "$m" | cut -d' ' -f2-)
+      p1=${parents%% *}
+      for p in ${parents#* }; do
+        res=$(classify "$dir" "$p1" "$p" other)
+        case "${res%%	*}" in
+          conflict|gitlink)
+            if git -C "$dir" log -1 --format=%B "$m" | grep -q '^Conflict-Resolved:'; then by=agent; else by=hand; fi
+            printf '%s\t%s\t%s\t%s\n' "$repo" "$m" "$by" "$(printf '%s' "$res" | cut -f2)"
+            break ;;
+          error) printf '%s\t%s\terror\t%s\n' "$repo" "$m" "$(printf '%s' "$res" | cut -f2)"; rc=4; break ;;
+        esac
+      done
+    done
+  done <<EOF
+$set
+EOF
+  exit "$rc"
+}
+
 # gate_go <phase> <reason> <root> <members> <repos to check> — the gate's answer for a phase that
 # would start a review or a merge: phase=conflict instead when a repo conflicts with its base.
 gate_go() {
@@ -483,11 +584,16 @@ gate_go() {
   fi
   if [ "$crc" -ne 0 ]; then
     said=$(printf '%s' "$CROWS" | awk -F'\t' '$3 == "error" { print $1 ": " $4; exit }')
+    GATE_EXTRA="unknown=conflicts"
     gate_out stop "conflicts unknown for $said — unknown is not none" "$3" "$4"
   fi
   said=$(printf '%s' "$CROWS" | awk -F'\t' '$3 == "conflict" {
            printf "%sconflicts with %s in %s: %s", sep, $2, ($1 == "." ? "the root" : $1), $4; sep = "; " }')
-  [ -n "$said" ] && gate_out conflict "$said" "$3" "$4"
+  if [ -n "$said" ]; then
+    GATE_EXTRA="sensitive=$(printf '%s' "$CROWS" | awk -F'\t' '$3 == "conflict" && $5 != "-" {
+                  n = split($5, f, " "); for (i = 1; i <= n; i++) { printf "%s%s:%s", sep, $1, f[i]; sep = " " } }')"
+    gate_out conflict "$said" "$3" "$4"
+  fi
   gate_out "$1" "$2" "$3" "$4"
 }
 
@@ -497,8 +603,13 @@ v_gate() {
   set=$(repo_set) || { printf '%s\n' "$set"; exit 2; }
   prsout=$(v_prs); rc=$?
   [ "$rc" -eq 2 ] && { printf '%s\n' "$prsout"; exit 2; }
-  gate_out() { printf 'phase=%s\nreason=%s\nroot=%s\nmembers=%s\n%s\n' "$1" "$2" "$3" "$4" "$prsout"; exit 0; }
+  # GATE_EXTRA: one more key=value line — sensitive= with conflict, unknown= with a stop that
+  # couldn't read the state (prs: gh failed; conflicts: a fetch or merge-tree failed).
+  gate_out() { printf 'phase=%s\nreason=%s\nroot=%s\nmembers=%s\n%s%s\n' "$1" "$2" "$3" "$4" "${GATE_EXTRA:+$GATE_EXTRA
+}" "$prsout"; exit 0; }
+  GATE_EXTRA=""
   if [ "$rc" -ne 0 ]; then
+    GATE_EXTRA="unknown=prs"
     gate_out stop "PRs unknown for: $(printf '%s\n' "$prsout" | awk -F'\t' '$4 == "error" { print $1 }' | paste -sd' ' -) — gh failed; unknown is not none" unknown unknown
   fi
   while IFS=$'\t' read -r repo slug base role; do
@@ -517,7 +628,7 @@ v_gate() {
         tp=$(takes_part "$slug" "$base")
         case "$tp" in
           pushed) m_part=1; stop="${stop:-$repo has commits on $OPT_BRANCH ahead of $base, but no PR — pushed, no PR}" ;;
-          error*) stop="${stop:-could not tell whether $repo takes part: ${tp#error } — unknown is not none}" ;;
+          error*) [ -n "$stop" ] || { stop="could not tell whether $repo takes part: ${tp#error } — unknown is not none"; GATE_EXTRA="unknown=prs"; } ;;
         esac ;;
     esac
   done <<EOF
@@ -534,6 +645,7 @@ EOF
   # land — a third level not built yet. Workspace-only multistep is a single
   # repo's, so only a member taking part stops it.
   if [ -n "$OPT_MULTISTEP" ] && { [ "$n_part" -gt 0 ] || [ -n "$m_part" ]; }; then
+    GATE_EXTRA=""
     gate_out stop "multistep issues (Jira sub-tasks) across member repos aren't supported yet — review the sub-task PRs by hand" "$root" "$members"
   fi
   [ -n "$stop" ] && gate_out stop "$stop" "$root" "$members"
@@ -680,7 +792,7 @@ gitlink_step() {
   git -C "$ROOT" fetch -q origin "+refs/heads/$ROOT_BASE:$base_ref" 2>/dev/null || return 0
   res=$(classify "$ROOT" HEAD "$base_ref" base)
   [ "${res%%	*}" = gitlink ] || return 0
-  paths=${res#*	}
+  paths=$(printf '%s' "$res" | cut -f2)
   git -C "$ROOT" merge -q --no-commit --no-ff "$base_ref" >/dev/null 2>&1   # it may stop at the pointers
   for p in $paths; do
     ours=$(git -C "$ROOT" rev-parse "HEAD:$p" 2>/dev/null); theirs=$(git -C "$ROOT" rev-parse "$base_ref:$p" 2>/dev/null)
